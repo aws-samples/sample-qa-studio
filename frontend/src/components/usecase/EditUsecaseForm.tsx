@@ -1,0 +1,97 @@
+import React, { useState } from 'react';
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import FormField from "@cloudscape-design/components/form-field";
+import Input from "@cloudscape-design/components/input";
+import Textarea from "@cloudscape-design/components/textarea";
+import Checkbox from "@cloudscape-design/components/checkbox";
+import Button from "@cloudscape-design/components/button";
+
+interface EditUsecaseFormProps {
+  usecase: any;
+  onSave: (updatedUsecase: any) => void;
+  onCancel: () => void;
+}
+
+export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUsecaseFormProps) {
+  const [name, setName] = useState(usecase.name || '');
+  const [description, setDescription] = useState(usecase.description || '');
+  const [startingUrl, setStartingUrl] = useState(usecase.starting_url || '');
+  const [active, setActive] = useState(usecase.active || false);
+  const [headless, setHeadless] = useState(usecase.headless || false);
+  const [tags, setTags] = useState(usecase.tags?.join(', ') || '');
+
+  const handleSave = () => {
+    const updatedUsecase = {
+      name,
+      description,
+      starting_url: startingUrl,
+      active,
+      headless,
+      tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
+    };
+    onSave(updatedUsecase);
+  };
+
+  return (
+    <SpaceBetween direction="vertical" size="m">
+      <FormField label="Name">
+        <Input
+          value={name}
+          onChange={({ detail }) => setName(detail.value)}
+          placeholder="Enter usecase name"
+        />
+      </FormField>
+
+      <FormField label="Description">
+        <Textarea
+          value={description}
+          onChange={({ detail }) => setDescription(detail.value)}
+          placeholder="Enter usecase description"
+          rows={3}
+        />
+      </FormField>
+
+      <FormField label="Starting URL">
+        <Input
+          value={startingUrl}
+          onChange={({ detail }) => setStartingUrl(detail.value)}
+          placeholder="https://example.com"
+          type="url"
+        />
+      </FormField>
+
+      <FormField label="Tags">
+        <Input
+          value={tags}
+          onChange={({ detail }) => setTags(detail.value)}
+          placeholder="tag1, tag2, tag3"
+        />
+      </FormField>
+
+      <SpaceBetween direction="vertical" size="s">
+        <Checkbox
+          checked={active}
+          onChange={({ detail }) => setActive(detail.checked)}
+        >
+          Active
+        </Checkbox>
+
+        <Checkbox
+          checked={headless}
+          onChange={({ detail }) => setHeadless(detail.checked)}
+        >
+          Run in headless mode
+        </Checkbox>
+      </SpaceBetween>
+
+      <SpaceBetween direction="horizontal" size="xs">
+        <Button variant="primary" onClick={handleSave}>
+          Save Changes
+        </Button>
+        <Button onClick={onCancel}>
+          Cancel
+        </Button>
+      </SpaceBetween>
+    </SpaceBetween>
+  );
+}

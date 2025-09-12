@@ -1,0 +1,86 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+
+	"lambda/models"
+
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+)
+
+func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	usecaseId := request.PathParameters["id"]
+	if usecaseId == "" {
+		return events.APIGatewayProxyResponse{StatusCode: 400}, nil
+	}
+
+	var req models.UpdateUsecaseRequest
+	if err := json.Unmarshal([]byte(request.Body), &req); err != nil {
+		log.Printf("Error unmarshaling request: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 400}, err
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Printf("Error loading config: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 500}, err
+	}
+
+	client := dynamodb.NewFromConfig(cfg)
+
+	_, err = client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(models.GetTableName()),
+		Key: map[string]types.AttributeValue{
+			"pk": &types.AttributeValueMemberS{Value: "USECASES"},
+			"sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("USECASE#%s", usecaseId)},
+		},
+		UpdateExpression: aws.String("SET #name = :name, description = :description, starting_url = :starting_url, active = :active, headless = :headless, tags = :tags"),
+		ExpressionAttributeNames: map[string]string{
+			"#name": "name",
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":name":         &types.AttributeValueMemberS{Value: req.Name},
+			":description":  &types.AttributeValueMemberS{Value: req.Description},
+			":starting_url": &types.AttributeValueMemberS{Value: req.StartingURL},
+			":active":       &types.AttributeValueMemberBOOL{Value: req.Active},
+			":headless":     &types.AttributeValueMemberBOOL{Value: req.Headless},
+			":tags":         &types.AttributeValueMemberSS{Value: req.Tags},
+		},
+	})
+	if err != nil {
+		log.Printf("Error updating usecase: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 500}, err
+	}
+
+	response, err := json.Marshal(map[string]string{
+		"status":    "usecase updated",
+		"usecaseId": usecaseId,
+	})
+	if err != nil {
+		log.Printf("Error marshaling response: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 500}, err
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers: map[string]string{
+			"Content-Type":                 "application/json",
+			"Access-Control-Allow-Origin":  "*",
+			"Access-Control-Allow-Methods": "PATCH, OPTIONS",
+			"Access-Control-Allow-Headers": "Content-Type, Authorization",
+		},
+		Body: string(response),
+	}, nil
+}
+
+func main() {
+	lambda.Start(handler)
+}

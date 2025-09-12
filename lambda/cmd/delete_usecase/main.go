@@ -1,0 +1,169 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"lambda/models"
+	"log"
+
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+)
+
+func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	usecaseId := request.PathParameters["id"]
+	if usecaseId == "" {
+		return events.APIGatewayProxyResponse{StatusCode: 400}, nil
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Printf("Error loading config: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 500}, err
+	}
+
+	client := dynamodb.NewFromConfig(cfg)
+
+	// Delete usecase metadata
+	_, err = client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(models.GetTableName()),
+		Key: map[string]types.AttributeValue{
+			"pk": &types.AttributeValueMemberS{Value: "USECASES"},
+			"sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("USECASE#%s", usecaseId)},
+		},
+	})
+	if err != nil {
+		log.Printf("Error deleting usecase: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 500}, err
+	}
+
+	// Delete CREATED_BY record (if it exists)
+	_, err = client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(models.GetTableName()),
+		Key: map[string]types.AttributeValue{
+			"pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("USECASE#%s", usecaseId)},
+			"sk": &types.AttributeValueMemberS{Value: "CREATED_BY"},
+		},
+	})
+	if err != nil {
+		log.Printf("Error deleting created_by record (may not exist for older usecases): %v", err)
+		// Don't return error here as the record might not exist for older usecases
+	}
+
+	// Query and delete all steps
+	stepsResult, err := client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(models.GetTableName()),
+		KeyConditionExpression: aws.String("pk = :usecaseId AND begins_with(sk, :prefix)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":usecaseId": &types.AttributeValueMemberS{Value: fmt.Sprintf("USECASE#%s", usecaseId)},
+			":prefix":    &types.AttributeValueMemberS{Value: "STEP#"},
+		},
+	})
+	if err != nil {
+		log.Printf("Error querying steps: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 500}, err
+	}
+
+	for _, item := range stepsResult.Items {
+		_, err = client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+			TableName: aws.String(models.GetTableName()),
+			Key: map[string]types.AttributeValue{
+				"pk": item["pk"],
+				"sk": item["sk"],
+			},
+		})
+		if err != nil {
+			log.Printf("Error deleting step: %v", err)
+		}
+	}
+
+	// Query and delete all executions
+	executionsResult, err := client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(models.GetTableName()),
+		KeyConditionExpression: aws.String("pk = :usecaseId AND begins_with(sk, :prefix)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":usecaseId": &types.AttributeValueMemberS{Value: fmt.Sprintf("USECASE_EXECUTION#%s", usecaseId)},
+			":prefix":    &types.AttributeValueMemberS{Value: "EXECUTION#"},
+		},
+	})
+	if err != nil {
+		log.Printf("Error querying executions: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 500}, err
+	}
+
+	for _, item := range executionsResult.Items {
+		executionId := item["pk"]
+
+		// Delete execution
+		_, err = client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+			TableName: aws.String(models.GetTableName()),
+			Key: map[string]types.AttributeValue{
+				"pk": executionId,
+				"sk": item["sk"],
+			},
+		})
+		if err != nil {
+			log.Printf("Error deleting execution: %v", err)
+		}
+
+		// Query and delete execution steps
+		var executionIdStr string
+		attributevalue.Unmarshal(executionId, &executionIdStr)
+
+		executionStepsResult, err := client.Query(ctx, &dynamodb.QueryInput{
+			TableName:              aws.String(models.GetTableName()),
+			KeyConditionExpression: aws.String("pk = :executionId AND begins_with(sk, :prefix)"),
+			ExpressionAttributeValues: map[string]types.AttributeValue{
+				":executionId": &types.AttributeValueMemberS{Value: fmt.Sprintf("EXECUTION#%s", executionIdStr)},
+				":prefix":      &types.AttributeValueMemberS{Value: "EXECUTION_STEP#"},
+			},
+		})
+		if err != nil {
+			log.Printf("Error querying execution steps: %v", err)
+			continue
+		}
+
+		for _, stepItem := range executionStepsResult.Items {
+			_, err = client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+				TableName: aws.String(models.GetTableName()),
+				Key: map[string]types.AttributeValue{
+					"pk": stepItem["pk"],
+					"sk": stepItem["sk"],
+				},
+			})
+			if err != nil {
+				log.Printf("Error deleting execution step: %v", err)
+			}
+		}
+	}
+
+	response, err := json.Marshal(map[string]string{
+		"status":    "usecase deleted",
+		"usecaseId": usecaseId,
+	})
+	if err != nil {
+		log.Printf("Error marshaling response: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 500}, err
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers: map[string]string{
+			"Content-Type":                 "application/json",
+			"Access-Control-Allow-Origin":  "*",
+			"Access-Control-Allow-Methods": "DELETE, OPTIONS",
+			"Access-Control-Allow-Headers": "Content-Type, Authorization",
+		},
+		Body: string(response),
+	}, nil
+}
+
+func main() {
+	lambda.Start(handler)
+}

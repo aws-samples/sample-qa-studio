@@ -1,0 +1,80 @@
+#!make
+
+.DEFAULT_GOAL := help
+
+help:
+	@echo "Available targets:"
+	@echo "  test_all          - Run all Go tests with coverage"
+	@echo "  lambdas.build     - Build all Lambda functions"
+	@echo "  lambdas.clean     - Clean up Lambda bootstrap binaries"
+	@echo "  frontend.build    - Build React frontend"
+	@echo "  docker.build      - Build worker Docker image"
+	@echo "  docker.upload     - Upload worker image to ECR"
+	@echo "  cdk.deploy        - Deploy CDK stack to AWS"
+	@echo "  deploy            - Full deployment (build + deploy + cleanup)"
+	@echo "  clean             - Clean up all build artifacts"
+
+test_all:
+	go test -p 1 -v -coverpkg=./... -coverprofile=profile.cov ./... && go tool cover -func profile.cov && rm -rf profile.cov
+
+docker.build:
+	cd worker/ && podman build --platform linux/arm64 -t accept_ai_worker .
+	podman tag localhost/nova-act-qa-studio:latest {your-registry-here}/nova-act-qa-studio:latest
+
+docker.upload:
+	aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin {your-registry-here}
+	docker push {your-registry-here}/nova-act-qa-studio:latest
+
+frontend.build:
+	cd frontend && npm run build
+
+lambdas.build:
+	cd lambda/cmd/create_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/list_usecases/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/get_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/create_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/list_steps/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/execute_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/update_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/delete_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/update_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/list_executions/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/update_execution/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/delete_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/delete_execution/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/update_execution_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/get_execution_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/get_execution/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/list_execution_steps/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/create_usecase_variables/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/get_usecase_variables/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/create_schedule/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/get_schedule/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/delete_schedule/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/create_usecase_hooks/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/get_usecase_hooks/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/generate_s3_url/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/create_usecase_secrets/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/get_usecase_secrets/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/delete_usecase_secrets/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/update_usecase_secrets/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/get_execution_variables/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/reorder_steps/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/export_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/import_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/generate_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+
+lambdas.clean:
+	@echo "Cleaning up Lambda bootstrap binaries..."
+	@find lambda/cmd -name "bootstrap" -type f -delete 2>/dev/null || true
+	@find lambda/cmd -name "test_build" -type f -delete 2>/dev/null || true
+	@echo "Lambda binaries cleaned up"
+
+clean: lambdas.clean
+	@echo "All build artifacts cleaned up"
+
+cdk.deploy:
+	AWS_REGION=eu-central-1 npx cdk deploy
+
+# deploy: lambdas.build frontend.build cdk.deploy
+deploy: lambdas.build frontend.build cdk.deploy lambdas.clean

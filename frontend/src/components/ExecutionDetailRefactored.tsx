@@ -1,0 +1,176 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import Header from "@cloudscape-design/components/header";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import Button from "@cloudscape-design/components/button";
+import Modal from "@cloudscape-design/components/modal";
+import Box from "@cloudscape-design/components/box";
+import AppLayout from "@cloudscape-design/components/app-layout";
+import Grid from "@cloudscape-design/components/grid";
+import { api } from '../utils/api';
+import ExecutionTimeline from './common/ExecutionTimeline';
+import Breadcrumb from './common/Breadcrumb';
+import { ExecutionInformation, ExecutionSteps, ExecutionVariables } from './execution';
+
+export default function ExecutionDetailRefactored() {
+  const { usecaseId, executionId } = useParams();
+  const navigate = useNavigate();
+  const [execution, setExecution] = useState<any>(null);
+  const [usecase, setUsecase] = useState<any>(null);
+  const [executionSteps, setExecutionSteps] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalContent, setModalContent] = useState<{ url: string, title: string, fileType?: string } | null>(null);
+  const [hasVariables, setHasVariables] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [executionData, stepsData, variablesData, usecaseData] = await Promise.all([
+          api.get(`usecase/${usecaseId}/executions/${executionId}`),
+          api.get(`usecase/${usecaseId}/executions/${executionId}/steps`),
+          api.get(`usecase/${usecaseId}/executions/${executionId}/variables`).catch(() => ({ variables: [], runtime_variables: [] })),
+          api.get(`usecase/${usecaseId}`)
+        ]);
+
+        setExecution(executionData);
+        setUsecase(usecaseData);
+
+        // Sort steps by sort property and set them
+        const sortedSteps = (stepsData.steps || []).sort((a: any, b: any) => a.sort - b.sort);
+        setExecutionSteps(sortedSteps);
+
+        sortedSteps.forEach((step: any) => {
+          if (step.logs.length > 0) {
+            // step.logs = step.logs.reverse();
+          }
+        });
+
+        // Check if there are any variables
+        setHasVariables(variablesData?.variables?.length > 0 || variablesData?.runtime_variables?.length > 0);
+      } catch (error) {
+        console.error('Failed to fetch execution data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [usecaseId, executionId]);
+
+  const handleViewContent = (content: { url: string, title: string, fileType: string }) => {
+    setModalContent(content);
+    setModalVisible(true);
+  };
+
+  if (loading) return <div>Loading...</div>;
+  if (!execution) return <div>Execution not found</div>;
+  if (!usecaseId || !executionId) return <div>Invalid parameters</div>;
+
+  return (
+    <AppLayout
+      navigationHide
+      toolsHide
+      content={
+        <SpaceBetween direction="vertical" size="l">
+          <Breadcrumb
+            items={[
+              { text: "Home", href: "/" },
+              { text: usecase?.name || "Use Case", href: `/usecase/${usecaseId}` },
+              { text: "Execution Details" }
+            ]}
+          />
+          <Header variant="h1">
+            Execution Details
+          </Header>
+
+          <Grid
+            gridDefinition={[
+              { colspan: { default: 12, m: 9 } },
+              { colspan: { default: 12, m: 3 } },
+            ]}
+          >
+            <SpaceBetween direction='vertical' size='m'>
+              <ExecutionInformation
+                execution={execution}
+                usecaseId={usecaseId}
+                executionId={executionId}
+                onViewVideo={handleViewContent}
+              />
+
+              {hasVariables && (
+                <ExecutionVariables
+                  usecaseId={usecaseId}
+                  executionId={executionId}
+                />
+              )}
+            </SpaceBetween>
+
+            <ExecutionTimeline execution={execution} />
+          </Grid>
+
+
+
+          <ExecutionSteps
+            executionSteps={executionSteps}
+            usecaseId={usecaseId}
+            executionId={executionId}
+            onViewFile={handleViewContent}
+          />
+
+          {/* Modal for viewing files and videos */}
+          <Modal
+            onDismiss={() => setModalVisible(false)}
+            visible={modalVisible}
+            size="max"
+            header={modalContent?.title || "View File"}
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button variant="link" onClick={() => setModalVisible(false)}>
+                    Close
+                  </Button>
+                  {modalContent?.url && (
+                    <Button
+                      variant="primary"
+                      onClick={() => window.open(modalContent.url, '_blank')}
+                      iconName="external"
+                    >
+                      Open in New Tab
+                    </Button>
+                  )}
+                </SpaceBetween>
+              </Box>
+            }
+          >
+            {modalContent?.url && (
+              modalContent.fileType === 'video' ? (
+                <video
+                  src={modalContent.url}
+                  controls
+                  style={{
+                    width: '100%',
+                    height: '80vh',
+                    borderRadius: '4px'
+                  }}
+                  title={modalContent.title}
+                />
+              ) : (
+                <iframe
+                  src={modalContent.url}
+                  style={{
+                    width: '100%',
+                    height: '80vh',
+                    border: 'none',
+                    borderRadius: '4px'
+                  }}
+                  title={modalContent.title}
+                />
+              )
+            )}
+          </Modal>
+        </SpaceBetween>
+      }
+    />
+  );
+}

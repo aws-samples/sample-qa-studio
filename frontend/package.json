@@ -1,0 +1,44 @@
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@aws-amplify/ui-react": "^6.11.2",
+    "@cloudscape-design/code-view": "3.0.64",
+    "@cloudscape-design/components": "3.0.1000",
+    "@cloudscape-design/chat-components": "1.0.61",
+    "@cloudscape-design/global-styles": "1.0.44",
+    "ace-builds": "^1.43.2",
+    "aws-amplify": "^6.15.4",
+    "oidc-client-ts": "^3.3.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-oidc-context": "^3.3.0",
+    "react-router-dom": "^7.6.2",
+    "typescript": "^4.9.5",
+    "uuid": "^11.1.0",
+    "web-vitals": "^4.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.6",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "7.0.6",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/user-event": "^14.5.2",
+    "vitest": "^2.1.8",
+    "jsdom": "^26.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run"
+  },
+  "type": "module"
+}
