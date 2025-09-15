@@ -23,3 +23,5 @@ lambda/cmd/*/test_build
 
 .kiro
 Makefile
+
+.env
