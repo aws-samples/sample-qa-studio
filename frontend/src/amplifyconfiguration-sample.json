@@ -1,0 +1,9 @@
+{
+  "Auth": {
+    "Cognito": {
+      "userPoolId": "",
+      "userPoolClientId": "",
+      "region": ""
+    }
+  }
+}

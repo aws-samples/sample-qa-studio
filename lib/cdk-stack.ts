@@ -33,7 +33,9 @@ export class NovaActQAStudio extends cdk.Stack {
   private baseName: string = ""
 
   private cdkName(name: string): string {
-    return `${this.baseName}_${name.toLocaleLowerCase().replace("-", "_")}`
+    const computedName = `${this.baseName}-${name.toLocaleLowerCase().replace("_", "-")}`
+    // console.log(computedName)
+    return computedName
   }
 
   private CreateLambda(props: CreateLambdaProps): lambda.Function {
@@ -59,8 +61,9 @@ export class NovaActQAStudio extends cdk.Stack {
     return fn
   }
 
-  constructor(scope: Construct, id: string, props?: NovaActQAStudioCreateProps) {
+  constructor(scope: Construct, id: string, props: NovaActQAStudioCreateProps) {
     super(scope, id, props);
+    this.baseName = props?.baseName
 
     const novaApiKey = new secretsmanager.Secret(this, 'NovaApiKey', {
       secretName: this.cdkName('nova-api-key')
@@ -96,13 +99,15 @@ export class NovaActQAStudio extends cdk.Stack {
     // S3 Bucket for artifacts
     const bucket = new s3.Bucket(this, 'artefacts', {
       bucketName: this.cdkName('artefacts'),
-      removalPolicy: cdk.RemovalPolicy.DESTROY
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
     });
 
     // S3 Bucket for frontend
     const frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
       bucketName: this.cdkName('frontend'),
-      removalPolicy: cdk.RemovalPolicy.DESTROY
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
     });
 
     // Origin Access Identity
@@ -150,7 +155,7 @@ export class NovaActQAStudio extends cdk.Stack {
     const userPool = new cognito.UserPool(this, 'user_pool', {
       userPoolName: this.cdkName('user-pool'),
       signInAliases: { email: true },
-      selfSignUpEnabled: true
+      selfSignUpEnabled: false,
     });
 
     // Cognito User Pool Client
@@ -167,7 +172,11 @@ export class NovaActQAStudio extends cdk.Stack {
           authorizationCodeGrant: true,
           implicitCodeGrant: true
         },
-        scopes: [cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE]
+        scopes: [
+          cognito.OAuthScope.OPENID, 
+          cognito.OAuthScope.EMAIL,
+          cognito.OAuthScope.PROFILE
+        ]
       }
     });
 
@@ -180,6 +189,45 @@ export class NovaActQAStudio extends cdk.Stack {
     const ecrRepository = new ecr.Repository(this, 'images_repository', {
       repositoryName: this.cdkName('images')
     });
+
+    const agentCoreExecutionRole = new iam.Role(this, 'agent_core_execution_role', {
+      roleName: this.cdkName('agent_core_execution_role'),
+      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+    })
+
+    // agentCoreExecutionRole.attachInlinePolicy(new iam.Policy(this, 'agent_core_execution_role_assume_role', {
+    //   statements: [
+    //     new iam.PolicyStatement({
+    //       effect: iam.Effect.ALLOW,
+    //       principals: [
+    //         new iam.ServicePrincipal("bedrock-agentcore.amazonaws.com")
+    //       ],
+    //       actions: [
+    //         'sts:AssumeRole',
+    //       ],
+    //       resources: [
+    //         "*",
+    //       ]
+    //     })
+    //   ]
+    // }))
+
+    agentCoreExecutionRole.attachInlinePolicy(new iam.Policy(this, 'agent_core_execution_role_s3', {
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            "s3:PutObject",
+            "s3:ListMultipartUploadParts",
+            "s3:AbortMultipartUpload"
+          ],
+          resources: [
+            bucket.bucketArn,
+            `${bucket.bucketArn}/*`
+          ]
+        })
+      ]
+    }))
 
     // VPC for ECS
     const vpc = new ec2.Vpc(this, 'vpc', {
@@ -210,11 +258,11 @@ export class NovaActQAStudio extends cdk.Stack {
     });
 
     // Security Group for ECS tasks
-    const ecsSecurityGroup = new ec2.SecurityGroup(this, 'EcsTaskSecurityGroup', {
-      vpc,
-      description: 'Security group for ECS tasks',
-      allowAllOutbound: true
-    });
+    // const ecsSecurityGroup = new ec2.SecurityGroup(this, 'EcsTaskSecurityGroup', {
+    //   vpc,
+    //   description: 'Security group for ECS tasks',
+    //   allowAllOutbound: true
+    // });
 
     // ECS Cluster
     const cluster = new ecs.Cluster(this, 'cluster', {
@@ -232,8 +280,9 @@ export class NovaActQAStudio extends cdk.Stack {
       },
     });
 
+
     // Add container to task definition
-    taskDefinition.addContainer('container', {
+      taskDefinition.addContainer('container', {
       image: ecs.ContainerImage.fromEcrRepository(ecrRepository, 'latest'),
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: this.cdkName('logs'),
@@ -242,7 +291,8 @@ export class NovaActQAStudio extends cdk.Stack {
       environment: {
         DYNAMO_TABLE: table.tableName,
         QUEUE_URL: queue.queueUrl,
-        BUCKET_NAME: bucket.bucketName
+        BUCKET_NAME: bucket.bucketName,
+        NOVA_ACT_API_KEY_NAME: novaApiKey.secretName
       }
     });
 
@@ -251,27 +301,43 @@ export class NovaActQAStudio extends cdk.Stack {
     queue.grantConsumeMessages(taskDefinition.taskRole);
     bucket.grantReadWrite(taskDefinition.taskRole);
     ecrRepository.grantPull(taskDefinition.executionRole!);
+    ecrRepository.grantPull(taskDefinition.taskRole!);
 
     // Add ECR permissions to execution role
     taskDefinition.executionRole!.attachInlinePolicy(new iam.Policy(this, 'ecr_access_policy', {
       statements: [
+        // new iam.PolicyStatement({
+        //   effect: iam.Effect.ALLOW,
+        //   actions: [
+        //     'ecr:GetAuthorizationToken',
+        //   ],
+        //   resources: [
+        //     "*",
+        //   ]
+        // }),
+        // new iam.PolicyStatement({
+        //   effect: iam.Effect.ALLOW,
+        //   actions: [
+        //     'ecr:BatchCheckLayerAvailability',
+        //     'ecr:BatchGetImage',
+        //     'ecr:CompleteLayerUpload',
+        //     'ecr:GetDownloadUrlForLayer',
+        //   ],
+        //   resources: [
+        //     ecrRepository.repositoryArn
+        //   ]
+        // }),
         new iam.PolicyStatement({
           effect: iam.Effect.ALLOW,
           actions: [
-            'ecr:GetAuthorizationToken',
-            'ecr:BatchCheckLayerAvailability',
-            'ecr:GetDownloadUrlForLayer',
-            'ecr:BatchGetImage',
             'secretsmanager:GetSecretValue',
-            'ssm:GetParameters'
+            'ssm:GetParameters',
+            'bedrock-agentcore:*',
           ],
           resources: [
             "*",
-            `arn:aws:ecr:${this.region}:${this.account}:repository/*`,
-            `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
-            `arn:aws:ssm:${this.region}:${this.account}:parameter/*`
           ]
-        })
+        }),
       ]
     }));
 
@@ -296,6 +362,7 @@ export class NovaActQAStudio extends cdk.Stack {
           actions: [
             'secretsmanager:GetSecretValue',
             'secretsmanager:ListSecrets',
+            'bedrock-agentcore:StartBrowserSession'
           ],
           resources: [`*`]
         })
@@ -354,11 +421,11 @@ export class NovaActQAStudio extends cdk.Stack {
         SECURITY_GROUP_ID: vpc.vpcDefaultSecurityGroup,
         TABLE_NAME: table.tableName,
         S3_BUCKET: bucket.bucketName,
+        BEDROCK_EXECUTION_ROLE: agentCoreExecutionRole.roleArn,
+        NOVA_ACT_API_KEY_NAME: novaApiKey.secretName,
         USER_AGENT: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
       }
     });
-
-
 
     const updateStepLambda = this.CreateLambda({
       path: 'update_step',

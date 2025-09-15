@@ -316,7 +316,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 			Overrides: &ecsTypes.TaskOverride{
 				ContainerOverrides: []ecsTypes.ContainerOverride{
 					{
-						Name: aws.String("AcceptAiContainer"),
+						Name: aws.String("container"),
 						// Command: []string{"bash", "-c", fmt.Sprintf("source .venv/bin/activate && ./worker -mode ecs -executionId %s -usecaseId %s", executionId, usecaseId)},
 						Environment: []ecsTypes.KeyValuePair{
 							{
@@ -342,6 +342,14 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 							{
 								Name:  aws.String("USER_AGENT"),
 								Value: aws.String(os.Getenv("USER_AGENT")),
+							},
+							{
+								Name:  aws.String("BEDROCK_EXECUTION_ROLE"),
+								Value: aws.String(os.Getenv("BEDROCK_EXECUTION_ROLE")),
+							},
+							{
+								Name:  aws.String("NOVA_ACT_API_KEY_NAME"),
+								Value: aws.String(os.Getenv("NOVA_ACT_API_KEY_NAME")),
 							},
 						},
 					},

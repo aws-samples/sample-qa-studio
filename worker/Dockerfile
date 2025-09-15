@@ -64,7 +64,7 @@ ENV LOGS_DIRECTORY=/app/logs
 # EXPOSE 8080
 
 # Default command to run the worker
-USER non-root
+# USER non-root
 CMD ["bash", "-c", "source .venv/bin/activate && python worker.py"]
 # CMD ["bash", "-c", "python worker.py"]
 # CMD ["source .venv/bin/activate && python worker.py"]
