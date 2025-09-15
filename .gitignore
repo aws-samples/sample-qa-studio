@@ -25,3 +25,4 @@ lambda/cmd/*/test_build
 Makefile
 
 frontend/.env
+frontend/src/amplifyconfiguration.json
