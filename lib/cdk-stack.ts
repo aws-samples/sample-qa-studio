@@ -96,6 +96,10 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
+    new cdk.CfnOutput(this, 'apigateway domain', { 
+      value: api.url
+    });
+
     // S3 Bucket for artifacts
     const bucket = new s3.Bucket(this, 'artefacts', {
       bucketName: this.cdkName('artefacts'),
@@ -158,6 +162,10 @@ export class NovaActQAStudio extends cdk.Stack {
       selfSignUpEnabled: false,
     });
 
+    new cdk.CfnOutput(this, 'user pool id', { 
+      value: userPool.userPoolId
+    });
+
     // Cognito User Pool Client
     const userPoolClient = new cognito.UserPoolClient(this, 'user_pool_client', {
       userPoolClientName: this.cdkName('client'),
@@ -180,6 +188,10 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
+    new cdk.CfnOutput(this, 'user pool client id', {
+      value: userPoolClient.userPoolClientId
+    })
+
     // EventBridge Schedule Group
     const scheduleGroup = new scheduler.CfnScheduleGroup(this, 'schedule_group', {
       name: this.cdkName('schedules')
@@ -188,6 +200,10 @@ export class NovaActQAStudio extends cdk.Stack {
     // ECR Repository
     const ecrRepository = new ecr.Repository(this, 'images_repository', {
       repositoryName: this.cdkName('images')
+    });
+
+    new cdk.CfnOutput(this, 'ECR', { 
+      value: ecrRepository.repositoryName
     });
 
     const agentCoreExecutionRole = new iam.Role(this, 'agent_core_execution_role', {

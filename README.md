@@ -56,11 +56,62 @@ cd lambda && go mod download && cd ..
 
 ### 2. Build and Deploy
 
-Use the provided Makefile for a complete deployment:
+This section will explain how to install and deploy the tool.
+We're going to use the Makefile sample to customize it to your own needs
+
+**1. Basic Setup** 
 
 ```bash
-# Build all components and deploy to AWS
-make deploy
+git clone git@github.com:aws-samples/sample-nova-act-qa-studio.git
+cd sample-nova-act-qa-studio
+cp Makefile-sample Makefile
+cp frontend/src/amplifyconfiguration-sample.json frontend/src/amplifyconfiguration.json
+cp frontend/.env-sample frontend/.env
+make
+```
+
+**2. Adjusting information** 
+
+```json
+// Add cognito data to the frontend
+// frontend/src/amplifyconfiguration.json
+{
+  "Auth": {
+    "Cognito": {
+      "userPoolId": "{'user pool id' from the terminal output}",
+      "userPoolClientId": "{'user pool client id' from the terminal output}",
+      "region": "{your region}"
+    }
+  }
+}
+```
+
+```bash
+; update api gateway endpoint for frontend
+; frontend/.env
+VITE_API_ENDPOINT={'apigateway domain' from the terminal output}
+```
+
+```bash
+# Update the Makefile
+# find the section "cdk.deploy"
+cdk.deploy:
+	AWS_REGION=eu-central-1 npx cdk deploy --context baseName={your base name}
+
+# find the section "docker.build" and "docker.upload"
+docker.build:
+	cd worker/ && podman build --platform linux/arm64 -t {your base name}-images .
+	podman tag {your base name}:latest {your aws account id}.dkr.ecr.{your region}.amazonaws.com/{your base name}:latest
+
+docker.upload:
+	aws ecr get-login-password --region {your region} | podman login --username AWS --password-stdin {your aws account id}.dkr.ecr.eu-central-1.amazonaws.com
+	podman push {your aws account id}.dkr.ecr.{your region}.amazonaws.com/{your base name}:latest
+```
+
+**3. Deploy again**
+
+```
+make
 ```
 
 This command will:
