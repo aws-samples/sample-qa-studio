@@ -306,33 +306,12 @@ export class NovaActQAStudio extends cdk.Stack {
     // Add ECR permissions to execution role
     taskDefinition.executionRole!.attachInlinePolicy(new iam.Policy(this, 'ecr_access_policy', {
       statements: [
-        // new iam.PolicyStatement({
-        //   effect: iam.Effect.ALLOW,
-        //   actions: [
-        //     'ecr:GetAuthorizationToken',
-        //   ],
-        //   resources: [
-        //     "*",
-        //   ]
-        // }),
-        // new iam.PolicyStatement({
-        //   effect: iam.Effect.ALLOW,
-        //   actions: [
-        //     'ecr:BatchCheckLayerAvailability',
-        //     'ecr:BatchGetImage',
-        //     'ecr:CompleteLayerUpload',
-        //     'ecr:GetDownloadUrlForLayer',
-        //   ],
-        //   resources: [
-        //     ecrRepository.repositoryArn
-        //   ]
-        // }),
         new iam.PolicyStatement({
           effect: iam.Effect.ALLOW,
           actions: [
             'secretsmanager:GetSecretValue',
             'ssm:GetParameters',
-            'bedrock-agentcore:*',
+            // 'bedrock-agentcore:*',
           ],
           resources: [
             "*",
@@ -355,14 +334,35 @@ export class NovaActQAStudio extends cdk.Stack {
       ]
     }));
 
-    taskDefinition.taskRole!.attachInlinePolicy(new iam.Policy(this, 'task_rRole_secrets_manager_policy', {
+    taskDefinition.taskRole!.attachInlinePolicy(new iam.Policy(this, 'task_role_secrets_manager_policy', {
       statements: [
         new iam.PolicyStatement({
           effect: iam.Effect.ALLOW,
           actions: [
             'secretsmanager:GetSecretValue',
             'secretsmanager:ListSecrets',
-            'bedrock-agentcore:StartBrowserSession'
+          ],
+          resources: [`*`]
+        })
+      ]
+    }));
+
+    taskDefinition.taskRole!.attachInlinePolicy(new iam.Policy(this, 'task_role_bedrock_agentscore', {
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            "bedrock-agentcore:CreateBrowser",
+            "bedrock-agentcore:ListBrowsers",
+            "bedrock-agentcore:GetBrowser",
+            "bedrock-agentcore:DeleteBrowser",
+            "bedrock-agentcore:StartBrowserSession",
+            "bedrock-agentcore:ListBrowserSessions",
+            "bedrock-agentcore:GetBrowserSession",
+            "bedrock-agentcore:StopBrowserSession",
+            "bedrock-agentcore:UpdateBrowserStream",
+            "bedrock-agentcore:ConnectBrowserAutomationStream",
+            "bedrock-agentcore:ConnectBrowserLiveViewStream"
           ],
           resources: [`*`]
         })

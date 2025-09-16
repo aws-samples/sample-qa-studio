@@ -27,9 +27,9 @@ RUN apt-get update && \
 # ENV CHROME_DEVEL_SANDBOX=/usr/lib/chromium/chrome-sandbox
 
 # Create a non-root user for security
-# RUN useradd -m -u 1000 worker && \
-#     mkdir -p /app /app/logs && \
-#     chown -R worker:worker /app
+RUN useradd -m -u 1000 worker && \
+    mkdir -p /app /app/logs && \
+    chown -R worker:worker /app
 
 # Set working directory
 WORKDIR /app
@@ -41,8 +41,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     python3 -m venv .venv && \
     source .venv/bin/activate && \
-    pip install --no-cache-dir -r requirements.txt && \
-    playwright install --with-deps chromium
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy the worker code
 COPY . .
@@ -51,7 +50,7 @@ COPY . .
 # RUN chown -R worker:worker /app
 
 # Switch to non-root user
-# USER worker
+USER worker
 
 # Create logs directory
 RUN mkdir -p /app/logs
