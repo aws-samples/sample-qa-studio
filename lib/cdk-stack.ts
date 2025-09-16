@@ -288,8 +288,8 @@ export class NovaActQAStudio extends cdk.Stack {
 
     // ECS Task Definition
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'task_definition', {
-      memoryLimitMiB: 3072,
-      cpu: 1024,
+      memoryLimitMiB: 1024,
+      cpu: 512,
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
         cpuArchitecture: ecs.CpuArchitecture.ARM64
