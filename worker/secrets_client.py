@@ -4,6 +4,7 @@ Secrets Manager client for retrieving usecase secrets
 """
 
 import boto3
+import os
 import logging
 from typing import Dict, Optional
 
@@ -29,7 +30,8 @@ class SecretsClient:
         Returns:
             The secret value as a string, or None if retrieval fails
         """
-        secret_name = f"accept-ai/usecase/{usecase_id}/{secret_key}"
+        secret_name = f"{os.getenv('SECRETS_PREFIX')}/usecase/{usecase_id}/{secret_key}"
+        print(secret_name)
         
         try:
             response = self.client.get_secret_value(SecretId=secret_name)

@@ -20,7 +20,9 @@ def execute_secret_step(nova: NovaAct, step: ExecutionStep, usecase_id: str):
         raise SecretsMissingException(f"Secret key '{step.secret_key}' not found")
     
     # Execute the instruction first, then type the secret
-    result = nova.act(f"{step.instruction} you must return a bool if the action was successful", schema=BOOL_SCHEMA)
+    result = nova.act(f"{step.instruction} you must return true if the action was successful", schema=BOOL_SCHEMA)
+    print("RESULT")
+    print(result)
     
     # Type the secret value
     nova.page.keyboard.type(secret_value)

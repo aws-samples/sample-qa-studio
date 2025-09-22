@@ -7,6 +7,7 @@ import (
 	"lambda/models"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -17,6 +18,7 @@ import (
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("Received request: %+v", request)
+	prefix := os.Getenv("SECRET_PREFIX")
 
 	usecaseID := request.PathParameters["id"]
 	if usecaseID == "" {
@@ -53,7 +55,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	secretsClient := secretsmanager.NewFromConfig(cfg)
 
-	secretName := fmt.Sprintf("%s/usecase/%s/%s", models.GetSecretPrefix(), usecaseID, req.SecretKey)
+	secretName := fmt.Sprintf("%s/usecase/%s/%s", prefix, usecaseID, req.SecretKey)
 
 	// Delete the secret (with immediate deletion)
 	_, err = secretsClient.DeleteSecret(ctx, &secretsmanager.DeleteSecretInput{

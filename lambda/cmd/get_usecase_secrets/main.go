@@ -7,6 +7,7 @@ import (
 	"lambda/models"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -18,6 +19,7 @@ import (
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("Received request: %+v", request)
+	prefix := os.Getenv("SECRET_PREFIX")
 
 	usecaseID := request.PathParameters["id"]
 	if usecaseID == "" {
@@ -62,7 +64,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 
 	var secrets []models.SecretInfo
-	secretPrefix := fmt.Sprintf("%s/usecase/%s/", models.GetSecretPrefix(), usecaseID)
+	secretPrefix := fmt.Sprintf("%s/usecase/%s/", prefix, usecaseID)
 
 	for _, secret := range result.SecretList {
 		if secret.Name != nil && strings.HasPrefix(*secret.Name, secretPrefix) {

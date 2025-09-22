@@ -7,6 +7,7 @@ import (
 	"lambda/models"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -18,6 +19,7 @@ import (
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("Received request: %+v", request)
+	prefix := os.Getenv("SECRET_PREFIX")
 
 	usecaseID := request.PathParameters["id"]
 	if usecaseID == "" {
@@ -49,7 +51,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	// Create or update secrets
 	for _, secret := range req.Secrets {
-		secretName := fmt.Sprintf("%s/usecase/%s/%s", models.GetSecretPrefix(), usecaseID, secret.Key)
+		secretName := fmt.Sprintf("%s/usecase/%s/%s", prefix, usecaseID, secret.Key)
 
 		// Try to create the secret first
 		_, err := secretsClient.CreateSecret(ctx, &secretsmanager.CreateSecretInput{
@@ -63,7 +65,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 				},
 				{
 					Key:   aws.String("managed_by"),
-					Value: aws.String(models.GetSecretPrefix()),
+					Value: aws.String(prefix),
 				},
 			},
 		})

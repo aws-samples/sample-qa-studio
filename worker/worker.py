@@ -127,16 +127,11 @@ def main():
     # Execute workflow
     try:
         logger.info("Initializing NovaAct context manager...")
-        # TODO: Implement custom bedrock_agent_core browser
-        logger.info(f"CREATING BROWSER")
         browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/")
-        logger.info(f"CREATED BROWSER: {browser_id}")
-        logger.info(f"STARTING BROWSER")
         browser = start_browser(browser_id, execution_id)
-        logger.info(f"STARTED BROWSER")
-        logger.info(f"GENERATING WEBSOCKET")
         ws_url, headers = browser.generate_ws_headers()
-        logger.info(f"GENERATED WEBSOCKET")
+        live_view_url = browser.generate_live_view_url()
+        print(live_view_url)
         # print(f"Browser viewer is running at: {client.generate_live_view_url()}")
 
         with NovaAct(

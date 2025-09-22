@@ -378,7 +378,8 @@ export class NovaActQAStudio extends cdk.Stack {
             "bedrock-agentcore:StopBrowserSession",
             "bedrock-agentcore:UpdateBrowserStream",
             "bedrock-agentcore:ConnectBrowserAutomationStream",
-            "bedrock-agentcore:ConnectBrowserLiveViewStream"
+            "bedrock-agentcore:ConnectBrowserLiveViewStream",
+            "*",
           ],
           resources: [`*`]
         })
@@ -439,6 +440,7 @@ export class NovaActQAStudio extends cdk.Stack {
         S3_BUCKET: bucket.bucketName,
         BEDROCK_EXECUTION_ROLE: agentCoreExecutionRole.roleArn,
         NOVA_ACT_API_KEY_NAME: novaApiKey.secretName,
+        SECRETS_PREFIX: props.baseName,
         USER_AGENT: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
       }
     });
@@ -619,7 +621,7 @@ export class NovaActQAStudio extends cdk.Stack {
       path: 'create_usecase_secrets',
       name: 'CreateUsecaseSecrets',
       environment: {
-        TABLE_NAME: table.tableName
+        SECRET_PREFIX: props.baseName
       }
     });
 
@@ -627,7 +629,7 @@ export class NovaActQAStudio extends cdk.Stack {
       path: 'get_usecase_secrets',
       name: 'GetUsecaseSecrets',
       environment: {
-        TABLE_NAME: table.tableName
+        SECRET_PREFIX: props.baseName
       }
     });
 
@@ -635,7 +637,7 @@ export class NovaActQAStudio extends cdk.Stack {
       path: 'delete_usecase_secrets',
       name: 'DeleteUsecaseSecrets',
       environment: {
-        TABLE_NAME: table.tableName
+        SECRET_PREFIX: props.baseName
       }
     });
 
@@ -643,7 +645,7 @@ export class NovaActQAStudio extends cdk.Stack {
       path: 'update_usecase_secrets',
       name: 'UpdateUsecaseSecrets',
       environment: {
-        TABLE_NAME: table.tableName
+        SECRET_PREFIX: props.baseName
       }
     });
 

@@ -351,6 +351,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 								Name:  aws.String("NOVA_ACT_API_KEY_NAME"),
 								Value: aws.String(os.Getenv("NOVA_ACT_API_KEY_NAME")),
 							},
+							{
+								Name:  aws.String("SECRETS_PREFIX"),
+								Value: aws.String(os.Getenv("SECRETS_PREFIX")),
+							},
 						},
 					},
 				},
