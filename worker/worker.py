@@ -252,7 +252,6 @@ def main():
         return False
     
     browser.stop()
-    time.sleep(10)
     delete_browser(browser_id)
     
     # Update execution status to completed
