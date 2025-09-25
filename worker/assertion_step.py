@@ -156,6 +156,7 @@ def execute_assertion_step(step: ExecutionStep, runtime_variables: dict):
         success = False
         logs = f"Exception during assertion: {str(e)}"
         actual_value = "ERROR"
+        result.metadata.act_id = e.metadata.act_id if hasattr(e, 'metadata') else "error"
 
     status = "success" if success else "error"
     logger.info(f"Assertion step {step.sort}: {step.validation_type} {step.validation_operator} - Status: {status}")

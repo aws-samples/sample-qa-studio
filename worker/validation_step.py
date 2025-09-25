@@ -117,7 +117,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
     from types import SimpleNamespace
     result = SimpleNamespace()
     result.metadata = SimpleNamespace()
-    result.metadata.act_id = "error"
+    result.metadata.act_id = e.metadata.act_id if hasattr(e, 'metadata') else "error"
     result.parsed_response = "Exception occurred"
     logs = str(e)
 
