@@ -126,8 +126,6 @@ export default function UsecaseDetailRefactored() {
         ]}
       />
 
-
-
       <Modal
         onDismiss={() => setShowDeleteModal(false)}
         visible={showDeleteModal}

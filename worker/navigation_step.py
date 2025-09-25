@@ -11,10 +11,7 @@ def execute_navigation_step(nova: NovaAct, step: ExecutionStep):
   logs = ""
   
   try:
-    result = nova.act(f"{step.instruction} you must return a bool if the action was successful", schema=BOOL_SCHEMA)
-    if not result.parsed_response:
-      success = False
-      logs = f"Navigation step failed: Action was not successful. Got: {result.parsed_response}"
+    result = nova.act(f"{step.instruction}")
           
   except Exception as e:
     logger.error(f"Error executing navigation step {step.sort}: {str(e)}")

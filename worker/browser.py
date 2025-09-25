@@ -4,18 +4,18 @@ import os
 from utils import get_region
 from bedrock_agentcore.tools.browser_client import BrowserClient
 
-def _create_client():
+def _create_client(region: str):
   control_client = boto3.client(
     'bedrock-agentcore-control',
-    region_name=get_region(),
-    endpoint_url=f"https://bedrock-agentcore-control.{get_region()}.amazonaws.com"
+    region_name=region,
+    endpoint_url=f"https://bedrock-agentcore-control.{region}.amazonaws.com"
   )
 
   return control_client
 
 
-def create_browser(unique_id: str,execution_id: str, artefact_bucket: str, artefact_prefix: str):
-  cp_client = _create_client()
+def create_browser(unique_id: str,execution_id: str, artefact_bucket: str, artefact_prefix: str, region: str):
+  cp_client = _create_client(region)
   response = cp_client.create_browser(
     name=f"nova_act_qa_studio_{unique_id}",
     description=f"browser for {execution_id}",
@@ -36,15 +36,15 @@ def create_browser(unique_id: str,execution_id: str, artefact_bucket: str, artef
   return response['browserId']
 
 
-def delete_browser(browser_id: str):
-  cp_client = _create_client()
+def delete_browser(browser_id: str, region: str):
+  cp_client = _create_client(region)
   cp_client.delete_browser(
     browserId=browser_id
   )
 
 
-def start_browser(browser_id: str, execution_id: str):
-  browser_client = BrowserClient(region=get_region())
+def start_browser(browser_id: str, execution_id: str, region: str):
+  browser_client = BrowserClient(region)
   session_id = browser_client.start(
     identifier=browser_id,
     name=execution_id

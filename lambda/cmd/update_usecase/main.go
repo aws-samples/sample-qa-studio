@@ -42,17 +42,18 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 			"pk": &types.AttributeValueMemberS{Value: "USECASES"},
 			"sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("USECASE#%s", usecaseId)},
 		},
-		UpdateExpression: aws.String("SET #name = :name, description = :description, starting_url = :starting_url, active = :active, headless = :headless, tags = :tags"),
+		UpdateExpression: aws.String("SET #name = :name, description = :description, starting_url = :starting_url, active = :active, headless = :headless, tags = :tags, execution_region = :execution_region"),
 		ExpressionAttributeNames: map[string]string{
 			"#name": "name",
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":name":         &types.AttributeValueMemberS{Value: req.Name},
-			":description":  &types.AttributeValueMemberS{Value: req.Description},
-			":starting_url": &types.AttributeValueMemberS{Value: req.StartingURL},
-			":active":       &types.AttributeValueMemberBOOL{Value: req.Active},
-			":headless":     &types.AttributeValueMemberBOOL{Value: req.Headless},
-			":tags":         &types.AttributeValueMemberSS{Value: req.Tags},
+			":name":             &types.AttributeValueMemberS{Value: req.Name},
+			":description":      &types.AttributeValueMemberS{Value: req.Description},
+			":starting_url":     &types.AttributeValueMemberS{Value: req.StartingURL},
+			":active":           &types.AttributeValueMemberBOOL{Value: req.Active},
+			":headless":         &types.AttributeValueMemberBOOL{Value: req.Headless},
+			":tags":             &types.AttributeValueMemberSS{Value: req.Tags},
+			":execution_region": &types.AttributeValueMemberS{Value: req.Region},
 		},
 	})
 	if err != nil {

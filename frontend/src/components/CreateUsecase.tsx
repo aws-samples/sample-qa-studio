@@ -8,7 +8,9 @@ import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
 import Checkbox from "@cloudscape-design/components/checkbox";
+import Select, {SelectProps} from "@cloudscape-design/components/select";
 import { api } from '../utils/api';
+import { regionOptions, findRegionOptions } from '../utils/browser_regions';
 
 export default function CreateUsecase() {
   const navigate = useNavigate();
@@ -19,6 +21,7 @@ export default function CreateUsecase() {
   const [tags, setTags] = useState('');
   const [headless, setHeadless] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState(findRegionOptions('eu-central-1') as SelectProps.Option);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -29,6 +32,7 @@ export default function CreateUsecase() {
         starting_url: startingUrl,
         active,
         headless,
+        region: selectedRegion.value,
         tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag)
       });
       navigate('/');
@@ -66,6 +70,16 @@ export default function CreateUsecase() {
             placeholder="https://example.com"
           />
         </FormField>
+
+              <FormField label="Region">
+        <Select
+          selectedOption={selectedRegion}
+          onChange={({ detail }) =>
+            setSelectedRegion(detail.selectedOption)
+          }
+          options={regionOptions}
+        />
+      </FormField>
         
         <FormField label="Tags">
           <Input

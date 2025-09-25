@@ -5,6 +5,8 @@ import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Button from "@cloudscape-design/components/button";
+import Select, {SelectProps} from "@cloudscape-design/components/select";
+import { regionOptions, findRegionOptions } from './../../utils/browser_regions';
 
 interface EditUsecaseFormProps {
   usecase: any;
@@ -19,6 +21,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
   const [active, setActive] = useState(usecase.active || false);
   const [headless, setHeadless] = useState(usecase.headless || false);
   const [tags, setTags] = useState(usecase.tags?.join(', ') || '');
+  const [selectedRegion, setSelectedRegion] = useState(findRegionOptions(usecase.region) as SelectProps.Option);
 
   const handleSave = () => {
     const updatedUsecase = {
@@ -27,6 +30,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
       starting_url: startingUrl,
       active,
       headless,
+      region: selectedRegion.value,
       tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
     };
     onSave(updatedUsecase);
@@ -57,6 +61,16 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
           onChange={({ detail }) => setStartingUrl(detail.value)}
           placeholder="https://example.com"
           type="url"
+        />
+      </FormField>
+
+      <FormField label="Region">
+        <Select
+          selectedOption={selectedRegion}
+          onChange={({ detail }) =>
+            setSelectedRegion(detail.selectedOption)
+          }
+          options={regionOptions}
         />
       </FormField>
 

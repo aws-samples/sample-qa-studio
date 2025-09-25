@@ -95,6 +95,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Headless:    headless,
 		CreatedAt:   createdAtTime,
 		TriggerType: triggerType,
+		Region:      usecase.Region,
 	}
 
 	item, err := attributevalue.MarshalMap(execution)

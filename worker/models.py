@@ -20,7 +20,7 @@ class Execution:
     executing_at: Optional[str] = None
     trigger_type: Optional[str] = None
     session_id: Optional[str] = None
-
+    region: str = None
 
 @dataclass
 class ExecutionStep:

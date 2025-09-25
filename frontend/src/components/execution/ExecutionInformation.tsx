@@ -69,6 +69,10 @@ export default function ExecutionInformation({
             value: new Date(execution.createdAt).toLocaleString(),
           },
           {
+            label: "Execution Region",
+            value: execution.region,
+          },
+          {
             label: "Starting URL",
             value: (<a href={execution.starting_url} target="_startPage">{execution.starting_url}</a>),
           },

@@ -65,6 +65,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Headless:    req.Headless,
 		Tags:        req.Tags,
 		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+		Region:      req.Region,
 	}
 
 	item, err := attributevalue.MarshalMap(usecase)

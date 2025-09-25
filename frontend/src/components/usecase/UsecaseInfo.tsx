@@ -10,6 +10,7 @@ import EditUsecaseForm from './EditUsecaseForm';
 import { api } from '../../utils/api';
 import { useApiData } from '../common/useAsyncData';
 import { ContainerLoading, EmptyState } from '../common/LoadingStates';
+import { regionOptions } from '../../utils/browser_regions';
 
 interface UsecaseInfoProps {
   usecaseId: string;
@@ -107,6 +108,10 @@ export default function UsecaseInfo({ usecaseId }: UsecaseInfoProps) {
               ) : (
                 <Badge color="red">Inactive</Badge>
               ),
+            },
+            {
+              label: "Execution Region",
+              value: usecase.region,
             },
             {
               label: "Starting URL",

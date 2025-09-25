@@ -43,6 +43,7 @@ type UseCase struct {
 	Headless    bool     `json:"headless" dynamodbav:"headless"`
 	Tags        []string `json:"tags" dynamodbav:"tags"`
 	CreatedAt   string   `json:"createdAt" dynamodbav:"createdAt"`
+	Region      string   `json:"region" dynamodbav:"execution_region"`
 }
 
 type CreateUsecaseRequest struct {
@@ -52,6 +53,7 @@ type CreateUsecaseRequest struct {
 	Active      bool     `json:"active"`
 	Headless    bool     `json:"headless"`
 	Tags        []string `json:"tags"`
+	Region      string   `json:"region"`
 }
 
 type UpdateUsecaseRequest struct {
@@ -61,6 +63,7 @@ type UpdateUsecaseRequest struct {
 	Active      bool     `json:"active"`
 	Headless    bool     `json:"headless"`
 	Tags        []string `json:"tags"`
+	Region      string   `json:"region"`
 }
 
 type Step struct {
@@ -92,6 +95,7 @@ type Execution struct {
 	ExecutingAt      string `json:"executingAt" dynamodbav:"executing_at"`
 	TriggerType      string `json:"triggerType" dynamodbav:"trigger_type"`
 	NovaActSessionID string `json:"novaActSessionId" dynamodbav:"nova_session_id"`
+	Region           string `json:"region" dynamodbav:"execution_region"`
 }
 
 type ExecutionStep struct {
