@@ -15,11 +15,11 @@ interface ExecutionStepsProps {
   onViewFile: (content: { url: string, title: string, fileType: string }) => void;
 }
 
-export default function ExecutionSteps({ 
-  executionSteps, 
-  usecaseId, 
-  executionId, 
-  onViewFile 
+export default function ExecutionSteps({
+  executionSteps,
+  usecaseId,
+  executionId,
+  onViewFile
 }: ExecutionStepsProps) {
   const [loadingModal, setLoadingModal] = useState(false);
 
@@ -76,7 +76,7 @@ export default function ExecutionSteps({
                   <div style={{ marginBottom: '4px' }}>
                     {item.instruction}
                   </div>
-                  {actId && (
+                  {actId && actId !== "error" && (
                     <div style={{ fontSize: '12px', color: '#5f6b7a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Button
                         variant="inline-link"
@@ -117,7 +117,7 @@ export default function ExecutionSteps({
                 );
               }
 
-              if(item.logs) {
+              if (item.logs) {
                 return (<pre>{item.logs}</pre>)
               }
 
