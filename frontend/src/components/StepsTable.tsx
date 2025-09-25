@@ -112,6 +112,8 @@ export default function StepsTable({
           return <Badge color="green" className="step">Assertion</Badge>;
       case 'retrieve_value':
         return <Badge color="blue" className="step">Value</Badge>;
+      case 'url':
+        return <Badge color="severity-medium" className="step">Goto</Badge>;
       case 'navigation':
       default:
         return <Badge className="step">Navigation</Badge>;

@@ -22,6 +22,7 @@ interface StepFormModalProps {
 
 const STEP_TYPE_OPTIONS = [
   { text: 'Navigation', id: 'navigation' },
+  { text: 'URL', id: 'url' },
   { text: 'Secret', id: 'secret' },
   { text: 'Validation', id: 'validation' },
   { text: 'Retrieve Value', id: 'retrieve_value' },
@@ -261,9 +262,10 @@ export default function StepFormModal({
             label="Instruction"
             description={
               stepType === 'navigation' ? 'Describe the action to perform on the page' :
-                stepType === 'secret' ? 'Describe the action (e.g., "Type password in login field")' :
-                  stepType === 'validation' ? 'Describe what should be validated on the page' :
-                    'Describe what value to retrieve from the page'
+                stepType === 'url' ? 'Enter the URL to navigate to (e.g., "https://example.com/login")' :
+                  stepType === 'secret' ? 'Describe the action (e.g., "Type password in login field")' :
+                    stepType === 'validation' ? 'Describe what should be validated on the page' :
+                      'Describe what value to retrieve from the page'
             }
           >
             <Textarea
@@ -271,9 +273,10 @@ export default function StepFormModal({
               onChange={({ detail }) => setInstruction(detail.value)}
               placeholder={
                 stepType === 'navigation' ? 'Enter navigation instruction' :
-                  stepType === 'secret' ? 'Describe the action with the secret' :
-                    stepType === 'validation' ? 'Describe the validation to perform' :
-                      'Describe what to retrieve (e.g., "Get the product price")'
+                  stepType === 'url' ? 'https://example.com/page' :
+                    stepType === 'secret' ? 'Describe the action with the secret' :
+                      stepType === 'validation' ? 'Describe the validation to perform' :
+                        'Describe what to retrieve (e.g., "Get the product price")'
               }
               rows={3}
             />
