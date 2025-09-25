@@ -15,12 +15,6 @@ def execute_retrieve_value_step(nova: NovaAct, step: ExecutionStep):
     retrieved_value = ''
 
     try:
-        # Determine schema based on value_type, default to string
-
-        logger.info('----------------------------')
-        logger.info(f"Executing instruction: {step.value_type}")
-        logger.info('----------------------------')
-
         schema = STRING_SCHEMA
         if hasattr(step, 'value_type') and step.value_type:
             if step.value_type == 'number':
@@ -51,7 +45,7 @@ def execute_retrieve_value_step(nova: NovaAct, step: ExecutionStep):
         from types import SimpleNamespace
         result = SimpleNamespace()
         result.metadata = SimpleNamespace()
-        result.metadata.act_id = "error"
+        result.metadata.act_id = e.metadata.act_id if hasattr(e, 'metadata') else "error"
         result.parsed_response = "Exception occurred"
 
     status = "success" if success else "error"
