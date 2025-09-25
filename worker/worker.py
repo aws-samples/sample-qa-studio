@@ -21,6 +21,7 @@ from secret_step import execute_secret_step
 from navigation_step import execute_navigation_step
 from retrieve_value_step import execute_retrieve_value_step
 from assertion_step import execute_assertion_step
+from url_step import execute_url_step
 
 # Configure logging
 logging.basicConfig(
@@ -182,12 +183,16 @@ def main():
                             result, success, logs, actual_value = execute_retrieve_value_step(nova, parsed_step)
                         case 'assertion':
                             result, success, logs, actual_value = execute_assertion_step(parsed_step, template_parser.get_runtime_variables_dict())
+                        case 'url':
+                            result, success, logs = execute_url_step(nova, parsed_step)
                         case _:
                             result, success, logs = execute_navigation_step(nova, parsed_step)
 
                     # Safely extract act_id from result
                     if result and hasattr(result, 'metadata') and hasattr(result.metadata, 'act_id'):
                         act_id = result.metadata.act_id
+                    elif parsed_step.step_type == 'url':
+                        act_id = ""
                     else:
                         act_id = ""
                         if success:  # If we thought it was successful but have no result, mark as error

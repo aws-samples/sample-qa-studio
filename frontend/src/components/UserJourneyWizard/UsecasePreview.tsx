@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -62,6 +62,7 @@ export default function UsecasePreview({ usecase, onImport, onRegenerate, isImpo
   const getStepTypeBadge = (stepType: string) => {
     const typeConfig = {
       navigation: { color: 'blue' as const, label: 'Navigation' },
+      url: { color: 'severity-medium' as const, label: 'Goto' },
       validation: { color: 'green' as const, label: 'Validation' },
       secret: { color: 'red' as const, label: 'Secret' },
       retrieve_value: { color: 'grey' as const, label: 'Retrieve Value' }
