@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "paths": {
+      "dcv": ["./src/utils/dcvjs-esm/dcv.js"]
+    },
     "target": "ES2020",
     "lib": [
       "dom",
@@ -10,6 +13,7 @@
       "vite/client"
     ],
     "allowJs": true,
+    "checkJs": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,

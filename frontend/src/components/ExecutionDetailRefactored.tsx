@@ -11,6 +11,7 @@ import { api } from '../utils/api';
 import ExecutionTimeline from './common/ExecutionTimeline';
 import Breadcrumb from './common/Breadcrumb';
 import { ExecutionInformation, ExecutionSteps, ExecutionVariables } from './execution';
+import LiveViewPanel from './execution/LiveViewPanel';
 
 export default function ExecutionDetailRefactored() {
   const { usecaseId, executionId } = useParams();
@@ -97,6 +98,15 @@ export default function ExecutionDetailRefactored() {
                 executionId={executionId}
                 onViewVideo={handleViewContent}
               />
+
+              {/* Live View Panel - Show for executing or recently completed executions */}
+              {(execution?.status === 'executing') && (
+                <LiveViewPanel
+                  usecaseId={usecaseId}
+                  executionId={executionId}
+                  executionStatus={execution?.status}
+                />
+              )}
 
               {hasVariables && (
                 <ExecutionVariables
