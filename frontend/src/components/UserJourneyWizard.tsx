@@ -19,7 +19,9 @@ import Textarea from "@cloudscape-design/components/textarea";
 import UsecasePreview from './UserJourneyWizard/UsecasePreview';
 import Popover from "@cloudscape-design/components/popover";
 import LoadingBar from "@cloudscape-design/chat-components/loading-bar";
+import Select, { SelectProps } from "@cloudscape-design/components/select";
 import LiveRegion from "@cloudscape-design/components/live-region";
+import { regionOptions, findRegionOptions } from './../utils/browser_regions'
 
 interface UserJourneyWizardProps {
   onUsecaseCreated?: (usecaseId: string) => void;
@@ -30,6 +32,7 @@ interface WizardState {
     title: string;
     startingUrl: string;
     userJourney: string;
+    executionRegion: string;
   };
   isGenerating: boolean;
   isImporting: boolean;
@@ -51,7 +54,8 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
     formData: {
       title: '',
       startingUrl: '',
-      userJourney: ''
+      userJourney: '',
+      executionRegion: 'eu-central-1'
     },
     isGenerating: false,
     isImporting: false,
@@ -97,7 +101,8 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
       const response = await wizardApi.generateUsecase({
         title: state.formData.title,
         startingUrl: state.formData.startingUrl,
-        userJourney: state.formData.userJourney
+        userJourney: state.formData.userJourney,
+        region: state.formData.executionRegion
       });
 
       if (response.success) {
@@ -159,7 +164,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
           // Clear form for reuse
           setState(prev => ({
             ...prev,
-            formData: { title: '', startingUrl: '', userJourney: '' },
+            formData: { title: '', startingUrl: '', userJourney: '', executionRegion: '' },
             generatedUsecase: null,
             previewMode: false,
             isImporting: false,
@@ -385,6 +390,37 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
             placeholder="https://example.com/login"
             disabled={state.isGenerating}
             invalid={!!state.validationErrors.startingUrl}
+          />
+        </FormField>
+
+        <FormField
+          label={
+            <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+              <span>Execution Region</span>
+              <Popover
+                size="medium"
+                position="right"
+                triggerType="custom"
+                dismissButton={false}
+                content={
+                  <SpaceBetween direction="vertical" size="xs">
+                    <Box variant="strong">Examples:</Box>
+                    <Box variant="small">• https://example.com/login</Box>
+                    <Box variant="small">• https://shop.example.com</Box>
+                    <Box variant="small">• https://app.example.com/signup</Box>
+                  </SpaceBetween>
+                }
+              >
+                <Button variant="inline-icon" iconName="status-info" />
+              </Popover>
+            </SpaceBetween>
+          }
+          errorText={state.validationErrors.startingUrl}
+        >
+          <Select
+            selectedOption={findRegionOptions(state.formData.executionRegion)!}
+            onChange={({ detail }) => handleFieldChange('executionRegion', detail.selectedOption.value!)}
+            options={regionOptions}
           />
         </FormField>
         

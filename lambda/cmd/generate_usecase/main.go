@@ -26,6 +26,7 @@ type GenerateUsecaseRequest struct {
 	Title       string `json:"title"`
 	StartingURL string `json:"startingUrl"`
 	UserJourney string `json:"userJourney"`
+	Region      string `json:"region"`
 }
 
 // Response structure for generate usecase
@@ -419,6 +420,7 @@ Generate a JSON object that matches this EXACT schema. This JSON will be importe
     "starting_url": "` + request.StartingURL + `",
     "active": true,
     "headless": false,
+    "region": "` + request.Region + `",
     "tags": []
   },
   "steps": [
@@ -587,6 +589,32 @@ func validateRequest(req *GenerateUsecaseRequest) error {
 		}
 	} else {
 		req.UserJourney = sanitizedJourney
+	}
+
+	// Validate region
+	if strings.TrimSpace(req.Region) == "" {
+		errors = append(errors, ValidationError{
+			Field:   "region",
+			Message: "Region is required",
+			Code:    "REQUIRED",
+		})
+	} else {
+		// Validate region format (basic validation)
+		validRegions := []string{"us-east-1", "us-west-2", "ap-southeast-2", "eu-central-1"}
+		isValidRegion := false
+		for _, validRegion := range validRegions {
+			if req.Region == validRegion {
+				isValidRegion = true
+				break
+			}
+		}
+		if !isValidRegion {
+			errors = append(errors, ValidationError{
+				Field:   "region",
+				Message: "Invalid region. Must be one of: us-east-1, us-west-2, ap-southeast-2, eu-central-1",
+				Code:    "INVALID_FORMAT",
+			})
+		}
 	}
 
 	if len(errors) > 0 {

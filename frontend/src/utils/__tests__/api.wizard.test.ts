@@ -41,7 +41,7 @@ describe('Wizard API', () => {
         success: true,
         usecaseData: JSON.stringify({
           exportVersion: '1.0',
-          usecase: { name: 'Test', description: 'Test case', starting_url: 'https://example.com', active: true, headless: false, tags: [] },
+          usecase: { name: 'Test', description: 'Test case', starting_url: 'https://example.com', active: true, headless: false, region: 'us-east-1', tags: [] },
           steps: [],
           variables: [],
           secrets: [],
@@ -369,7 +369,7 @@ describe('Wizard API', () => {
         success: true,
         usecaseData: JSON.stringify({
           exportVersion: '1.0',
-          usecase: { name: 'Test', description: 'Test', starting_url: 'https://example.com', active: true, headless: false, tags: [] },
+          usecase: { name: 'Test', description: 'Test', starting_url: 'https://example.com', active: true, headless: false, region: 'us-east-1', tags: [] },
           steps: [],
           variables: [],
           secrets: [],
@@ -454,7 +454,7 @@ describe('Wizard API', () => {
       // Mock a large response with many steps
       const largeUsecaseData = {
         exportVersion: '1.0',
-        usecase: { name: 'Large Test', description: 'Test', starting_url: 'https://example.com', active: true, headless: false, tags: [] },
+        usecase: { name: 'Large Test', description: 'Test', starting_url: 'https://example.com', active: true, headless: false, region: 'us-east-1', tags: [] },
         steps: Array.from({ length: 100 }, (_, i) => ({
           sort: i + 1,
           instruction: `Step ${i + 1}`,

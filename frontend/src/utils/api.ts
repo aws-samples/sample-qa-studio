@@ -104,6 +104,7 @@ export interface GenerateUsecaseRequest {
   title: string;
   startingUrl: string;
   userJourney: string;
+  region: string;
 }
 
 export interface GenerateUsecaseResponse {
@@ -152,6 +153,10 @@ export const wizardApi = {
     
     if (!request.userJourney?.trim()) {
       throw errorManager.createError('validation', 'User journey description is required');
+    }
+    
+    if (!request.region?.trim()) {
+      throw errorManager.createError('validation', 'Execution region is required');
     }
     
     // URL validation
