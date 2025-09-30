@@ -108,7 +108,7 @@ export class LiveViewer {
             '[Viewer] DCV requested credentials - should not happen with presigned URL'
           );
         },
-        error: (auth: any, error: any) => {
+        error: (_auth: any, error: any) => {
           console.error('[Viewer] DCV auth error:', error);
           console.error('[Viewer] Error details:', {
             message: error.message || error,
@@ -118,7 +118,7 @@ export class LiveViewer {
           });
           reject(error);
         },
-        success: (auth: any, result:any) => {
+        success: (_auth: any, result:any) => {
           console.log('[Viewer] DCV auth success:', result);
           if (result && result[0]) {
             const { sessionId, authToken } = result[0];

@@ -5,7 +5,7 @@ import * as path from 'path';
 export default defineConfig({
   resolve: {
     alias: {
-      'dcv': path.resolve(__dirname, './src/utils/dcvjs-esm/dcv.js'),
+      'dcv': path.resolve(__dirname, './public/dcv/dcv.js'),
     }
   },
   plugins: [react()],

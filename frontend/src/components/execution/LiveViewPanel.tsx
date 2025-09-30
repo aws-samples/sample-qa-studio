@@ -10,6 +10,7 @@ import Box from "@cloudscape-design/components/box";
 import Link from "@cloudscape-design/components/link";
 import { RemoteBrowser } from '../dcv/DCVViewer';
 import { useLiveViewUrl } from '../../hooks/useLiveViewUrl';
+import { api } from './../../utils/api';
 
 interface LiveViewPanelProps {
   usecaseId: string;
@@ -24,13 +25,12 @@ export default function LiveViewPanel({
 }: LiveViewPanelProps) {
   const [showViewer, setShowViewer] = useState(false);
   const [dcvError, setDcvError] = useState<string | null>(null);
-  
+
   const { 
     liveViewUrl, 
     isLoading, 
     error, 
     isExpired, 
-    refresh 
   } = useLiveViewUrl(usecaseId, executionId, executionStatus === 'executing');
 
   const handleOpenViewer = () => {
@@ -41,11 +41,6 @@ export default function LiveViewPanel({
   const handleCloseViewer = () => {
     setShowViewer(false);
     setDcvError(null);
-  };
-
-  const handleDcvError = (error: any) => {
-    console.error('DCV Error:', error);
-    setDcvError(error.message || 'Failed to connect to live session');
   };
 
   const isExecutionActive = executionStatus === 'executing';
@@ -59,13 +54,6 @@ export default function LiveViewPanel({
             variant="h3"
             actions={
               <SpaceBetween direction="horizontal" size="xs">
-                <Button
-                  iconName="refresh"
-                  variant="icon"
-                  onClick={refresh}
-                  loading={isLoading}
-                  ariaLabel="Refresh live view status"
-                />
                 {hasLiveView && (
                   <Button
                     variant="primary"

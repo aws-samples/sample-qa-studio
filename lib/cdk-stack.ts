@@ -137,6 +137,10 @@ export class NovaActQAStudio extends cdk.Stack {
       ]
     });
 
+    new cdk.CfnOutput(this, 'cloudfront domain', {
+      value: distribution.domainName
+    })
+
     // Grant OAI access to S3 bucket
     frontendBucket.grantRead(oai);
 

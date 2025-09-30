@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "paths": {
-      "dcv": ["./src/utils/dcvjs-esm/dcv.js"]
+      "dcv": ["./public/dcv/dcv.js"]
     },
     "target": "ES2020",
     "lib": [
