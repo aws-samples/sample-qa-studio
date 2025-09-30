@@ -19,6 +19,7 @@ interface GeneratedUsecase {
     starting_url: string;
     active: boolean;
     headless: boolean;
+    region: string;
     tags: string[];
   };
   steps: Array<{
@@ -229,6 +230,10 @@ export default function UsecasePreview({ usecase, onImport, onRegenerate, isImpo
               <Badge color={usecase.usecase.headless ? 'blue' : 'grey'}>
                 {usecase.usecase.headless ? 'Enabled' : 'Disabled'}
               </Badge>
+            </div>
+            <div>
+              <Box variant="awsui-key-label">Region</Box>
+              <TextContent>{usecase.usecase.region}</TextContent>
             </div>
             <div>
               <Box variant="awsui-key-label">Tags</Box>
