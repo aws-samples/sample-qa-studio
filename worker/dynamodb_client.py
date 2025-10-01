@@ -3,8 +3,10 @@ from typing import Optional, List
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 import logging
+import os
 
 from models import Execution, ExecutionStep, ExecutionVariables, KeyValuePair
+from sqs_client import SQSClient
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,8 @@ class DynamoDBClient:
     def __init__(self, table_name: str, region_name: str = 'us-east-1'):
         self.dynamodb = boto3.resource('dynamodb', region_name=region_name)
         self.table = self.dynamodb.Table(table_name)
+        self.sqs_client = SQSClient(region_name)
+        self.notification_queue_url = os.getenv('NOTIFICATION_QUEUE_URL')
     
     def get_execution(self, usecase_id: str, execution_id: str) -> Optional[Execution]:
         """Load execution data from DynamoDB"""
@@ -151,6 +155,15 @@ class DynamoDBClient:
             )
             
             logger.info(f"Updated execution {execution_id} status to {status} for usecase {usecase_id}")
+            
+            # Send notification if execution failed and notification queue is configured
+            if status in ['failed', 'error'] and self.notification_queue_url:
+                self.sqs_client.send_notification_message(
+                    self.notification_queue_url, 
+                    usecase_id, 
+                    execution_id
+                )
+            
             return True
             
         except ClientError as e:

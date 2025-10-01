@@ -198,3 +198,20 @@ type CreatedByRecord struct {
 	Sub       string `json:"sub" dynamodbav:"sub"`
 	CreatedAt string `json:"createdAt" dynamodbav:"createdAt"`
 }
+
+type NotificationMessage struct {
+	UsecaseID   string `json:"usecase_id"`
+	ExecutionID string `json:"execution_id"`
+}
+
+type UsecaseSubscription struct {
+	PK        string `json:"pk" dynamodbav:"pk"`
+	SK        string `json:"sk" dynamodbav:"sk"`
+	Email     string `json:"email" dynamodbav:"email"`
+	CreatedAt string `json:"createdAt" dynamodbav:"createdAt"`
+}
+
+type SubscriptionStatusResponse struct {
+	IsSubscribed bool   `json:"is_subscribed"`
+	Email        string `json:"email,omitempty"`
+}

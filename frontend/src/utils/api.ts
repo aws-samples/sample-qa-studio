@@ -234,3 +234,22 @@ export const exportImportApi = {
   },
   importUsecase: (data: any) => api.post('import', data),
 };
+
+
+
+export interface SubscriptionStatusResponse {
+  is_subscribed: boolean;
+  email?: string;
+}
+
+export const subscriptionApi = {
+  getStatus: async (usecaseId: string): Promise<SubscriptionStatusResponse> => {
+    return api.get(`usecase/${usecaseId}/subscription`);
+  },
+  subscribe: async (usecaseId: string): Promise<SubscriptionStatusResponse> => {
+    return api.post(`usecase/${usecaseId}/subscription`, {});
+  },
+  unsubscribe: async (usecaseId: string): Promise<SubscriptionStatusResponse> => {
+    return api.delete(`usecase/${usecaseId}/subscription`);
+  },
+};

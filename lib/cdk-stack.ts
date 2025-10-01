@@ -3,6 +3,7 @@ import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -152,6 +153,13 @@ export class NovaActQAStudio extends cdk.Stack {
     const queue = new sqs.Queue(this, 'queue', {
       queueName: this.cdkName('workhorse'),
       visibilityTimeout: cdk.Duration.minutes(10),
+      removalPolicy: cdk.RemovalPolicy.DESTROY
+    });
+
+    // SQS Notification Queue
+    const notificationQueue = new sqs.Queue(this, 'notification_queue', {
+      queueName: this.cdkName('notifications'),
+      visibilityTimeout: cdk.Duration.minutes(5),
       removalPolicy: cdk.RemovalPolicy.DESTROY
     });
 
@@ -308,7 +316,8 @@ export class NovaActQAStudio extends cdk.Stack {
         DYNAMO_TABLE: table.tableName,
         QUEUE_URL: queue.queueUrl,
         BUCKET_NAME: bucket.bucketName,
-        NOVA_ACT_API_KEY_NAME: novaApiKey.secretName
+        NOVA_ACT_API_KEY_NAME: novaApiKey.secretName,
+        NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl
       }
     });
 
@@ -316,6 +325,7 @@ export class NovaActQAStudio extends cdk.Stack {
     table.grantFullAccess(taskDefinition.taskRole);
     queue.grantConsumeMessages(taskDefinition.taskRole);
     bucket.grantReadWrite(taskDefinition.taskRole);
+    notificationQueue.grantSendMessages(taskDefinition.taskRole);
     ecrRepository.grantPull(taskDefinition.executionRole!);
     ecrRepository.grantPull(taskDefinition.taskRole!);
 
@@ -481,7 +491,8 @@ export class NovaActQAStudio extends cdk.Stack {
       path: 'update_execution',
       name: 'UpdateExecution',
       environment: {
-        TABLE_NAME: table.tableName
+        TABLE_NAME: table.tableName,
+        NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl
       }
     });
 
@@ -698,6 +709,46 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
+    // Send Notification Lambda (only for user subscriptions)
+    const sendNotificationLambda = this.CreateLambda({
+      path: 'send_notification',
+      name: 'SendNotification',
+      environment: {
+        TABLE_NAME: table.tableName,
+        NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl
+      }
+    });
+
+    // Add SQS event source to send notification lambda with batch size 1
+    sendNotificationLambda.addEventSource(new lambdaEventSources.SqsEventSource(notificationQueue, {
+      batchSize: 1
+    }));
+
+    // Usecase Subscription Lambdas
+    const subscribeUsecaseLambda = this.CreateLambda({
+      path: 'subscribe_usecase',
+      name: 'SubscribeUsecase',
+      environment: {
+        TABLE_NAME: table.tableName
+      }
+    });
+
+    const unsubscribeUsecaseLambda = this.CreateLambda({
+      path: 'unsubscribe_usecase',
+      name: 'UnsubscribeUsecase',
+      environment: {
+        TABLE_NAME: table.tableName
+      }
+    });
+
+    const getUsecaseSubscriptionLambda = this.CreateLambda({
+      path: 'get_usecase_subscription',
+      name: 'GetUsecaseSubscription',
+      environment: {
+        TABLE_NAME: table.tableName
+      }
+    });
+
     // Grant Lambda permissions
     table.grantReadData(listUsecasesLambda);
     table.grantWriteData(createUsecaseLambda);
@@ -709,6 +760,7 @@ export class NovaActQAStudio extends cdk.Stack {
     table.grantWriteData(updateUsecaseLambda);
     table.grantReadData(listExecutionsLambda);
     table.grantWriteData(updateExecutionLambda);
+    notificationQueue.grantSendMessages(updateExecutionLambda);
     table.grantWriteData(updateExecutionStepLambda);
     table.grantReadData(getExecutionStepLambda);
     table.grantReadData(getExecutionLambda);
@@ -723,6 +775,14 @@ export class NovaActQAStudio extends cdk.Stack {
     table.grantReadData(exportUsecaseLambda);
     table.grantWriteData(importUsecaseLambda);
     table.grantReadData(generateUsecaseLambda);
+
+    // Grant permissions for send notification lambda
+    table.grantReadData(sendNotificationLambda);
+    notificationQueue.grantConsumeMessages(sendNotificationLambda);
+
+    table.grantWriteData(subscribeUsecaseLambda);
+    table.grantFullAccess(unsubscribeUsecaseLambda);
+    table.grantReadData(getUsecaseSubscriptionLambda);
 
     // Grant S3 permissions to generate_s3_url Lambda
     bucket.grantRead(generateS3UrlLambda);
@@ -785,6 +845,16 @@ export class NovaActQAStudio extends cdk.Stack {
       resources: [
         "*"
       ]
+    }));
+
+    // Grant SES permissions to send notification Lambda
+    sendNotificationLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'ses:SendEmail',
+        'ses:SendRawEmail'
+      ],
+      resources: ['*']
     }));
 
     updateUsecaseSecretsLambda.addToRolePolicy(new iam.PolicyStatement({
@@ -1036,6 +1106,23 @@ export class NovaActQAStudio extends cdk.Stack {
     // API Gateway generate-usecase endpoint
     const generateUsecase = api.root.addResource('generate-usecase');
     generateUsecase.addMethod('POST', new apigateway.LambdaIntegration(generateUsecaseLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+
+
+
+    // API Gateway subscription endpoints
+    const usecaseSubscription = usecaseId.addResource('subscription');
+    usecaseSubscription.addMethod('GET', new apigateway.LambdaIntegration(getUsecaseSubscriptionLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+    usecaseSubscription.addMethod('POST', new apigateway.LambdaIntegration(subscribeUsecaseLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+    usecaseSubscription.addMethod('DELETE', new apigateway.LambdaIntegration(unsubscribeUsecaseLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO
     });

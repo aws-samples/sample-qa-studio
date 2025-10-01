@@ -63,6 +63,10 @@ lambdas.build:
 	cd lambda/cmd/export_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
 	cd lambda/cmd/import_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
 	cd lambda/cmd/generate_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/get_usecase_subscription/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/subscribe_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/unsubscribe_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	cd lambda/cmd/send_notification/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
 
 lambdas.clean:
 	@echo "Cleaning up Lambda bootstrap binaries..."
