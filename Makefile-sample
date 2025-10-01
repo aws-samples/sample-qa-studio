@@ -18,12 +18,12 @@ test_all:
 	go test -p 1 -v -coverpkg=./... -coverprofile=profile.cov ./... && go tool cover -func profile.cov && rm -rf profile.cov
 
 docker.build:
-	cd worker/ && podman build --platform linux/arm64 -t accept_ai_worker .
-	podman tag localhost/nova-act-qa-studio:latest {your-registry-here}/nova-act-qa-studio:latest
+	cd worker/ && podman build --platform linux/arm64 -t {ecr-name} .
 
 docker.upload:
-	aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin {your-registry-here}
-	docker push {your-registry-here}/nova-act-qa-studio:latest
+	podman tag {ecr-name}:latest {ecr-uri}:latest
+	aws ecr get-login-password --region {region} | podman login --username AWS --password-stdin {ecr-hostname}
+	podman push {ecr-uri}:latest
 
 frontend.build:
 	cd frontend && npm run build
@@ -78,7 +78,7 @@ clean: lambdas.clean
 	@echo "All build artifacts cleaned up"
 
 cdk.deploy:
-	AWS_REGION=eu-central-1 npx cdk deploy
+	npx cdk deploy
 
 # deploy: lambdas.build frontend.build cdk.deploy
 deploy: lambdas.build frontend.build cdk.deploy lambdas.clean
