@@ -266,8 +266,16 @@ export class NovaActQAStudio extends cdk.Stack {
     const vpc = new ec2.Vpc(this, 'vpc', {
       vpcName: this.cdkName('vpc'),
       maxAzs: 2,
-      natGateways: 1
+      natGateways: 1,
     });
+
+    // Get default security group and allow all outbound traffic
+    const defaultSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(this, 'default_security_group', vpc.vpcDefaultSecurityGroup);
+    defaultSecurityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.allTraffic(),
+      'Allow all outbound traffic'
+    );
 
     // Add VPC endpoints for ECR and CloudWatch
     vpc.addGatewayEndpoint('S3Endpoint', {
@@ -315,7 +323,7 @@ export class NovaActQAStudio extends cdk.Stack {
 
 
     // Add container to task definition
-      taskDefinition.addContainer('container', {
+    taskDefinition.addContainer('container', {
       image: ecs.ContainerImage.fromEcrRepository(ecrRepository, 'latest'),
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: this.cdkName('logs'),
