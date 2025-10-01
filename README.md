@@ -79,7 +79,9 @@ This command will:
 
 **2. Adjusting information**
 
-Update the Amplify config at [frontend/src/amplifyconfiguration.json](frontend/src/amplifyconfiguration.json) with the Cognito User Pool:
+Make the following changes to your local project and AWS resources:
+
+- Update the Amplify config at [frontend/src/amplifyconfiguration.json](frontend/src/amplifyconfiguration.json) with the Cognito User Pool:
 
 ```json
 {
@@ -93,17 +95,23 @@ Update the Amplify config at [frontend/src/amplifyconfiguration.json](frontend/s
 }
 ```
 
-Update [frontend/.env](frontend/.env) with the API Gateway invoke URL;
+- Update [frontend/.env](frontend/.env) with the API Gateway invoke URL;
 
 ```bash
 VITE_API_ENDPOINT={'apigateway domain' from the terminal output}
 ```
 
-Update the Makefile with your ECR Repository details from the CDK outputs:
-- Replace `{repository-name}` with the `EcrName` output
-- Replace `{repository-uri}` with the `EcrUri` output  
-- Replace `{registry-hostname}` with the `EcrHostname` output
-- Replace `{region}` with your AWS region
+- Update the [Makefile](./Makefile) with your ECR Repository details from the CDK outputs:
+  - Replace `{repository-name}` with the `EcrName` output
+  - Replace `{repository-uri}` with the `EcrUri` output  
+  - Replace `{registry-hostname}` with the `EcrHostname` output
+  - Replace `{region}` with your AWS region
+
+- Upload your Nova Act API Key to the `nova-act-qa-studio-nova-api-key` Secrets Manager Secret:
+  - Go to AWS Console → Secrets Manager → `nova-act-qa-studio-nova-api-key`
+  - Click "Retrieve secret value" → "Edit"
+  - Replace the placeholder value with your actual Nova Act API key
+  - Click "Save"
 
 **3. Deploy again**
 
