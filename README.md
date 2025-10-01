@@ -135,7 +135,7 @@ make docker.upload
 
 After deployment, you'll need to:
 
-1. **Create First User**: Go to AWS Console → Cognito → User Pools → nova-act-qa-studio-user-pool → Users → Create user with your email address
+1. **Create First User**: Go to AWS Console → Cognito → User Pools → `nova-act-qa-studio-user-pool` → Users → Create user with your email address
 2. **Access Application**: Navigate to the CloudFront distribution URL from the deployment outputs
 3. **First Login**: Sign in with the user credentials you created in step 1
 
