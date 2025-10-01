@@ -77,9 +77,7 @@ export class NovaActQAStudio extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const backupVault = new backup.BackupVault(this, "dynamodb_backup_vault", {
-      backupVaultName: this.cdkName("data_backup")
-    })
+    const backupVault = new backup.BackupVault(this, "dynamodb_backup_vault")
     const plan = new backup.BackupPlan(this, "dynamodb_backup_plan")
     plan.addRule(backup.BackupPlanRule.daily(backupVault))
     plan.addSelection("data_table", {
@@ -102,14 +100,12 @@ export class NovaActQAStudio extends cdk.Stack {
 
     // S3 Bucket for artifacts
     const bucket = new s3.Bucket(this, 'artefacts', {
-      bucketName: this.cdkName('artefacts'),
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
 
     // S3 Bucket for frontend
     const frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
-      bucketName: this.cdkName('frontend'),
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
@@ -135,6 +131,10 @@ export class NovaActQAStudio extends cdk.Stack {
           responsePagePath: '/index.html'
         }
       ]
+    });
+
+    new cdk.CfnOutput(this, 'CloudFrontDistributionDomain', { 
+      value: distribution.distributionDomainName
     });
 
     // Grant OAI access to S3 bucket
@@ -198,12 +198,21 @@ export class NovaActQAStudio extends cdk.Stack {
     });
 
     // ECR Repository
-    const ecrRepository = new ecr.Repository(this, 'images_repository', {
-      repositoryName: this.cdkName('images')
+    const ecrRepository = new ecr.Repository(this, 'images_repository');
+
+    new cdk.CfnOutput(this, 'EcrName', { 
+      value: ecrRepository.repositoryName
     });
 
-    new cdk.CfnOutput(this, 'ECR', { 
-      value: ecrRepository.repositoryName
+    const ecrUri = ecrRepository.repositoryUri
+    const ecrHostname = ecrUri.split('/')[0]
+
+    new cdk.CfnOutput(this, 'EcrUri', { 
+      value: ecrUri
+    });
+
+    new cdk.CfnOutput(this, 'EcrHostname', { 
+      value: ecrHostname
     });
 
     const agentCoreExecutionRole = new iam.Role(this, 'agent_core_execution_role', {
