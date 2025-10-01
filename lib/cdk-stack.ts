@@ -17,6 +17,8 @@ import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as backup from 'aws-cdk-lib/aws-backup';
+import * as ecr_assets from 'aws-cdk-lib/aws-ecr-assets';
+import * as ecrdeploy from 'cdk-ecr-deployment';
 
 interface CreateLambdaProps {
   name: string,
@@ -207,6 +209,17 @@ export class NovaActQAStudio extends cdk.Stack {
 
     // ECR Repository
     const ecrRepository = new ecr.Repository(this, 'images_repository');
+    
+    // Build worker
+    const workerImage = new ecr_assets.DockerImageAsset(this, 'MyDockerImage', {
+      directory: 'worker',
+      platform: ecr_assets.Platform.LINUX_ARM64
+    });
+
+    new ecrdeploy.ECRDeployment(this, 'container_deployment', {
+      src: new ecrdeploy.DockerImageName(workerImage.imageUri),
+      dest: new ecrdeploy.DockerImageName(`${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/${ecrRepository.repositoryName}:latest`),
+    });
 
     new cdk.CfnOutput(this, 'EcrName', { 
       value: ecrRepository.repositoryName
@@ -262,6 +275,7 @@ export class NovaActQAStudio extends cdk.Stack {
       ]
     }))
 
+
     // VPC for ECS
     const vpc = new ec2.Vpc(this, 'vpc', {
       vpcName: this.cdkName('vpc'),
@@ -298,13 +312,6 @@ export class NovaActQAStudio extends cdk.Stack {
       service: ec2.GatewayVpcEndpointAwsService.DYNAMODB
     });
 
-    // Security Group for ECS tasks
-    // const ecsSecurityGroup = new ec2.SecurityGroup(this, 'EcsTaskSecurityGroup', {
-    //   vpc,
-    //   description: 'Security group for ECS tasks',
-    //   allowAllOutbound: true
-    // });
-
     // ECS Cluster
     const cluster = new ecs.Cluster(this, 'cluster', {
       vpc,
@@ -318,7 +325,7 @@ export class NovaActQAStudio extends cdk.Stack {
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
         cpuArchitecture: ecs.CpuArchitecture.ARM64
-      },
+      },      
     });
 
 
