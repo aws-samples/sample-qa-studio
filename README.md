@@ -127,9 +127,9 @@ make docker.upload
 
 After deployment, you'll need to:
 
-1. **Configure Cognito**: Set up user pool domain and OAuth settings
-2. **Update Frontend Config**: Configure the frontend with API Gateway and Cognito endpoints
-3. **Test Worker**: Verify ECS task definition can pull and run the worker container
+1. **Create First User**: Go to AWS Console → Cognito → User Pools → nova-act-qa-studio-user-pool → Users → Create user with your email address
+2. **Access Application**: Navigate to the CloudFront distribution URL from the deployment outputs
+3. **First Login**: Sign in with the user credentials you created in step 1
 
 ## Development
 
