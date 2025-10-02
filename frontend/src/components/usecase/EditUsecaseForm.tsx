@@ -5,7 +5,7 @@ import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Button from "@cloudscape-design/components/button";
-import Select, {SelectProps} from "@cloudscape-design/components/select";
+import Select, { SelectProps } from "@cloudscape-design/components/select";
 import { regionOptions, findRegionOptions } from './../../utils/browser_regions';
 
 interface EditUsecaseFormProps {
@@ -31,7 +31,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
       active,
       headless,
       region: selectedRegion.value,
-      tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
+      tags: tags.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0)
     };
     onSave(updatedUsecase);
   };

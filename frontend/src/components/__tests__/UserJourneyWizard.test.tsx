@@ -226,6 +226,7 @@ describe('UserJourneyWizard', () => {
         starting_url: 'https://example.com',
         active: true,
         headless: false,
+        region: 'us-east-1',
         tags: []
       },
       steps: [
@@ -280,7 +281,8 @@ describe('UserJourneyWizard', () => {
       expect(wizardApi.generateUsecase).toHaveBeenCalledWith({
         title: validFormData.title,
         startingUrl: validFormData.startingUrl,
-        userJourney: validFormData.userJourney
+        userJourney: validFormData.userJourney,
+        region: validFormData.executionRegion
       });
 
       // Wait for preview to appear
@@ -399,6 +401,7 @@ describe('UserJourneyWizard', () => {
         starting_url: 'https://example.com',
         active: true,
         headless: false,
+        region: 'us-east-1',
         tags: []
       },
       steps: [
@@ -654,7 +657,7 @@ describe('UserJourneyWizard', () => {
         success: true,
         usecaseData: JSON.stringify({
           exportVersion: '1.0',
-          usecase: { name: 'Test', description: 'Test', starting_url: 'https://example.com', active: true, headless: false, tags: [] },
+          usecase: { name: 'Test', description: 'Test', starting_url: 'https://example.com', active: true, headless: false, region: 'us-east-1', tags: [] },
           steps: [],
           variables: [],
           secrets: [],

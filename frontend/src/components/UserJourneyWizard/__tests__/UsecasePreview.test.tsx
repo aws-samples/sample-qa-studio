@@ -15,6 +15,7 @@ describe('UsecasePreview', () => {
       starting_url: 'https://example.com/login',
       active: true,
       headless: false,
+      region: 'us-east-1',
       tags: ['login', 'authentication']
     },
     steps: [
@@ -294,6 +295,7 @@ describe('UsecasePreview', () => {
           starting_url: 'https://example.com',
           active: true,
           headless: false,
+          region: 'us-east-1',
           tags: []
         },
         steps: [
