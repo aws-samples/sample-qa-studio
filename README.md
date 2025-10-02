@@ -1,10 +1,10 @@
-# NovaAct QA Studio - Web Automation Platform
+# Nova Act QA Studio - Web Automation Platform
 
-Is a cloud-native web automation platform that enables users to create, manage, and execute browser-based workflows without writing code. Built on AWS with a modern serverless architecture, it combines the power of AI-driven browser automation through Nova Act with an intuitive web interface for creating complex automation scenarios.
+Nova Act QA Studio is a cloud-native web automation platform that enables users to create, manage, and execute browser-based workflows without writing code. Built on AWS with a modern serverless architecture, it combines the power of AI-driven browser automation through Nova Act with an intuitive web interface for creating complex automation scenarios.
 
-## What is NovaAct QA Studio?
+## What is Nova Act QA Studio?
 
-NovaAct QA Studio transforms web automation from a developer-only task into an accessible tool for anyone. Users can:
+Nova Act QA Studio transforms web automation from a developer-only task into an accessible tool for anyone. Users can:
 
 - **Create Automation Workflows**: Define step-by-step browser interactions through a visual interface
 - **Execute with AI**: Leverage Nova Act's AI-powered browser automation for intelligent web interactions
@@ -17,20 +17,21 @@ The platform is perfect for web scraping, automated testing, data collection, fo
 
 ## Architecture Overview
 
-NovaAct QA Studio follows a modern serverless architecture pattern:
+Nova Act QA Studio follows a modern serverless architecture pattern:
 
-- **Frontend**: React application with AWS Cloudscape Design System
+- **Frontend**: React application with AWS Cloudscape Design System hosted on S3 and CloudFront
 - **API Layer**: AWS API Gateway with Lambda functions (Go)
-- **Authentication**: AWS Cognito for secure user management  
+- **Authentication**: AWS Cognito with AWS Amplify SDK for secure user management
 - **Data Storage**: DynamoDB with single-table design
 - **Execution Engine**: ECS Fargate containers running Python workers
 - **Artifact Storage**: S3 for videos, screenshots, and logs
 - **Scheduling**: EventBridge Scheduler for automated executions
 - **Queue System**: SQS for reliable execution orchestration
+- **Browser**: Bedrock AgentCore Browser Tool for a running Nova Act on a fully managed remote browser
 
 ## Prerequisites
 
-Before deploying Accept AI, ensure you have:
+Before deploying Nova Act QA Studio, ensure you have:
 
 - AWS CLI configured with appropriate permissions
 - Node.js 18+ and npm
@@ -45,8 +46,8 @@ Before deploying Accept AI, ensure you have:
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd accept-ai
+git clone git@github.com:aws-samples/sample-nova-act-qa-studio.git
+cd sample-nova-act-qa-studio
 
 # Install dependencies
 npm install
@@ -59,82 +60,66 @@ cd lambda && go mod download && cd ..
 This section will explain how to install and deploy the tool.
 We're going to use the Makefile sample to customize it to your own needs
 
-**1. Basic Setup** 
+**1. Initial deployment**
 
 ```bash
-git clone git@github.com:aws-samples/sample-nova-act-qa-studio.git
-cd sample-nova-act-qa-studio
 cp Makefile-sample Makefile
 cp frontend/src/amplifyconfiguration-sample.json frontend/src/amplifyconfiguration.json
 cp frontend/.env-sample frontend/.env
-make
+make deploy
 ```
 
-**2. Adjusting information** 
+This command will:
+
+- Build all Lambda functions for ARM64 architecture
+- Build the React frontend
+- Build and deploy the CDK Stack to AWS
+
+> Note the CloudFormation outputs printed in the terminal at the end of the `make deploy` execution - you'll need these values for the next steps.
+
+**2. Adjusting information**
+
+Make the following changes to your local project and AWS resources:
+
+- Update the Amplify config at [frontend/src/amplifyconfiguration.json](frontend/src/amplifyconfiguration.json) with the Cognito User Pool:
 
 ```json
-// Add cognito data to the frontend
-// frontend/src/amplifyconfiguration.json
 {
   "Auth": {
     "Cognito": {
       "userPoolId": "{'user pool id' from the terminal output}",
       "userPoolClientId": "{'user pool client id' from the terminal output}",
-      "region": "{your region}"
+      "region": "{your user pool region}"
     }
   }
 }
 ```
 
+- Update [frontend/.env](frontend/.env) with the API Gateway invoke URL;
+
 ```bash
-; update api gateway endpoint for frontend
-; frontend/.env
 VITE_API_ENDPOINT={'apigateway domain' from the terminal output}
 ```
 
-```bash
-# Update the Makefile
-# find the section "cdk.deploy"
-cdk.deploy:
-	AWS_REGION=eu-central-1 npx cdk deploy --context baseName={your base name}
+- Update the [Makefile](./Makefile) with your ECR Repository details from the CDK outputs:
+  - Replace `{repository-name}` with the `EcrName` output
+  - Replace `{repository-uri}` with the `EcrUri` output  
+  - Replace `{registry-hostname}` with the `EcrHostname` output
+  - Replace `{region}` with your AWS region
 
-# find the section "docker.build" and "docker.upload"
-docker.build:
-	cd worker/ && podman build --platform linux/arm64 -t {your base name}-images .
-	podman tag {your base name}:latest {your aws account id}.dkr.ecr.{your region}.amazonaws.com/{your base name}:latest
-
-docker.upload:
-	aws ecr get-login-password --region {your region} | podman login --username AWS --password-stdin {your aws account id}.dkr.ecr.eu-central-1.amazonaws.com
-	podman push {your aws account id}.dkr.ecr.{your region}.amazonaws.com/{your base name}:latest
-```
+- Upload your Nova Act API Key to the `nova-act-qa-studio-nova-api-key` Secrets Manager Secret:
+  - Go to AWS Console → Secrets Manager → `nova-act-qa-studio-nova-api-key`
+  - Click "Retrieve secret value" → "Edit"
+  - Replace the placeholder value with your actual Nova Act API key
+  - Click "Save"
 
 **3. Deploy again**
 
 ```
-make
+make deploy
 ```
 
-This command will:
-- Build all Lambda functions for ARM64 architecture
-- Build the React frontend
-- Deploy the CDK stack to AWS
-
-### 4. Manual Deployment Steps
-
-If you prefer to run each step individually:
-
-```bash
-# Build Lambda functions
-make lambdas.build
-
-# Build frontend
-make frontend.build
-
-# Deploy CDK stack
-make cdk.deploy
-```
-
-### 5. Worker Container Setup
+### 4. Worker Container Setup
 
 Build and push the worker container to ECR:
 
@@ -146,13 +131,13 @@ make docker.build
 make docker.upload
 ```
 
-### 6. Post-Deployment Configuration
+### 5. Post-Deployment
 
 After deployment, you'll need to:
 
-1. **Configure Cognito**: Set up user pool domain and OAuth settings
-2. **Update Frontend Config**: Configure the frontend with API Gateway and Cognito endpoints
-3. **Test Worker**: Verify ECS task definition can pull and run the worker container
+1. **Create First User**: Go to AWS Console → Cognito → User Pools → `nova-act-qa-studio-user-pool` → Users → Create user with your email address
+2. **Access Application**: Navigate to the CloudFront distribution URL from the deployment outputs
+3. **First Login**: Sign in with the user credentials you created in step 1
 
 ## Development
 
@@ -178,12 +163,14 @@ python worker.py
 Key environment variables for different components:
 
 **Worker Container:**
+
 - `NOVA_ACT_API_KEY`: Your Nova Act API key
-- `DYNAMODB_TABLE_NAME`: DynamoDB table name (default: accept-ai)
+- `DYNAMODB_TABLE_NAME`: DynamoDB table name (default: nova-act-qa-studio)
 - `S3_BUCKET`: S3 bucket for artifacts
 - `AWS_REGION`: AWS region (default: eu-central-1)
 
 **Lambda Functions:**
+
 - `TABLE_NAME`: DynamoDB table name
 - `QUEUE_URL`: SQS queue URL
 - `BUCKET_NAME`: S3 bucket name
@@ -200,14 +187,16 @@ Key environment variables for different components:
 
 ### Step Types
 
-Accept AI supports two types of workflow steps:
+Nova Act QA Studio supports two types of workflow steps:
 
 **Plain Text Steps**: Regular automation instructions
+
 - Example: "Click on the login button"
 - Example: "Navigate to the dashboard"
 - Example: "Wait for page to load"
 
 **Secret Steps**: Secure steps that reference predefined secrets
+
 - Action: "Type username in login field" + Secret: "username"
 - Action: "Type password in password field" + Secret: "password"
 - Action: "Enter API key in settings" + Secret: "api_key"
@@ -217,6 +206,7 @@ Secret steps ensure sensitive data never appears in logs or execution history, p
 ## Useful Commands
 
 ### CDK Commands
+
 - `npm run build`: Compile TypeScript to JavaScript
 - `npm run watch`: Watch for changes and compile
 - `npx cdk deploy`: Deploy stack to AWS
@@ -224,6 +214,7 @@ Secret steps ensure sensitive data never appears in logs or execution history, p
 - `npx cdk synth`: Generate CloudFormation template
 
 ### Development Commands
+
 - `make test_all`: Run all Go tests with coverage
 - `make docker.build`: Build worker container
 - `make docker.upload`: Push container to ECR

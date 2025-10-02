@@ -179,16 +179,16 @@ func validateStepsSchema(steps []StepSchema) []string {
 		"assertion":      true,
 	}
 	validOperators := map[string]bool{
-		"exact":                      true,
-		"exact_case_insensitive":     true,
-		"contains":                   true,
-		"contains_case_insensitive":  true,
-		"equals":                     true,
-		"not_equals":                 true,
-		"greater_then":               true,
-		"less_then":                  true,
-		"greater_or_equal_then":      true,
-		"less_or_equal_then":         true,
+		"exact":                     true,
+		"exact_case_insensitive":    true,
+		"contains":                  true,
+		"contains_case_insensitive": true,
+		"equals":                    true,
+		"not_equals":                true,
+		"greater_then":              true,
+		"less_then":                 true,
+		"greater_or_equal_then":     true,
+		"less_or_equal_then":        true,
 	}
 
 	sortNumbers := make(map[int]bool)
@@ -295,14 +295,8 @@ var (
 	// XSS detection patterns
 	xssPattern = regexp.MustCompile(`(?i)<script|javascript:|on\w+\s*=|<iframe|<object|<embed`)
 
-	// SQL injection detection patterns
-	sqlInjectionPattern = regexp.MustCompile(`(?i)(\b(union|select|insert|update|delete|drop|create|alter|exec|execute)\b)|('|(--)|(\|)|(%27)|(%2D%2D)|(%7C))`)
-
 	// Path traversal detection patterns
 	pathTraversalPattern = regexp.MustCompile(`\.\.[\/\\]|%2e%2e[\/\\]|\.\.%2f|\.\.%5c`)
-
-	// Command injection detection patterns
-	commandInjectionPattern = regexp.MustCompile(`[;&|` + "`" + `$(){}[\]]`)
 
 	// Valid title pattern (alphanumeric, spaces, hyphens, underscores)
 	titlePattern = regexp.MustCompile(`^[a-zA-Z0-9\s\-_]+$`)
@@ -326,19 +320,9 @@ func ValidateInputSecurity(input string) *SecurityValidationResult {
 		result.Threats = append(result.Threats, "Potential XSS content detected")
 	}
 
-	if sqlInjectionPattern.MatchString(input) {
-		result.IsSecure = false
-		result.Threats = append(result.Threats, "Potential SQL injection content detected")
-	}
-
 	if pathTraversalPattern.MatchString(input) {
 		result.IsSecure = false
 		result.Threats = append(result.Threats, "Potential path traversal content detected")
-	}
-
-	if commandInjectionPattern.MatchString(input) {
-		result.IsSecure = false
-		result.Threats = append(result.Threats, "Potential command injection content detected")
 	}
 
 	return result
