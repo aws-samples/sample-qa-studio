@@ -275,14 +275,6 @@ export class NovaActQAStudio extends cdk.Stack {
       natGateways: 1,
     });
 
-    // Get default security group and allow all outbound traffic
-    const defaultSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(this, 'default_security_group', vpc.vpcDefaultSecurityGroup);
-    defaultSecurityGroup.addEgressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.allTraffic(),
-      'Allow all outbound traffic'
-    );
-
     // Add VPC endpoints for ECR and CloudWatch
     vpc.addGatewayEndpoint('S3Endpoint', {
       service: ec2.GatewayVpcEndpointAwsService.S3
@@ -302,6 +294,13 @@ export class NovaActQAStudio extends cdk.Stack {
 
     vpc.addGatewayEndpoint('DynamoDbEndpoint', {
       service: ec2.GatewayVpcEndpointAwsService.DYNAMODB
+    });
+
+    // Security Group for ECS tasks
+    const ecsSecurityGroup = new ec2.SecurityGroup(this, 'EcsTaskSecurityGroup', {
+      vpc,
+      description: 'Security group for ECS tasks',
+      allowAllOutbound: true
     });
 
     // ECS Cluster
@@ -459,7 +458,7 @@ export class NovaActQAStudio extends cdk.Stack {
         ECS_CLUSTER: cluster.clusterArn,
         ECS_TASK_DEFINITION: taskDefinition.taskDefinitionArn,
         SUBNET_ID: vpc.publicSubnets[0].subnetId,
-        SECURITY_GROUP_ID: vpc.vpcDefaultSecurityGroup,
+        SECURITY_GROUP_ID: ecsSecurityGroup.securityGroupId,
         TABLE_NAME: table.tableName,
         S3_BUCKET: bucket.bucketName,
         BEDROCK_EXECUTION_ROLE: agentCoreExecutionRole.roleArn,

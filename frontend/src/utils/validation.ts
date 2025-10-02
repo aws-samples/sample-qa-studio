@@ -27,12 +27,8 @@ export interface FieldValidationConfig {
 const SECURITY_PATTERNS = {
   // Detect potential XSS attempts
   xss: /<script|javascript:|on\w+\s*=|<iframe|<object|<embed/i,
-  // Detect SQL injection attempts
-  sqlInjection: /(\b(union|select|insert|update|delete|drop|create|alter|exec|execute)\b)|('|(--)|(\|)|(%27)|(%2D%2D)|(%7C))/i,
   // Detect path traversal attempts
   pathTraversal: /\.\.[\/\\]|%2e%2e[\/\\]|\.\.%2f|\.\.%5c/i,
-  // Detect command injection
-  commandInjection: /[;&|`$(){}[\]]/,
 };
 
 export class ValidationManager {

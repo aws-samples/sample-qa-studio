@@ -162,6 +162,11 @@ export default function ImportUsecaseModal({ visible, onDismiss, onImportSuccess
                     {filePreview.usecase.description}
                   </div>
                 )}
+                {filePreview.usecase?.region && (
+                  <div style={{ marginTop: '4px', color: '#5f6b7a' }}>
+                    <strong>Region:</strong> {filePreview.usecase.region}
+                  </div>
+                )}
               </div>
 
               <div>
