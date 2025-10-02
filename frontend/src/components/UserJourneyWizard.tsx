@@ -397,25 +397,8 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
           label={
             <SpaceBetween direction="horizontal" size="xs" alignItems="center">
               <span>Execution Region</span>
-              <Popover
-                size="medium"
-                position="right"
-                triggerType="custom"
-                dismissButton={false}
-                content={
-                  <SpaceBetween direction="vertical" size="xs">
-                    <Box variant="strong">Examples:</Box>
-                    <Box variant="small">• https://example.com/login</Box>
-                    <Box variant="small">• https://shop.example.com</Box>
-                    <Box variant="small">• https://app.example.com/signup</Box>
-                  </SpaceBetween>
-                }
-              >
-                <Button variant="inline-icon" iconName="status-info" />
-              </Popover>
             </SpaceBetween>
           }
-          errorText={state.validationErrors.startingUrl}
         >
           <Select
             selectedOption={findRegionOptions(state.formData.executionRegion)!}
