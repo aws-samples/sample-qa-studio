@@ -97,7 +97,7 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
-    new cdk.CfnOutput(this, 'apigateway domain', { 
+    new cdk.CfnOutput(this, 'apigateway domain', {
       value: api.url
     });
 
@@ -172,7 +172,7 @@ export class NovaActQAStudio extends cdk.Stack {
       selfSignUpEnabled: false,
     });
 
-    new cdk.CfnOutput(this, 'user pool id', { 
+    new cdk.CfnOutput(this, 'user pool id', {
       value: userPool.userPoolId
     });
 
@@ -191,7 +191,7 @@ export class NovaActQAStudio extends cdk.Stack {
           implicitCodeGrant: true
         },
         scopes: [
-          cognito.OAuthScope.OPENID, 
+          cognito.OAuthScope.OPENID,
           cognito.OAuthScope.EMAIL,
           cognito.OAuthScope.PROFILE
         ]
