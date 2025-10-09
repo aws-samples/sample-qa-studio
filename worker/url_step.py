@@ -13,9 +13,8 @@ def execute_url_step(nova: NovaAct, step: ExecutionStep):
     
     try:
         # Use nova.go_to_url to navigate to the specified URL
-        result = nova.go_to_url(step.instruction)
+        nova.go_to_url(step.instruction)
         logger.info(f"Successfully navigated to URL: {step.instruction}")
-        print(result)
         
     except Exception as e:
         logger.error(f"Error executing URL step {step.sort}: {str(e)}")
