@@ -4,7 +4,7 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 import logging
 
-from models import Execution, ExecutionStep, ExecutionVariables, KeyValuePair
+from models import Execution, ExecutionStep, ExecutionVariables, KeyValuePair, ExecutionHeaders
 
 logger = logging.getLogger(__name__)
 
@@ -261,3 +261,30 @@ class DynamoDBClient:
         except Exception as e:
             logger.error(f"Unexpected error updating runtime variables for execution {execution_id}: {e}")
             return False
+    
+    def get_execution_headers(self, execution_id: str) -> Optional[ExecutionHeaders]:
+        """Load execution headers from DynamoDB"""
+        try:
+            response = self.table.get_item(
+                Key={
+                    'pk': f'EXECUTION#{execution_id}',
+                    'sk': f'HEADERS'
+                }
+            )
+            
+            if 'Item' not in response:
+                logger.info(f"No headers found for execution {execution_id}")
+                return None
+            
+            item = response['Item']
+            
+            return ExecutionHeaders(
+                pk=item['pk'],
+                sk=item['sk'],
+                headers=item.get('headers', {}),
+                created_at=item['created_at']
+            )
+            
+        except ClientError as e:
+            logger.error(f"Error getting execution headers for {execution_id}: {e}")
+            return None

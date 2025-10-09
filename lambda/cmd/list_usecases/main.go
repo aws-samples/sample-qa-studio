@@ -21,6 +21,7 @@ type Response struct {
 }
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("Header: %v", request.Headers)
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Printf("Error loading config: %v", err)

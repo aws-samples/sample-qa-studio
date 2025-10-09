@@ -198,3 +198,25 @@ type CreatedByRecord struct {
 	Sub       string `json:"sub" dynamodbav:"sub"`
 	CreatedAt string `json:"createdAt" dynamodbav:"createdAt"`
 }
+
+type UsecaseHeaders struct {
+	PK        string            `json:"pk" dynamodbav:"pk"`
+	SK        string            `json:"sk" dynamodbav:"sk"`
+	Headers   map[string]string `json:"headers" dynamodbav:"headers"`
+	CreatedAt string            `json:"createdAt" dynamodbav:"created_at"`
+}
+
+type ExecutionHeaders struct {
+	PK        string            `json:"pk" dynamodbav:"pk"`
+	SK        string            `json:"sk" dynamodbav:"sk"`
+	Headers   map[string]string `json:"headers" dynamodbav:"headers"`
+	CreatedAt string            `json:"createdAt" dynamodbav:"created_at"`
+}
+
+type CreateUsecaseHeadersRequest struct {
+	Headers map[string]string `json:"headers"`
+}
+
+type GetUsecaseHeadersResponse struct {
+	Headers map[string]string `json:"headers"`
+}
