@@ -43,3 +43,9 @@
   text-align: center !important;
   text-transform: capitalize;
 }
+
+#dcv-display,
+.RemoteBrowserContainer {
+  height: 860px;
+  width: 1480px;
+}

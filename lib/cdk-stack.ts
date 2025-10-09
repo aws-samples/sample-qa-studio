@@ -688,6 +688,14 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
+    const getLiveViewLambda = this.CreateLambda({
+      path: 'get_live_view',
+      name: 'GetLiveView',
+      environment: {
+        DYNAMODB_TABLE_NAME: table.tableName
+      }
+    });
+
     const exportUsecaseLambda = this.CreateLambda({
       memorySize: 256,
       path: 'export_usecase',
@@ -743,6 +751,7 @@ export class NovaActQAStudio extends cdk.Stack {
     table.grantReadData(generateS3UrlLambda);
     table.grantWriteData(reorderStepsLambda);
     table.grantReadData(getExecutionVariablesLambda);
+    table.grantReadData(getLiveViewLambda);
     table.grantReadData(exportUsecaseLambda);
     table.grantWriteData(importUsecaseLambda);
     table.grantReadData(generateUsecaseLambda);
@@ -995,6 +1004,13 @@ export class NovaActQAStudio extends cdk.Stack {
     // API Gateway execution variables endpoint
     const executionVariables = execution.addResource('variables');
     executionVariables.addMethod('GET', new apigateway.LambdaIntegration(getExecutionVariablesLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+
+    // API Gateway live view endpoint
+    const liveView = execution.addResource('live-view');
+    liveView.addMethod('GET', new apigateway.LambdaIntegration(getLiveViewLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO
     });
