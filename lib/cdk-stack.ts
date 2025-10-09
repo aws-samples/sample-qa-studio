@@ -335,7 +335,7 @@ export class NovaActQAStudio extends cdk.Stack {
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
         cpuArchitecture: ecs.CpuArchitecture.ARM64
-      },
+      },      
     });
 
 
