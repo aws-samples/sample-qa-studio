@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 
 	"lambda/models"
 
@@ -15,8 +16,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/aws-sdk-go-v2/service/ses"
-	sesTypes "github.com/aws/aws-sdk-go-v2/service/ses/types"
+	"github.com/aws/aws-sdk-go-v2/service/sns"
+	snsTypes "github.com/aws/aws-sdk-go-v2/service/sns/types"
 )
 
 func handler(ctx context.Context, sqsEvent events.SQSEvent) error {
@@ -27,7 +28,7 @@ func handler(ctx context.Context, sqsEvent events.SQSEvent) error {
 	}
 
 	dynamoClient := dynamodb.NewFromConfig(cfg)
-	sesClient := ses.NewFromConfig(cfg)
+	snsClient := sns.NewFromConfig(cfg)
 
 	for _, record := range sqsEvent.Records {
 		var notificationMsg models.NotificationMessage
@@ -51,27 +52,50 @@ func handler(ctx context.Context, sqsEvent events.SQSEvent) error {
 			continue
 		}
 
-		// Only send to subscribed users for scheduled executions
-		if execution.TriggerType == "Scheduled" {
-			subscriptions, err := getUserSubscriptions(ctx, dynamoClient, notificationMsg.UsecaseID)
-			if err != nil {
-				log.Printf("Error getting user subscriptions: %v", err)
-			} else {
-				for _, subscription := range subscriptions {
-					err := sendFailureNotification(ctx, sesClient, subscription.Email, usecase, execution)
-					if err != nil {
-						log.Printf("Error sending subscription email to %s: %v", subscription.Email, err)
-					} else {
-						log.Printf("Successfully sent subscription notification to %s", subscription.Email)
-					}
-				}
-			}
+		// Check if we should send notifications for this execution
+		shouldNotify := shouldSendNotification(execution)
+		if !shouldNotify {
+			log.Printf("Skipping notification for execution (trigger type: %s, status: %s)", execution.TriggerType, execution.Status)
+			continue
+		}
+
+		// Get subscribed users for this usecase
+		subscriptions, err := getUserSubscriptions(ctx, dynamoClient, notificationMsg.UsecaseID)
+		if err != nil {
+			log.Printf("Error getting user subscriptions: %v", err)
+			continue
+		}
+
+		if len(subscriptions) == 0 {
+			log.Printf("No subscriptions found for usecase %s", notificationMsg.UsecaseID)
+			continue
+		}
+
+		// Send SNS notification with usecase_id filter attribute
+		// SNS will automatically filter to only subscribed users for this usecase
+		err = sendSNSNotificationWithFilter(ctx, snsClient, usecase, execution)
+		if err != nil {
+			log.Printf("Error sending SNS notification for usecase %s: %v", usecase.Name, err)
 		} else {
-			log.Printf("Skipping notification for non-scheduled execution (trigger type: %s)", execution.TriggerType)
+			log.Printf("Successfully sent SNS notification for usecase %s to %d subscribers", usecase.Name, len(subscriptions))
 		}
 	}
 
 	return nil
+}
+
+// shouldSendNotification determines if we should send a notification based on execution details
+func shouldSendNotification(execution *models.Execution) bool {
+	// Send notifications for:
+	// 1. Scheduled executions that failed
+	// 2. Any execution that failed (optional - you can customize this logic)
+
+	// For now, let's send notifications for failed executions
+	if execution.TriggerType == "Scheduled" && execution.Status == "error" {
+		return true
+	}
+
+	return false
 }
 
 func getUsecase(ctx context.Context, client *dynamodb.Client, usecaseID string) (*models.UseCase, error) {
@@ -140,60 +164,102 @@ func getUserSubscriptions(ctx context.Context, client *dynamodb.Client, usecaseI
 	return subscriptions, nil
 }
 
-func sendFailureNotification(ctx context.Context, sesClient *ses.Client, recipientEmail string, usecase *models.UseCase, execution *models.Execution) error {
-	subject := fmt.Sprintf("Execution Failed: %s", usecase.Name)
+func sendSNSNotificationWithFilter(ctx context.Context, snsClient *sns.Client, usecase *models.UseCase, execution *models.Execution) error {
+	// Get SNS topic ARN from environment variable
+	topicArn := os.Getenv("SNS_TOPIC_ARN")
+	if topicArn == "" {
+		return fmt.Errorf("SNS_TOPIC_ARN environment variable not set")
+	}
 
-	htmlBody := fmt.Sprintf(`
-		<html>
-		<body>
-			<h2>Execution Failed</h2>
-			<p><strong>Usecase:</strong> %s</p>
-			<p><strong>Description:</strong> %s</p>
-			<p><strong>Execution ID:</strong> %s</p>
-			<p><strong>Status:</strong> %s</p>
-			<p><strong>Trigger Type:</strong> %s</p>
-			<p><strong>Started At:</strong> %s</p>
-			<p><strong>Completed At:</strong> %s</p>
-			<p><strong>Starting URL:</strong> %s</p>
-		</body>
-		</html>
-	`, usecase.Name, usecase.Description, execution.SK[10:], execution.Status, execution.TriggerType, execution.CreatedAt, execution.CompletedAt, execution.StartingURL)
+	// Get frontend URL from environment variable
+	frontendUrl := os.Getenv("FRONTEND_URL")
+	if frontendUrl == "" {
+		frontendUrl = "https://your-app.com" // Default fallback
+	}
 
-	textBody := fmt.Sprintf(`
-Execution Failed
+	// Create notification subject and status emoji based on execution status
+	var subject, statusEmoji, statusMessage string
+	switch execution.Status {
+	case "COMPLETED":
+		subject = fmt.Sprintf("✅ Execution Completed: %s", usecase.Name)
+		statusEmoji = "✅"
+		statusMessage = "Your usecase execution completed successfully!"
+	case "FAILED", "ERROR":
+		subject = fmt.Sprintf("❌ Execution Failed: %s", usecase.Name)
+		statusEmoji = "❌"
+		statusMessage = "Your usecase execution encountered an error and failed."
+	default:
+		subject = fmt.Sprintf("📋 Execution Update: %s", usecase.Name)
+		statusEmoji = "📋"
+		statusMessage = fmt.Sprintf("Your usecase execution status: %s", execution.Status)
+	}
 
-Usecase: %s
-Description: %s
-Execution ID: %s
-Status: %s
-Trigger Type: %s
-Started At: %s
-Completed At: %s
-Starting URL: %s
-	`, usecase.Name, usecase.Description, execution.SK[10:], execution.Status, execution.TriggerType, execution.CreatedAt, execution.CompletedAt, execution.StartingURL)
+	// Create execution link
+	executionId := getExecutionID(execution.SK)
+	executionLink := fmt.Sprintf("%s/usecase/%s/execution/%s", frontendUrl, usecase.ID, executionId)
 
-	input := &ses.SendEmailInput{
-		Source: aws.String("noreply@example.com"), // This should be configured with a verified SES email
-		Destination: &sesTypes.Destination{
-			ToAddresses: []string{recipientEmail},
+	// Create rich notification message with execution link
+	message := fmt.Sprintf(`
+%s %s
+
+%s
+
+📋 EXECUTION DETAILS:
+• Usecase: %s
+• Description: %s
+• Execution ID: %s
+• Status: %s %s
+• Trigger Type: %s
+• Started At: %s
+• Completed At: %s
+• Starting URL: %s
+
+🔗 VIEW FULL DETAILS: %s
+
+---
+To manage your subscriptions, visit your dashboard.
+	`, statusEmoji, usecase.Name, statusMessage, usecase.Name, usecase.Description, executionId, execution.Status, statusEmoji, execution.TriggerType, execution.CreatedAt, execution.CompletedAt, execution.StartingURL, executionLink)
+
+	// Create message attributes for SNS filtering
+	// The key attribute is usecase_id which will be used for filtering
+	messageAttributes := map[string]snsTypes.MessageAttributeValue{
+		"usecase_id": {
+			DataType:    aws.String("String"),
+			StringValue: aws.String(usecase.ID),
 		},
-		Message: &sesTypes.Message{
-			Subject: &sesTypes.Content{
-				Data: aws.String(subject),
-			},
-			Body: &sesTypes.Body{
-				Html: &sesTypes.Content{
-					Data: aws.String(htmlBody),
-				},
-				Text: &sesTypes.Content{
-					Data: aws.String(textBody),
-				},
-			},
+		"execution_status": {
+			DataType:    aws.String("String"),
+			StringValue: aws.String(execution.Status),
+		},
+		"trigger_type": {
+			DataType:    aws.String("String"),
+			StringValue: aws.String(execution.TriggerType),
 		},
 	}
 
-	_, err := sesClient.SendEmail(ctx, input)
-	return err
+	// Publish to SNS topic with filter attributes
+	input := &sns.PublishInput{
+		TopicArn:          aws.String(topicArn),
+		Subject:           aws.String(subject),
+		Message:           aws.String(message),
+		MessageAttributes: messageAttributes,
+	}
+
+	result, err := snsClient.Publish(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to publish SNS message: %w", err)
+	}
+
+	log.Printf("Published SNS message %s for usecase %s with filter usecase_id=%s", aws.ToString(result.MessageId), usecase.Name, usecase.ID)
+	return nil
+}
+
+// getExecutionID extracts execution ID from SK (removes "EXECUTION#" prefix)
+func getExecutionID(sk string) string {
+	if len(sk) > 10 && sk[:10] == "EXECUTION#" {
+		return sk[10:]
+	}
+	return sk
 }
 
 func main() {
