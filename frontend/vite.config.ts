@@ -1,7 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import * as path from 'path';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      'dcv': path.resolve(__dirname, './public/dcv/dcv.js'),
+    }
+  },
   plugins: [react()],
   build: {
     outDir: 'build'
