@@ -264,6 +264,44 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		}
 	}
 
+	// Load usecase headers and create execution headers
+	headersResult, err := ddbClient.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(models.GetTableName()),
+		Key: map[string]types.AttributeValue{
+			"pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("USECASE#%s", usecaseId)},
+			"sk": &types.AttributeValueMemberS{Value: "HEADERS"},
+		},
+	})
+	if err != nil {
+		log.Printf("Error loading headers: %v", err)
+	} else if headersResult.Item != nil {
+		var usecaseHeaders models.UsecaseHeaders
+		err = attributevalue.UnmarshalMap(headersResult.Item, &usecaseHeaders)
+		if err != nil {
+			log.Printf("Error unmarshaling headers: %v", err)
+		} else {
+			executionHeaders := models.ExecutionHeaders{
+				PK:        "EXECUTION#" + executionId,
+				SK:        "HEADERS",
+				Headers:   usecaseHeaders.Headers,
+				CreatedAt: createdAtTime,
+			}
+
+			headersItem, err := attributevalue.MarshalMap(executionHeaders)
+			if err != nil {
+				log.Printf("Error marshaling execution headers: %v", err)
+			} else {
+				_, err = ddbClient.PutItem(ctx, &dynamodb.PutItemInput{
+					TableName: aws.String(models.GetTableName()),
+					Item:      headersItem,
+				})
+				if err != nil {
+					log.Printf("Error creating execution headers: %v", err)
+				}
+			}
+		}
+	}
+
 	var response []byte
 
 	if triggerType == "OnDemand" {

@@ -694,6 +694,22 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
+    const createUsecaseHeadersLambda = this.CreateLambda({
+      path: 'create_usecase_headers',
+      name: 'CreateUsecaseHeaders',
+      environment: {
+        TABLE_NAME: table.tableName
+      }
+    });
+
+    const getUsecaseHeadersLambda = this.CreateLambda({
+      path: 'get_usecase_headers',
+      name: 'GetUsecaseHeaders',
+      environment: {
+        TABLE_NAME: table.tableName
+      }
+    });
+
     const reorderStepsLambda = this.CreateLambda({
       path: 'reorder_steps',
       name: 'ReorderSteps',
@@ -849,6 +865,8 @@ export class NovaActQAStudio extends cdk.Stack {
     table.grantReadData(exportUsecaseLambda);
     table.grantWriteData(importUsecaseLambda);
     table.grantReadData(generateUsecaseLambda);
+    table.grantWriteData(createUsecaseHeadersLambda);
+    table.grantReadData(getUsecaseHeadersLambda);
 
     // Grant permissions for send notification lambda
     table.grantReadData(sendNotificationLambda);
@@ -1213,6 +1231,17 @@ export class NovaActQAStudio extends cdk.Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO
     });
     secrets.addMethod('PATCH', new apigateway.LambdaIntegration(updateUsecaseSecretsLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+
+    // API Gateway headers endpoints
+    const headers = usecaseId.addResource('headers');
+    headers.addMethod('POST', new apigateway.LambdaIntegration(createUsecaseHeadersLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+    headers.addMethod('GET', new apigateway.LambdaIntegration(getUsecaseHeadersLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO
     });

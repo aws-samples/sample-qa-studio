@@ -1,12 +1,10 @@
 from dataclasses import dataclass
-from typing import List, Optional
-
+from typing import List, Optional, Dict
 
 @dataclass
 class KeyValuePair:
     key: str
     value: str
-
 
 @dataclass
 class Execution:
@@ -16,11 +14,11 @@ class Execution:
     starting_url: str
     headless: bool
     created_at: str
-    completed_at: Optional[str] = None
-    executing_at: Optional[str] = None
-    trigger_type: Optional[str] = None
-    session_id: Optional[str] = None
-    region: str = None
+    completed_at: Optional[str]
+    executing_at: Optional[str]
+    trigger_type: Optional[str]
+    session_id: Optional[str]
+    region: str
 
 @dataclass
 class ExecutionStep:
@@ -29,31 +27,29 @@ class ExecutionStep:
     step_id: str
     sort: int
     instruction: str
-    step_type: str = "navigation"  # "navigation", "secret", "validation", "retrieve_value", or "assertion"
-    secret_key: str = ""
-    validation_type: str = ""  # "bool" or "string"
-    validation_operator: str = ""  # "exact" or "contains"
-    validation_value: str = ""  # Expected value for validation
-    artefact: str = ""
-    logs: List[str] = None
-    created_at: str = ""
-    capture_variable: str = ""  # Optional: custom name for runtime variable capture
-    value_type: str = ""  # For retrieve_value steps: "string", "number", "bool"
-    assertion_variable: str = ""  # For assertion steps: name of runtime variable to compare
-    
-    def __post_init__(self):
-        if self.logs is None:
-            self.logs = []
-
+    artefact: str
+    logs: List[str]
+    created_at: str
+    secret_key: str
+    step_type: str
+    validation_type: str
+    validation_operator: str
+    validation_value: str
+    capture_variable: str
+    value_type: str
+    assertion_variable: str
 
 @dataclass
 class ExecutionVariables:
     pk: str
     sk: str
     variables: List[KeyValuePair]
+    runtime_variables: List[KeyValuePair]
     created_at: str
-    runtime_variables: Optional[List[KeyValuePair]] = None
-    
-    def __post_init__(self):
-        if self.runtime_variables is None:
-            self.runtime_variables = []
+
+@dataclass
+class ExecutionHeaders:
+    pk: str
+    sk: str
+    headers: Dict[str, str]
+    created_at: str

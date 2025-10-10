@@ -14,6 +14,7 @@ const UsecaseInfo = React.lazy(() => import('./usecase/UsecaseInfo'));
 const UsecaseSchedule = React.lazy(() => import('./usecase/UsecaseSchedule'));
 const UsecaseVariables = React.lazy(() => import('./usecase/UsecaseVariables'));
 const SecretsManager = React.lazy(() => import('./SecretsManager'));
+const HeadersManager = React.lazy(() => import('./HeadersManager'));
 const WorkflowSteps = React.lazy(() => import('./usecase/WorkflowSteps'));
 const ExecutionHistory = React.lazy(() => import('./usecase/ExecutionHistory'));
 const UsecaseHooks = React.lazy(() => import('./usecase/UsecaseHooks'));
@@ -111,6 +112,15 @@ export default function UsecaseDetailRefactored() {
             content: (
               <LazyWrapper loadingText="Loading secrets...">
                 <SecretsManager usecaseId={id} />
+              </LazyWrapper>
+            )
+          },
+          {
+            id: 'headers',
+            label: 'Headers',
+            content: (
+              <LazyWrapper loadingText="Loading headers...">
+                <HeadersManager usecaseId={id} />
               </LazyWrapper>
             )
           },

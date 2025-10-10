@@ -97,6 +97,13 @@ def main():
         else:
             logger.info("No variables found")
         
+        # Load execution headers
+        execution_headers = db_client.get_execution_headers(execution_id)
+        if execution_headers:
+            logger.info(f"Loaded {len(execution_headers.headers)} headers")
+        else:
+            logger.info("No headers found")
+        
         # Load Nova API key from Secrets Manager
         nova_api_key = secrets_client._get_secret_value_by_name(os.getenv('NOVA_ACT_API_KEY_NAME'))
         if not nova_api_key:
@@ -150,6 +157,13 @@ def main():
             nova_act_api_key=nova_api_key,
             user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
         ) as nova:
+
+            # Set custom HTTP headers if configured
+            if execution_headers and execution_headers.headers:
+                logger.info(f"Setting {len(execution_headers.headers)} custom HTTP headers")
+                nova.page.set_extra_http_headers(execution_headers.headers)
+                # Navigate to starting URL to apply headers
+                nova.go_to_url(execution.starting_url)
 
             logger.info("NovaAct initialized successfully")
                 
