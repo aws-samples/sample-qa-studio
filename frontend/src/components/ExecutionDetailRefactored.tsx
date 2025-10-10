@@ -11,6 +11,7 @@ import { api } from '../utils/api';
 import ExecutionTimeline from './common/ExecutionTimeline';
 import Breadcrumb from './common/Breadcrumb';
 import { ExecutionInformation, ExecutionSteps, ExecutionVariables } from './execution';
+import LiveViewPanel from './execution/LiveViewPanel';
 
 export default function ExecutionDetailRefactored() {
   const { usecaseId, executionId } = useParams();
@@ -23,40 +24,59 @@ export default function ExecutionDetailRefactored() {
   const [modalContent, setModalContent] = useState<{ url: string, title: string, fileType?: string } | null>(null);
   const [hasVariables, setHasVariables] = useState(false);
 
+  const fetchData = async () => {
+    try {
+      const [executionData, stepsData, variablesData, usecaseData] = await Promise.all([
+        api.get(`usecase/${usecaseId}/executions/${executionId}`),
+        api.get(`usecase/${usecaseId}/executions/${executionId}/steps`),
+        api.get(`usecase/${usecaseId}/executions/${executionId}/variables`).catch(() => ({ variables: [], runtime_variables: [] })),
+        api.get(`usecase/${usecaseId}`)
+      ]);
+
+      setExecution(executionData);
+      setUsecase(usecaseData);
+
+      // Sort steps by sort property and set them
+      const sortedSteps = (stepsData.steps || []).sort((a: any, b: any) => a.sort - b.sort);
+      setExecutionSteps(sortedSteps);
+
+      sortedSteps.forEach((step: any) => {
+        if (step.logs.length > 0) {
+          // step.logs = step.logs.reverse();
+        }
+      });
+
+      // Check if there are any variables
+      setHasVariables(variablesData?.variables?.length > 0 || variablesData?.runtime_variables?.length > 0);
+    } catch (error) {
+      console.error('Failed to fetch execution data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial data fetch
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [executionData, stepsData, variablesData, usecaseData] = await Promise.all([
-          api.get(`usecase/${usecaseId}/executions/${executionId}`),
-          api.get(`usecase/${usecaseId}/executions/${executionId}/steps`),
-          api.get(`usecase/${usecaseId}/executions/${executionId}/variables`).catch(() => ({ variables: [], runtime_variables: [] })),
-          api.get(`usecase/${usecaseId}`)
-        ]);
-
-        setExecution(executionData);
-        setUsecase(usecaseData);
-
-        // Sort steps by sort property and set them
-        const sortedSteps = (stepsData.steps || []).sort((a: any, b: any) => a.sort - b.sort);
-        setExecutionSteps(sortedSteps);
-
-        sortedSteps.forEach((step: any) => {
-          if (step.logs.length > 0) {
-            // step.logs = step.logs.reverse();
-          }
-        });
-
-        // Check if there are any variables
-        setHasVariables(variablesData?.variables?.length > 0 || variablesData?.runtime_variables?.length > 0);
-      } catch (error) {
-        console.error('Failed to fetch execution data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [usecaseId, executionId]);
+
+  // Polling effect for executing status
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    if (execution?.status === 'executing' || execution?.status === 'pending') {
+      intervalId = setInterval(() => {
+        fetchData();
+      }, 10000); // 10 seconds
+    }
+
+    // Cleanup interval on unmount or when status changes
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [execution?.status, usecaseId, executionId]);
 
   const handleViewContent = (content: { url: string, title: string, fileType: string }) => {
     setModalContent(content);
@@ -106,10 +126,18 @@ export default function ExecutionDetailRefactored() {
               )}
             </SpaceBetween>
 
-            <ExecutionTimeline execution={execution} />
+            <SpaceBetween direction='vertical' size='m'>
+              <ExecutionTimeline execution={execution} />
+              {/* Live View Panel - Show for executing or recently completed executions */}
+              {(execution?.status === 'executing') && (
+                <LiveViewPanel
+                  usecaseId={usecaseId}
+                  executionId={executionId}
+                  executionStatus={execution?.status}
+                />
+              )}
+            </SpaceBetween>
           </Grid>
-
-
 
           <ExecutionSteps
             executionSteps={executionSteps}

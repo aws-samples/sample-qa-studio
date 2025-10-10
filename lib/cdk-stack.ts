@@ -3,6 +3,7 @@ import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -18,6 +19,7 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as backup from 'aws-cdk-lib/aws-backup';
 import * as ecr_assets from 'aws-cdk-lib/aws-ecr-assets';
 import * as ecrdeploy from 'cdk-ecr-deployment';
+import * as sns from 'aws-cdk-lib/aws-sns';
 
 interface CreateLambdaProps {
   name: string,
@@ -96,7 +98,7 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
-    new cdk.CfnOutput(this, 'apigateway domain', { 
+    new cdk.CfnOutput(this, 'apigateway domain', {
       value: api.url
     });
 
@@ -135,7 +137,7 @@ export class NovaActQAStudio extends cdk.Stack {
       ]
     });
 
-    new cdk.CfnOutput(this, 'CloudFrontDistributionDomain', { 
+    new cdk.CfnOutput(this, 'CloudFrontDistributionDomain', {
       value: distribution.distributionDomainName
     });
 
@@ -157,6 +159,23 @@ export class NovaActQAStudio extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY
     });
 
+    // SQS Notification Queue
+    const notificationQueue = new sqs.Queue(this, 'notification_queue', {
+      queueName: this.cdkName('notifications'),
+      visibilityTimeout: cdk.Duration.minutes(5),
+      removalPolicy: cdk.RemovalPolicy.DESTROY
+    });
+
+    // SNS Topic for Email Notifications
+    const notificationTopic = new sns.Topic(this, 'notification_topic', {
+      topicName: this.cdkName('notifications'),
+      displayName: 'Usecase Execution Notifications'
+    });
+
+    new cdk.CfnOutput(this, 'SNS Topic ARN', {
+      value: notificationTopic.topicArn
+    });
+
     // Cognito User Pool
     const userPool = new cognito.UserPool(this, 'user_pool', {
       userPoolName: this.cdkName('user-pool'),
@@ -164,7 +183,7 @@ export class NovaActQAStudio extends cdk.Stack {
       selfSignUpEnabled: false,
     });
 
-    new cdk.CfnOutput(this, 'user pool id', { 
+    new cdk.CfnOutput(this, 'user pool id', {
       value: userPool.userPoolId
     });
 
@@ -183,7 +202,7 @@ export class NovaActQAStudio extends cdk.Stack {
           implicitCodeGrant: true
         },
         scopes: [
-          cognito.OAuthScope.OPENID, 
+          cognito.OAuthScope.OPENID,
           cognito.OAuthScope.EMAIL,
           cognito.OAuthScope.PROFILE
         ]
@@ -201,7 +220,7 @@ export class NovaActQAStudio extends cdk.Stack {
 
     // ECR Repository
     const ecrRepository = new ecr.Repository(this, 'images_repository');
-    
+
     // Build worker
     const workerImage = new ecr_assets.DockerImageAsset(this, 'MyDockerImage', {
       directory: 'worker',
@@ -213,18 +232,18 @@ export class NovaActQAStudio extends cdk.Stack {
       dest: new ecrdeploy.DockerImageName(`${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/${ecrRepository.repositoryName}:latest`),
     });
 
-    new cdk.CfnOutput(this, 'EcrName', { 
+    new cdk.CfnOutput(this, 'EcrName', {
       value: ecrRepository.repositoryName
     });
 
     const ecrUri = ecrRepository.repositoryUri
     const ecrHostname = ecrUri.split('/')[0]
 
-    new cdk.CfnOutput(this, 'EcrUri', { 
+    new cdk.CfnOutput(this, 'EcrUri', {
       value: ecrUri
     });
 
-    new cdk.CfnOutput(this, 'EcrHostname', { 
+    new cdk.CfnOutput(this, 'EcrHostname', {
       value: ecrHostname
     });
 
@@ -316,7 +335,7 @@ export class NovaActQAStudio extends cdk.Stack {
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
         cpuArchitecture: ecs.CpuArchitecture.ARM64
-      },      
+      },
     });
 
 
@@ -331,7 +350,8 @@ export class NovaActQAStudio extends cdk.Stack {
         DYNAMO_TABLE: table.tableName,
         QUEUE_URL: queue.queueUrl,
         BUCKET_NAME: bucket.bucketName,
-        NOVA_ACT_API_KEY_NAME: novaApiKey.secretName
+        NOVA_ACT_API_KEY_NAME: novaApiKey.secretName,
+        NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl
       }
     });
 
@@ -339,6 +359,7 @@ export class NovaActQAStudio extends cdk.Stack {
     table.grantFullAccess(taskDefinition.taskRole);
     queue.grantConsumeMessages(taskDefinition.taskRole);
     bucket.grantReadWrite(taskDefinition.taskRole);
+    notificationQueue.grantSendMessages(taskDefinition.taskRole);
     ecrRepository.grantPull(taskDefinition.executionRole!);
     ecrRepository.grantPull(taskDefinition.taskRole!);
 
@@ -504,7 +525,8 @@ export class NovaActQAStudio extends cdk.Stack {
       path: 'update_execution',
       name: 'UpdateExecution',
       environment: {
-        TABLE_NAME: table.tableName
+        TABLE_NAME: table.tableName,
+        NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl
       }
     });
 
@@ -704,6 +726,14 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
+    const getLiveViewLambda = this.CreateLambda({
+      path: 'get_live_view',
+      name: 'GetLiveView',
+      environment: {
+        DYNAMODB_TABLE_NAME: table.tableName
+      }
+    });
+
     const exportUsecaseLambda = this.CreateLambda({
       memorySize: 256,
       path: 'export_usecase',
@@ -737,6 +767,77 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
+    // Send Notification Lambda (only for user subscriptions)
+    const sendNotificationLambda = this.CreateLambda({
+      path: 'send_notification',
+      name: 'SendNotification',
+      environment: {
+        TABLE_NAME: table.tableName,
+        NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl,
+        SNS_TOPIC_ARN: notificationTopic.topicArn,
+        FRONTEND_URL: `https://${distribution.distributionDomainName}`
+      }
+    });
+
+    // Add SQS event source to send notification lambda with batch size 1
+    sendNotificationLambda.addEventSource(new lambdaEventSources.SqsEventSource(notificationQueue, {
+      batchSize: 1
+    }));
+
+    // Usecase Subscription Lambdas
+    const subscribeUsecaseLambda = this.CreateLambda({
+      path: 'subscribe_usecase',
+      name: 'SubscribeUsecase',
+      environment: {
+        TABLE_NAME: table.tableName,
+        SNS_TOPIC_ARN: notificationTopic.topicArn
+      }
+    });
+
+    const unsubscribeUsecaseLambda = this.CreateLambda({
+      path: 'unsubscribe_usecase',
+      name: 'UnsubscribeUsecase',
+      environment: {
+        TABLE_NAME: table.tableName,
+        SNS_TOPIC_ARN: notificationTopic.topicArn
+      }
+    });
+
+    const getUsecaseSubscriptionLambda = this.CreateLambda({
+      path: 'get_usecase_subscription',
+      name: 'GetUsecaseSubscription',
+      environment: {
+        TABLE_NAME: table.tableName
+      }
+    });
+
+
+
+    // User Management Lambda Functions
+    const listUsersLambda = this.CreateLambda({
+      path: 'list_users',
+      name: 'ListUsers',
+      environment: {
+        USER_POOL_ID: userPool.userPoolId
+      }
+    });
+
+    const createUserLambda = this.CreateLambda({
+      path: 'create_user',
+      name: 'CreateUser',
+      environment: {
+        USER_POOL_ID: userPool.userPoolId
+      }
+    });
+
+    const deleteUserLambda = this.CreateLambda({
+      path: 'delete_user',
+      name: 'DeleteUser',
+      environment: {
+        USER_POOL_ID: userPool.userPoolId
+      }
+    });
+
     // Grant Lambda permissions
     table.grantReadData(listUsecasesLambda);
     table.grantWriteData(createUsecaseLambda);
@@ -748,6 +849,7 @@ export class NovaActQAStudio extends cdk.Stack {
     table.grantWriteData(updateUsecaseLambda);
     table.grantReadData(listExecutionsLambda);
     table.grantWriteData(updateExecutionLambda);
+    notificationQueue.grantSendMessages(updateExecutionLambda);
     table.grantWriteData(updateExecutionStepLambda);
     table.grantReadData(getExecutionStepLambda);
     table.grantReadData(getExecutionLambda);
@@ -759,11 +861,48 @@ export class NovaActQAStudio extends cdk.Stack {
     table.grantReadData(generateS3UrlLambda);
     table.grantWriteData(reorderStepsLambda);
     table.grantReadData(getExecutionVariablesLambda);
+    table.grantReadData(getLiveViewLambda);
     table.grantReadData(exportUsecaseLambda);
     table.grantWriteData(importUsecaseLambda);
     table.grantReadData(generateUsecaseLambda);
     table.grantWriteData(createUsecaseHeadersLambda);
     table.grantReadData(getUsecaseHeadersLambda);
+
+    // Grant permissions for send notification lambda
+    table.grantReadData(sendNotificationLambda);
+    notificationQueue.grantConsumeMessages(sendNotificationLambda);
+
+    table.grantWriteData(subscribeUsecaseLambda);
+    table.grantFullAccess(unsubscribeUsecaseLambda);
+    table.grantReadData(getUsecaseSubscriptionLambda);
+
+    // Grant SNS permissions to subscribe Lambda for auto-subscribing users and managing filter policies
+    notificationTopic.grantSubscribe(subscribeUsecaseLambda);
+    subscribeUsecaseLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'sns:ListSubscriptionsByTopic',
+        'sns:GetSubscriptionAttributes',
+        'sns:SetSubscriptionAttributes'
+      ],
+      resources: [notificationTopic.topicArn, `${notificationTopic.topicArn}:*`]
+    }));
+
+    // Grant SNS permissions to unsubscribe Lambda for managing filter policies and unsubscribing users
+    unsubscribeUsecaseLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'sns:ListSubscriptionsByTopic',
+        'sns:GetSubscriptionAttributes',
+        'sns:SetSubscriptionAttributes',
+        'sns:Unsubscribe'
+      ],
+      resources: [notificationTopic.topicArn, `${notificationTopic.topicArn}:*`]
+    }));
+
+
+
+
 
     // Grant S3 permissions to generate_s3_url Lambda
     bucket.grantRead(generateS3UrlLambda);
@@ -828,12 +967,40 @@ export class NovaActQAStudio extends cdk.Stack {
       ]
     }));
 
+    // Grant SNS permissions to send notification Lambda
+    notificationTopic.grantPublish(sendNotificationLambda);
+
     updateUsecaseSecretsLambda.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: [
         'secretsmanager:UpdateSecret'
       ],
       resources: ['*']
+    }));
+
+    // Grant Cognito permissions for user management
+    listUsersLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'cognito-idp:ListUsers'
+      ],
+      resources: [userPool.userPoolArn]
+    }));
+
+    createUserLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'cognito-idp:*'
+      ],
+      resources: [userPool.userPoolArn]
+    }));
+
+    deleteUserLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'cognito-idp:AdminDeleteUser'
+      ],
+      resources: [userPool.userPoolArn]
     }));
 
     // Grant EventBridge Scheduler permissions
@@ -1017,6 +1184,13 @@ export class NovaActQAStudio extends cdk.Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO
     });
 
+    // API Gateway live view endpoint
+    const liveView = execution.addResource('live-view');
+    liveView.addMethod('GET', new apigateway.LambdaIntegration(getLiveViewLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+
     // API Gateway step endpoints
     const step = steps.addResource('{stepId}');
     step.addMethod('PATCH', new apigateway.LambdaIntegration(updateStepLambda), {
@@ -1088,6 +1262,38 @@ export class NovaActQAStudio extends cdk.Stack {
     // API Gateway generate-usecase endpoint
     const generateUsecase = api.root.addResource('generate-usecase');
     generateUsecase.addMethod('POST', new apigateway.LambdaIntegration(generateUsecaseLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+
+    // API Gateway subscription endpoints
+    const usecaseSubscription = usecaseId.addResource('subscription');
+    usecaseSubscription.addMethod('GET', new apigateway.LambdaIntegration(getUsecaseSubscriptionLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+    usecaseSubscription.addMethod('POST', new apigateway.LambdaIntegration(subscribeUsecaseLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+    usecaseSubscription.addMethod('DELETE', new apigateway.LambdaIntegration(unsubscribeUsecaseLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+
+    // API Gateway user management endpoints
+    const users = api.root.addResource('users');
+    users.addMethod('GET', new apigateway.LambdaIntegration(listUsersLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+    users.addMethod('POST', new apigateway.LambdaIntegration(createUserLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+
+    const user = users.addResource('{username}');
+    user.addMethod('DELETE', new apigateway.LambdaIntegration(deleteUserLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO
     });

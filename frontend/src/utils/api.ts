@@ -58,7 +58,19 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
       throw error;
     }
 
-    return await response.json();
+    // Handle responses with no content (like 204 No Content)
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return null;
+    }
+
+    // Check if response has JSON content
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return await response.json();
+    }
+
+    // For non-JSON responses, return the text
+    return await response.text();
   } catch (error) {
     // If it's already an ErrorState, re-throw it
     if ((error as ErrorState).type) {
@@ -238,4 +250,47 @@ export const exportImportApi = {
     return response.blob();
   },
   importUsecase: (data: any) => api.post('import', data),
+};
+
+export interface SubscriptionStatusResponse {
+  is_subscribed: boolean;
+  email?: string;
+}
+
+export const subscriptionApi = {
+  getStatus: async (usecaseId: string): Promise<SubscriptionStatusResponse> => {
+    return api.get(`usecase/${usecaseId}/subscription`);
+  },
+  subscribe: async (usecaseId: string): Promise<SubscriptionStatusResponse> => {
+    return api.post(`usecase/${usecaseId}/subscription`, {});
+  },
+  unsubscribe: async (usecaseId: string): Promise<SubscriptionStatusResponse> => {
+    return api.delete(`usecase/${usecaseId}/subscription`);
+  },
+}
+
+// User Management API
+export interface User {
+  username: string;
+  email: string;
+  status: string;
+  enabled: boolean;
+  created_at: string;
+  attributes: { [key: string]: string };
+}
+
+export interface CreateUserRequest {
+  email: string;
+}
+
+export interface CreateUserResponse {
+  username: string;
+  email: string;
+  status: string;
+}
+
+export const userApi = {
+  list: (): Promise<{ users: User[] }> => api.get('users'),
+  create: (userData: CreateUserRequest): Promise<CreateUserResponse> => api.post('users', userData),
+  delete: (username: string): Promise<void> => api.delete(`users/${encodeURIComponent(username)}`),
 };

@@ -8,6 +8,7 @@ import { api, exportImportApi } from '../../utils/api';
 import { useApiData } from '../common/useAsyncData';
 import { HeaderLoading } from '../common/LoadingStates';
 import Breadcrumb from '../common/Breadcrumb';
+import SubscriptionButton from './SubscriptionButton';
 
 interface UsecaseHeaderProps {
   usecaseId: string;
@@ -67,6 +68,7 @@ export default function UsecaseHeader({ usecaseId, onDeleteUsecase }: UsecaseHea
         variant="h1"
         actions={
           <SpaceBetween direction="horizontal" size="m">
+            <SubscriptionButton usecaseId={usecaseId} />
             <ButtonDropdown
               variant="primary"
               loading={executing}

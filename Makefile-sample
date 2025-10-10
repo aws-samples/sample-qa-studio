@@ -29,40 +29,7 @@ frontend.build:
 	cd frontend && npm run build
 
 lambdas.build:
-	cd lambda/cmd/create_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/list_usecases/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/get_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/create_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/list_steps/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/execute_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/update_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/delete_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/update_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/list_executions/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/update_execution/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/delete_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/delete_execution/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/update_execution_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/get_execution_step/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/get_execution/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/list_execution_steps/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/create_usecase_variables/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/get_usecase_variables/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/create_schedule/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/get_schedule/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/delete_schedule/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/create_usecase_hooks/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/get_usecase_hooks/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/generate_s3_url/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/create_usecase_secrets/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/get_usecase_secrets/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/delete_usecase_secrets/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/update_usecase_secrets/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/get_execution_variables/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/reorder_steps/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/export_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/import_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
-	cd lambda/cmd/generate_usecase/ && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go
+	for f in $$(find ${LAMBDA_FOLDER} -type d -maxdepth 1 -mindepth 1 -exec basename {} \;); do sh -c "cd ${LAMBDA_FOLDER}/$${f} && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go && echo \"\033[0;32m OK \033[0m $${f}\""; done
 
 lambdas.clean:
 	@echo "Cleaning up Lambda bootstrap binaries..."

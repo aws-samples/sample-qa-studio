@@ -3,8 +3,11 @@ from typing import Optional, List
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 import logging
+import os
 
 from models import Execution, ExecutionStep, ExecutionVariables, KeyValuePair, ExecutionHeaders
+from sqs_client import SQSClient
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +16,8 @@ class DynamoDBClient:
     def __init__(self, table_name: str, region_name: str = 'us-east-1'):
         self.dynamodb = boto3.resource('dynamodb', region_name=region_name)
         self.table = self.dynamodb.Table(table_name)
+        self.sqs_client = SQSClient(region_name)
+        self.notification_queue_url = os.getenv('NOTIFICATION_QUEUE_URL')
     
     def get_execution(self, usecase_id: str, execution_id: str) -> Optional[Execution]:
         """Load execution data from DynamoDB"""
@@ -151,6 +156,15 @@ class DynamoDBClient:
             )
             
             logger.info(f"Updated execution {execution_id} status to {status} for usecase {usecase_id}")
+            
+            # Send notification if execution failed and notification queue is configured
+            if status in ['failed', 'error'] and self.notification_queue_url:
+                self.sqs_client.send_notification_message(
+                    self.notification_queue_url, 
+                    usecase_id, 
+                    execution_id
+                )
+            
             return True
             
         except ClientError as e:
@@ -288,3 +302,82 @@ class DynamoDBClient:
         except ClientError as e:
             logger.error(f"Error getting execution headers for {execution_id}: {e}")
             return None
+
+    def create_live_view(self, execution_id: str, live_url: str) -> bool:
+        """Create a live view record for an execution in DynamoDB"""
+        try:
+            from utils import get_time
+            
+            # Calculate expiration time (24 hours from now)
+            expires_at = int((datetime.now() + timedelta(hours=24)).timestamp())
+            
+            self.table.put_item(
+                Item={
+                    'pk': f'EXECUTION#{execution_id}',
+                    'sk': 'LIVE_VIEW',
+                    'live_url': live_url,
+                    'created_at': get_time(),
+                    'expires_at': expires_at
+                }
+            )
+            
+            logger.info(f"Created live view record for execution {execution_id} with URL: {live_url}")
+            return True
+            
+        except ClientError as e:
+            logger.error(f"Error creating live view for execution {execution_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error creating live view for execution {execution_id}: {e}")
+            return False
+    
+    def delete_live_view(self, execution_id: str) -> bool:
+        """Delete the live view record for an execution from DynamoDB"""
+        try:
+            self.table.delete_item(
+                Key={
+                    'pk': f'EXECUTION#{execution_id}',
+                    'sk': 'LIVE_VIEW'
+                }
+            )
+            
+            logger.info(f"Deleted live view record for execution {execution_id}")
+            return True
+            
+        except ClientError as e:
+            logger.error(f"Error deleting live view for execution {execution_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error deleting live view for execution {execution_id}: {e}")
+            return False
+    
+    def update_live_view(self, execution_id: str, live_url: str) -> bool:
+        """Update the live view URL for an execution in DynamoDB"""
+        try:
+            from utils import get_time
+            
+            # Calculate new expiration time (24 hours from now)
+            expires_at = int((datetime.now() + timedelta(hours=24)).timestamp())
+            
+            self.table.update_item(
+                Key={
+                    'pk': f'EXECUTION#{execution_id}',
+                    'sk': 'LIVE_VIEW'
+                },
+                UpdateExpression="SET live_url = :live_url, updated_at = :updated_at, expires_at = :expires_at",
+                ExpressionAttributeValues={
+                    ":live_url": live_url,
+                    ":updated_at": get_time(),
+                    ":expires_at": expires_at
+                }
+            )
+            
+            logger.info(f"Updated live view URL for execution {execution_id}")
+            return True
+            
+        except ClientError as e:
+            logger.error(f"Error updating live view for execution {execution_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error updating live view for execution {execution_id}: {e}")
+            return False

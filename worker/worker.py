@@ -140,7 +140,9 @@ def main():
         ws_url, headers = browser.generate_ws_headers()
         live_view_url = browser.generate_live_view_url()
         print(live_view_url)
-        # print(f"Browser viewer is running at: {client.generate_live_view_url()}")
+        
+        # Store live view URL in DynamoDB
+        db_client.create_live_view(execution_id, live_view_url)
 
         with NovaAct(
             cdp_endpoint_url=ws_url,
@@ -268,10 +270,20 @@ def main():
             db_client.update_execution_status(usecase_id, execution_id, "error", completed_at=get_time())
         except Exception as db_error:
             logger.error(f"Failed to update execution status after Nova Act error: {str(db_error)}")
+        
+        # Clean up live view URL on error
+        try:
+            db_client.delete_live_view(execution_id)
+        except Exception as cleanup_error:
+            logger.error(f"Failed to cleanup live view URL: {str(cleanup_error)}")
+        
         return False
     
     browser.stop()
     delete_browser(browser_id, execution.region)
+    
+    # Clean up live view URL
+    db_client.delete_live_view(execution_id)
     
     # Update execution status to completed
     if not all_success:
