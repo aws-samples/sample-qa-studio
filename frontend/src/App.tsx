@@ -20,6 +20,7 @@ const CreateUsecase = React.lazy(() => import('./components/CreateUsecase'));
 const UserJourneyWizard = React.lazy(() => import('./components/UserJourneyWizard'));
 const UsecaseDetail = React.lazy(() => import('./components/UsecaseDetailRefactored'));
 const ExecutionDetail = React.lazy(() => import('./components/ExecutionDetailRefactored'));
+const Users = React.lazy(() => import('./components/Users'));
 
 Amplify.configure(amplifyconfig);
 
@@ -48,6 +49,7 @@ function AppContent() {
         import('./components/UserJourneyWizard');
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
+        import('./components/Users');
       });
     } else {
       setTimeout(() => {
@@ -55,6 +57,7 @@ function AppContent() {
         import('./components/UserJourneyWizard');
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
+        import('./components/Users');
       }, 2000);
     }
   }, []);
@@ -71,7 +74,8 @@ function AppContent() {
           items={[
             { type: "link", text: "Home", href: "/" },
             { type: "link", text: "Create Use Case", href: "/create-usecase" },
-            { type: "link", text: "User Journey Wizard", href: "/user-journey-wizard" }
+            { type: "link", text: "User Journey Wizard", href: "/user-journey-wizard" },
+            { type: "link", text: "Users", href: "/users" }
           ]}
           onFollow={(event) => {
             if (!event.detail.external) {
@@ -97,6 +101,7 @@ function AppContent() {
                 <UserJourneyWizard />
               </ErrorBoundary>
             } />
+            <Route path="/users" element={<Users />} />
             <Route path="/usecase/:id" element={<UsecaseDetail />} />
             <Route path="/usecase/:usecaseId/execution/:executionId" element={<ExecutionDetail />} />
           </Routes>

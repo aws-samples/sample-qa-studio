@@ -96,7 +96,7 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
-    new cdk.CfnOutput(this, 'apigateway domain', { 
+    new cdk.CfnOutput(this, 'apigateway domain', {
       value: api.url
     });
 
@@ -135,7 +135,7 @@ export class NovaActQAStudio extends cdk.Stack {
       ]
     });
 
-    new cdk.CfnOutput(this, 'CloudFrontDistributionDomain', { 
+    new cdk.CfnOutput(this, 'CloudFrontDistributionDomain', {
       value: distribution.distributionDomainName
     });
 
@@ -164,7 +164,7 @@ export class NovaActQAStudio extends cdk.Stack {
       selfSignUpEnabled: false,
     });
 
-    new cdk.CfnOutput(this, 'user pool id', { 
+    new cdk.CfnOutput(this, 'user pool id', {
       value: userPool.userPoolId
     });
 
@@ -183,7 +183,7 @@ export class NovaActQAStudio extends cdk.Stack {
           implicitCodeGrant: true
         },
         scopes: [
-          cognito.OAuthScope.OPENID, 
+          cognito.OAuthScope.OPENID,
           cognito.OAuthScope.EMAIL,
           cognito.OAuthScope.PROFILE
         ]
@@ -201,7 +201,7 @@ export class NovaActQAStudio extends cdk.Stack {
 
     // ECR Repository
     const ecrRepository = new ecr.Repository(this, 'images_repository');
-    
+
     // Build worker
     const workerImage = new ecr_assets.DockerImageAsset(this, 'MyDockerImage', {
       directory: 'worker',
@@ -213,18 +213,18 @@ export class NovaActQAStudio extends cdk.Stack {
       dest: new ecrdeploy.DockerImageName(`${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/${ecrRepository.repositoryName}:latest`),
     });
 
-    new cdk.CfnOutput(this, 'EcrName', { 
+    new cdk.CfnOutput(this, 'EcrName', {
       value: ecrRepository.repositoryName
     });
 
     const ecrUri = ecrRepository.repositoryUri
     const ecrHostname = ecrUri.split('/')[0]
 
-    new cdk.CfnOutput(this, 'EcrUri', { 
+    new cdk.CfnOutput(this, 'EcrUri', {
       value: ecrUri
     });
 
-    new cdk.CfnOutput(this, 'EcrHostname', { 
+    new cdk.CfnOutput(this, 'EcrHostname', {
       value: ecrHostname
     });
 
@@ -316,7 +316,7 @@ export class NovaActQAStudio extends cdk.Stack {
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
         cpuArchitecture: ecs.CpuArchitecture.ARM64
-      },      
+      },
     });
 
 
@@ -729,6 +729,31 @@ export class NovaActQAStudio extends cdk.Stack {
       }
     });
 
+    // User Management Lambda Functions
+    const listUsersLambda = this.CreateLambda({
+      path: 'list_users',
+      name: 'ListUsers',
+      environment: {
+        USER_POOL_ID: userPool.userPoolId
+      }
+    });
+
+    const createUserLambda = this.CreateLambda({
+      path: 'create_user',
+      name: 'CreateUser',
+      environment: {
+        USER_POOL_ID: userPool.userPoolId
+      }
+    });
+
+    const deleteUserLambda = this.CreateLambda({
+      path: 'delete_user',
+      name: 'DeleteUser',
+      environment: {
+        USER_POOL_ID: userPool.userPoolId
+      }
+    });
+
     // Grant Lambda permissions
     table.grantReadData(listUsecasesLambda);
     table.grantWriteData(createUsecaseLambda);
@@ -825,6 +850,31 @@ export class NovaActQAStudio extends cdk.Stack {
         'secretsmanager:UpdateSecret'
       ],
       resources: ['*']
+    }));
+
+    // Grant Cognito permissions for user management
+    listUsersLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'cognito-idp:ListUsers'
+      ],
+      resources: [userPool.userPoolArn]
+    }));
+
+    createUserLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'cognito-idp:*'
+      ],
+      resources: [userPool.userPoolArn]
+    }));
+
+    deleteUserLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'cognito-idp:AdminDeleteUser'
+      ],
+      resources: [userPool.userPoolArn]
     }));
 
     // Grant EventBridge Scheduler permissions
@@ -1075,6 +1125,23 @@ export class NovaActQAStudio extends cdk.Stack {
     // API Gateway generate-usecase endpoint
     const generateUsecase = api.root.addResource('generate-usecase');
     generateUsecase.addMethod('POST', new apigateway.LambdaIntegration(generateUsecaseLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+
+    // API Gateway user management endpoints
+    const users = api.root.addResource('users');
+    users.addMethod('GET', new apigateway.LambdaIntegration(listUsersLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+    users.addMethod('POST', new apigateway.LambdaIntegration(createUserLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+
+    const user = users.addResource('{username}');
+    user.addMethod('DELETE', new apigateway.LambdaIntegration(deleteUserLambda), {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO
     });
