@@ -335,7 +335,7 @@ export class NovaActQAStudio extends cdk.Stack {
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
         cpuArchitecture: ecs.CpuArchitecture.ARM64
-      },      
+      },
     });
 
 
@@ -797,6 +797,31 @@ export class NovaActQAStudio extends cdk.Stack {
 
 
 
+    // User Management Lambda Functions
+    const listUsersLambda = this.CreateLambda({
+      path: 'list_users',
+      name: 'ListUsers',
+      environment: {
+        USER_POOL_ID: userPool.userPoolId
+      }
+    });
+
+    const createUserLambda = this.CreateLambda({
+      path: 'create_user',
+      name: 'CreateUser',
+      environment: {
+        USER_POOL_ID: userPool.userPoolId
+      }
+    });
+
+    const deleteUserLambda = this.CreateLambda({
+      path: 'delete_user',
+      name: 'DeleteUser',
+      environment: {
+        USER_POOL_ID: userPool.userPoolId
+      }
+    });
+
     // Grant Lambda permissions
     table.grantReadData(listUsecasesLambda);
     table.grantWriteData(createUsecaseLambda);
@@ -933,6 +958,31 @@ export class NovaActQAStudio extends cdk.Stack {
         'secretsmanager:UpdateSecret'
       ],
       resources: ['*']
+    }));
+
+    // Grant Cognito permissions for user management
+    listUsersLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'cognito-idp:ListUsers'
+      ],
+      resources: [userPool.userPoolArn]
+    }));
+
+    createUserLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'cognito-idp:*'
+      ],
+      resources: [userPool.userPoolArn]
+    }));
+
+    deleteUserLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'cognito-idp:AdminDeleteUser'
+      ],
+      resources: [userPool.userPoolArn]
     }));
 
     // Grant EventBridge Scheduler permissions
@@ -1187,8 +1237,6 @@ export class NovaActQAStudio extends cdk.Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO
     });
 
-
-
     // API Gateway subscription endpoints
     const usecaseSubscription = usecaseId.addResource('subscription');
     usecaseSubscription.addMethod('GET', new apigateway.LambdaIntegration(getUsecaseSubscriptionLambda), {
@@ -1204,6 +1252,21 @@ export class NovaActQAStudio extends cdk.Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO
     });
 
+    // API Gateway user management endpoints
+    const users = api.root.addResource('users');
+    users.addMethod('GET', new apigateway.LambdaIntegration(listUsersLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
+    users.addMethod('POST', new apigateway.LambdaIntegration(createUserLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
 
+    const user = users.addResource('{username}');
+    user.addMethod('DELETE', new apigateway.LambdaIntegration(deleteUserLambda), {
+      authorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO
+    });
   }
 }
