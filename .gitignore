@@ -26,3 +26,4 @@ Makefile
 
 frontend/.env
 frontend/src/amplifyconfiguration.json
+configuration.json

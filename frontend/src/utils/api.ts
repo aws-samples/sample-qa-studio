@@ -1,7 +1,8 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { errorManager, ErrorState } from './errorManager';
+import {apiUrl} from '../api-config.json'
 
-const API_BASE_URL = import.meta.env.VITE_API_ENDPOINT || 'https://doihpyuate.execute-api.eu-central-1.amazonaws.com/prod/';
+const API_BASE_URL = apiUrl || '/prod/';
 
 export interface ExecutionModel {
   pk: string;
