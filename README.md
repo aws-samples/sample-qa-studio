@@ -187,12 +187,58 @@ Secret steps ensure sensitive data never appears in logs or execution history, p
 - `make docker.build` - Build worker Docker container
 - `make docker.upload` - Push worker container to ECR
 
+### Release Commands
+
+- `npm run release:patch` - Create patch release (1.0.0 → 1.0.1)
+- `npm run release:minor` - Create minor release (1.0.0 → 1.1.0)
+- `npm run release:major` - Create major release (1.0.0 → 2.0.0)
+- `npm run release:prerelease` - Create pre-release (1.0.0 → 1.0.1-beta.0)
+- `npm run changelog` - Generate changelog from git commits
+
 ## Monitoring and Troubleshooting
 
 - **CloudWatch Logs**: Monitor Lambda function and ECS task logs
 - **DynamoDB**: Check execution status and step progress
 - **S3**: Access execution artifacts (videos, screenshots, logs)
 - **SQS**: Monitor queue depth and message processing
+
+## Creating a Release
+
+The project includes an automated release system that creates distributable packages:
+
+```bash
+# Create a patch release (bug fixes)
+npm run release:patch
+
+# Create a minor release (new features)
+npm run release:minor
+
+# Create a major release (breaking changes)
+npm run release:major
+
+# Create a pre-release (beta/rc)
+npm run release:prerelease
+```
+
+The release process automatically:
+- Bumps the version in `package.json`
+- Generates a changelog from git commits
+- Builds all Lambda functions and frontend
+- Creates a release archive in `/release/`
+- Commits changes and creates a git tag
+- Pushes to remote repository
+
+### Release Archive Contents
+
+The generated zip file (`nova-act-qa-studio-vX.Y.Z.zip`) contains:
+- Pre-built Lambda functions (no Go compiler needed)
+- Built frontend application
+- Worker source code and Dockerfile
+- Compiled CDK infrastructure code
+- Configuration templates
+- Documentation
+
+Users can deploy directly from the release archive without build tools.
 
 ## Contributing
 

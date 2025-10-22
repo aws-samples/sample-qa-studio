@@ -28,3 +28,6 @@ frontend/.env
 frontend/src/amplifyconfiguration.json
 frontend/src/api-config.json
 configuration.json
+
+# Release artifacts
+release/
