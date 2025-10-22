@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-7] - 2025-10-22
+
+### Other Changes
+
+- rework release creation (b95fc79)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-6] - 2025-10-22
 
 ### Other Changes
