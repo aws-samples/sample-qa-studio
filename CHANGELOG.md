@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-10] - 2025-10-22
+
+### Chores
+
+- release v0.1.1-9 (a99b960)
+
+### Other Changes
+
+- improve build process (6430d59)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-9] - 2025-10-22
 
 ### Other Changes
