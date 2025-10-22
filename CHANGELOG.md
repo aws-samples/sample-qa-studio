@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-5] - 2025-10-22
+
+### Other Changes
+
+- fixes release paths (256e2bf)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-4] - 2025-10-22
 
 ### Other Changes
