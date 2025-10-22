@@ -10,7 +10,6 @@ import { NovaActQAStudioFrontendDeploymentStack } from '../lib/frontend-deployme
 import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioRouteStack } from '../lib/route-stack';
 import { adminEmail, baseName, userAgentString } from '../configuration.json'
-import { api } from '../frontend/src/utils/api';
 
 const app = new App();
 
