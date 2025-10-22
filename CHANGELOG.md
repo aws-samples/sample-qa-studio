@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-8] - 2025-10-22
+
+### Other Changes
+
+- ensure synth can run (4455db0)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-7] - 2025-10-22
 
 ### Other Changes
