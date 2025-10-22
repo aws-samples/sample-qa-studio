@@ -90,7 +90,7 @@ function createReleaseZip(version: string): string {
   });
 
   // Copy frontend source (will be built during deployment)
-  exec(`mkdir -p ${tempDir}/frontend`);
+  exec(`mkdir -p ${tempDir}/frontend/build`);
   exec(`cp -r frontend/src ${tempDir}/frontend/`);
   exec(`cp -r frontend/public ${tempDir}/frontend/`);
   exec(`cp frontend/package.json ${tempDir}/frontend/`);
@@ -98,6 +98,9 @@ function createReleaseZip(version: string): string {
   exec(`cp frontend/tsconfig.json ${tempDir}/frontend/`);
   exec(`cp frontend/vite.config.ts ${tempDir}/frontend/ 2>/dev/null || true`);
   exec(`cp frontend/.env-sample ${tempDir}/frontend/ 2>/dev/null || true`);
+  
+  // Create placeholder in build directory so CDK can synthesize
+  exec(`echo "This directory will be populated during deployment" > ${tempDir}/frontend/build/.placeholder`);
 
   // Copy worker source
   exec(`mkdir -p ${tempDir}/worker`);
