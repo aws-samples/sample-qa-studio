@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-9] - 2025-10-22
+
+### Other Changes
+
+- more fixes to deploy and build the frontend (cfc4ae4)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-8] - 2025-10-22
 
 ### Other Changes
