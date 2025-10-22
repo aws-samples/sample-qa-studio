@@ -88,7 +88,7 @@ function createReleaseZip(version: string): string {
   exec(`find lambda/cmd -name "bootstrap" -type f -exec sh -c 'mkdir -p ${tempDir}/lambdas/$(dirname {}) && cp {} ${tempDir}/lambdas/{}' \\;`);
 
   // Copy frontend build
-  exec(`cp -r frontend/dist ${tempDir}/frontend`);
+  exec(`cp -r frontend/build ${tempDir}/frontend`);
 
   // Copy worker source
   exec(`mkdir -p ${tempDir}/worker`);
