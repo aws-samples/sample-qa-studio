@@ -10,6 +10,7 @@ import { NovaActQAStudioFrontendDeploymentStack } from '../lib/frontend-deployme
 import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioRouteStack } from '../lib/route-stack';
 import { adminEmail, baseName, userAgentString } from '../configuration.json'
+import { api } from '../frontend/src/utils/api';
 
 const app = new App();
 
@@ -38,7 +39,7 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
 const frontendStack = new NovaActQAStudioFrontendStack(app, 'frontend', {
   stackName: `${baseName}-frontend`,
   baseName,
-  api: apiStack.api,
+  apiId: apiStack.api.restApiId,
 })
 
 const frontendDeploymentStack = new NovaActQAStudioFrontendDeploymentStack(app, 'frontend_deployment', {

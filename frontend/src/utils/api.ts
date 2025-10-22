@@ -1,8 +1,8 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { errorManager, ErrorState } from './errorManager';
-import {apiUrl} from '../api-config.json'
+import { apiUrl } from '../api-config.json'
 
-const API_BASE_URL = apiUrl || '/prod/';
+const API_BASE_URL = '/prod/'
 
 export interface ExecutionModel {
   pk: string;
@@ -47,11 +47,11 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
         response.status,
         errorData.error || errorData.message
       );
-      
+
       if (errorData.details) {
         error.details = errorData.details;
       }
-      
+
       if (errorData.code) {
         error.code = errorData.code;
       }
@@ -80,7 +80,7 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
 
     // Convert unknown errors to network errors
     console.error('API request failed:', error);
-    throw errorManager.createError('network', 
+    throw errorManager.createError('network',
       'Network request failed. Please check your connection and try again.',
       { details: (error as Error).message }
     );
@@ -89,19 +89,19 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
 
 export const api = {
   get: (endpoint: string) => apiRequest(endpoint, { method: 'GET' }),
-  post: (endpoint: string, data: any) => apiRequest(endpoint, { 
-    method: 'POST', 
-    body: JSON.stringify(data) 
+  post: (endpoint: string, data: any) => apiRequest(endpoint, {
+    method: 'POST',
+    body: JSON.stringify(data)
   }),
-  patch: (endpoint: string, data: any) => apiRequest(endpoint, { 
-    method: 'PATCH', 
-    body: JSON.stringify(data) 
+  patch: (endpoint: string, data: any) => apiRequest(endpoint, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
   }),
-  put: (endpoint: string, data: any) => apiRequest(endpoint, { 
-    method: 'PUT', 
-    body: JSON.stringify(data) 
+  put: (endpoint: string, data: any) => apiRequest(endpoint, {
+    method: 'PUT',
+    body: JSON.stringify(data)
   }),
-  delete: (endpoint: string, data?: any) => apiRequest(endpoint, { 
+  delete: (endpoint: string, data?: any) => apiRequest(endpoint, {
     method: 'DELETE',
     ...(data && { body: JSON.stringify(data) })
   }),
@@ -136,16 +136,16 @@ export interface ApiError {
 
 // Enhanced API request with retry logic using RetryManager
 export const apiRequestWithRetry = async (
-  endpoint: string, 
-  options: RequestInit = {}, 
+  endpoint: string,
+  options: RequestInit = {},
   maxRetries: number = 3
 ): Promise<any> => {
   const operation = () => apiRequest(endpoint, options);
-  
+
   // Use RetryManager for consistent retry behavior
   const { RetryManager } = await import('./retryManager');
   const result = await RetryManager.executeWithRetry(operation, { maxRetries });
-  
+
   if (result.success) {
     return result.data;
   } else {
@@ -159,42 +159,42 @@ export const wizardApi = {
     if (!request.title?.trim()) {
       throw errorManager.createError('validation', 'Use case title is required');
     }
-    
+
     if (!request.startingUrl?.trim()) {
       throw errorManager.createError('validation', 'Starting URL is required');
     }
-    
+
     if (!request.userJourney?.trim()) {
       throw errorManager.createError('validation', 'User journey description is required');
     }
-    
+
     if (!request.region?.trim()) {
       throw errorManager.createError('validation', 'Execution region is required');
     }
-    
+
     // URL validation
     try {
       new URL(request.startingUrl);
     } catch {
-      throw errorManager.createError('validation', 
+      throw errorManager.createError('validation',
         'Please enter a valid URL (including http:// or https://)');
     }
-    
+
     // Length validations
     if (request.title.length > 200) {
       throw errorManager.createError('validation', 'Title must be 200 characters or less');
     }
-    
+
     if (request.userJourney.length < 50) {
-      throw errorManager.createError('validation', 
+      throw errorManager.createError('validation',
         'User journey description must be at least 50 characters');
     }
-    
+
     if (request.userJourney.length > 2000) {
-      throw errorManager.createError('validation', 
+      throw errorManager.createError('validation',
         'User journey description must be 2000 characters or less');
     }
-    
+
     try {
       // Use circuit breaker for Bedrock calls to prevent cascading failures
       const { RetryManager } = await import('./retryManager');
@@ -206,7 +206,7 @@ export const wizardApi = {
         'bedrock-generate-usecase',
         { maxRetries: 2 } // Limit retries for expensive Bedrock calls
       );
-      
+
       if (result.success) {
         return result.data;
       } else {
@@ -222,9 +222,9 @@ export const wizardApi = {
       if ((error as ErrorState).type) {
         throw error;
       }
-      
+
       // Convert unknown errors to bedrock errors for this context
-      throw errorManager.createError('bedrock', 
+      throw errorManager.createError('bedrock',
         'Failed to generate use case with AI. Please try again.',
         { details: (error as Error).message }
       );

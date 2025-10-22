@@ -8,7 +8,20 @@
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "build:lambdas": "cd lambda/cmd && for dir in */; do (cd \"$dir\" && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go && echo \"✓ Built $dir\"); done",
+    "clean:lambdas": "find lambda/cmd -name 'bootstrap' -type f -delete",
+    "deploy:storage": "cdk deploy storage --require-approval never",
+    "deploy:auth": "cdk deploy auth --require-approval never",
+    "deploy:api": "cdk deploy api --require-approval never",
+    "deploy:frontend": "cdk deploy frontend --require-approval never",
+    "deploy:frontend-build": "cd frontend && npm run build && cd ..",
+    "deploy:frontend-deployment": "cdk deploy frontend_deployment --require-approval never",
+    "deploy:notification": "cdk deploy notification --require-approval never",
+    "deploy:worker": "cdk deploy worker --require-approval never",
+    "deploy:routes": "cdk deploy routes --require-approval never",
+    "config:write": "ts-node scripts/write-config.ts",
+    "deploy": "npm run build:lambdas && npm run deploy:storage && npm run deploy:auth && npm run deploy:api && npm run deploy:frontend && npm run config:write && npm run deploy:notification && npm run deploy:worker && npm run deploy:routes && npm run deploy:frontend-build && npm run deploy:frontend-deployment && npm run clean:lambdas"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

@@ -12,15 +12,16 @@ import {
   PriceClass,
   OriginRequestHeaderBehavior,
   OriginRequestQueryStringBehavior,
-  OriginRequestCookieBehavior
+  OriginRequestCookieBehavior,
+  OriginProtocolPolicy,
+  ResponseHeadersPolicy,
 } from 'aws-cdk-lib/aws-cloudfront';
-import { S3BucketOrigin, RestApiOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
-import { RestApi } from 'aws-cdk-lib/aws-apigateway';
+import { S3BucketOrigin, HttpOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
 interface NovaActQAStudioFrontendStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
-  api: RestApi
+  apiId: string
 }
 
 /**
@@ -47,6 +48,18 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
       autoDeleteObjects: true,
     });
 
+    const cachePolicy = new CachePolicy(this, 'CachePolicy', {
+      cachePolicyName: this.cdkName('cache-policy'),
+      defaultTtl: Duration.seconds(0),
+      minTtl: Duration.seconds(0),
+      maxTtl: Duration.seconds(1),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+      cookieBehavior: CacheCookieBehavior.all(),
+      headerBehavior: CacheHeaderBehavior.allowList('Origin', 'Access-Control-Request-Headers', 'Access-Control-Request-Method', 'Authorization'),
+      queryStringBehavior: CacheQueryStringBehavior.all()
+    })
+
     // CloudFront Distribution with S3 origin
     this.distribution = new Distribution(this, 'distribution', {
       defaultBehavior: {
@@ -55,13 +68,14 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
       },
       additionalBehaviors: {
         "/prod/*": {
-          origin: new RestApiOrigin(props.api, {
-            originPath: '/'
+          origin: new HttpOrigin(`${props.apiId}.execute-api.${this.region}.amazonaws.com`, {
+            protocolPolicy: OriginProtocolPolicy.HTTPS_ONLY
           }),
           viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           allowedMethods: AllowedMethods.ALLOW_ALL,
-          cachePolicy: CachePolicy.CACHING_DISABLED,
-          originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER
+          cachePolicy: cachePolicy,
+          originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          responseHeadersPolicy: ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS_WITH_PREFLIGHT_AND_SECURITY_HEADERS,
         }
       },
       priceClass: PriceClass.PRICE_CLASS_100,
@@ -71,11 +85,16 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
           httpStatus: 404,
           responseHttpStatus: 200,
           responsePagePath: '/index.html'
+        },
+        {
+          httpStatus: 403,
+          responseHttpStatus: 200,
+          responsePagePath: '/index.html'
         }
       ]
     });
 
-    this.log('CloudFrontDistributionDomain', this.distribution.distributionDomainName)
+    this.log('CloudFrontDistributionDomain', `https://${this.distribution.distributionDomainName}`)
     this.log('frontendBucket', this.frontendBucket.bucketName)
 
     // Export the distribution domain name for use in other stacks
@@ -84,8 +103,5 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
       description: 'CloudFront Distribution Domain Name',
       exportName: `${props.baseName}-distribution-domain-name`
     });
-
-    // Note: amplifyconfiguration.json will be generated post-deployment
-    // by running: make config.write or npx ts-node scripts/write-config.ts
   }
 }

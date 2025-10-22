@@ -17,7 +17,9 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
 
     this.api = new RestApi(this, 'Api', {
       restApiName: this.cdkName('service'),
-      endpointTypes: [EndpointType.REGIONAL],
+      endpointTypes: [
+        EndpointType.REGIONAL
+      ],
       defaultCorsPreflightOptions: {
         allowOrigins: Cors.ALL_ORIGINS,
         allowMethods: Cors.ALL_METHODS,

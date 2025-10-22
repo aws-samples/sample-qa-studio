@@ -1,6 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { RestApi, LambdaIntegration, AuthorizationType, Method, Resource, IAuthorizer } from 'aws-cdk-lib/aws-apigateway';
+import { RestApi, LambdaIntegration, AuthorizationType, Method, Resource, IAuthorizer, Cors, IResource, Deployment, Stage } from 'aws-cdk-lib/aws-apigateway';
 import { Function } from 'aws-cdk-lib/aws-lambda';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
@@ -40,12 +40,25 @@ enum HttpMethod {
 export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
   private authorizer: IAuthorizer
   private table: Table
+  private deployment: Deployment
 
   private addMethod(resource: Resource, method: HttpMethod, lambda: Function): Method {
     return resource.addMethod(method, new LambdaIntegration(lambda), {
       authorizer: this.authorizer,
       authorizationType: AuthorizationType.COGNITO
     });
+  }
+
+  private addResource(parentResource: IResource, name: string): Resource {
+    const resource = parentResource.addResource(name);
+    this.deployment.node.addDependency(resource)
+    resource.addCorsPreflight({
+      allowOrigins: Cors.ALL_ORIGINS,
+      allowMethods: Cors.ALL_METHODS,
+      allowHeaders: ['Content-Type', 'Authorization', 'X-Amz-Date', 'X-Api-Key', 'X-Amz-Security-Token']
+    })
+
+    return resource
   }
 
   private defaultCreateLambdaWithTable(path: string): Function {
@@ -66,6 +79,12 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       restApiId: props.apiId,
       rootResourceId: props.apiRootResourceId
     })
+
+    // Create a deployment to push changes to the API Gateway stage
+    this.deployment = new Deployment(this, 'ApiDeployment', {
+      api: apiInstance,
+      description: `Deployment at ${new Date().toISOString()}`
+    });
 
     // Lambda Functions
     const listUsecasesLambda = this.defaultCreateLambdaWithTable('list_usecases')
@@ -262,109 +281,110 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     props.artefactsBucket.grantRead(deleteExecutionLambda);
 
     // API Gateway endpoints
-    const usecases = apiInstance.root.addResource('usecases');
+    const usecases = this.addResource(apiInstance.root, 'usecases')
     this.addMethod(usecases, HttpMethod.GET, listUsecasesLambda)
 
-    const usecase = apiInstance.root.addResource('usecase');
+    const usecase = this.addResource(apiInstance.root, 'usecase')
     this.addMethod(usecase, HttpMethod.POST, createUsecaseLambda)
 
-    const usecaseId = usecase.addResource('{id}');
+    const usecaseId = this.addResource(usecase, '{id}')
     this.addMethod(usecaseId, HttpMethod.GET, getUsecaseLambda)
     this.addMethod(usecaseId, HttpMethod.PATCH, updateUsecaseLambda)
     this.addMethod(usecaseId, HttpMethod.DELETE, deleteUsecaseLambda)
 
-    const steps = usecaseId.addResource('steps');
+    const steps = this.addResource(usecaseId, 'steps');
     this.addMethod(steps, HttpMethod.POST, createStepLambda)
     this.addMethod(steps, HttpMethod.GET, listStepsLambda)
 
     // API Gateway execute endpoint
-    const execute = usecaseId.addResource('execute');
+    const execute = this.addResource(usecaseId, 'execute');
     this.addMethod(execute, HttpMethod.POST, props.executeUsecaseLambda)
 
     // API Gateway variables endpoint
-    const variables = usecaseId.addResource('variables');
+    const variables = this.addResource(usecaseId, 'variables');
     this.addMethod(variables, HttpMethod.POST, createUsecaseVariablesLambda)
     this.addMethod(variables, HttpMethod.GET, getUsecaseVariablesLambda)
 
     // API Gateway schedule endpoint
-    const schedule = usecaseId.addResource('schedule');
+    const schedule = this.addResource(usecaseId, 'schedule');
     this.addMethod(schedule, HttpMethod.POST, props.createScheduleLambda)
     this.addMethod(schedule, HttpMethod.GET, props.getScheduleLambda)
     this.addMethod(schedule, HttpMethod.DELETE, props.deleteScheduleLambda)
 
     // API Gateway hooks endpoint
-    const hooks = usecaseId.addResource('hooks');
+    const hooks = this.addResource(usecaseId, 'hooks');
     this.addMethod(hooks, HttpMethod.POST, createUsecaseHooksLambda)
     this.addMethod(hooks, HttpMethod.GET, getUsercaseHooksLambda)
 
     // API Gateway executions endpoints
-    const executions = usecaseId.addResource('executions');
+    const executions = this.addResource(usecaseId, 'executions');
     this.addMethod(executions, HttpMethod.GET, listExecutionsLambda)
 
-    const execution = executions.addResource('{executionId}');
+    const execution = this.addResource(executions, '{executionId}');
     this.addMethod(execution, HttpMethod.DELETE, deleteExecutionLambda)
     this.addMethod(execution, HttpMethod.GET, getExecutionLambda)
 
-    const executionSteps = execution.addResource('steps');
+    const executionSteps = this.addResource(execution, 'steps');
     this.addMethod(executionSteps, HttpMethod.GET, listExecutionStepsLambda)
 
-    const executionStep = executionSteps.addResource('{stepId}');
+    const executionStep = this.addResource(executionSteps, '{stepId}');
     this.addMethod(executionStep, HttpMethod.GET, getExecutionStepLambda)
 
     // API Gateway execution variables endpoint
-    const executionVariables = execution.addResource('variables');
+    const executionVariables = this.addResource(execution, 'variables');
     this.addMethod(executionVariables, HttpMethod.GET, getExecutionVariablesLambda)
 
     // API Gateway live view endpoint
-    const liveView = execution.addResource('live-view');
+    const liveView = this.addResource(execution, 'live-view');
     this.addMethod(liveView, HttpMethod.GET, getLiveViewLambda)
 
     // API Gateway step endpoints
-    const step = steps.addResource('{stepId}');
+    const step = this.addResource(steps, '{stepId}');
     this.addMethod(step, HttpMethod.PATCH, updateStepLambda)
     this.addMethod(step, HttpMethod.DELETE, deleteStepLambda)
 
     // API Gateway reorder steps endpoint
-    const reorderSteps = steps.addResource('reorder');
+    const reorderSteps = this.addResource(steps, 'reorder');
     this.addMethod(reorderSteps, HttpMethod.PATCH, reorderStepsLambda)
 
     // API Gateway endpoint for S3 URL generation
-    const generateS3Url = apiInstance.root.addResource('generate-s3-url');
+    const generateS3Url = this.addResource(apiInstance.root, 'generate-s3-url');
     this.addMethod(generateS3Url, HttpMethod.POST, props.generateS3UrlLambda)
 
     // API Gateway secrets endpoints
-    const secrets = usecaseId.addResource('secrets');
+    const secrets = this.addResource(usecaseId, 'secrets');
     this.addMethod(secrets, HttpMethod.POST, createUsecaseSecretsLambda)
     this.addMethod(secrets, HttpMethod.GET, getUsecaseSecretsLambda)
     this.addMethod(secrets, HttpMethod.DELETE, deleteUsecaseSecretsLambda)
     this.addMethod(secrets, HttpMethod.PATCH, updateUsecaseSecretsLambda)
 
     // API Gateway headers endpoints
-    const headers = usecaseId.addResource('headers');
-    this.addMethod(headers, HttpMethod.GET, createUsecaseHeadersLambda)
-    this.addMethod(headers, HttpMethod.POST, getUsecaseHeadersLambda)
+    const headers = this.addResource(usecaseId, 'headers');
+    this.addMethod(headers, HttpMethod.POST, createUsecaseHeadersLambda)
+    this.addMethod(headers, HttpMethod.GET, getUsecaseHeadersLambda)
 
     // API Gateway export/import endpoints
-    const exportEndpoint = usecaseId.addResource('export');
+    const exportEndpoint = this.addResource(usecaseId, 'export');
     this.addMethod(exportEndpoint, HttpMethod.GET, exportUsecaseLambda)
 
-    const importEndpoint = apiInstance.root.addResource('import');
+    const importEndpoint = this.addResource(apiInstance.root, 'import');
     this.addMethod(importEndpoint, HttpMethod.POST, importUsecaseLambda)
 
     // API Gateway generate-usecase endpoint
-    const generateUsecase = apiInstance.root.addResource('generate-usecase');
+    const generateUsecase = this.addResource(apiInstance.root, 'generate-usecase');
     this.addMethod(generateUsecase, HttpMethod.POST, generateUsecaseLambda)
 
     // API Gateway subscription endpoints
-    const usecaseSubscription = usecaseId.addResource('subscription');
+    const usecaseSubscription = this.addResource(usecaseId, 'subscription');
     this.addMethod(usecaseSubscription, HttpMethod.GET, props.getUsecaseSubscriptionLambda)
     this.addMethod(usecaseSubscription, HttpMethod.POST, props.subscribeUsecaseLambda)
     this.addMethod(usecaseSubscription, HttpMethod.DELETE, props.unsubscribeUsecaseLambda)
 
     // API Gateway user management endpoints
-    const users = apiInstance.root.addResource('users');
+    const users = this.addResource(apiInstance.root, 'users');
     this.addMethod(users, HttpMethod.GET, props.listUsersLambda)
     this.addMethod(users, HttpMethod.POST, props.addUserLambda)
-    this.addMethod(users, HttpMethod.DELETE, props.removeUserLambda)
+    const user = this.addResource(users, '{username}');
+    this.addMethod(user, HttpMethod.DELETE, props.removeUserLambda)
   }
 }

@@ -56,9 +56,9 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 
 	// Get table name from environment
-	tableName := os.Getenv("DYNAMODB_TABLE_NAME")
+	tableName := os.Getenv("TABLE_NAME")
 	if tableName == "" {
-		log.Printf("DYNAMODB_TABLE_NAME environment variable not set")
+		log.Printf("TABLE_NAME environment variable not set")
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
 			Headers: map[string]string{

@@ -32,7 +32,7 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
     super(scope, id, props);
 
     this.novaActApiKeySecret = new Secret(this, 'nova_api_key', {
-      secretName: this.cdkName('nova_api_key')
+      secretName: this.cdkName('nova_api_key'),
     })
 
     this.table = new Table(this, 'table', {
@@ -48,7 +48,10 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    const backupVault = new BackupVault(this, "dynamodb_backup_vault")
+    const backupVault = new BackupVault(this, "dynamodb_backup_vault", {
+      backupVaultName: this.cdkName("dynamodb_backup_vault"),
+      removalPolicy: cdk.RemovalPolicy.DESTROY
+    })
     const plan = new BackupPlan(this, "dynamodb_backup_plan")
     plan.addRule(BackupPlanRule.daily(backupVault))
     plan.addSelection("data", {

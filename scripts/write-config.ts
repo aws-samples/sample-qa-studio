@@ -1,15 +1,27 @@
 #!/usr/bin/env ts-node
 import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 
-const baseName = process.argv[2];
-const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
+// Read configuration from configuration.json
+const configPath = join(__dirname, '..', 'configuration.json');
+let baseName: string;
 
-if (!baseName) {
-  console.error('Usage: ts-node scripts/write-config.ts <baseName>');
+try {
+  const configContent = readFileSync(configPath, 'utf-8');
+  const config = JSON.parse(configContent);
+  baseName = config.baseName;
+  
+  if (!baseName) {
+    throw new Error('baseName not found in configuration.json');
+  }
+} catch (error) {
+  console.error('❌ Error reading configuration.json:', error);
+  console.error('Make sure configuration.json exists and contains a "baseName" field');
   process.exit(1);
 }
+
+const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
 
 async function getStackOutputs(stackName: string) {
   const client = new CloudFormationClient({ region });
