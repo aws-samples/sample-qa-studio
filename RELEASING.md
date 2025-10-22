@@ -148,7 +148,8 @@ nova-act-qa-studio-v1.2.3/
 │       ├── list_usecases/bootstrap
 │       ├── create_usecase/bootstrap
 │       └── ...
-├── frontend/             # Built React application (ready to deploy)
+├── frontend/
+│   └── build/            # Built React application (ready to deploy)
 ├── worker/               # Worker source + Dockerfile
 ├── lib/                  # CDK TypeScript source
 ├── bin/                  # CDK TypeScript source

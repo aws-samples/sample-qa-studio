@@ -94,8 +94,9 @@ function createReleaseZip(version: string): string {
     }
   });
 
-  // Copy frontend build
-  exec(`cp -r frontend/build ${tempDir}/frontend`);
+  // Copy frontend build (maintain directory structure)
+  exec(`mkdir -p ${tempDir}/frontend`);
+  exec(`cp -r frontend/build ${tempDir}/frontend/`);
 
   // Copy worker source
   exec(`mkdir -p ${tempDir}/worker`);
