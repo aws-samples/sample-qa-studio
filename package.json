@@ -1,6 +1,6 @@
 {
   "name": "cdk",
-  "version": "0.1.1-9",
+  "version": "0.1.1-8",
   "bin": {
     "cdk": "bin/cdk.js"
   },
@@ -9,7 +9,7 @@
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
-    "build:lambdas": "cd lambda/cmd && for dir in */; do (cd \"$dir\" && GOOS=linux GOARCH=arm64 go build -tags lambda.norpc -o bootstrap main.go && echo \"✓ Built $dir\"); done",
+    "build:lambdas": "cd lambda/cmd && for dir in */; do (cd \"$dir\" && GOOS=linux GOARCH=arm64 go build -ldflags=\"-s -w\" -tags lambda.norpc -o bootstrap main.go && echo \"✓ Built $dir\"); done",
     "clean:lambdas": "find lambda/cmd -name 'bootstrap' -type f -delete",
     "deploy:storage": "cdk deploy storage --require-approval never",
     "deploy:auth": "cdk deploy auth --require-approval never",
