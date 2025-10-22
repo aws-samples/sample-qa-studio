@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-6] - 2025-10-22
+
+### Other Changes
+
+- update deployment proces (30a3a1e)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-5] - 2025-10-22
 
 ### Other Changes
