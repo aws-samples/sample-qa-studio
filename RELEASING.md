@@ -131,17 +131,18 @@ npm run build
 cp configuration.json.sample configuration.json
 # Edit configuration.json
 
-# Deploy (uses pre-built Lambdas and frontend)
+# Deploy (uses pre-built Lambdas, builds frontend)
 npm run deploy:release
 ```
 
 **What happens during deployment:**
-1. Backend stacks are deployed (storage, auth, API, worker, etc.)
-2. `config:write` automatically generates `amplifyconfiguration.json` with Cognito pool IDs
-3. The config is written to `frontend/build/amplifyconfiguration.json`
-4. The pre-built frontend (with config) is deployed to S3/CloudFront
+1. Frontend dependencies are installed (`npm install` in frontend/)
+2. Backend stacks are deployed (storage, auth, API, worker, etc.)
+3. `config:write` automatically generates `amplifyconfiguration.json` with Cognito pool IDs
+4. Frontend is built with the generated config
+5. Frontend is deployed to S3/CloudFront
 
-The `deploy:release` command skips Lambda and frontend builds since they're included in the archive.
+The `deploy:release` command skips Lambda builds (pre-built) but builds the frontend during deployment.
 
 ## Release Archive Contents
 
@@ -154,8 +155,11 @@ nova-act-qa-studio-v1.2.3/
 │       ├── list_usecases/bootstrap
 │       ├── create_usecase/bootstrap
 │       └── ...
-├── frontend/
-│   └── build/            # Built React application (ready to deploy)
+├── frontend/             # Frontend source (built during deployment)
+│   ├── src/
+│   ├── public/
+│   ├── package.json
+│   └── vite.config.ts
 ├── worker/               # Worker source + Dockerfile
 ├── lib/                  # CDK TypeScript source
 ├── bin/                  # CDK TypeScript source

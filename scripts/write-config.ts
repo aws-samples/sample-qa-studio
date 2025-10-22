@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
-import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 
 // Read configuration from configuration.json
@@ -73,15 +73,10 @@ async function main() {
     }
   };
 
-  const frontendSrcPath = join(__dirname, '..', 'frontend', 'src', 'amplifyconfiguration.json');
-  const frontendBuildPath = join(__dirname, '..', 'frontend', 'build', 'amplifyconfiguration.json');
-  
-  writeConfig(frontendSrcPath, amplifyConfig);
-  
-  // Also write to build directory if it exists (for releases)
-  if (existsSync(join(__dirname, '..', 'frontend', 'build'))) {
-    writeConfig(frontendBuildPath, amplifyConfig);
-  }
+  writeConfig(
+    join(__dirname, '..', 'frontend', 'src', 'amplifyconfiguration.json'),
+    amplifyConfig
+  );
 
   // Optionally write API config
   if (apiOutputs.ApiUrlOutput) {

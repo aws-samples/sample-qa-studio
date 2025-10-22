@@ -52,11 +52,6 @@ function buildLambdas(): void {
   exec('npm run build:lambdas');
 }
 
-function buildFrontend(): void {
-  console.log('\n🔨 Building frontend...');
-  exec('cd frontend && npm run build');
-}
-
 function createReleaseDir(): void {
   if (!existsSync(RELEASE_DIR)) {
     mkdirSync(RELEASE_DIR, { recursive: true });
@@ -94,12 +89,15 @@ function createReleaseZip(version: string): string {
     }
   });
 
-  // Copy frontend build (maintain directory structure)
-  exec(`mkdir -p ${tempDir}/frontend/src`);
-  exec(`cp -r frontend/build ${tempDir}/frontend/`);
-  
-  // Copy frontend config template
-  exec(`cp frontend/src/amplifyconfiguration.json.template ${tempDir}/frontend/src/`);
+  // Copy frontend source (will be built during deployment)
+  exec(`mkdir -p ${tempDir}/frontend`);
+  exec(`cp -r frontend/src ${tempDir}/frontend/`);
+  exec(`cp -r frontend/public ${tempDir}/frontend/`);
+  exec(`cp frontend/package.json ${tempDir}/frontend/`);
+  exec(`cp frontend/package-lock.json ${tempDir}/frontend/`);
+  exec(`cp frontend/tsconfig.json ${tempDir}/frontend/`);
+  exec(`cp frontend/vite.config.ts ${tempDir}/frontend/ 2>/dev/null || true`);
+  exec(`cp frontend/.env-sample ${tempDir}/frontend/ 2>/dev/null || true`);
 
   // Copy worker source
   exec(`mkdir -p ${tempDir}/worker`);
@@ -209,9 +207,8 @@ function main(): void {
     console.log('\n📝 Generating changelog...');
     exec(`npx ts-node scripts/generate-changelog.ts ${newVersion}`);
 
-    // Build everything
+    // Build Lambdas only (frontend will be built during deployment)
     buildLambdas();
-    buildFrontend();
 
     // Create release
     createReleaseDir();

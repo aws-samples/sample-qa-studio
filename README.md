@@ -233,7 +233,7 @@ The release process automatically:
 
 The generated zip file (`nova-act-qa-studio-vX.Y.Z.zip`) contains:
 - Pre-built Lambda functions in `lambda/cmd/*/bootstrap` (no Go compiler needed)
-- Built frontend application in `frontend/build/` (no build needed)
+- Frontend source code (will be built during deployment)
 - Worker source code and Dockerfile
 - CDK TypeScript source code
 - Configuration templates
@@ -256,17 +256,17 @@ npm run build
 cp configuration.json.sample configuration.json
 # Edit configuration.json with your settings
 
-# Deploy (includes config generation)
+# Deploy (includes frontend install and build)
 npm run deploy:release
 ```
 
 **How it works:**
-1. Deploys backend stacks (storage, auth, API, etc.)
-2. Automatically generates `amplifyconfiguration.json` with Cognito pool IDs
-3. Writes config to `frontend/build/amplifyconfiguration.json`
-4. Deploys the pre-built frontend with the generated config
+1. Installs frontend dependencies
+2. Deploys backend stacks (storage, auth, API, etc.)
+3. Automatically generates `amplifyconfiguration.json` with Cognito pool IDs
+4. Builds and deploys the frontend
 
-Users need Node.js and npm, but not Go or frontend build tools (Lambdas and frontend are pre-built).
+Users need Node.js and npm, but not Go (Lambdas are pre-built).
 
 ## Contributing
 
