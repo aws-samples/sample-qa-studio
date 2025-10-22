@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-3] - 2025-10-22
+
+### Other Changes
+
+- update release process (8c54f60)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-2] - 2025-10-22
 
 ### Documentation
