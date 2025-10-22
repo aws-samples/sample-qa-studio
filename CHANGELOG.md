@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-4] - 2025-10-22
+
+### Other Changes
+
+- fix faulty import (dfac38e)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-3] - 2025-10-22
 
 ### Other Changes
