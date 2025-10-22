@@ -95,8 +95,11 @@ function createReleaseZip(version: string): string {
   });
 
   // Copy frontend build (maintain directory structure)
-  exec(`mkdir -p ${tempDir}/frontend`);
+  exec(`mkdir -p ${tempDir}/frontend/src`);
   exec(`cp -r frontend/build ${tempDir}/frontend/`);
+  
+  // Copy frontend config template
+  exec(`cp frontend/src/amplifyconfiguration.json.template ${tempDir}/frontend/src/`);
 
   // Copy worker source
   exec(`mkdir -p ${tempDir}/worker`);

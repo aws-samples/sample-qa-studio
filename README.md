@@ -256,11 +256,15 @@ npm run build
 cp configuration.json.sample configuration.json
 # Edit configuration.json with your settings
 
-# Deploy (Lambdas and frontend already built!)
+# Deploy (includes config generation)
 npm run deploy:release
 ```
 
-**Note:** The `deploy:release` command skips Lambda and frontend builds since they're pre-built in the release archive.
+**How it works:**
+1. Deploys backend stacks (storage, auth, API, etc.)
+2. Automatically generates `amplifyconfiguration.json` with Cognito pool IDs
+3. Writes config to `frontend/build/amplifyconfiguration.json`
+4. Deploys the pre-built frontend with the generated config
 
 Users need Node.js and npm, but not Go or frontend build tools (Lambdas and frontend are pre-built).
 

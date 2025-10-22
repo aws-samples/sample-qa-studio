@@ -135,6 +135,12 @@ cp configuration.json.sample configuration.json
 npm run deploy:release
 ```
 
+**What happens during deployment:**
+1. Backend stacks are deployed (storage, auth, API, worker, etc.)
+2. `config:write` automatically generates `amplifyconfiguration.json` with Cognito pool IDs
+3. The config is written to `frontend/build/amplifyconfiguration.json`
+4. The pre-built frontend (with config) is deployed to S3/CloudFront
+
 The `deploy:release` command skips Lambda and frontend builds since they're included in the archive.
 
 ## Release Archive Contents
