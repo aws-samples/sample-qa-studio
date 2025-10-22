@@ -223,7 +223,7 @@ npm run release:prerelease
 The release process automatically:
 - Bumps the version in `package.json`
 - Generates a changelog from git commits
-- Builds all Lambda functions and frontend
+- Builds Lambda functions and frontend
 - Creates a release archive in `/release/`
 - Commits changes and creates a git tag
 - Pushes to remote repository
@@ -234,11 +234,33 @@ The generated zip file (`nova-act-qa-studio-vX.Y.Z.zip`) contains:
 - Pre-built Lambda functions (no Go compiler needed)
 - Built frontend application
 - Worker source code and Dockerfile
-- Compiled CDK infrastructure code
+- CDK TypeScript source code
 - Configuration templates
 - Documentation
 
-Users can deploy directly from the release archive without build tools.
+### Deploying from Release Archive
+
+```bash
+# Extract release
+unzip nova-act-qa-studio-v1.2.3.zip
+cd nova-act-qa-studio-v1.2.3
+
+# Install dependencies
+npm install
+cd frontend && npm install && cd ..
+
+# Compile CDK TypeScript
+npm run build
+
+# Configure
+cp configuration.json.sample configuration.json
+# Edit configuration.json with your settings
+
+# Deploy (Lambdas already built!)
+npm run deploy
+```
+
+Users need Node.js and npm, but not Go (Lambdas are pre-built).
 
 ## Contributing
 

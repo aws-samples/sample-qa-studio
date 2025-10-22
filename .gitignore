@@ -1,7 +1,12 @@
 logs/*
+
+# Compiled TypeScript files
 *.js
-!jest.config.js
 *.d.ts
+
+# Exceptions - keep config files
+!jest.config.js
+
 node_modules
 
 # CDK asset staging directory

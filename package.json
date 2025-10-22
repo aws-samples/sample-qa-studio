@@ -1,6 +1,6 @@
 {
   "name": "cdk",
-  "version": "0.1.0",
+  "version": "0.1.1-0",
   "bin": {
     "cdk": "bin/cdk.js"
   },
@@ -22,11 +22,11 @@
     "deploy:routes": "cdk deploy routes --require-approval never",
     "config:write": "ts-node scripts/write-config.ts",
     "deploy": "npm run build:lambdas && npm run deploy:storage && npm run deploy:auth && npm run deploy:api && npm run deploy:frontend && npm run config:write && npm run deploy:notification && npm run deploy:worker && npm run deploy:routes && npm run deploy:frontend-build && npm run deploy:frontend-deployment && npm run clean:lambdas",
-    "changelog": "node scripts/generate-changelog.js",
-    "release:patch": "node scripts/release.js patch",
-    "release:minor": "node scripts/release.js minor",
-    "release:major": "node scripts/release.js major",
-    "release:prerelease": "node scripts/release.js prerelease"
+    "changelog": "ts-node scripts/generate-changelog.ts",
+    "release:patch": "ts-node scripts/release.ts patch",
+    "release:minor": "ts-node scripts/release.ts minor",
+    "release:major": "ts-node scripts/release.ts major",
+    "release:prerelease": "ts-node scripts/release.ts prerelease"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
