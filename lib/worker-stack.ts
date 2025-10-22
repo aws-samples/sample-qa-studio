@@ -64,7 +64,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
   constructor(scope: Construct, id: string, props: NovaActQAStudioWorkerStackCreateProps) {
     super(scope, id, props);
 
-    const registry = new Repository(this, 'images_repository');
+    const registry = new Repository(this, 'images_repository', {
+      removalPolicy: RemovalPolicy.DESTROY
+    });
     this.artefactsBucket = new Bucket(this, 'artefacts', {
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,

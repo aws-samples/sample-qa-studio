@@ -153,7 +153,8 @@ Secret steps ensure sensitive data never appears in logs or execution history, p
 
 ### Main Deployment
 
-- `npm run deploy` - Complete deployment of all stacks and frontend
+- `npm run deploy` - Complete deployment (builds Lambdas + frontend, then deploys)
+- `npm run deploy:release` - Deploy from release archive (skips builds, uses pre-built artifacts)
 
 ### Individual Stack Deployment
 
@@ -231,8 +232,8 @@ The release process automatically:
 ### Release Archive Contents
 
 The generated zip file (`nova-act-qa-studio-vX.Y.Z.zip`) contains:
-- Pre-built Lambda functions (no Go compiler needed)
-- Built frontend application
+- Pre-built Lambda functions in `lambda/cmd/*/bootstrap` (no Go compiler needed)
+- Built frontend application in `frontend/` (no build needed)
 - Worker source code and Dockerfile
 - CDK TypeScript source code
 - Configuration templates
@@ -247,7 +248,6 @@ cd nova-act-qa-studio-v1.2.3
 
 # Install dependencies
 npm install
-cd frontend && npm install && cd ..
 
 # Compile CDK TypeScript
 npm run build
@@ -256,11 +256,13 @@ npm run build
 cp configuration.json.sample configuration.json
 # Edit configuration.json with your settings
 
-# Deploy (Lambdas already built!)
-npm run deploy
+# Deploy (Lambdas and frontend already built!)
+npm run deploy:release
 ```
 
-Users need Node.js and npm, but not Go (Lambdas are pre-built).
+**Note:** The `deploy:release` command skips Lambda and frontend builds since they're pre-built in the release archive.
+
+Users need Node.js and npm, but not Go or frontend build tools (Lambdas and frontend are pre-built).
 
 ## Contributing
 

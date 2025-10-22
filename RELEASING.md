@@ -112,17 +112,46 @@ Types:
 - `test`: Tests
 - `chore`: Maintenance
 
+## Deploying from a Release Archive
+
+If you're deploying from a release archive (not building from source):
+
+```bash
+# Extract release
+unzip nova-act-qa-studio-v1.2.3.zip
+cd nova-act-qa-studio-v1.2.3
+
+# Install dependencies
+npm install
+
+# Compile CDK TypeScript
+npm run build
+
+# Configure
+cp configuration.json.sample configuration.json
+# Edit configuration.json
+
+# Deploy (uses pre-built Lambdas and frontend)
+npm run deploy:release
+```
+
+The `deploy:release` command skips Lambda and frontend builds since they're included in the archive.
+
 ## Release Archive Contents
 
 The generated `nova-act-qa-studio-vX.Y.Z.zip` contains:
 
 ```
 nova-act-qa-studio-v1.2.3/
-├── lambdas/              # Pre-built Lambda functions
-├── frontend/             # Built React application
+├── lambda/
+│   └── cmd/              # Pre-built Lambda functions (bootstrap binaries)
+│       ├── list_usecases/bootstrap
+│       ├── create_usecase/bootstrap
+│       └── ...
+├── frontend/             # Built React application (ready to deploy)
 ├── worker/               # Worker source + Dockerfile
-├── lib/                  # Compiled CDK code
-├── bin/                  # Compiled CDK code
+├── lib/                  # CDK TypeScript source
+├── bin/                  # CDK TypeScript source
 ├── scripts/              # Deployment scripts
 ├── package.json          # With version
 ├── configuration.json.sample

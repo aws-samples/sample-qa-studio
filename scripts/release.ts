@@ -83,9 +83,16 @@ function createReleaseZip(version: string): string {
 
   console.log('   Copying files...');
 
-  // Copy Lambda functions
-  exec(`mkdir -p ${tempDir}/lambdas`);
-  exec(`find lambda/cmd -name "bootstrap" -type f -exec sh -c 'mkdir -p ${tempDir}/lambdas/$(dirname {}) && cp {} ${tempDir}/lambdas/{}' \\;`);
+  // Copy Lambda functions with proper structure (lambda/cmd/function_name/bootstrap)
+  exec(`mkdir -p ${tempDir}/lambda/cmd`);
+  const lambdaDirs = execQuiet('ls lambda/cmd').split('\n').filter(d => d.trim());
+  lambdaDirs.forEach(dir => {
+    const bootstrapPath = `lambda/cmd/${dir}/bootstrap`;
+    if (existsSync(bootstrapPath)) {
+      exec(`mkdir -p ${tempDir}/lambda/cmd/${dir}`);
+      exec(`cp ${bootstrapPath} ${tempDir}/lambda/cmd/${dir}/`);
+    }
+  });
 
   // Copy frontend build
   exec(`cp -r frontend/build ${tempDir}/frontend`);
