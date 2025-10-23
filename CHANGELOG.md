@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-12] - 2025-10-23
+
+### Other Changes
+
+- make api enpoint confgurable (074115a)
+- add deployment of the api gateway (a58df0e)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-11] - 2025-10-23
 
 ### Other Changes
