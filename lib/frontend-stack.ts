@@ -10,9 +10,6 @@ import {
   AllowedMethods,
   OriginRequestPolicy,
   PriceClass,
-  OriginRequestHeaderBehavior,
-  OriginRequestQueryStringBehavior,
-  OriginRequestCookieBehavior,
   OriginProtocolPolicy,
   ResponseHeadersPolicy,
 } from 'aws-cdk-lib/aws-cloudfront';
@@ -21,7 +18,8 @@ import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
 interface NovaActQAStudioFrontendStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
-  apiId: string
+  apiId: string,
+  apiEndpoint: string
 }
 
 /**
@@ -67,8 +65,8 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS
       },
       additionalBehaviors: {
-        "/prod/*": {
-          origin: new HttpOrigin(`${props.apiId}.execute-api.${this.region}.amazonaws.com`, {
+        [`${props.apiEndpoint}/*`]: {
+          origin: new HttpOrigin(`${ props.apiId }.execute - api.${ this.region }.amazonaws.com`, {
             protocolPolicy: OriginProtocolPolicy.HTTPS_ONLY
           }),
           viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -95,13 +93,13 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
     });
 
     this.log('CloudFrontDistributionDomain', `https://${this.distribution.distributionDomainName}`)
-    this.log('frontendBucket', this.frontendBucket.bucketName)
+      this.log('frontendBucket', this.frontendBucket.bucketName)
 
     // Export the distribution domain name for use in other stacks
     new CfnOutput(this, 'DistributionDomainName', {
-      value: this.distribution.distributionDomainName,
-      description: 'CloudFront Distribution Domain Name',
-      exportName: `${props.baseName}-distribution-domain-name`
-    });
+        value: this.distribution.distributionDomainName,
+        description: 'CloudFront Distribution Domain Name',
+        exportName: `${props.baseName}-distribution-domain-name`
+      });
   }
 }
