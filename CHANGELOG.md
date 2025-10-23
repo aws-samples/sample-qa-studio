@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-11] - 2025-10-23
+
+### Other Changes
+
+- deploy api gateway after changing routes (a7c954c)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-10] - 2025-10-22
 
 ### Chores
