@@ -389,7 +389,8 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     // Create a deployment to push changes to the API Gateway stage
     this.deployment = new Deployment(this, 'ApiDeployment', {
       api: apiInstance,
-      description: `Deployment at ${new Date().toISOString()}`
+      description: `Deployment at ${new Date().toISOString()}`,
+      stageName: 'prod'
     });
 
     this.routes.forEach((route: Method) => {
