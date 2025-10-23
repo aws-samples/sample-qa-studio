@@ -41,17 +41,22 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
   private authorizer: IAuthorizer
   private table: Table
   private deployment: Deployment
+  private routes: Method[] = []
 
   private addMethod(resource: Resource, method: HttpMethod, lambda: Function): Method {
-    return resource.addMethod(method, new LambdaIntegration(lambda), {
+    const resourceMethod = resource.addMethod(method, new LambdaIntegration(lambda), {
       authorizer: this.authorizer,
       authorizationType: AuthorizationType.COGNITO
     });
+
+    this.routes.push(resourceMethod)
+
+    return resourceMethod
   }
 
   private addResource(parentResource: IResource, name: string): Resource {
     const resource = parentResource.addResource(name);
-    this.deployment.node.addDependency(resource)
+    
     resource.addCorsPreflight({
       allowOrigins: Cors.ALL_ORIGINS,
       allowMethods: Cors.ALL_METHODS,
@@ -79,12 +84,6 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       restApiId: props.apiId,
       rootResourceId: props.apiRootResourceId
     })
-
-    // Create a deployment to push changes to the API Gateway stage
-    this.deployment = new Deployment(this, 'ApiDeployment', {
-      api: apiInstance,
-      description: `Deployment at ${new Date().toISOString()}`
-    });
 
     // Lambda Functions
     const listUsecasesLambda = this.defaultCreateLambdaWithTable('list_usecases')
@@ -386,5 +385,17 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     this.addMethod(users, HttpMethod.POST, props.addUserLambda)
     const user = this.addResource(users, '{username}');
     this.addMethod(user, HttpMethod.DELETE, props.removeUserLambda)
+
+    // Create a deployment to push changes to the API Gateway stage
+    this.deployment = new Deployment(this, 'ApiDeployment', {
+      api: apiInstance,
+      description: `Deployment at ${new Date().toISOString()}`
+    });
+
+    this.routes.forEach((route: Method) => {
+      this.deployment.node.addDependency(route);
+    })
+    
+    this.deployment.addToLogicalId(new Date().toISOString())
   }
 }
