@@ -42,51 +42,51 @@ export class NovaActQAStudio extends cdk.Stack {
     return computedName
   }
 
-  private CreateLambda(props: CreateLambdaProps): lambda.Function {
-    const fn = new lambda.Function(this, `lambda_${this.cdkName(props.name)}`, {
-      functionName: this.cdkName(props.name),
-      runtime: lambda.Runtime.PROVIDED_AL2023,
-      architecture: lambda.Architecture.ARM_64,
-      memorySize: props.memorySize || 128,
-      code: lambda.Code.fromAsset(`lambda/cmd/${props.path}`),
-      timeout: props.timeout || cdk.Duration.seconds(5),
-      handler: 'import.handler',
-      environment: props.environment,
-      logRetention: 5
-    });
+  // private CreateLambda(props: CreateLambdaProps): lambda.Function {
+  //   const fn = new lambda.Function(this, `lambda_${this.cdkName(props.name)}`, {
+  //     functionName: this.cdkName(props.name),
+  //     runtime: lambda.Runtime.PROVIDED_AL2023,
+  //     architecture: lambda.Architecture.ARM_64,
+  //     memorySize: props.memorySize || 128,
+  //     code: lambda.Code.fromAsset(`lambda/cmd/${props.path}`),
+  //     timeout: props.timeout || cdk.Duration.seconds(5),
+  //     handler: 'import.handler',
+  //     environment: props.environment,
+  //     logRetention: 5
+  //   });
 
-    fn.addToRolePolicy(new cdk.aws_iam.PolicyStatement({
-      actions: ['logs:CreateLogGroup',
-        'logs:CreateLogStream',
-        'logs:PutLogEvents'],
-      resources: ['*'],
-    }))
+  //   fn.addToRolePolicy(new cdk.aws_iam.PolicyStatement({
+  //     actions: ['logs:CreateLogGroup',
+  //       'logs:CreateLogStream',
+  //       'logs:PutLogEvents'],
+  //     resources: ['*'],
+  //   }))
 
-    return fn
-  }
+  //   return fn
+  // }
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioCreateProps) {
     super(scope, id, props);
     this.baseName = props?.baseName
 
-    const novaApiKey = new secretsmanager.Secret(this, 'NovaApiKey', {
-      secretName: this.cdkName('nova-api-key')
-    })
+    // const novaApiKey = new secretsmanager.Secret(this, 'NovaApiKey', {
+    //   secretName: this.cdkName('nova-api-key')
+    // })
 
     // DynamoDB Table
-    const table = new dynamodb.Table(this, 'Table', {
-      tableName: this.cdkName('data_table'),
-      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
+    // const table = new dynamodb.Table(this, 'Table', {
+    //   tableName: this.cdkName('data_table'),
+    //   partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+    //   sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
+    // });
 
-    const backupVault = new backup.BackupVault(this, "dynamodb_backup_vault")
-    const plan = new backup.BackupPlan(this, "dynamodb_backup_plan")
-    plan.addRule(backup.BackupPlanRule.daily(backupVault))
-    plan.addSelection("data_table", {
-      resources: [backup.BackupResource.fromDynamoDbTable(table)]
-    })
+    // const backupVault = new backup.BackupVault(this, "dynamodb_backup_vault")
+    // const plan = new backup.BackupPlan(this, "dynamodb_backup_plan")
+    // plan.addRule(backup.BackupPlanRule.daily(backupVault))
+    // plan.addSelection("data_table", {
+    //   resources: [backup.BackupResource.fromDynamoDbTable(table)]
+    // })
 
     // API Gateway
     const api = new apigateway.RestApi(this, 'Api', {
@@ -103,16 +103,16 @@ export class NovaActQAStudio extends cdk.Stack {
     });
 
     // S3 Bucket for artifacts
-    const bucket = new s3.Bucket(this, 'artefacts', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
+    // const bucket = new s3.Bucket(this, 'artefacts', {
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
+    //   autoDeleteObjects: true,
+    // });
 
     // S3 Bucket for frontend
-    const frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
+    // const frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
+    //   autoDeleteObjects: true,
+    // });
 
     // Origin Access Identity
     const oai = new cloudfront.OriginAccessIdentity(this, 'OAI', {
@@ -153,99 +153,99 @@ export class NovaActQAStudio extends cdk.Stack {
     });
 
     // SQS Queue
-    const queue = new sqs.Queue(this, 'queue', {
-      queueName: this.cdkName('workhorse'),
-      visibilityTimeout: cdk.Duration.minutes(10),
-      removalPolicy: cdk.RemovalPolicy.DESTROY
-    });
+    // const queue = new sqs.Queue(this, 'queue', {
+    //   queueName: this.cdkName('workhorse'),
+    //   visibilityTimeout: cdk.Duration.minutes(10),
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY
+    // });
 
     // SQS Notification Queue
-    const notificationQueue = new sqs.Queue(this, 'notification_queue', {
-      queueName: this.cdkName('notifications'),
-      visibilityTimeout: cdk.Duration.minutes(5),
-      removalPolicy: cdk.RemovalPolicy.DESTROY
-    });
+    // const notificationQueue = new sqs.Queue(this, 'notification_queue', {
+    //   queueName: this.cdkName('notifications'),
+    //   visibilityTimeout: cdk.Duration.minutes(5),
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY
+    // });
 
-    // SNS Topic for Email Notifications
-    const notificationTopic = new sns.Topic(this, 'notification_topic', {
-      topicName: this.cdkName('notifications'),
-      displayName: 'Usecase Execution Notifications'
-    });
+    // // SNS Topic for Email Notifications
+    // const notificationTopic = new sns.Topic(this, 'notification_topic', {
+    //   topicName: this.cdkName('notifications'),
+    //   displayName: 'Usecase Execution Notifications'
+    // });
 
     new cdk.CfnOutput(this, 'SNS Topic ARN', {
       value: notificationTopic.topicArn
     });
 
     // Cognito User Pool
-    const userPool = new cognito.UserPool(this, 'user_pool', {
-      userPoolName: this.cdkName('user-pool'),
-      signInAliases: { email: true },
-      selfSignUpEnabled: false,
-    });
+    // const userPool = new cognito.UserPool(this, 'user_pool', {
+    //   userPoolName: this.cdkName('user-pool'),
+    //   signInAliases: { email: true },
+    //   selfSignUpEnabled: false,
+    // });
 
-    new cdk.CfnOutput(this, 'user pool id', {
-      value: userPool.userPoolId
-    });
+    // new cdk.CfnOutput(this, 'user pool id', {
+    //   value: userPool.userPoolId
+    // });
 
-    // Cognito User Pool Client
-    const userPoolClient = new cognito.UserPoolClient(this, 'user_pool_client', {
-      userPoolClientName: this.cdkName('client'),
-      userPool,
-      generateSecret: false,
-      authFlows: {
-        userSrp: true,
-        userPassword: true
-      },
-      oAuth: {
-        flows: {
-          authorizationCodeGrant: true,
-          implicitCodeGrant: true
-        },
-        scopes: [
-          cognito.OAuthScope.OPENID,
-          cognito.OAuthScope.EMAIL,
-          cognito.OAuthScope.PROFILE
-        ]
-      }
-    });
+    // // Cognito User Pool Client
+    // const userPoolClient = new cognito.UserPoolClient(this, 'user_pool_client', {
+    //   userPoolClientName: this.cdkName('client'),
+    //   userPool,
+    //   generateSecret: false,
+    //   authFlows: {
+    //     userSrp: true,
+    //     userPassword: true
+    //   },
+    //   oAuth: {
+    //     flows: {
+    //       authorizationCodeGrant: true,
+    //       implicitCodeGrant: true
+    //     },
+    //     scopes: [
+    //       cognito.OAuthScope.OPENID,
+    //       cognito.OAuthScope.EMAIL,
+    //       cognito.OAuthScope.PROFILE
+    //     ]
+    //   }
+    // });
 
-    new cdk.CfnOutput(this, 'user pool client id', {
-      value: userPoolClient.userPoolClientId
-    })
+    // new cdk.CfnOutput(this, 'user pool client id', {
+    //   value: userPoolClient.userPoolClientId
+    // })
 
     // EventBridge Schedule Group
-    const scheduleGroup = new scheduler.CfnScheduleGroup(this, 'schedule_group', {
-      name: this.cdkName('schedules')
-    });
+    // const scheduleGroup = new scheduler.CfnScheduleGroup(this, 'schedule_group', {
+    //   name: this.cdkName('schedules')
+    // });
 
     // ECR Repository
-    const ecrRepository = new ecr.Repository(this, 'images_repository');
+    // const ecrRepository = new ecr.Repository(this, 'images_repository');
 
     // Build worker
-    const workerImage = new ecr_assets.DockerImageAsset(this, 'MyDockerImage', {
-      directory: 'worker',
-      platform: ecr_assets.Platform.LINUX_ARM64
-    });
+    // const workerImage = new ecr_assets.DockerImageAsset(this, 'MyDockerImage', {
+    //   directory: 'worker',
+    //   platform: ecr_assets.Platform.LINUX_ARM64
+    // });
 
-    new ecrdeploy.ECRDeployment(this, 'container_deployment', {
-      src: new ecrdeploy.DockerImageName(workerImage.imageUri),
-      dest: new ecrdeploy.DockerImageName(`${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/${ecrRepository.repositoryName}:latest`),
-    });
+    // new ecrdeploy.ECRDeployment(this, 'container_deployment', {
+    //   src: new ecrdeploy.DockerImageName(workerImage.imageUri),
+    //   dest: new ecrdeploy.DockerImageName(`${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/${ecrRepository.repositoryName}:latest`),
+    // });
 
-    new cdk.CfnOutput(this, 'EcrName', {
-      value: ecrRepository.repositoryName
-    });
+    // new cdk.CfnOutput(this, 'EcrName', {
+    //   value: ecrRepository.repositoryName
+    // });
 
-    const ecrUri = ecrRepository.repositoryUri
-    const ecrHostname = ecrUri.split('/')[0]
+    // const ecrUri = ecrRepository.repositoryUri
+    // const ecrHostname = ecrUri.split('/')[0]
 
-    new cdk.CfnOutput(this, 'EcrUri', {
-      value: ecrUri
-    });
+    // new cdk.CfnOutput(this, 'EcrUri', {
+    //   value: ecrUri
+    // });
 
-    new cdk.CfnOutput(this, 'EcrHostname', {
-      value: ecrHostname
-    });
+    // new cdk.CfnOutput(this, 'EcrHostname', {
+    //   value: ecrHostname
+    // });
 
     const agentCoreExecutionRole = new iam.Role(this, 'agent_core_execution_role', {
       roleName: this.cdkName('agent_core_execution_role'),

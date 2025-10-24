@@ -35,9 +35,9 @@ func init() {
 	}
 
 	dynamoClient = dynamodb.NewFromConfig(cfg)
-	tableName = os.Getenv("DYNAMODB_TABLE_NAME")
+	tableName = os.Getenv("TABLE_NAME")
 	if tableName == "" {
-		log.Fatal("DYNAMODB_TABLE_NAME environment variable is required")
+		log.Fatal("TABLE_NAME environment variable is required")
 	}
 }
 

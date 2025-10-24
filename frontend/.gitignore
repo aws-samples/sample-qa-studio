@@ -10,6 +10,14 @@
 
 # production
 /build
+/dist
+
+# compiled TypeScript
+*.js
+*.d.ts
+# Keep config files
+!*.config.js
+!vite.config.ts
 
 # misc
 .DS_Store

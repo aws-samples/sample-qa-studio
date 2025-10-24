@@ -55,125 +55,71 @@ cd frontend && npm install && cd ..
 cd lambda && go mod download && cd ..
 ```
 
-### 2. Build and Deploy
+### 2. Configure Your Deployment
 
-This section will explain how to install and deploy the tool.
-We're going to use the Makefile sample to customize it to your own needs
-
-**1. Initial deployment**
-
-```bash
-cp Makefile-sample Makefile
-cp frontend/src/amplifyconfiguration-sample.json frontend/src/amplifyconfiguration.json
-cp frontend/.env-sample frontend/.env
-make deploy
-```
-
-This command will:
-
-- Build all Lambda functions for ARM64 architecture
-- Build the React frontend
-- Build and deploy the CDK Stack to AWS
-
-> Note the CloudFormation outputs printed in the terminal at the end of the `make deploy` execution - you'll need these values for the next steps.
-
-**2. Adjusting information**
-
-Make the following changes to your local project and AWS resources:
-
-- Update the Amplify config at [frontend/src/amplifyconfiguration.json](frontend/src/amplifyconfiguration.json) with the Cognito User Pool:
+Update `configuration.json` with your settings:
 
 ```json
 {
-  "Auth": {
-    "Cognito": {
-      "userPoolId": "{'user pool id' from the terminal output}",
-      "userPoolClientId": "{'user pool client id' from the terminal output}",
-      "region": "{your user pool region}"
-    }
-  }
+  "baseName": "nova-act-qa-studio",
+  "adminEmail": "your-email@example.com",
+  "userAgentString": null
 }
 ```
 
-- Update [frontend/.env](frontend/.env) with the API Gateway invoke URL;
+### 3. Deploy Everything
 
 ```bash
-VITE_API_ENDPOINT={'apigateway domain' from the terminal output}
+npm run deploy
 ```
 
-- Update the [Makefile](./Makefile) with your ECR Repository details from the CDK outputs:
-  - Replace `{repository-name}` with the `EcrName` output
-  - Replace `{repository-uri}` with the `EcrUri` output  
-  - Replace `{registry-hostname}` with the `EcrHostname` output
-  - Replace `{region}` with your AWS region
+This single command will:
+- Build all Lambda functions for ARM64 architecture
+- Deploy all infrastructure stacks (storage, auth, API, notification, worker, routes, frontend)
+- Generate frontend configuration files automatically
+- Build and deploy the React frontend to S3/CloudFront
+- Clean up build artifacts
 
-- Upload your Nova Act API Key to the `nova-act-qa-studio-nova-api-key` Secrets Manager Secret:
-  - Go to AWS Console → Secrets Manager → `nova-act-qa-studio-nova-api-key`
-  - Click "Retrieve secret value" → "Edit"
-  - Replace the placeholder value with your actual Nova Act API key
-  - Click "Save"
+### 4. Configure Secrets
 
-**3. Deploy again**
-
-```
-make deploy
-```
-
-### 4. Worker Container Setup
-
-Build and push the worker container to ECR:
+Upload your Nova Act API Key to Secrets Manager:
 
 ```bash
-# Build worker Docker image
-make docker.build
+# Via AWS Console
+# Go to Secrets Manager → nova-act-qa-studio-nova-api-key
+# Click "Retrieve secret value" → "Edit"
+# Replace placeholder with your actual Nova Act API key
+# Click "Save"
 
-# Push to ECR (requires AWS authentication)
-make docker.upload
+# Or via AWS CLI
+aws secretsmanager update-secret \
+  --secret-id nova-act-qa-studio-nova-api-key \
+  --secret-string "your-nova-act-api-key"
 ```
 
-### 5. Post-Deployment
+That's it! Your Nova Act QA Studio is now deployed and ready to use. Access the application through the CloudFront distribution URL from the deployment outputs.
 
-After deployment, you'll need to:
+### Advanced: Individual Stack Deployment
 
-1. **Create First User**: Go to AWS Console → Cognito → User Pools → `nova-act-qa-studio-user-pool` → Users → Create user with your email address
-2. **Access Application**: Navigate to the CloudFront distribution URL from the deployment outputs
-3. **First Login**: Sign in with the user credentials you created in step 1
-
-## Development
-
-### Local Development
-
-For local development of individual components:
+If you need to deploy or update individual stacks:
 
 ```bash
-# Frontend development server
-cd frontend
-npm run dev
+# Individual stack deployments
+npm run deploy:storage
+npm run deploy:auth
+npm run deploy:api
+npm run deploy:frontend
+npm run deploy:notification
+npm run deploy:worker
+npm run deploy:routes
+npm run deploy:frontend-deployment
 
-# Run tests for Lambda functions
-make test_all
-
-# Local worker testing (requires AWS credentials)
-cd worker
-python worker.py
+# Utility commands
+npm run build:lambdas        # Build Lambda functions
+npm run clean:lambdas        # Clean build artifacts
+npm run config:write         # Generate frontend config
+npm run deploy:frontend-build # Build React app
 ```
-
-### Environment Variables
-
-Key environment variables for different components:
-
-**Worker Container:**
-
-- `NOVA_ACT_API_KEY`: Your Nova Act API key
-- `DYNAMODB_TABLE_NAME`: DynamoDB table name (default: nova-act-qa-studio)
-- `S3_BUCKET`: S3 bucket for artifacts
-- `AWS_REGION`: AWS region (default: eu-central-1)
-
-**Lambda Functions:**
-
-- `TABLE_NAME`: DynamoDB table name
-- `QUEUE_URL`: SQS queue URL
-- `BUCKET_NAME`: S3 bucket name
 
 ## Usage
 
@@ -205,20 +151,50 @@ Secret steps ensure sensitive data never appears in logs or execution history, p
 
 ## Useful Commands
 
+### Main Deployment
+
+- `npm run deploy` - Complete deployment (builds Lambdas + frontend, then deploys)
+- `npm run deploy:release` - Deploy from release archive (skips builds, uses pre-built artifacts)
+
+### Individual Stack Deployment
+
+- `npm run deploy:storage` - Deploy storage stack (DynamoDB, S3, ECR)
+- `npm run deploy:auth` - Deploy authentication stack (Cognito)
+- `npm run deploy:api` - Deploy API Gateway stack
+- `npm run deploy:frontend` - Deploy frontend infrastructure (CloudFront, S3)
+- `npm run deploy:notification` - Deploy notification stack (SNS, SQS)
+- `npm run deploy:worker` - Deploy worker stack (ECS Fargate)
+- `npm run deploy:routes` - Deploy API routes and Lambda integrations
+- `npm run deploy:frontend-deployment` - Deploy frontend assets to S3
+
+### Utility Commands
+
+- `npm run build:lambdas` - Build all Lambda functions for ARM64
+- `npm run clean:lambdas` - Remove Lambda build artifacts
+- `npm run config:write` - Generate frontend config from CloudFormation outputs
+- `npm run deploy:frontend-build` - Build React frontend application
+- `npm run build` - Compile TypeScript CDK code
+- `npm run watch` - Watch TypeScript files for changes
+
 ### CDK Commands
 
-- `npm run build`: Compile TypeScript to JavaScript
-- `npm run watch`: Watch for changes and compile
-- `npx cdk deploy`: Deploy stack to AWS
-- `npx cdk diff`: Compare deployed stack with current state
-- `npx cdk synth`: Generate CloudFormation template
+- `npx cdk diff` - Compare deployed stack with current state
+- `npx cdk synth` - Generate CloudFormation templates
+- `npx cdk destroy --all` - Delete all stacks (⚠️ deletes all data)
 
 ### Development Commands
 
-- `make test_all`: Run all Go tests with coverage
-- `make docker.build`: Build worker container
-- `make docker.upload`: Push container to ECR
-- `make deploy`: Full build and deployment
+- `make test_all` - Run all Go Lambda tests with coverage
+- `make docker.build` - Build worker Docker container
+- `make docker.upload` - Push worker container to ECR
+
+### Release Commands
+
+- `npm run release:patch` - Create patch release (1.0.0 → 1.0.1)
+- `npm run release:minor` - Create minor release (1.0.0 → 1.1.0)
+- `npm run release:major` - Create major release (1.0.0 → 2.0.0)
+- `npm run release:prerelease` - Create pre-release (1.0.0 → 1.0.1-beta.0)
+- `npm run changelog` - Generate changelog from git commits
 
 ## Monitoring and Troubleshooting
 
@@ -227,18 +203,84 @@ Secret steps ensure sensitive data never appears in logs or execution history, p
 - **S3**: Access execution artifacts (videos, screenshots, logs)
 - **SQS**: Monitor queue depth and message processing
 
+## Creating a Release
+
+The project includes an automated release system that creates distributable packages:
+
+```bash
+# Create a patch release (bug fixes)
+npm run release:patch
+
+# Create a minor release (new features)
+npm run release:minor
+
+# Create a major release (breaking changes)
+npm run release:major
+
+# Create a pre-release (beta/rc)
+npm run release:prerelease
+```
+
+The release process automatically:
+- Bumps the version in `package.json`
+- Generates a changelog from git commits
+- Builds Lambda functions and frontend
+- Creates a release archive in `/release/`
+- Commits changes and creates a git tag
+- Pushes to remote repository
+
+### Release Archive Contents
+
+The generated zip file (`nova-act-qa-studio-vX.Y.Z.zip`) contains:
+- Pre-built Lambda functions in `lambda/cmd/*/bootstrap` (no Go compiler needed)
+- Frontend source code (will be built during deployment)
+- Worker source code and Dockerfile
+- CDK TypeScript source code
+- Configuration templates
+- Documentation
+
+### Deploying from Release Archive
+
+```bash
+# Extract release
+unzip nova-act-qa-studio-v1.2.3.zip
+cd nova-act-qa-studio-v1.2.3
+
+# Install dependencies
+npm install
+
+# Compile CDK TypeScript
+npm run build
+
+# Configure
+cp configuration.json.sample configuration.json
+# Edit configuration.json with your settings
+
+# Deploy (includes frontend install and build)
+npm run deploy:release
+```
+
+**How it works:**
+1. Installs frontend dependencies
+2. Deploys backend stacks (storage, auth, API, etc.)
+3. Automatically generates `amplifyconfiguration.json` with Cognito pool IDs
+4. Builds and deploys the frontend
+
+Users need Node.js and npm, but not Go (Lambdas are pre-built).
+
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests: `make test_all`
-5. Submit a pull request
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on:
+- How to submit issues and feature requests
+- Development workflow and coding standards
+- Pull request process
+
+Please also review our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for information on reporting security vulnerabilities.
 
 ## License
 
-This library is licensed under the MIT-0 License. See the LICENSE file.
-
-## Support
-
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+This library is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file for details.
