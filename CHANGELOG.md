@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-14] - 2025-10-31
+
+### Features
+
+- Decouple CDK stacks and implement release mechanism (7e66e45)
+
+### Bug Fixes
+
+- solve a permission error that prevents the events lambda from reading the artifacts bucket (411ac85)
+
+### Chores
+
+- release v0.1.1-13 (3650629)
+
+### Other Changes
+
+- Enable video playback for executed sessions (9c9f129)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-13] - 2025-10-31
 
 ### Features
