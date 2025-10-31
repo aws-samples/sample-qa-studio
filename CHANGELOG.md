@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-13] - 2025-10-31
+
+### Features
+
+- Decouple CDK stacks and implement release mechanism (7e66e45)
+
+### Other Changes
+
+- Enable video playback for executed sessions (9c9f129)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-12] - 2025-10-23
 
 ### Other Changes
