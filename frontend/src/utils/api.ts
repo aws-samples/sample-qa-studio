@@ -2,7 +2,7 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { errorManager, ErrorState } from './errorManager';
 import { apiEndpoint } from '../../../configuration.json'
 
-const API_BASE_URL = apiEndpoint || '/api/'
+const API_BASE_URL = `/${apiEndpoint}/` || '/api/'
 
 export interface ExecutionModel {
   pk: string;

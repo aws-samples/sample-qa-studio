@@ -12,6 +12,7 @@ import ExecutionTimeline from './common/ExecutionTimeline';
 import Breadcrumb from './common/Breadcrumb';
 import { ExecutionInformation, ExecutionSteps, ExecutionVariables } from './execution';
 import LiveViewPanel from './execution/LiveViewPanel';
+import { RecordingPlayer } from './RecordingPlayer';
 
 export default function ExecutionDetailRefactored() {
   const { usecaseId, executionId } = useParams();
@@ -22,6 +23,7 @@ export default function ExecutionDetailRefactored() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState<{ url: string, title: string, fileType?: string } | null>(null);
+  const [recordingModalVisible, setRecordingModalVisible] = useState(false);
   const [hasVariables, setHasVariables] = useState(false);
 
   const fetchData = async () => {
@@ -83,6 +85,10 @@ export default function ExecutionDetailRefactored() {
     setModalVisible(true);
   };
 
+  const handleViewRecording = () => {
+    setRecordingModalVisible(true);
+  };
+
   if (loading) return <div>Loading...</div>;
   if (!execution) return <div>Execution not found</div>;
   if (!usecaseId || !executionId) return <div>Invalid parameters</div>;
@@ -115,7 +121,7 @@ export default function ExecutionDetailRefactored() {
                 execution={execution}
                 usecaseId={usecaseId}
                 executionId={executionId}
-                onViewVideo={handleViewContent}
+                onViewRecording={handleViewRecording}
               />
 
               {hasVariables && (
@@ -146,7 +152,7 @@ export default function ExecutionDetailRefactored() {
             onViewFile={handleViewContent}
           />
 
-          {/* Modal for viewing files and videos */}
+          {/* Modal for viewing files */}
           <Modal
             onDismiss={() => setModalVisible(false)}
             visible={modalVisible}
@@ -172,29 +178,38 @@ export default function ExecutionDetailRefactored() {
             }
           >
             {modalContent?.url && (
-              modalContent.fileType === 'video' ? (
-                <video
-                  src={modalContent.url}
-                  controls
-                  style={{
-                    width: '100%',
-                    height: '80vh',
-                    borderRadius: '4px'
-                  }}
-                  title={modalContent.title}
-                />
-              ) : (
-                <iframe
-                  src={modalContent.url}
-                  style={{
-                    width: '100%',
-                    height: '80vh',
-                    border: 'none',
-                    borderRadius: '4px'
-                  }}
-                  title={modalContent.title}
-                />
-              )
+              <iframe
+                src={modalContent.url}
+                style={{
+                  width: '100%',
+                  height: '80vh',
+                  border: 'none',
+                  borderRadius: '4px'
+                }}
+                title={modalContent.title}
+              />
+            )}
+          </Modal>
+
+          {/* Modal for viewing recording */}
+          <Modal
+            onDismiss={() => setRecordingModalVisible(false)}
+            visible={recordingModalVisible}
+            size="max"
+            header="Session Recording"
+            footer={
+              <Box float="right">
+                <Button variant="link" onClick={() => setRecordingModalVisible(false)}>
+                  Close
+                </Button>
+              </Box>
+            }
+          >
+            {recordingModalVisible && (
+              <RecordingPlayer
+                usecaseId={usecaseId}
+                executionId={executionId}
+              />
             )}
           </Modal>
         </SpaceBetween>

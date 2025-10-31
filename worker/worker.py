@@ -135,7 +135,7 @@ def main():
     # Execute workflow
     try:
         logger.info("Initializing NovaAct context manager...")
-        browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/", execution.region)
+        browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/recording/", execution.region)
         browser = start_browser(browser_id, execution_id, execution.region)
         ws_url, headers = browser.generate_ws_headers()
         live_view_url = browser.generate_live_view_url()

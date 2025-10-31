@@ -66,7 +66,7 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
       },
       additionalBehaviors: {
         [`${props.apiEndpoint}/*`]: {
-          origin: new HttpOrigin(`${ props.apiId }.execute - api.${ this.region }.amazonaws.com`, {
+          origin: new HttpOrigin(`${ props.apiId }.execute-api.${ this.region }.amazonaws.com`, {
             protocolPolicy: OriginProtocolPolicy.HTTPS_ONLY
           }),
           viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -79,11 +79,6 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
       priceClass: PriceClass.PRICE_CLASS_100,
       defaultRootObject: 'index.html',
       errorResponses: [
-        {
-          httpStatus: 404,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html'
-        },
         {
           httpStatus: 403,
           responseHttpStatus: 200,
