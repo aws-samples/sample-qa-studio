@@ -170,6 +170,30 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       }
     });
 
+    // Lambda for listing recording batches
+    const listRecordingBatchesLambda = this.createLambda({
+      path: 'list_recording_batches',
+      environment: {
+        BUCKET_NAME: props.artefactsBucket.bucketName,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    props.artefactsBucket.grantRead(listRecordingBatchesLambda)
+
+    // Lambda for getting a specific recording batch
+    const getRecordingBatchLambda = this.createLambda({
+      path: 'get_recording_batch',
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 1024,
+      environment: {
+        BUCKET_NAME: props.artefactsBucket.bucketName,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    props.artefactsBucket.grantRead(getRecordingBatchLambda);
+
     [listUsecasesLambda,
       getUsecaseLambda,
       listStepsLambda,
@@ -184,6 +208,8 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       exportUsecaseLambda,
       generateUsecaseLambda,
       getUsecaseHeadersLambda,
+      getRecordingBatchLambda,
+      listRecordingBatchesLambda,
       props.getUsecaseSubscriptionLambda].forEach((lambda: Function) => {
         lambda.role?.addManagedPolicy(props.tableReadPolicy);
       });
@@ -350,29 +376,6 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     // API Gateway endpoint for S3 URL generation
     const generateS3Url = this.addResource(apiInstance.root, 'generate-s3-url');
     this.addMethod(generateS3Url, HttpMethod.POST, props.generateS3UrlLambda)
-
-    // Lambda for listing recording batches
-    const listRecordingBatchesLambda = this.createLambda({
-      path: 'list_recording_batches',
-      environment: {
-        BUCKET_NAME: props.artefactsBucket.bucketName,
-        TABLE_NAME: props.table.tableName
-      }
-    });
-
-    listRecordingBatchesLambda.role?.addManagedPolicy(props.tableReadPolicy)
-    props.artefactsBucket.grantRead(listRecordingBatchesLambda)
-
-    // Lambda for getting a specific recording batch
-    const getRecordingBatchLambda = this.createLambda({
-      path: 'get_recording_batch',
-      timeout: cdk.Duration.seconds(30),
-      memorySize: 1024,
-      environment: {
-        BUCKET_NAME: props.artefactsBucket.bucketName,
-        TABLE_NAME: props.table.tableName
-      }
-    });
 
     // API Gateway endpoints for recording (nested under execution)
     // /usecase/{id}/executions/{executionId}/events - list batches

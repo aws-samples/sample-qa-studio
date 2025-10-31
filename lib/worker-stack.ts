@@ -1,4 +1,4 @@
-import { Duration, RemovalPolicy, Aws, CfnOutput } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, Aws } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
