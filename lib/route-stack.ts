@@ -208,8 +208,6 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       exportUsecaseLambda,
       generateUsecaseLambda,
       getUsecaseHeadersLambda,
-      getRecordingBatchLambda,
-      listRecordingBatchesLambda,
       props.getUsecaseSubscriptionLambda].forEach((lambda: Function) => {
         lambda.role?.addManagedPolicy(props.tableReadPolicy);
       });
