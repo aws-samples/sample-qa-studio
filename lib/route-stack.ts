@@ -9,7 +9,7 @@ import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from '.
 
 interface NovaActQAStudioRouteStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   apiId: string
-  apiEndpoint: string
+  apiDeploymentStage: string
   apiRootResourceId: string
   artefactsBucket: Bucket
   table: Table
@@ -229,6 +229,7 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
 
     [deleteUsecaseLambda,
       deleteExecutionLambda,
+      deleteStepLambda,
       props.unsubscribeUsecaseLambda].forEach((lambda: Function) => {
         lambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
       });
@@ -425,7 +426,7 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     this.deployment = new Deployment(this, 'ApiDeployment', {
       api: apiInstance,
       description: `Deployment at ${new Date().toISOString()}`,
-      stageName: props.apiEndpoint
+      stageName: props.apiDeploymentStage
     });
 
     this.routes.forEach((route: Method) => {

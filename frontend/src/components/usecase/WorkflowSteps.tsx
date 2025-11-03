@@ -3,7 +3,9 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import Toggle from "@cloudscape-design/components/toggle";
 import StepsTable from '../StepsTable';
+import WorkflowStepsCard from '../WorkflowStepsCard';
 import StepFormModal from './StepFormModal';
 import { api } from '../../utils/api';
 import { useMultipleAsyncData } from '../common/useAsyncData';
@@ -29,6 +31,7 @@ interface WorkflowStepsProps {
 
 export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [useCardLayout, setUseCardLayout] = useState(true);
 
   const { data, loading, refetch } = useMultipleAsyncData({
     steps: () => api.get(`usecase/${usecaseId}/steps`)
@@ -40,15 +43,44 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
     await refetch();
   };
 
-  const handleCreateStep = async (stepData: any) => {
-    const fullStepData = {
-      usecaseId: usecaseId,
-      sort: steps.length + 1,
-      ...stepData
-    };
-    
-    await api.post(`usecase/${usecaseId}/steps`, fullStepData);
-    await refreshSteps();
+  const handleCreateStep = async (stepData: any, position?: number) => {
+    if (position !== undefined && position <= steps.length) {
+      // Inserting in the middle - need to shift existing steps first
+      // Shift all steps at position and above up by 1
+      const stepsToShift = steps
+        .filter(step => step.sort >= position)
+        .map(step => ({
+          step_id: step.sk,
+          sort: step.sort + 1
+        }));
+      
+      if (stepsToShift.length > 0) {
+        await api.patch(`usecase/${usecaseId}/steps/reorder`, {
+          step_orders: stepsToShift
+        });
+      }
+      
+      // Now create the new step at the desired position
+      const fullStepData = {
+        usecaseId: usecaseId,
+        sort: position,
+        ...stepData
+      };
+      
+      await api.post(`usecase/${usecaseId}/steps`, fullStepData);
+      await refreshSteps();
+    } else {
+      // Adding at the end
+      const insertPosition = steps.length + 1;
+      const fullStepData = {
+        usecaseId: usecaseId,
+        sort: insertPosition,
+        ...stepData
+      };
+      
+      await api.post(`usecase/${usecaseId}/steps`, fullStepData);
+      await refreshSteps();
+    }
   };
 
   const handleUpdateStep = async (stepData: any) => {
@@ -90,6 +122,24 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
     }
   };
 
+  const handleReorderSteps = async (reorderedSteps: UsecaseStep[]) => {
+    try {
+      const stepOrders = reorderedSteps.map((step) => ({
+        step_id: step.sk,
+        sort: step.sort
+      }));
+
+      await api.patch(`usecase/${usecaseId}/steps/reorder`, {
+        step_orders: stepOrders
+      });
+
+      await refreshSteps();
+    } catch (error) {
+      console.error('Failed to reorder steps:', error);
+      throw error;
+    }
+  };
+
   if (loading) {
     return (
       <ContainerLoading 
@@ -115,6 +165,12 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
           variant="h1"
           actions={
             <SpaceBetween direction="horizontal" size="xs">
+              <Toggle
+                checked={useCardLayout}
+                onChange={({ detail }) => setUseCardLayout(detail.checked)}
+              >
+                Card Layout
+              </Toggle>
               <Button onClick={() => setShowCreateModal(true)}>
                 Add Step
               </Button>
@@ -122,13 +178,24 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
           }
         />
       
-        <StepsTable
-          steps={steps}
-          onStepsReordered={refreshSteps}
-          onUpdateStep={handleUpdateStep}
-          onDeleteStep={handleDeleteStep}
-          usecaseId={usecaseId}
-        />
+        {useCardLayout ? (
+          <WorkflowStepsCard
+            steps={steps}
+            onReorder={handleReorderSteps}
+            onUpdateStep={handleUpdateStep}
+            onDeleteStep={handleDeleteStep}
+            onAddStep={handleCreateStep}
+            usecaseId={usecaseId}
+          />
+        ) : (
+          <StepsTable
+            steps={steps}
+            onStepsReordered={refreshSteps}
+            onUpdateStep={handleUpdateStep}
+            onDeleteStep={handleDeleteStep}
+            usecaseId={usecaseId}
+          />
+        )}
       </SpaceBetween>
     </>
   );

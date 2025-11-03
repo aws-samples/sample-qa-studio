@@ -2,7 +2,19 @@ import { fetchAuthSession } from 'aws-amplify/auth';
 import { errorManager, ErrorState } from './errorManager';
 import { apiEndpoint } from '../../../configuration.json'
 
-const API_BASE_URL = `/${apiEndpoint}/` || '/api/'
+function buildRestEndpoint(path: string): string {
+  let endpoint = `/api/`
+
+  if(apiEndpoint.startsWith('https://') && apiEndpoint.endsWith('/')) {
+    endpoint = apiEndpoint
+  }
+
+  if(apiEndpoint.startsWith('https://') && !apiEndpoint.endsWith('/')) {
+    endpoint = `${apiEndpoint}/`
+  }
+
+  return `${endpoint}${path}`
+}
 
 export interface ExecutionModel {
   pk: string;
@@ -26,7 +38,7 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
       throw errorManager.createError('authentication', 'No authentication token available');
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(buildRestEndpoint(endpoint), {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -237,7 +249,7 @@ export const exportImportApi = {
     const session = await fetchAuthSession();
     const token = session.tokens?.idToken?.toString();
 
-    const response = await fetch(`${API_BASE_URL}usecase/${usecaseId}/export`, {
+    const response = await fetch(buildRestEndpoint(`usecase/${usecaseId}/export`), {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,

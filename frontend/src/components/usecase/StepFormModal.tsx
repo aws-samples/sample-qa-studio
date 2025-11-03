@@ -186,7 +186,7 @@ export default function StepFormModal({
         stepData.validation_operator = validationOperator;
         stepData.validation_value = validationValue.trim();
       }
-      
+
       // Ensure other step types don't have these fields
       if (stepType !== 'retrieve_value') {
         stepData.capture_variable = '';
@@ -221,7 +221,7 @@ export default function StepFormModal({
       onDismiss={onDismiss}
       visible={visible}
       closeAriaLabel="Close modal"
-      size="medium"
+      size="large"
       header={title}
       footer={
         <Box float="right">
@@ -240,7 +240,7 @@ export default function StepFormModal({
       }
     >
       <SpaceBetween direction="vertical" size="l">
-        <FormField label="Step Type">
+        <FormField label="Step Type" stretch>
           <SegmentedControl
             selectedId={stepType}
             onChange={({ detail }) => {
@@ -259,6 +259,7 @@ export default function StepFormModal({
 
         {stepType !== 'assertion' && (
           <FormField
+            stretch
             label="Instruction"
             description={
               stepType === 'navigation' ? 'Describe the action to perform on the page' :
@@ -285,6 +286,7 @@ export default function StepFormModal({
 
         {stepType === 'secret' && (
           <FormField
+            stretch
             label="Select Secret"
             description="Choose which secret to use for this step"
           >
@@ -307,7 +309,7 @@ export default function StepFormModal({
 
         {stepType === 'validation' && (
           <>
-            <FormField label="Validation Type">
+            <FormField label="Validation Type" stretch>
               <Select
                 selectedOption={VALIDATION_TYPE_OPTIONS.find(opt => opt.value === validationType) || null}
                 onChange={({ detail }) => {
@@ -328,7 +330,8 @@ export default function StepFormModal({
 
             {validationType === 'bool' && (
               <>
-                <FormField 
+                <FormField
+                  stretch
                   label="Expected Boolean Value"
                   description="Select true/false or use a variable"
                 >
@@ -347,7 +350,8 @@ export default function StepFormModal({
                   />
                 </FormField>
                 {booleanInputMode === 'variable' && (
-                  <FormField 
+                  <FormField
+                    stretch
                     label="Variable Expression"
                     description="Enter a variable that evaluates to a boolean (e.g., {{myBooleanVar}})"
                   >
@@ -363,22 +367,23 @@ export default function StepFormModal({
 
             {(validationType === 'string' || validationType === 'number') && (
               <>
-                <FormField label="Comparison Operator">
+                <FormField label="Comparison Operator" stretch>
                   <Select
                     selectedOption={
                       VALIDATION_OPERATOR_OPTIONS[validationType as keyof typeof VALIDATION_OPERATOR_OPTIONS]
                         ?.find(opt => opt.value === validationOperator) || null
                     }
-                    onChange={({ detail }) => setValidationOperator(detail.selectedOption?.value || 
+                    onChange={({ detail }) => setValidationOperator(detail.selectedOption?.value ||
                       (validationType === 'string' ? 'exact' : 'equals'))}
                     options={VALIDATION_OPERATOR_OPTIONS[validationType as keyof typeof VALIDATION_OPERATOR_OPTIONS] || []}
                   />
                 </FormField>
 
-                <FormField 
+                <FormField
+                  stretch
                   label="Expected Value"
                   description={
-                    validationType === 'number' 
+                    validationType === 'number'
                       ? 'Enter a numeric value. You can use variables like {{UniqueID}}, {{Time}}, {{ExecutionID}}, or custom variables.'
                       : 'Enter the expected text value. You can use variables like {{UniqueID}}, {{Time}}, {{ExecutionID}}, or custom variables.'
                   }
@@ -390,7 +395,7 @@ export default function StepFormModal({
                       setValidationValue(detail.value.toString())
                     }}
                     placeholder={
-                      validationType === 'number' 
+                      validationType === 'number'
                         ? 'Enter a number (e.g., 42, 3.14) or use variables like {{UniqueID}}'
                         : 'Enter expected value or use variables like {{UniqueID}}, {{Time}}'
                     }
@@ -404,7 +409,8 @@ export default function StepFormModal({
 
         {stepType === 'retrieve_value' && (
           <>
-            <FormField 
+            <FormField
+              stretch
               label="Variable Name"
               description="Name for the captured variable (will be available as {{variableName}} in subsequent steps)"
             >
@@ -415,7 +421,8 @@ export default function StepFormModal({
               />
             </FormField>
 
-            <FormField 
+            <FormField
+              stretch
               label="Value Type"
               description="Expected type of the retrieved value"
             >
@@ -430,14 +437,15 @@ export default function StepFormModal({
 
         {stepType === 'assertion' && (
           <>
-            <FormField 
+            <FormField
+              stretch
               label="Runtime Variable"
               description="Name of the runtime variable to compare (captured from previous retrieve_value steps)"
             >
               <Select
                 selectedOption={
-                  assertionVariable ? 
-                    { label: assertionVariable, value: assertionVariable } : 
+                  assertionVariable ?
+                    { label: assertionVariable, value: assertionVariable } :
                     null
                 }
                 onChange={({ detail }) => setAssertionVariable(detail.selectedOption?.value || '')}
@@ -449,7 +457,7 @@ export default function StepFormModal({
               />
             </FormField>
 
-            <FormField label="Validation Type">
+            <FormField label="Validation Type" stretch>
               <Select
                 selectedOption={VALIDATION_TYPE_OPTIONS.find(opt => opt.value === validationType) || null}
                 onChange={({ detail }) => {
@@ -470,7 +478,8 @@ export default function StepFormModal({
 
             {validationType === 'bool' && (
               <>
-                <FormField 
+                <FormField
+                  stretch
                   label="Expected Boolean Value"
                   description="Select true/false or use a variable"
                 >
@@ -489,7 +498,8 @@ export default function StepFormModal({
                   />
                 </FormField>
                 {booleanInputMode === 'variable' && (
-                  <FormField 
+                  <FormField
+                    stretch
                     label="Variable Expression"
                     description="Enter a variable that evaluates to a boolean (e.g., {{myBooleanVar}})"
                   >
@@ -505,22 +515,23 @@ export default function StepFormModal({
 
             {(validationType === 'string' || validationType === 'number') && (
               <>
-                <FormField label="Comparison Operator">
+                <FormField label="Comparison Operator" stretch>
                   <Select
                     selectedOption={
                       VALIDATION_OPERATOR_OPTIONS[validationType as keyof typeof VALIDATION_OPERATOR_OPTIONS]
                         ?.find(opt => opt.value === validationOperator) || null
                     }
-                    onChange={({ detail }) => setValidationOperator(detail.selectedOption?.value || 
+                    onChange={({ detail }) => setValidationOperator(detail.selectedOption?.value ||
                       (validationType === 'string' ? 'exact' : 'equals'))}
                     options={VALIDATION_OPERATOR_OPTIONS[validationType as keyof typeof VALIDATION_OPERATOR_OPTIONS] || []}
                   />
                 </FormField>
 
-                <FormField 
+                <FormField
+                  stretch
                   label="Expected Value"
                   description={
-                    validationType === 'number' 
+                    validationType === 'number'
                       ? 'Enter a numeric value. You can use variables like {{UniqueID}}, {{Time}}, {{ExecutionID}}, or custom variables.'
                       : 'Enter the expected text value. You can use variables like {{UniqueID}}, {{Time}}, {{ExecutionID}}, or custom variables.'
                   }
@@ -532,7 +543,7 @@ export default function StepFormModal({
                       setValidationValue(detail.value.toString())
                     }}
                     placeholder={
-                      validationType === 'number' 
+                      validationType === 'number'
                         ? 'Enter a number (e.g., 42, 3.14) or use variables like {{UniqueID}}'
                         : 'Enter expected value or use variables like {{UniqueID}}, {{Time}}'
                     }
