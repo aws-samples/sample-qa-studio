@@ -1,42 +1,23 @@
-import React, { useState } from 'react';
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import Button from "@cloudscape-design/components/button";
-import { getVideoUrl } from '../../utils/s3Utils';
 
 interface ExecutionInformationProps {
   execution: any;
   usecaseId: string;
   executionId: string;
-  onViewVideo: (content: { url: string, title: string, fileType: string }) => void;
+  onViewRecording: () => void;
 }
 
 export default function ExecutionInformation({ 
   execution, 
   usecaseId, 
   executionId, 
-  onViewVideo 
+  onViewRecording 
 }: ExecutionInformationProps) {
-  const [loadingVideo, setLoadingVideo] = useState(false);
-
-  const handleViewVideo = async () => {
-    try {
-      setLoadingVideo(true);
-      const { signedUrl } = await getVideoUrl(usecaseId, executionId);
-      onViewVideo({
-        url: signedUrl,
-        title: 'Execution Video',
-        fileType: 'video'
-      });
-    } catch (error) {
-      console.error('Failed to load video file:', error);
-    } finally {
-      setLoadingVideo(false);
-    }
-  };
 
   return (
     <Container 
@@ -94,8 +75,7 @@ export default function ExecutionInformation({
               <Button
                 variant="inline-link"
                 iconName="play"
-                onClick={handleViewVideo}
-                loading={loadingVideo}
+                onClick={onViewRecording}
               >
                 View
               </Button>

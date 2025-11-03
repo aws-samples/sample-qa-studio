@@ -11,3 +11,28 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+.rr-player {
+  background-color: rgb(22, 29, 38) !important;
+  color: rgb(235, 235, 240) !important;
+}
+
+.rr-controller {
+  background-color: #232b37 !important;
+  color: rgb(235, 235, 240) !important;
+  border-radius: 10px !important;
+}
+
+.rr-progress__handler,
+.rr-controller__btns button.active,
+.switch label::before {
+  background-color: rgb(66, 180, 255) !important;
+}
+
+.rr-timeline__time {
+  color: rgb(222, 222, 227) !important;
+}
+
+.rr-controller__btns button svg {
+  fill: rgb(222, 222, 227) !important;
+}

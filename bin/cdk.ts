@@ -42,7 +42,7 @@ const frontendStack = new NovaActQAStudioFrontendStack(app, 'frontend', {
   apiId: apiStack.api.restApiId,
 })
 
-const frontendDeploymentStack = new NovaActQAStudioFrontendDeploymentStack(app, 'frontend_deployment', {
+new NovaActQAStudioFrontendDeploymentStack(app, 'frontend_deployment', {
   stackName: `${baseName}-frontend-deployment`,
   baseName,
   distribution: frontendStack.distribution,
@@ -71,7 +71,7 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   userAgentString: userAgentString,
 })
 
-const routeStack = new NovaActQAStudioRouteStack(app, 'routes', {
+new NovaActQAStudioRouteStack(app, 'routes', {
   stackName: `${baseName}-routes`,
   apiEndpoint: apiEndpoint,
   baseName,

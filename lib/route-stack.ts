@@ -57,7 +57,7 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
 
   private addResource(parentResource: IResource, name: string): Resource {
     const resource = parentResource.addResource(name);
-    
+
     resource.addCorsPreflight({
       allowOrigins: Cors.ALL_ORIGINS,
       allowMethods: Cors.ALL_METHODS,
@@ -169,6 +169,30 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
         BEDROCK_REGION: 'eu-central-1'
       }
     });
+
+    // Lambda for listing recording batches
+    const listRecordingBatchesLambda = this.createLambda({
+      path: 'list_recording_batches',
+      environment: {
+        BUCKET_NAME: props.artefactsBucket.bucketName,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    props.artefactsBucket.grantRead(listRecordingBatchesLambda)
+
+    // Lambda for getting a specific recording batch
+    const getRecordingBatchLambda = this.createLambda({
+      path: 'get_recording_batch',
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 1024,
+      environment: {
+        BUCKET_NAME: props.artefactsBucket.bucketName,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    props.artefactsBucket.grantRead(getRecordingBatchLambda);
 
     [listUsecasesLambda,
       getUsecaseLambda,
@@ -351,6 +375,16 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     const generateS3Url = this.addResource(apiInstance.root, 'generate-s3-url');
     this.addMethod(generateS3Url, HttpMethod.POST, props.generateS3UrlLambda)
 
+    // API Gateway endpoints for recording (nested under execution)
+    // /usecase/{id}/executions/{executionId}/events - list batches
+    const executionEvents = this.addResource(execution, 'events');
+    this.addMethod(executionEvents, HttpMethod.GET, listRecordingBatchesLambda)
+
+    // /usecase/{id}/executions/{executionId}/event/{batchId} - get specific batch
+    const executionEvent = this.addResource(execution, 'event');
+    const executionEventBatch = this.addResource(executionEvent, '{batchId}');
+    this.addMethod(executionEventBatch, HttpMethod.GET, getRecordingBatchLambda)
+
     // API Gateway secrets endpoints
     const secrets = this.addResource(usecaseId, 'secrets');
     this.addMethod(secrets, HttpMethod.POST, createUsecaseSecretsLambda)
@@ -397,7 +431,7 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     this.routes.forEach((route: Method) => {
       this.deployment.node.addDependency(route);
     })
-    
+
     this.deployment.addToLogicalId(new Date().toISOString())
   }
 }
