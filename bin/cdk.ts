@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { App } from 'aws-cdk-lib';
-// import { NovaActQAStudio } from '../lib/cdk-stack';
 import { NovaActQAStudioStorageStack } from '../lib/storage-stack';
 import { NovaActQAStudioAuthStack } from '../lib/auth-stack';
 import { NovaActQAStudioWorkerStack } from '../lib/worker-stack';
@@ -110,7 +109,3 @@ new NovaActQAStudioRouteStack(app, 'routes', {
 // CloudFormation will automatically handle the dependency through the import/export mechanism
 
 app.synth();
-
-// new NovaActQAStudio(app, 'NovaActQAStudio', {
-//   baseName: baseName
-// });
