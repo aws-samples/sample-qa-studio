@@ -79,7 +79,7 @@ export default function HomeScreen() {
               </Link>
             )
           },
-          { id: 'description', header: 'Description', cell: item => item.description },
+          { id: 'description', header: 'Description', maxWidth: 200, cell: item => item.description },
           { id: 'active', header: 'Active', cell: item => item.active ? 'Yes' : 'No' },
           { id: 'tags', header: 'Tags', cell: item => item.tags ? item.tags.map((tag: string) => (<Badge key={tag}>{tag}</Badge>)) : '' }
         ]}

@@ -9,7 +9,7 @@ import { NovaActQAStudioFrontendStack } from '../lib/frontend-stack';
 import { NovaActQAStudioFrontendDeploymentStack } from '../lib/frontend-deployment';
 import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioRouteStack } from '../lib/route-stack';
-import { adminEmail, baseName, userAgentString, apiEndpoint } from '../configuration.json'
+import { adminEmail, baseName, userAgentString, apiEndpoint, apiDeploymentStage } from '../configuration.json'
 
 const app = new App();
 
@@ -73,7 +73,7 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
 
 new NovaActQAStudioRouteStack(app, 'routes', {
   stackName: `${baseName}-routes`,
-  apiEndpoint: apiEndpoint,
+  apiDeploymentStage: apiDeploymentStage,
   baseName,
   apiId: apiStack.api.restApiId,
   apiRootResourceId: apiStack.api.restApiRootResourceId,
