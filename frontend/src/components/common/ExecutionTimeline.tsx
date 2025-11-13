@@ -1,10 +1,8 @@
-import React from 'react';
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Box from "@cloudscape-design/components/box";
-import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import Steps from "@cloudscape-design/components/steps";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-// Removed unused KeyValuePairs import
 
 interface ExecutionTimelineProps {
   execution: {
@@ -21,7 +19,7 @@ interface ExecutionTimelineProps {
 export default function ExecutionTimeline({ execution }: ExecutionTimelineProps) {
   // Helper function to calculate duration between two timestamps
   const calculateDuration = (start: string, end: string): string => {
-    
+
     try {
       const startTime = new Date(start).getTime();
       const endTime = new Date(end).getTime();
@@ -52,70 +50,75 @@ export default function ExecutionTimeline({ execution }: ExecutionTimelineProps)
   const executingAt = execution.executingAt || execution.executing_at;
   const completedAt = execution.completedAt || execution.completed_at;
 
-  // Build timeline data
-  const timelineSteps = [];
+  // Build steps data for Cloudscape Steps component
+  const steps = [];
+  let activeStepIndex = 0;
 
+  // Step 1: Created
   if (createdAt) {
-    timelineSteps.push({
-      label: 'Created',
-      timestamp: new Date(createdAt).toLocaleString(),
-      status: 'success' as const,
+    steps.push({
+      header: 'Created',
+      info: new Date(createdAt).toLocaleString(),
       description: 'Execution request created and queued',
-      phase: 'creation'
+      status: 'success' as const
     });
   }
 
+  // Step 2: Started Executing
   if (executingAt && createdAt) {
     const queueTime = calculateDuration(createdAt, executingAt);
-    timelineSteps.push({
-      label: 'Started Executing',
-      timestamp: new Date(executingAt).toLocaleString(),
-      status: 'success' as const,
+    steps.push({
+      header: 'Started Executing',
+      info: new Date(executingAt).toLocaleString(),
       description: `Execution began processing after ${queueTime} in queue`,
-      transitionTime: queueTime,
-      phase: 'execution-start'
+      status: 'success' as const
     });
+  } else if (createdAt && !executingAt && execution.status === 'pending') {
+    const waitTime = calculateDuration(createdAt, new Date().toISOString());
+    steps.push({
+      header: 'Waiting in Queue',
+      info: `Waiting for ${waitTime}`,
+      description: 'Waiting to start execution',
+      status: 'pending' as const
+    });
+    activeStepIndex = 1;
   }
 
+  // Step 3: Completion
   if (completedAt) {
     const isSuccess = execution.status === 'success';
     const executionTime = executingAt
       ? calculateDuration(executingAt, completedAt)
       : calculateDuration(createdAt!, completedAt);
 
-    timelineSteps.push({
-      label: isSuccess ? 'Completed Successfully' : 'Failed',
-      timestamp: new Date(completedAt).toLocaleString(),
-      status: isSuccess ? 'success' as const : 'error' as const,
+    steps.push({
+      header: isSuccess ? 'Completed Successfully' : 'Failed',
+      info: new Date(completedAt).toLocaleString(),
       description: isSuccess
         ? `Execution completed successfully after ${executionTime}`
         : `Execution failed after ${executionTime}`,
-      transitionTime: executionTime,
-      phase: 'completion'
+      status: isSuccess ? 'success' as const : 'error' as const
     });
   } else if (execution.status === 'executing' || execution.status === 'in-progress') {
     const currentTime = executingAt
       ? calculateDuration(executingAt, new Date().toISOString())
       : calculateDuration(createdAt!, new Date().toISOString());
 
-    timelineSteps.push({
-      label: 'Currently Executing',
-      timestamp: 'In progress',
-      status: 'in-progress' as const,
-      description: `Execution has been running for ${currentTime}`,
-      transitionTime: currentTime,
-      phase: 'in-progress'
+    steps.push({
+      header: 'Currently Executing',
+      info: `Running for ${currentTime}`,
+      description: 'Execution in progress',
+      status: 'in-progress' as const
     });
-  } else if (createdAt && !executingAt && execution.status === 'pending') {
-    const waitTime = calculateDuration(createdAt, new Date().toISOString());
-    timelineSteps.push({
-      label: 'Waiting in Queue',
-      timestamp: 'Pending',
-      status: 'pending' as const,
-      description: `Waiting to start execution for ${waitTime}`,
-      transitionTime: waitTime,
-      phase: 'queued'
+    activeStepIndex = steps.length - 1;
+  } else if (!completedAt && executingAt) {
+    // Execution started but not completed yet
+    steps.push({
+      header: 'Completion',
+      description: 'Waiting for execution to complete',
+      status: 'pending' as const
     });
+    activeStepIndex = steps.length - 1;
   }
 
   // Calculate summary metrics
@@ -123,7 +126,7 @@ export default function ExecutionTimeline({ execution }: ExecutionTimelineProps)
   const queueDuration = executingAt && createdAt ? calculateDuration(createdAt, executingAt) : null;
   const executionDuration = completedAt && executingAt ? calculateDuration(executingAt, completedAt) : null;
 
-  if (timelineSteps.length === 0) {
+  if (steps.length === 0) {
     return (
       <Container header={<Header variant="h2">Execution Timeline</Header>}>
         <Box textAlign="center" padding="l">
@@ -138,57 +141,37 @@ export default function ExecutionTimeline({ execution }: ExecutionTimelineProps)
 
   return (
     <Container header={<Header variant="h2">Execution Timeline</Header>}>
+      <SpaceBetween direction="vertical" size="l">
+        {/* Cloudscape Steps Component */}
+        <Steps steps={steps} />
 
-      {/* Timeline Steps */}
-      <SpaceBetween direction="vertical" size="s">
-        {timelineSteps.map((step, index) => (
-          <Box key={index}>
+        {/* Compact Summary */}
+        {(totalDuration || queueDuration || executionDuration) && (
+          <Box>
+            <Box variant="h4">Summary</Box>
             <SpaceBetween direction="vertical" size="xs">
-              <StatusIndicator type={step.status}>
-                <Box variant="strong" fontSize="body-s">{step.label}</Box>
-              </StatusIndicator>
-
-              <Box margin={{ left: 'l' }}>
-                <Box variant="small" color="text-body-secondary">
-                    &nbsp;{step.timestamp}
+              {totalDuration && (
+                <Box>
+                  <Box variant="small" color="text-body-secondary">Total Duration</Box>
+                  <Box variant="strong" color="text-status-info"> {totalDuration}</Box>
                 </Box>
-                {step.transitionTime && (
-                  <Box variant="strong" color="text-status-info" fontSize="body-s">
-                    &nbsp;{step.transitionTime}
-                  </Box>
-                )}
-              </Box>
+              )}
+              {queueDuration && (
+                <Box>
+                  <Box variant="small" color="text-body-secondary">Queue Time</Box>
+                  <Box variant="strong"> {queueDuration}</Box>
+                </Box>
+              )}
+              {executionDuration && (
+                <Box>
+                  <Box variant="small" color="text-body-secondary">Execution Time</Box>
+                  <Box variant="strong"> {executionDuration}</Box>
+                </Box>
+              )}
             </SpaceBetween>
           </Box>
-        ))}
+        )}
       </SpaceBetween>
-
-      {/* Compact Summary */}
-      {(totalDuration || queueDuration || executionDuration) && (
-        <Box>
-          <Box variant="h4">Summary</Box>
-          <SpaceBetween direction="vertical" size="xs">
-            {totalDuration && (
-              <Box>
-                <Box variant="small" color="text-body-secondary">Total Duration</Box>
-                <Box variant="strong" color="text-status-info"> {totalDuration}</Box>
-              </Box>
-            )}
-            {queueDuration && (
-              <Box>
-                <Box variant="small" color="text-body-secondary">Queue Time</Box>
-                <Box variant="strong"> {queueDuration}</Box>
-              </Box>
-            )}
-            {executionDuration && (
-              <Box>
-                <Box variant="small" color="text-body-secondary">Execution Time</Box>
-                <Box variant="strong"> {executionDuration}</Box>
-              </Box>
-            )}
-          </SpaceBetween>
-        </Box>
-      )}
     </Container>
   );
 }
