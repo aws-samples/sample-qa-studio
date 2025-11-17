@@ -13,6 +13,7 @@ import Breadcrumb from './common/Breadcrumb';
 import { ExecutionInformation, ExecutionSteps, ExecutionVariables } from './execution';
 import LiveViewPanel from './execution/LiveViewPanel';
 import { RecordingPlayer } from './RecordingPlayer';
+import DownloadedFiles from './execution/DownloadedFiles';
 
 export default function ExecutionDetailRefactored() {
   const { usecaseId, executionId } = useParams();
@@ -25,8 +26,10 @@ export default function ExecutionDetailRefactored() {
   const [modalContent, setModalContent] = useState<{ url: string, title: string, fileType?: string } | null>(null);
   const [recordingModalVisible, setRecordingModalVisible] = useState(false);
   const [hasVariables, setHasVariables] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const fetchData = async () => {
+    setRefreshTrigger(prev => prev + 1);
     try {
       const [executionData, stepsData, variablesData, usecaseData] = await Promise.all([
         api.get(`usecase/${usecaseId}/executions/${executionId}`),
@@ -150,6 +153,12 @@ export default function ExecutionDetailRefactored() {
             usecaseId={usecaseId}
             executionId={executionId}
             onViewFile={handleViewContent}
+          />
+
+          <DownloadedFiles
+            usecaseId={usecaseId}
+            executionId={executionId}
+            refreshTrigger={refreshTrigger}
           />
 
           {/* Modal for viewing files */}

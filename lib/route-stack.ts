@@ -194,6 +194,28 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
 
     props.artefactsBucket.grantRead(getRecordingBatchLambda);
 
+    // Lambda for listing downloads
+    const listDownloadsLambda = this.createLambda({
+      path: 'list_downloads',
+      environment: {
+        BUCKET_NAME: props.artefactsBucket.bucketName,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    props.artefactsBucket.grantRead(listDownloadsLambda);
+
+    // Lambda for downloading a specific file (redirects to presigned URL)
+    const downloadFileLambda = this.createLambda({
+      path: 'download_file',
+      environment: {
+        BUCKET_NAME: props.artefactsBucket.bucketName,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    props.artefactsBucket.grantRead(downloadFileLambda);
+
     [listUsecasesLambda,
       getUsecaseLambda,
       listStepsLambda,
@@ -362,6 +384,13 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     // API Gateway live view endpoint
     const liveView = this.addResource(execution, 'live-view');
     this.addMethod(liveView, HttpMethod.GET, getLiveViewLambda)
+
+    // API Gateway downloads endpoints
+    const downloads = this.addResource(execution, 'downloads');
+    this.addMethod(downloads, HttpMethod.GET, listDownloadsLambda)
+
+    const downloadFile = this.addResource(downloads, '{fileName}');
+    this.addMethod(downloadFile, HttpMethod.GET, downloadFileLambda)
 
     // API Gateway step endpoints
     const step = this.addResource(steps, '{stepId}');

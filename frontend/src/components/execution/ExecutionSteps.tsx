@@ -117,6 +117,14 @@ export default function ExecutionSteps({
                 );
               }
 
+              if (item.stepType === 'download' && item.actualValue) {
+                return (
+                  <div style={{ fontSize: '12px', color: '#5f6b7a' }}>
+                    Downloaded: {item.actualValue}
+                  </div>
+                );
+              }
+
               if (item.logs) {
                 return (<pre>{item.logs}</pre>)
               }

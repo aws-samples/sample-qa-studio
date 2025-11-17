@@ -26,7 +26,8 @@ const STEP_TYPE_OPTIONS = [
   { text: 'Secret', id: 'secret' },
   { text: 'Validation', id: 'validation' },
   { text: 'Retrieve Value', id: 'retrieve_value' },
-  { text: 'Assertion', id: 'assertion' }
+  { text: 'Assertion', id: 'assertion' },
+  { text: 'Download', id: 'download' }
 ];
 
 const VALIDATION_TYPE_OPTIONS = [
@@ -221,7 +222,7 @@ export default function StepFormModal({
       onDismiss={onDismiss}
       visible={visible}
       closeAriaLabel="Close modal"
-      size="large"
+      size="max"
       header={title}
       footer={
         <Box float="right">
@@ -266,7 +267,8 @@ export default function StepFormModal({
                 stepType === 'url' ? 'Enter the URL to navigate to (e.g., "https://example.com/login")' :
                   stepType === 'secret' ? 'Describe the action (e.g., "Type password in login field")' :
                     stepType === 'validation' ? 'Describe what should be validated on the page' :
-                      'Describe what value to retrieve from the page'
+                      stepType === 'download' ? 'Describe the action that triggers the download. Automatically handles downloads in popups or current page.' :
+                        'Describe what value to retrieve from the page'
             }
           >
             <Textarea
@@ -277,7 +279,8 @@ export default function StepFormModal({
                   stepType === 'url' ? 'https://example.com/page' :
                     stepType === 'secret' ? 'Describe the action with the secret' :
                       stepType === 'validation' ? 'Describe the validation to perform' :
-                        'Describe what to retrieve (e.g., "Get the product price")'
+                        stepType === 'download' ? 'Click the download button' :
+                          'Describe what to retrieve (e.g., "Get the product price")'
               }
               rows={3}
             />
