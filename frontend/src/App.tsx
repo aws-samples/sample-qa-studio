@@ -12,6 +12,8 @@ import TopNavigation from "@cloudscape-design/components/top-navigation";
 import Spinner from "@cloudscape-design/components/spinner";
 import Box from "@cloudscape-design/components/box";
 import ErrorBoundary from './components/ErrorBoundary';
+
+import { baseName } from "../../configuration.json"
 // Removed complex chunk loader imports for compatibility
 
 // Lazy load components for code splitting
@@ -75,7 +77,9 @@ function AppContent() {
             { type: "link", text: "Home", href: "/" },
             { type: "link", text: "Create Use Case", href: "/create-usecase" },
             { type: "link", text: "User Journey Wizard", href: "/user-journey-wizard" },
-            { type: "link", text: "Users", href: "/users" }
+            { type: "link", text: "Users", href: "/users" },
+            { type: "divider" },
+            { type: "link", text: baseName, href: "#" },
           ]}
           onFollow={(event) => {
             if (!event.detail.external) {

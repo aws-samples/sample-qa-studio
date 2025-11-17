@@ -22,6 +22,7 @@ from navigation_step import execute_navigation_step
 from retrieve_value_step import execute_retrieve_value_step
 from assertion_step import execute_assertion_step
 from url_step import execute_url_step
+from download_step import execute_download_step
 
 # Configure logging
 logging.basicConfig(
@@ -201,6 +202,8 @@ def main():
                             result, success, logs, actual_value = execute_assertion_step(parsed_step, template_parser.get_runtime_variables_dict())
                         case 'url':
                             result, success, logs = execute_url_step(nova, parsed_step)
+                        case 'download':
+                            result, success, logs, actual_value = execute_download_step(nova, parsed_step, usecase_id, execution_id, s3_bucket_name)
                         case _:
                             result, success, logs = execute_navigation_step(nova, parsed_step)
 

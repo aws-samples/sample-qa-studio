@@ -7,7 +7,6 @@ import FormField from "@cloudscape-design/components/form-field";
 import Select from "@cloudscape-design/components/select";
 import Textarea from "@cloudscape-design/components/textarea";
 import Input from "@cloudscape-design/components/input";
-import SegmentedControl from "@cloudscape-design/components/segmented-control";
 import { api } from '../../utils/api';
 
 interface StepFormModalProps {
@@ -21,12 +20,13 @@ interface StepFormModalProps {
 }
 
 const STEP_TYPE_OPTIONS = [
-  { text: 'Navigation', id: 'navigation' },
-  { text: 'URL', id: 'url' },
-  { text: 'Secret', id: 'secret' },
-  { text: 'Validation', id: 'validation' },
-  { text: 'Retrieve Value', id: 'retrieve_value' },
-  { text: 'Assertion', id: 'assertion' }
+  { label: 'Navigation', value: 'navigation' },
+  { label: 'URL', value: 'url' },
+  { label: 'Secret', value: 'secret' },
+  { label: 'Validation', value: 'validation' },
+  { label: 'Retrieve Value', value: 'retrieve_value' },
+  { label: 'Assertion', value: 'assertion' },
+  { label: 'Download', value: 'download' }
 ];
 
 const VALIDATION_TYPE_OPTIONS = [
@@ -240,11 +240,15 @@ export default function StepFormModal({
       }
     >
       <SpaceBetween direction="vertical" size="l">
-        <FormField label="Step Type" stretch>
-          <SegmentedControl
-            selectedId={stepType}
+        <FormField
+          stretch
+          label="Step Type"
+          description="Select the type of step to create"
+        >
+          <Select
+            selectedOption={STEP_TYPE_OPTIONS.find(opt => opt.value === stepType) || null}
             onChange={({ detail }) => {
-              setStepType(detail.selectedId);
+              setStepType(detail.selectedOption?.value || 'navigation');
               // Reset all dependent fields when changing type
               setSelectedSecret('');
               setValidationType('bool');
@@ -266,7 +270,8 @@ export default function StepFormModal({
                 stepType === 'url' ? 'Enter the URL to navigate to (e.g., "https://example.com/login")' :
                   stepType === 'secret' ? 'Describe the action (e.g., "Type password in login field")' :
                     stepType === 'validation' ? 'Describe what should be validated on the page' :
-                      'Describe what value to retrieve from the page'
+                      stepType === 'download' ? 'Describe the action that triggers the download. Automatically handles downloads in popups or current page.' :
+                        'Describe what value to retrieve from the page'
             }
           >
             <Textarea
@@ -277,7 +282,8 @@ export default function StepFormModal({
                   stepType === 'url' ? 'https://example.com/page' :
                     stepType === 'secret' ? 'Describe the action with the secret' :
                       stepType === 'validation' ? 'Describe the validation to perform' :
-                        'Describe what to retrieve (e.g., "Get the product price")'
+                        stepType === 'download' ? 'Click the download button' :
+                          'Describe what to retrieve (e.g., "Get the product price")'
               }
               rows={3}
             />
