@@ -85,17 +85,20 @@ type Step struct {
 }
 
 type Execution struct {
-	PK               string `json:"pk" dynamodbav:"pk"`
-	SK               string `json:"sk" dynamodbav:"sk"`
-	Status           string `json:"status" dynamodbav:"status"`
-	StartingURL      string `json:"starting_url" dynamodbav:"starting_url"`
-	Headless         bool   `json:"headless" dynamodbav:"headless"`
-	CreatedAt        string `json:"createdAt" dynamodbav:"created_at"`
-	CompletedAt      string `json:"completedAt" dynamodbav:"completed_at"`
-	ExecutingAt      string `json:"executingAt" dynamodbav:"executing_at"`
-	TriggerType      string `json:"triggerType" dynamodbav:"trigger_type"`
-	NovaActSessionID string `json:"novaActSessionId" dynamodbav:"nova_session_id"`
-	Region           string `json:"region" dynamodbav:"execution_region"`
+	PK                string `json:"pk" dynamodbav:"pk"`
+	SK                string `json:"sk" dynamodbav:"sk"`
+	Status            string `json:"status" dynamodbav:"status"`
+	StartingURL       string `json:"starting_url" dynamodbav:"starting_url"`
+	Headless          bool   `json:"headless" dynamodbav:"headless"`
+	CreatedAt         string `json:"createdAt" dynamodbav:"created_at"`
+	CompletedAt       string `json:"completedAt" dynamodbav:"completed_at"`
+	ExecutingAt       string `json:"executingAt" dynamodbav:"executing_at"`
+	TriggerType       string `json:"triggerType" dynamodbav:"trigger_type"`
+	NovaActSessionID  string `json:"novaActSessionId" dynamodbav:"nova_session_id"`
+	Region            string `json:"region" dynamodbav:"execution_region"`
+	TaskArn           string `json:"taskArn,omitempty" dynamodbav:"task_arn,omitempty"`
+	TaskID            string `json:"taskId,omitempty" dynamodbav:"task_id,omitempty"`
+	CloudWatchLogsURL string `json:"cloudWatchLogsUrl,omitempty" dynamodbav:"cloudwatch_logs_url,omitempty"`
 }
 
 type ExecutionStep struct {
