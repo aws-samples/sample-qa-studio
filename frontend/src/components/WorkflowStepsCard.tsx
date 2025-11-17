@@ -25,6 +25,7 @@ import Icon from "@cloudscape-design/components/icon";
 import Modal from "@cloudscape-design/components/modal";
 import StepFormModal from './usecase/StepFormModal';
 import './WorkflowStepsCard.css';
+import './StepsTable.css';
 
 interface UsecaseStep {
   pk: string;
@@ -98,6 +99,8 @@ function SortableStepCard({
         return <Badge color="blue">Value</Badge>;
       case 'url':
         return <Badge color="severity-medium">Goto</Badge>;
+      case 'download':
+        return <Badge className="badge-purple">Download</Badge>;
       case 'navigation':
       default:
         return <Badge>Navigation</Badge>;

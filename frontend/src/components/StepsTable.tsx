@@ -6,6 +6,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Badge from "@cloudscape-design/components/badge";
 import { api } from '../utils/api';
 import StepFormModal from './usecase/StepFormModal';
+import './StepsTable.css';
 
 interface UsecaseStep {
   pk: string;
@@ -115,7 +116,7 @@ export default function StepsTable({
       case 'url':
         return <Badge color="severity-medium" className="step">Goto</Badge>;
       case 'download':
-        return <Badge color="severity-low" className="step">Download</Badge>;
+        return <Badge className="step badge-purple">Download</Badge>;
       case 'navigation':
       default:
         return <Badge className="step">Navigation</Badge>;

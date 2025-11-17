@@ -124,7 +124,7 @@ export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger
             header: 'Actions',
             cell: item => (
               <Button
-                variant="primary"
+                variant="icon"
                 iconName="download"
                 onClick={() => handleDownload(item.fileName)}
               >
