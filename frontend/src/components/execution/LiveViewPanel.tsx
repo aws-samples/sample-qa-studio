@@ -11,17 +11,24 @@ import Link from "@cloudscape-design/components/link";
 import { RemoteBrowser } from '../dcv/DCVViewer';
 import { useLiveViewUrl } from '../../hooks/useLiveViewUrl';
 import { api } from './../../utils/api';
+import './LiveViewPanel.css';
 
 interface LiveViewPanelProps {
   usecaseId: string;
   executionId: string;
   executionStatus?: string;
+  currentStep?: {
+    sort: number;
+    instruction: string;
+    status: string;
+  } | null;
 }
 
 export default function LiveViewPanel({ 
   usecaseId, 
   executionId,
-  executionStatus = 'unknown'
+  executionStatus = 'unknown',
+  currentStep = null
 }: LiveViewPanelProps) {
   const [showViewer, setShowViewer] = useState(false);
   const [dcvError, setDcvError] = useState<string | null>(null);
@@ -126,16 +133,35 @@ export default function LiveViewPanel({
         size="max"
         header="Live Browser Session"
       >
-        {hasLiveView && (
-          <RemoteBrowser
-            presignedUrl={liveViewUrl}
-            // width={1400}
-            // height={900}
-            // onConnect={() => console.log('DCV connected')}
-            // onDisconnect={() => console.log('DCV disconnected')}
-            // onError={handleDcvError}
-          />
-        )}
+        <div className="live-view-modal-content">
+          <div className="live-view-canvas">
+            {hasLiveView && (
+              <RemoteBrowser
+                presignedUrl={liveViewUrl}
+                // width={1400}
+                // height={900}
+                // onConnect={() => console.log('DCV connected')}
+                // onDisconnect={() => console.log('DCV disconnected')}
+                // onError={handleDcvError}
+              />
+            )}
+          </div>
+          {currentStep && (
+            <div className="current-step-indicator">
+              <span className="current-step-label">Current Step:</span>
+              <div className="current-step-content">
+                <strong>Step {currentStep.sort}</strong>
+                {' - '}
+                {currentStep.instruction}
+              </div>
+              {currentStep.status === 'executing' && (
+                <div className="current-step-status">
+                  <Spinner size="normal" /> Executing...
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </Modal>
     </>
   );
