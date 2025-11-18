@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Link from "@cloudscape-design/components/link";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import Table from "@cloudscape-design/components/table";
 import { api } from '../utils/api';
@@ -175,6 +176,18 @@ export default function HomeScreen() {
     setSelectedItems([]);
   };
 
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      const data = await api.get('usecases');
+      setUsecases(data.usecases || []);
+    } catch (error) {
+      console.error('Failed to fetch usecases:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SpaceBetween direction="vertical" size="l">
       <Flashbar items={flashbarItems} />
@@ -182,33 +195,42 @@ export default function HomeScreen() {
       <Header 
         variant="h1"
         actions={
-          <ButtonDropdown
-            variant="primary"
-            loading={batchExecuting}
-            disabled={batchExecuting}
-            onItemClick={({ detail }) => {
-              if (detail.id === 'import') {
-                setShowImportModal(true);
-              } else if (detail.id === 'execute-selected') {
-                handleBatchExecute();
-              }
-            }}
-            items={[
-              {
-                id: 'execute-selected',
-                text: `Execute Selected (${selectedItems.length})`,
-                disabled: selectedItems.length === 0
-              },
-              {
-                id: 'import',
-                text: 'Import Use Case'
-              }
-            ]}
-            mainAction={{
-              text: 'Create Use Case',
-              onClick: () => navigate('/create-usecase')
-            }}
-          />
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              iconName="refresh"
+              variant="normal"
+              onClick={handleRefresh}
+              disabled={loading}
+              ariaLabel="Refresh use cases"
+            />
+            <ButtonDropdown
+              variant="primary"
+              loading={batchExecuting}
+              disabled={batchExecuting}
+              onItemClick={({ detail }) => {
+                if (detail.id === 'import') {
+                  setShowImportModal(true);
+                } else if (detail.id === 'execute-selected') {
+                  handleBatchExecute();
+                }
+              }}
+              items={[
+                {
+                  id: 'execute-selected',
+                  text: `Execute Selected (${selectedItems.length})`,
+                  disabled: selectedItems.length === 0
+                },
+                {
+                  id: 'import',
+                  text: 'Import Use Case'
+                }
+              ]}
+              mainAction={{
+                text: 'Create Use Case',
+                onClick: () => navigate('/create-usecase')
+              }}
+            />
+          </SpaceBetween>
         }
       >
         Use Cases
@@ -217,14 +239,21 @@ export default function HomeScreen() {
         columnDefinitions={[
           { 
             id: 'name', 
-            header: 'Name', 
+            header: 'Name',
+            maxWidth: 300,
             cell: item => (
-              <Link href={`/usecase/${item.id}`}>
-                {item.name}
-              </Link>
+              <div>
+                <Link href={`/usecase/${item.id}`}>
+                  {item.name}
+                </Link>
+                {item.description && (
+                  <div style={{ fontSize: '0.85em', color: '#5f6b7a', marginTop: '4px' }}>
+                    {item.description}
+                  </div>
+                )}
+              </div>
             )
           },
-          { id: 'description', header: 'Description', maxWidth: 200, cell: item => item.description },
           { 
             id: 'last_execution_status', 
             header: 'Last Status', 
@@ -267,7 +296,15 @@ export default function HomeScreen() {
               <Badge color="red">Inactive</Badge>
             )
           },
-          { id: 'tags', header: 'Tags', cell: item => item.tags ? item.tags.map((tag: string) => (<Badge key={tag}>{tag}</Badge>)) : '' }
+          { 
+            id: 'tags', 
+            header: 'Tags', 
+            cell: item => item.tags ? (
+              <SpaceBetween direction="horizontal" size="xs">
+                {item.tags.map((tag: string) => (<Badge key={tag}>{tag}</Badge>))}
+              </SpaceBetween>
+            ) : ''
+          }
         ]}
         items={usecases}
         loading={loading}
@@ -276,6 +313,7 @@ export default function HomeScreen() {
         selectionType="multi"
         selectedItems={selectedItems}
         onSelectionChange={({ detail }) => setSelectedItems(detail.selectedItems)}
+        resizableColumns
       />
       
       <ImportUsecaseModal
