@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Button from "@cloudscape-design/components/button";
@@ -17,7 +17,6 @@ import DownloadedFiles from './execution/DownloadedFiles';
 
 export default function ExecutionDetailRefactored() {
   const { usecaseId, executionId } = useParams();
-  const navigate = useNavigate();
   const [execution, setExecution] = useState<any>(null);
   const [usecase, setUsecase] = useState<any>(null);
   const [executionSteps, setExecutionSteps] = useState<any[]>([]);
@@ -25,6 +24,9 @@ export default function ExecutionDetailRefactored() {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState<{ url: string, title: string, fileType?: string } | null>(null);
   const [recordingModalVisible, setRecordingModalVisible] = useState(false);
+  const [stopModalVisible, setStopModalVisible] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
   const [hasVariables, setHasVariables] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
@@ -92,6 +94,22 @@ export default function ExecutionDetailRefactored() {
     setRecordingModalVisible(true);
   };
 
+  const handleStopExecution = async () => {
+    setStopping(true);
+    setStopError(null);
+    
+    try {
+      await api.post(`usecase/${usecaseId}/executions/${executionId}/stop`, {});
+      setStopModalVisible(false);
+      fetchData(); // Refresh execution data
+    } catch (error: any) {
+      console.error('Failed to stop execution:', error);
+      setStopError(error?.message || 'Failed to stop execution. Please try again.');
+    } finally {
+      setStopping(false);
+    }
+  };
+
   if (loading) return <div>Loading...</div>;
   if (!execution) return <div>Execution not found</div>;
   if (!usecaseId || !executionId) return <div>Invalid parameters</div>;
@@ -109,7 +127,29 @@ export default function ExecutionDetailRefactored() {
               { text: "Execution Details" }
             ]}
           />
-          <Header variant="h1">
+          <Header 
+            variant="h1"
+            actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                {execution?.cloudWatchLogsUrl && (
+                  <Button
+                    iconName="external"
+                    onClick={() => window.open(execution.cloudWatchLogsUrl, '_blank')}
+                  >
+                    CloudWatch Logs
+                  </Button>
+                )}
+                {(execution?.status === 'executing' || execution?.status === 'pending') && (
+                  <Button
+                    iconName="status-stopped"
+                    onClick={() => setStopModalVisible(true)}
+                  >
+                    Stop Execution
+                  </Button>
+                )}
+              </SpaceBetween>
+            }
+          >
             Execution Details
           </Header>
 
@@ -220,6 +260,45 @@ export default function ExecutionDetailRefactored() {
                 executionId={executionId}
               />
             )}
+          </Modal>
+
+          {/* Stop Execution Confirmation Modal */}
+          <Modal
+            onDismiss={() => setStopModalVisible(false)}
+            visible={stopModalVisible}
+            header="Stop Execution"
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button 
+                    variant="link" 
+                    onClick={() => setStopModalVisible(false)}
+                    disabled={stopping}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="primary"
+                    onClick={handleStopExecution}
+                    loading={stopping}
+                  >
+                    Stop Execution
+                  </Button>
+                </SpaceBetween>
+              </Box>
+            }
+          >
+            <SpaceBetween size="m">
+              {stopError && (
+                <Box color="text-status-error">
+                  {stopError}
+                </Box>
+              )}
+              <Box>
+                <p>Are you sure you want to stop this execution?</p>
+                <p>This will terminate the running ECS task and mark the execution as stopped. This action cannot be undone.</p>
+              </Box>
+            </SpaceBetween>
           </Modal>
         </SpaceBetween>
       }

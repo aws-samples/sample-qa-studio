@@ -90,6 +90,7 @@ new NovaActQAStudioRouteStack(app, 'routes', {
   getScheduleLambda: workerStack.getScheduleLambda,
   deleteScheduleLambda: workerStack.deleteScheduleLambda,
   executeUsecaseLambda: workerStack.executeUsecaseLambda,
+  stopExecutionLambda: workerStack.stopExecutionLambda,
   tableReadPolicy: storageStack.tableReadPolicy,
   tableWritePolicy: storageStack.tableWritePolicy,
   tableFullAccessPolicy: storageStack.tableFullAccessPolicy,

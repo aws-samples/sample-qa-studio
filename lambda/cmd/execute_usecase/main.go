@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"lambda/models"
@@ -23,6 +25,76 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/google/uuid"
 )
+
+// generateCloudWatchLogsURL creates a deep link to CloudWatch Logs for a specific ECS task
+func generateCloudWatchLogsURL(region, logGroup, streamPrefix, taskID string) string {
+	// CloudWatch Logs URL format for ECS task logs
+	// The log stream name for ECS tasks with awsLogs driver is: {streamPrefix}/{container-name}/{task-id}
+	logStreamName := fmt.Sprintf("%s/container/%s", streamPrefix, taskID)
+
+	return fmt.Sprintf(
+		"https://%s.console.aws.amazon.com/cloudwatch/home?region=%s#logsV2:log-groups/log-group/%s/log-events/%s",
+		region,
+		region,
+		url.PathEscape(logGroup),
+		url.PathEscape(logStreamName),
+	)
+}
+
+// updateExecutionTaskInfo updates the execution record with ECS task metadata
+func updateExecutionTaskInfo(ctx context.Context, ddbClient *dynamodb.Client, usecaseID, executionID, taskArn, taskID, cloudWatchURL string) error {
+	_, err := ddbClient.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(models.GetTableName()),
+		Key: map[string]types.AttributeValue{
+			"pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("USECASE_EXECUTION#%s", usecaseID)},
+			"sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("EXECUTION#%s", executionID)},
+		},
+		UpdateExpression: aws.String("SET task_arn = :task_arn, task_id = :task_id, cloudwatch_logs_url = :cloudwatch_url"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":task_arn":       &types.AttributeValueMemberS{Value: taskArn},
+			":task_id":        &types.AttributeValueMemberS{Value: taskID},
+			":cloudwatch_url": &types.AttributeValueMemberS{Value: cloudWatchURL},
+		},
+	})
+
+	if err != nil {
+		log.Printf("Error updating execution task info: %v", err)
+		return err
+	}
+
+	log.Printf("Updated execution %s with task ARN: %s, task ID: %s", executionID, taskArn, taskID)
+	return nil
+}
+
+// updateExecutionStatusWithError updates execution status and logs error details
+func updateExecutionStatusWithError(ctx context.Context, ddbClient *dynamodb.Client, usecaseID, executionID, status, errorMsg string) error {
+	completedAt := time.Now().UTC().Format(time.RFC3339)
+
+	_, err := ddbClient.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(models.GetTableName()),
+		Key: map[string]types.AttributeValue{
+			"pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("USECASE_EXECUTION#%s", usecaseID)},
+			"sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("EXECUTION#%s", executionID)},
+		},
+		UpdateExpression: aws.String("SET #status = :status, completed_at = :completed_at, error_message = :error_msg"),
+		ExpressionAttributeNames: map[string]string{
+			"#status": "status",
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":status":       &types.AttributeValueMemberS{Value: status},
+			":completed_at": &types.AttributeValueMemberS{Value: completedAt},
+			":error_msg":    &types.AttributeValueMemberS{Value: errorMsg},
+		},
+	})
+
+	if err != nil {
+		log.Printf("Error updating execution status: %v", err)
+		return err
+	}
+
+	log.Printf("Updated execution %s status to %s with error: %s", executionID, status, errorMsg)
+	return nil
+}
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	usecaseId := request.PathParameters["id"]
@@ -400,15 +472,94 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 			},
 		}
 
-		_, err = ecsClient.RunTask(ctx, taskInput)
+		taskResult, err := ecsClient.RunTask(ctx, taskInput)
 		if err != nil {
 			log.Printf("Error starting ECS task: %v", err)
+			updateExecutionStatusWithError(ctx, ddbClient, usecaseId, executionId, "failed", fmt.Sprintf("Failed to start ECS task: %v", err))
 			return events.APIGatewayProxyResponse{StatusCode: 500}, err
 		}
 
-		response, err = json.Marshal(map[string]string{
-			"status":    "task started",
-			"usecaseId": usecaseId,
+		// Check for task failures
+		if len(taskResult.Failures) > 0 {
+			failure := taskResult.Failures[0]
+			errorMsg := fmt.Sprintf("Task failed to start - Reason: %s, Detail: %s",
+				aws.ToString(failure.Reason),
+				aws.ToString(failure.Detail))
+			log.Printf("ECS task failure: %s", errorMsg)
+
+			updateExecutionStatusWithError(ctx, ddbClient, usecaseId, executionId, "failed", errorMsg)
+
+			return events.APIGatewayProxyResponse{
+				StatusCode: 500,
+				Headers: map[string]string{
+					"Content-Type":                 "application/json",
+					"Access-Control-Allow-Origin":  "*",
+					"Access-Control-Allow-Methods": "POST, OPTIONS",
+					"Access-Control-Allow-Headers": "Content-Type, Authorization",
+				},
+				Body: fmt.Sprintf(`{"error": "%s"}`, errorMsg),
+			}, fmt.Errorf("task failed to start")
+		}
+
+		// Verify at least one task was created
+		if len(taskResult.Tasks) == 0 {
+			errorMsg := "No tasks were created by ECS RunTask"
+			log.Printf("ECS error: %s", errorMsg)
+			updateExecutionStatusWithError(ctx, ddbClient, usecaseId, executionId, "failed", errorMsg)
+
+			return events.APIGatewayProxyResponse{
+				StatusCode: 500,
+				Headers: map[string]string{
+					"Content-Type":                 "application/json",
+					"Access-Control-Allow-Origin":  "*",
+					"Access-Control-Allow-Methods": "POST, OPTIONS",
+					"Access-Control-Allow-Headers": "Content-Type, Authorization",
+				},
+				Body: fmt.Sprintf(`{"error": "%s"}`, errorMsg),
+			}, fmt.Errorf("%s", errorMsg)
+		}
+
+		// Extract task ARN and ID
+		task := taskResult.Tasks[0]
+		taskArn := aws.ToString(task.TaskArn)
+
+		// Extract task ID from ARN (format: arn:aws:ecs:region:account:task/cluster-name/task-id)
+		taskID := taskArn
+		if lastSlash := strings.LastIndex(taskArn, "/"); lastSlash != -1 {
+			taskID = taskArn[lastSlash+1:]
+		}
+
+		log.Printf("ECS task started - ARN: %s, ID: %s", taskArn, taskID)
+
+		// Generate CloudWatch Logs URL
+		region := os.Getenv("AWS_REGION")
+		logGroup := os.Getenv("LOG_GROUP_NAME")
+		if logGroup == "" {
+			logGroup = "/ecs/nova-act-worker" // Default log group name
+		}
+
+		streamPrefix := os.Getenv("LOG_STREAM_PREFIX")
+		if streamPrefix == "" {
+			streamPrefix = "ecs" // Default stream prefix
+		}
+
+		cloudWatchURL := generateCloudWatchLogsURL(region, logGroup, streamPrefix, taskID)
+		log.Printf("CloudWatch Logs URL: %s", cloudWatchURL)
+
+		// Update execution with task metadata
+		err = updateExecutionTaskInfo(ctx, ddbClient, usecaseId, executionId, taskArn, taskID, cloudWatchURL)
+		if err != nil {
+			log.Printf("Warning: Failed to update task info in DynamoDB: %v", err)
+			// Don't fail the request, task is already running
+		}
+
+		response, err = json.Marshal(map[string]interface{}{
+			"status":            "task started",
+			"usecaseId":         usecaseId,
+			"executionId":       executionId,
+			"taskArn":           taskArn,
+			"taskId":            taskID,
+			"cloudWatchLogsUrl": cloudWatchURL,
 		})
 		if err != nil {
 			log.Printf("Error marshaling response: %v", err)

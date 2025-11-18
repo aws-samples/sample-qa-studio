@@ -14,6 +14,8 @@ import { Platform, DockerImageAsset } from 'aws-cdk-lib/aws-ecr-assets';
 import { ECRDeployment, DockerImageName } from 'cdk-ecr-deployment';
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
+import { Rule } from 'aws-cdk-lib/aws-events';
+import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
 interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
@@ -59,6 +61,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
   public readonly deleteScheduleLambda: Function
   public readonly getScheduleLambda: Function
   public readonly executeUsecaseLambda: Function
+  public readonly stopExecutionLambda: Function
   public readonly generateS3UrlLambda: Function
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioWorkerStackCreateProps) {
@@ -271,6 +274,11 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
+    // Get the log group name and stream prefix from the task definition container
+    const containerDefinition = this.taskDefinition.defaultContainer;
+    const logGroupName = containerDefinition?.logDriverConfig?.options?.['awslogs-group'] || `/ecs/${this.cdkName('logs')}`;
+    const logStreamPrefix = containerDefinition?.logDriverConfig?.options?.['awslogs-stream-prefix'] || this.cdkName('logs');
+
     this.executeUsecaseLambda = this.createLambda({
       path: 'execute_usecase',
       environment: {
@@ -284,11 +292,34 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         BEDROCK_EXECUTION_ROLE: agentCoreExecutionRole.roleArn,
         NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
         SECRETS_PREFIX: props.baseName,
-        USER_AGENT: props.userAgentString
+        USER_AGENT: props.userAgentString,
+        LOG_GROUP_NAME: logGroupName,
+        LOG_STREAM_PREFIX: logStreamPrefix
       }
     });
 
     props.table.grantFullAccess(this.executeUsecaseLambda)
+
+    // Stop Execution Lambda - stops running ECS tasks
+    this.stopExecutionLambda = this.createLambda({
+      path: 'stop_execution',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        ECS_CLUSTER: this.cluster.clusterArn
+      }
+    });
+
+    props.table.grantFullAccess(this.stopExecutionLambda)
+
+    // Grant ECS StopTask permissions to stopExecutionLambda
+    this.stopExecutionLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'ecs:StopTask',
+        'ecs:DescribeTasks'
+      ],
+      resources: ['*'] // StopTask requires wildcard for task resources
+    }));
 
     this.createScheduleLambda = this.createLambda({
       path: 'create_schedule',
@@ -370,6 +401,32 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         this.taskDefinition.executionRole!.roleArn
       ]
     }));
+
+    // Task State Change Handler Lambda - monitors ECS task failures
+    const taskStateChangeLambda = this.createLambda({
+      path: 'handle_task_state_change',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    props.table.grantFullAccess(taskStateChangeLambda);
+
+    // EventBridge Rule to capture ECS task state changes
+    const taskStateChangeRule = new Rule(this, 'TaskStateChangeRule', {
+      eventPattern: {
+        source: ['aws.ecs'],
+        detailType: ['ECS Task State Change'],
+        detail: {
+          clusterArn: [this.cluster.clusterArn],
+          lastStatus: ['STOPPED']
+        }
+      },
+      description: 'Captures ECS task state changes for failure detection'
+    });
+
+    // Add Lambda as target for the EventBridge rule
+    taskStateChangeRule.addTarget(new LambdaFunction(taskStateChangeLambda));
 
     this.log('clusterName', this.cluster.clusterName)
     this.log('taskDefinition', this.taskDefinition.taskDefinitionArn)

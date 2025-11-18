@@ -24,6 +24,7 @@ interface NovaActQAStudioRouteStackCreateProps extends NovaActQAStudioBaseStackC
   deleteScheduleLambda: Function,
   getScheduleLambda: Function,
   executeUsecaseLambda: Function,
+  stopExecutionLambda: Function,
   subscribeUsecaseLambda: Function,
   unsubscribeUsecaseLambda: Function,
   getUsecaseSubscriptionLambda: Function,
@@ -370,6 +371,10 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     const execution = this.addResource(executions, '{executionId}');
     this.addMethod(execution, HttpMethod.DELETE, deleteExecutionLambda)
     this.addMethod(execution, HttpMethod.GET, getExecutionLambda)
+
+    // Stop execution endpoint
+    const stopExecution = this.addResource(execution, 'stop');
+    this.addMethod(stopExecution, HttpMethod.POST, props.stopExecutionLambda)
 
     const executionSteps = this.addResource(execution, 'steps');
     this.addMethod(executionSteps, HttpMethod.GET, listExecutionStepsLambda)
