@@ -162,7 +162,15 @@ def main():
             # Set custom HTTP headers if configured
             if execution_headers and execution_headers.headers:
                 logger.info(f"Setting {len(execution_headers.headers)} custom HTTP headers")
-                nova.page.set_extra_http_headers(execution_headers.headers)
+                
+                # Parse headers for variable substitution
+                parsed_headers = {}
+                for header_name, header_value in execution_headers.headers.items():
+                    parsed_value = template_parser.parse_instruction(header_value)
+                    parsed_headers[header_name] = parsed_value
+                    logger.info(f"Header: {header_name} = {parsed_value}")
+                
+                nova.page.set_extra_http_headers(parsed_headers)
                 # Navigate to starting URL to apply headers
                 nova.go_to_url(execution.starting_url)
 
