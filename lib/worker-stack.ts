@@ -402,6 +402,13 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       ]
     }));
 
+    // Grant EventBridge permissions to executeUsecaseLambda
+    this.executeUsecaseLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/default`]
+    }));
+
     // Task State Change Handler Lambda - monitors ECS task failures
     const taskStateChangeLambda = this.createLambda({
       path: 'handle_task_state_change',

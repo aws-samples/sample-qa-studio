@@ -9,6 +9,7 @@ import { NovaActQAStudioFrontendStack } from '../lib/frontend-stack';
 import { NovaActQAStudioFrontendDeploymentStack } from '../lib/frontend-deployment';
 import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioRouteStack } from '../lib/route-stack';
+import { NovaActQAStudioEventBridgeStack } from '../lib/eventbridge-stack';
 import { adminEmail, baseName, userAgentString, apiEndpoint, apiDeploymentStage } from '../configuration.json'
 
 const app = new App();
@@ -69,6 +70,14 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   novaActApiKeySecret: storageStack.novaActApiKeySecret,
   notificationQueue: notificationStack.notificationQueue,
   userAgentString: userAgentString,
+})
+
+// EventBridge stack for execution status events
+new NovaActQAStudioEventBridgeStack(app, 'eventbridge', {
+  stackName: `${baseName}-eventbridge`,
+  baseName,
+  table: storageStack.table,
+  tableWritePolicy: storageStack.tableWritePolicy
 })
 
 new NovaActQAStudioRouteStack(app, 'routes', {

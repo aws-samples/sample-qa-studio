@@ -22,6 +22,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecsTypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
+	eventbridgeTypes "github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/google/uuid"
 )
@@ -66,6 +68,50 @@ func updateExecutionTaskInfo(ctx context.Context, ddbClient *dynamodb.Client, us
 	return nil
 }
 
+// publishExecutionStatusEvent publishes an execution status change event to EventBridge
+func publishExecutionStatusEvent(ctx context.Context, usecaseID, executionID, status string) error {
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Printf("Error loading config for EventBridge: %v", err)
+		return err
+	}
+
+	eventsClient := eventbridge.NewFromConfig(cfg)
+
+	eventDetail := map[string]string{
+		"usecase_id":   usecaseID,
+		"execution_id": executionID,
+		"status":       status,
+		"timestamp":    time.Now().UTC().Format(time.RFC3339),
+	}
+
+	detailJSON, err := json.Marshal(eventDetail)
+	if err != nil {
+		log.Printf("Error marshaling event detail: %v", err)
+		return err
+	}
+
+	_, err = eventsClient.PutEvents(ctx, &eventbridge.PutEventsInput{
+		Entries: []eventbridgeTypes.PutEventsRequestEntry{
+			{
+				Source:       aws.String("nova-act-qa-studio.execution"),
+				DetailType:   aws.String("nova-act-qa-studio.execution.status.changed"),
+				Detail:       aws.String(string(detailJSON)),
+				EventBusName: aws.String("default"),
+			},
+		},
+	})
+
+	if err != nil {
+		log.Printf("Error publishing event to EventBridge: %v", err)
+		// Don't fail the execution if event publishing fails
+		return nil
+	}
+
+	log.Printf("Published execution status event: %s/%s -> %s", usecaseID, executionID, status)
+	return nil
+}
+
 // updateExecutionStatusWithError updates execution status and logs error details
 func updateExecutionStatusWithError(ctx context.Context, ddbClient *dynamodb.Client, usecaseID, executionID, status, errorMsg string) error {
 	completedAt := time.Now().UTC().Format(time.RFC3339)
@@ -93,6 +139,10 @@ func updateExecutionStatusWithError(ctx context.Context, ddbClient *dynamodb.Cli
 	}
 
 	log.Printf("Updated execution %s status to %s with error: %s", executionID, status, errorMsg)
+
+	// Publish event to EventBridge
+	publishExecutionStatusEvent(ctx, usecaseID, executionID, status)
+
 	return nil
 }
 
@@ -184,6 +234,9 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		log.Printf("Error creating execution: %v", err)
 		return events.APIGatewayProxyResponse{StatusCode: 500}, err
 	}
+
+	// Publish event for pending status
+	publishExecutionStatusEvent(ctx, usecaseId, executionId, "pending")
 
 	// Load steps for this usecase
 	input := &dynamodb.QueryInput{
