@@ -33,17 +33,20 @@ func GetBucketName() string {
 }
 
 type UseCase struct {
-	PK          string   `json:"pk" dynamodbav:"pk"`
-	SK          string   `json:"sk" dynamodbav:"sk"`
-	ID          string   `json:"id" dynamodbav:"id"`
-	Name        string   `json:"name" dynamodbav:"name"`
-	Description string   `json:"description" dynamodbav:"description"`
-	StartingURL string   `json:"starting_url" dynamodbav:"starting_url"`
-	Active      bool     `json:"active" dynamodbav:"active"`
-	Headless    bool     `json:"headless" dynamodbav:"headless"`
-	Tags        []string `json:"tags" dynamodbav:"tags"`
-	CreatedAt   string   `json:"createdAt" dynamodbav:"createdAt"`
-	Region      string   `json:"region" dynamodbav:"execution_region"`
+	PK                  string   `json:"pk" dynamodbav:"pk"`
+	SK                  string   `json:"sk" dynamodbav:"sk"`
+	ID                  string   `json:"id" dynamodbav:"id"`
+	Name                string   `json:"name" dynamodbav:"name"`
+	Description         string   `json:"description" dynamodbav:"description"`
+	StartingURL         string   `json:"starting_url" dynamodbav:"starting_url"`
+	Active              bool     `json:"active" dynamodbav:"active"`
+	Headless            bool     `json:"headless" dynamodbav:"headless"`
+	Tags                []string `json:"tags" dynamodbav:"tags"`
+	CreatedAt           string   `json:"createdAt" dynamodbav:"createdAt"`
+	Region              string   `json:"region" dynamodbav:"execution_region"`
+	LastExecutionID     string   `json:"last_execution_id,omitempty" dynamodbav:"last_execution_id,omitempty"`
+	LastExecutionStatus string   `json:"last_execution_status,omitempty" dynamodbav:"last_execution_status,omitempty"`
+	LastExecutionTime   string   `json:"last_execution_time,omitempty" dynamodbav:"last_execution_time,omitempty"`
 }
 
 type CreateUsecaseRequest struct {

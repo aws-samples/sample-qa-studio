@@ -38,7 +38,7 @@ def main():
     usecase_id = os.getenv('USECASE_ID')
     execution_id = os.getenv('EXECUTION_ID')
     s3_bucket_name = os.getenv('S3_BUCKET')
-    table_name = os.getenv('DYNAMODB_TABLE_NAME', 'your-table-name')
+    table_name = os.getenv('DYNAMO_TABLE', 'your-table-name')
     region_name = get_region()
     logs_directory = os.getenv('LOGS_DIRECTORY', './logs')
     

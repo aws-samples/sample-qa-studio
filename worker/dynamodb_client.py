@@ -4,6 +4,7 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 import logging
 import os
+import json
 
 from models import Execution, ExecutionStep, ExecutionVariables, KeyValuePair, ExecutionHeaders
 from sqs_client import SQSClient
@@ -18,6 +19,8 @@ class DynamoDBClient:
         self.table = self.dynamodb.Table(table_name)
         self.sqs_client = SQSClient(region_name)
         self.notification_queue_url = os.getenv('NOTIFICATION_QUEUE_URL')
+        self.eventbridge_client = boto3.client('events', region_name=region_name)
+        self.event_bus_name = os.getenv('EVENT_BUS_NAME', 'default')
     
     def get_execution(self, usecase_id: str, execution_id: str) -> Optional[Execution]:
         """Load execution data from DynamoDB"""
@@ -157,6 +160,9 @@ class DynamoDBClient:
             
             logger.info(f"Updated execution {execution_id} status to {status} for usecase {usecase_id}")
             
+            # Publish EventBridge event for execution status change
+            self._publish_execution_status_event(usecase_id, execution_id, status, completed_at)
+            
             # Send notification if execution failed and notification queue is configured
             if status in ['failed', 'error'] and self.notification_queue_url:
                 self.sqs_client.send_notification_message(
@@ -170,6 +176,38 @@ class DynamoDBClient:
         except ClientError as e:
             logger.error(f"Error updating execution {execution_id} status for usecase {usecase_id}: {e}")
             return False
+    
+    def _publish_execution_status_event(self, usecase_id: str, execution_id: str, status: str, 
+                                       completed_at: Optional[str] = None) -> None:
+        """Publish execution status change event to EventBridge"""
+        try:
+            event_detail = {
+                'usecase_id': usecase_id,
+                'execution_id': execution_id,
+                'status': status,
+                'timestamp': datetime.utcnow().isoformat() + 'Z'
+            }
+            
+            if completed_at:
+                event_detail['completed_at'] = completed_at
+            
+            self.eventbridge_client.put_events(
+                Entries=[
+                    {
+                        'Source': 'nova-act-qa-studio.execution',
+                        'DetailType': 'nova-act-qa-studio.execution.status.changed',
+                        'Detail': json.dumps(event_detail),
+                        'EventBusName': self.event_bus_name
+                    }
+                ]
+            )
+            
+            logger.info(f"Published execution status event: {usecase_id}/{execution_id} -> {status}")
+            
+        except Exception as e:
+            # Log error but don't fail the execution update
+            logger.error(f"Failed to publish execution status event: {e}")
+            logger.error(f"Event details: usecase_id={usecase_id}, execution_id={execution_id}, status={status}")
     
     def update_execution_session_id(self, usecase_id: str, execution_id: str, session_id: str) -> bool:
         """Update execution with Nova Act session ID in DynamoDB"""
