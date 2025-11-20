@@ -10,6 +10,7 @@ import { api } from '../utils/api';
 import Badge from "@cloudscape-design/components/badge";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import ImportUsecaseModal from './ImportUsecaseModal';
+import DeleteUsecaseModal from './DeleteUsecaseModal';
 import Flashbar from "@cloudscape-design/components/flashbar";
 // import { usePreloadOnHover } from './common/ComponentPreloader';
 
@@ -64,8 +65,10 @@ export default function HomeScreen() {
   const [usecases, setUsecases] = useState<Usecase[]>([]);
   const [loading, setLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
   const [batchExecuting, setBatchExecuting] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const [flashbarItems, setFlashbarItems] = useState<any[]>([]);
 
   // Preload UsecaseDetail when hovering over usecase links
@@ -176,6 +179,91 @@ export default function HomeScreen() {
     setSelectedItems([]);
   };
 
+  const handleDeleteClick = () => {
+    if (selectedItems.length === 0) {
+      setFlashbarItems([{
+        type: 'warning',
+        content: 'Please select at least one use case to delete',
+        dismissible: true,
+        onDismiss: () => setFlashbarItems([])
+      }]);
+      return;
+    }
+    setShowDeleteModal(true);
+  };
+
+  const handleBatchDelete = async () => {
+    setShowDeleteModal(false);
+    setBatchDeleting(true);
+    setFlashbarItems([{
+      type: 'info',
+      content: `Deleting ${selectedItems.length} use case(s)...`,
+      loading: true
+    }]);
+
+    // Delete all selected use cases in parallel
+    const deletePromises = selectedItems.map(async (usecase) => {
+      try {
+        await api.delete(`usecase/${usecase.id}`);
+        return {
+          usecaseId: usecase.id,
+          usecaseName: usecase.name,
+          success: true
+        } as BatchExecutionResult;
+      } catch (error) {
+        return {
+          usecaseId: usecase.id,
+          usecaseName: usecase.name,
+          success: false,
+          error: (error as Error).message
+        } as BatchExecutionResult;
+      }
+    });
+
+    const results = await Promise.all(deletePromises);
+    
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.filter(r => !r.success).length;
+
+    // Show results
+    const resultItems = [];
+    
+    if (successCount > 0) {
+      resultItems.push({
+        type: 'success' as const,
+        content: `Successfully deleted ${successCount} use case(s)`,
+        dismissible: true,
+        onDismiss: () => setFlashbarItems([])
+      });
+    }
+
+    if (failureCount > 0) {
+      const failedUsecases = results
+        .filter(r => !r.success)
+        .map(r => r.usecaseName)
+        .join(', ');
+      
+      resultItems.push({
+        type: 'error' as const,
+        content: `Failed to delete ${failureCount} use case(s): ${failedUsecases}`,
+        dismissible: true,
+        onDismiss: () => setFlashbarItems([])
+      });
+    }
+
+    setFlashbarItems(resultItems);
+    setSelectedItems([]);
+    setBatchDeleting(false);
+    
+    // Refresh the list
+    try {
+      const data = await api.get('usecases');
+      setUsecases(data.usecases || []);
+    } catch (error) {
+      console.error('Failed to fetch usecases:', error);
+    }
+  };
+
   const handleRefresh = async () => {
     setLoading(true);
     try {
@@ -205,19 +293,26 @@ export default function HomeScreen() {
             />
             <ButtonDropdown
               variant="primary"
-              loading={batchExecuting}
-              disabled={batchExecuting}
+              loading={batchExecuting || batchDeleting}
+              disabled={batchExecuting || batchDeleting || loading}
               onItemClick={({ detail }) => {
                 if (detail.id === 'import') {
                   setShowImportModal(true);
                 } else if (detail.id === 'execute-selected') {
                   handleBatchExecute();
+                } else if (detail.id === 'delete-selected') {
+                  handleDeleteClick();
                 }
               }}
               items={[
                 {
                   id: 'execute-selected',
                   text: `Execute Selected (${selectedItems.length})`,
+                  disabled: selectedItems.length === 0
+                },
+                {
+                  id: 'delete-selected',
+                  text: `Delete Selected (${selectedItems.length})`,
                   disabled: selectedItems.length === 0
                 },
                 {
@@ -320,6 +415,14 @@ export default function HomeScreen() {
         visible={showImportModal}
         onDismiss={() => setShowImportModal(false)}
         onImportSuccess={handleImportSuccess}
+      />
+
+      <DeleteUsecaseModal
+        visible={showDeleteModal}
+        usecaseCount={selectedItems.length}
+        onDismiss={() => setShowDeleteModal(false)}
+        onConfirm={handleBatchDelete}
+        deleting={batchDeleting}
       />
     </SpaceBetween>
   );
