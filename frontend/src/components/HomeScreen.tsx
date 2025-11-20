@@ -335,14 +335,14 @@ export default function HomeScreen() {
           { 
             id: 'name', 
             header: 'Name',
-            maxWidth: 300,
+            minWidth: 450,
             cell: item => (
               <div>
                 <Link href={`/usecase/${item.id}`}>
                   {item.name}
                 </Link>
                 {item.description && (
-                  <div style={{ fontSize: '0.85em', color: '#5f6b7a', marginTop: '4px' }}>
+                  <div style={{ fontSize: '0.85em', color: '#5f6b7a', marginTop: '4px', whiteSpace: 'pre-line' }}>
                     {item.description}
                   </div>
                 )}
@@ -352,6 +352,7 @@ export default function HomeScreen() {
           { 
             id: 'last_execution_status', 
             header: 'Last Status', 
+            width: 120,
             cell: item => {
               if (!item.last_execution_status) {
                 return <StatusIndicator type="stopped">Never run</StatusIndicator>;
@@ -367,6 +368,7 @@ export default function HomeScreen() {
           { 
             id: 'last_execution_time', 
             header: 'Last Execution', 
+            width: 120,
             cell: item => {
               if (!item.last_execution_time) {
                 return '-';
@@ -384,21 +386,13 @@ export default function HomeScreen() {
           },
           { 
             id: 'active', 
-            header: 'Active', 
+            header: 'Active',
+            width: 100, 
             cell: item => item.active ? (
               <Badge color="green">Active</Badge>
             ) : (
               <Badge color="red">Inactive</Badge>
             )
-          },
-          { 
-            id: 'tags', 
-            header: 'Tags', 
-            cell: item => item.tags ? (
-              <SpaceBetween direction="horizontal" size="xs">
-                {item.tags.map((tag: string) => (<Badge key={tag}>{tag}</Badge>))}
-              </SpaceBetween>
-            ) : ''
           }
         ]}
         items={usecases}
