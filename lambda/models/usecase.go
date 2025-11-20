@@ -85,6 +85,10 @@ type Step struct {
 	CreatedAt          string `json:"createdAt" dynamodbav:"createdAt"`
 	ValueStep          string `json:"value_step,omitempty" dynamodbav:"value_step,omitempty"`
 	ValueType          string `json:"value_type,omitempty" dynamodbav:"value_type,omitempty"`
+	// Template reference fields
+	TemplateID      string `json:"template_id,omitempty" dynamodbav:"template_id,omitempty"`
+	TemplateStepID  string `json:"template_step_id,omitempty" dynamodbav:"template_step_id,omitempty"`
+	TemplateVersion int    `json:"template_version,omitempty" dynamodbav:"template_version,omitempty"`
 }
 
 type Execution struct {
@@ -242,4 +246,77 @@ type UsecaseSubscription struct {
 type SubscriptionStatusResponse struct {
 	IsSubscribed bool   `json:"is_subscribed"`
 	Email        string `json:"email,omitempty"`
+}
+
+// Template models
+type StepTemplate struct {
+	PK          string   `json:"pk" dynamodbav:"pk"` // "TEMPLATE#<template_id>"
+	SK          string   `json:"sk" dynamodbav:"sk"` // "METADATA"
+	ID          string   `json:"id" dynamodbav:"id"`
+	Name        string   `json:"name" dynamodbav:"name"`
+	Description string   `json:"description" dynamodbav:"description"`
+	Category    string   `json:"category" dynamodbav:"category"`
+	Tags        []string `json:"tags" dynamodbav:"tags"`
+	CreatedBy   string   `json:"created_by" dynamodbav:"created_by"` // User email
+	CreatedAt   string   `json:"created_at" dynamodbav:"created_at"`
+	UpdatedAt   string   `json:"updated_at" dynamodbav:"updated_at"`
+	Version     int      `json:"version" dynamodbav:"version"`
+}
+
+type TemplateStep struct {
+	PK                 string `json:"pk" dynamodbav:"pk"` // "TEMPLATE#<template_id>"
+	SK                 string `json:"sk" dynamodbav:"sk"` // "STEP#<step_id>"
+	Sort               int    `json:"sort" dynamodbav:"sort"`
+	ID                 string `json:"id" dynamodbav:"id"`
+	Instruction        string `json:"instruction" dynamodbav:"instruction"`
+	StepType           string `json:"step_type" dynamodbav:"step_type"`
+	SecretKey          string `json:"secret_key,omitempty" dynamodbav:"secret_key,omitempty"`
+	CaptureVariable    string `json:"capture_variable,omitempty" dynamodbav:"capture_variable,omitempty"`
+	ValidationType     string `json:"validation_type,omitempty" dynamodbav:"validation_type,omitempty"`
+	ValidationOperator string `json:"validation_operator,omitempty" dynamodbav:"validation_operator,omitempty"`
+	ValidationValue    string `json:"validation_value,omitempty" dynamodbav:"validation_value,omitempty"`
+	AssertionVariable  string `json:"assertion_variable,omitempty" dynamodbav:"assertion_variable,omitempty"`
+	CreatedAt          string `json:"created_at" dynamodbav:"created_at"`
+	ValueType          string `json:"value_type,omitempty" dynamodbav:"value_type,omitempty"`
+}
+
+type TemplateVariables struct {
+	PK        string         `json:"pk" dynamodbav:"pk"` // "TEMPLATE#<template_id>"
+	SK        string         `json:"sk" dynamodbav:"sk"` // "VARIABLES"
+	Variables []KeyValuePair `json:"variables" dynamodbav:"variables"`
+	CreatedAt string         `json:"created_at" dynamodbav:"created_at"`
+}
+
+// Request/Response types for templates
+type CreateTemplateRequest struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Category    string   `json:"category"`
+	Tags        []string `json:"tags"`
+}
+
+type UpdateTemplateRequest struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Category    string   `json:"category"`
+	Tags        []string `json:"tags"`
+}
+
+type CreateTemplateStepRequest struct {
+	TemplateID         string `json:"template_id"`
+	Sort               int    `json:"sort"`
+	Instruction        string `json:"instruction"`
+	StepType           string `json:"step_type"`
+	SecretKey          string `json:"secret_key,omitempty"`
+	CaptureVariable    string `json:"capture_variable,omitempty"`
+	ValidationType     string `json:"validation_type,omitempty"`
+	ValidationOperator string `json:"validation_operator,omitempty"`
+	ValidationValue    string `json:"validation_value,omitempty"`
+	AssertionVariable  string `json:"assertion_variable,omitempty"`
+	ValueType          string `json:"value_type,omitempty"`
+}
+
+type ImportTemplateRequest struct {
+	TemplateID     string `json:"template_id"`
+	InsertPosition int    `json:"insert_position"` // 0 = beginning, -1 = end, or specific position
 }

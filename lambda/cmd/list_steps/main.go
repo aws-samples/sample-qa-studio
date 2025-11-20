@@ -34,6 +34,10 @@ type Step struct {
 	AssertionVariable  string `json:"assertion_variable,omitempty" dynamodbav:"assertion_variable,omitempty"`
 	ValueStep          string `json:"value_step,omitempty" dynamodbav:"value_step,omitempty"`
 	ValueType          string `json:"value_type,omitempty" dynamodbav:"value_type,omitempty"`
+	// Template reference fields
+	TemplateID      string `json:"template_id,omitempty" dynamodbav:"template_id,omitempty"`
+	TemplateStepID  string `json:"template_step_id,omitempty" dynamodbav:"template_step_id,omitempty"`
+	TemplateVersion int    `json:"template_version,omitempty" dynamodbav:"template_version,omitempty"`
 }
 
 type Response struct {

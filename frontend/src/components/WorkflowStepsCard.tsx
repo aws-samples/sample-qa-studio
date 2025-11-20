@@ -40,6 +40,9 @@ interface UsecaseStep {
   validation_value?: string;
   assertion_variable?: string;
   capture_variable?: string;
+  template_id?: string;
+  template_step_id?: string;
+  template_version?: number;
 }
 
 interface WorkflowStepsCardProps {
@@ -48,6 +51,7 @@ interface WorkflowStepsCardProps {
   onUpdateStep: (stepData: any) => Promise<void>;
   onDeleteStep: (stepId: string) => void;
   onAddStep: (stepData: any, position?: number) => Promise<void>;
+  onUpdateFromTemplate?: (stepId: string) => Promise<void>;
   usecaseId: string;
 }
 
@@ -86,6 +90,49 @@ function SortableStepCard({
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+
+  // Validate step for missing required information
+  const validateStep = (): string[] => {
+    const issues: string[] = [];
+    
+    if (step.step_type === 'secret' && !step.secret_key) {
+      issues.push('Secret key is not configured');
+    }
+    
+    if (step.step_type === 'validation') {
+      if (!step.validation_type) {
+        issues.push('Validation type is not set');
+      }
+      if (!step.validation_value) {
+        issues.push('Validation value is not set');
+      }
+    }
+    
+    if (step.step_type === 'assertion') {
+      if (!step.assertion_variable) {
+        issues.push('Assertion variable is not set');
+      }
+      if (!step.validation_type) {
+        issues.push('Validation type is not set');
+      }
+      if (!step.validation_value) {
+        issues.push('Validation value is not set');
+      }
+    }
+    
+    if (step.step_type === 'retrieve_value' && !step.capture_variable) {
+      issues.push('Capture variable is not set');
+    }
+    
+    if (!step.instruction || step.instruction.trim() === '') {
+      issues.push('Instruction is empty');
+    }
+    
+    return issues;
+  };
+
+  const validationIssues = validateStep();
+  const hasIssues = validationIssues.length > 0;
 
   const getStepTypeBadge = (stepType?: string) => {
     switch (stepType) {
@@ -201,10 +248,17 @@ function SortableStepCard({
             <SpaceBetween direction="vertical" size="xs">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {getStepTypeBadge(step.step_type)}
+                {hasIssues && (
+                  <div title={validationIssues.join(', ')} style={{ display: 'flex', alignItems: 'center' }}>
+                    <Box color="text-status-warning">
+                      <Icon name="status-warning" size="medium" />
+                    </Box>
+                  </div>
+                )}
               </div>
 
               <div className="step-instruction">
-                {step.instruction}
+                {step.instruction || <Box color="text-status-warning">(No instruction provided)</Box>}
               </div>
 
               {details.length > 0 && (
@@ -212,6 +266,32 @@ function SortableStepCard({
                   {details.map((detail, idx) => (
                     <div key={idx}>{detail}</div>
                   ))}
+                </div>
+              )}
+
+              {hasIssues && (
+                <div className="step-details" style={{ color: '#d91515' }}>
+                  {validationIssues.map((issue, idx) => (
+                    <div key={idx}>⚠ {issue}</div>
+                  ))}
+                </div>
+              )}
+
+              {step.template_id && (
+                <div style={{ 
+                  marginTop: '8px',
+                  fontSize: '0.85em',
+                  color: '#5f6b7a'
+                }}>
+                  From template: 
+                  <a 
+                    href={`/templates/${step.template_id}`}
+                    style={{ marginLeft: '4px', color: '#0972d3' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    View Template
+                  </a>
+                  {step.template_version && ` (v${step.template_version})`}
                 </div>
               )}
             </SpaceBetween>
@@ -266,6 +346,7 @@ export default function WorkflowStepsCard({
   onUpdateStep,
   onDeleteStep,
   onAddStep,
+  onUpdateFromTemplate,
   usecaseId,
 }: WorkflowStepsCardProps) {
   const [editingStep, setEditingStep] = useState<UsecaseStep | null>(null);
@@ -288,10 +369,13 @@ export default function WorkflowStepsCard({
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const oldIndex = steps.findIndex((step) => step.sk === active.id);
-      const newIndex = steps.findIndex((step) => step.sk === over.id);
+      // Sort steps first to match the visual order
+      const sortedSteps = [...steps].sort((a, b) => a.sort - b.sort);
+      
+      const oldIndex = sortedSteps.findIndex((step) => step.sk === active.id);
+      const newIndex = sortedSteps.findIndex((step) => step.sk === over.id);
 
-      const reorderedSteps = arrayMove(steps, oldIndex, newIndex).map((step, index) => ({
+      const reorderedSteps = arrayMove(sortedSteps, oldIndex, newIndex).map((step, index) => ({
         ...step,
         sort: index + 1,
       }));
@@ -366,6 +450,13 @@ export default function WorkflowStepsCard({
     setDeletingStep(null);
   };
 
+  const handleUpdateFromTemplateInModal = async () => {
+    if (!onUpdateFromTemplate || !editingStep) return;
+    
+    const stepId = editingStep.sk.replace('STEP#', '');
+    await onUpdateFromTemplate(stepId);
+  };
+
   if (steps.length === 0) {
     return (
       <>
@@ -407,6 +498,10 @@ export default function WorkflowStepsCard({
           setEditingStep(null);
         }}
         onSubmit={handleUpdateStep}
+        onUpdateFromTemplate={editingStep?.template_step_id && onUpdateFromTemplate ? 
+          handleUpdateFromTemplateInModal : 
+          undefined
+        }
         step={editingStep}
         usecaseId={usecaseId}
         title="Edit Step"
@@ -466,7 +561,7 @@ export default function WorkflowStepsCard({
           strategy={verticalListSortingStrategy}
         >
           <SpaceBetween direction="vertical" size="s">
-            {steps.map((step, index) => (
+            {[...steps].sort((a, b) => a.sort - b.sort).map((step, index) => (
               <SortableStepCard
                 key={step.sk}
                 step={step}

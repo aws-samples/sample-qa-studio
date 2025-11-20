@@ -7,12 +7,18 @@ import FormField from "@cloudscape-design/components/form-field";
 import Select from "@cloudscape-design/components/select";
 import Textarea from "@cloudscape-design/components/textarea";
 import Input from "@cloudscape-design/components/input";
+import Container from "@cloudscape-design/components/container";
+import Header from "@cloudscape-design/components/header";
+import Link from "@cloudscape-design/components/link";
+import Spinner from "@cloudscape-design/components/spinner";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import { api } from '../../utils/api';
 
 interface StepFormModalProps {
   visible: boolean;
   onDismiss: () => void;
   onSubmit: (stepData: any) => Promise<void>;
+  onUpdateFromTemplate?: () => Promise<void>;
   step?: any; // For editing existing steps
   usecaseId: string;
   title: string;
@@ -69,6 +75,7 @@ export default function StepFormModal({
   visible,
   onDismiss,
   onSubmit,
+  onUpdateFromTemplate,
   step,
   usecaseId,
   title,
@@ -86,6 +93,10 @@ export default function StepFormModal({
   const [valueType, setValueType] = useState('string');
   const [assertionVariable, setAssertionVariable] = useState('');
   const [booleanInputMode, setBooleanInputMode] = useState('true');
+  const [updatingFromTemplate, setUpdatingFromTemplate] = useState(false);
+  const [templateStep, setTemplateStep] = useState<any>(null);
+  const [loadingTemplateStep, setLoadingTemplateStep] = useState(false);
+  const [templateDifferences, setTemplateDifferences] = useState<Array<{field: string, current: any, template: any}>>([]);
 
   // Get available runtime variables from existing retrieve_value steps
   const getAvailableRuntimeVariables = () => {
@@ -141,6 +152,16 @@ export default function StepFormModal({
     }
   }, [visible, stepType, usecaseId]);
 
+  // Load template step data when modal opens with a step from a template
+  useEffect(() => {
+    if (visible && step?.template_id && step?.template_step_id) {
+      loadTemplateStep();
+    } else {
+      setTemplateStep(null);
+      setTemplateDifferences([]);
+    }
+  }, [visible, step?.template_id, step?.template_step_id]);
+
   const loadSecrets = async () => {
     try {
       const response = await api.get(`usecase/${usecaseId}/secrets`);
@@ -149,6 +170,97 @@ export default function StepFormModal({
       console.error('Failed to load secrets:', error);
       setAvailableSecrets([]);
     }
+  };
+
+  const loadTemplateStep = async () => {
+    if (!step?.template_id || !step?.template_step_id) return;
+    
+    setLoadingTemplateStep(true);
+    try {
+      const response = await api.get(`templates/${step.template_id}/steps`);
+      const steps = response.steps || [];
+      const matchingStep = steps.find((s: any) => s.id === step.template_step_id);
+      
+      if (matchingStep) {
+        setTemplateStep(matchingStep);
+        calculateDifferences(step, matchingStep);
+      }
+    } catch (error) {
+      console.error('Failed to load template step:', error);
+      setTemplateStep(null);
+    } finally {
+      setLoadingTemplateStep(false);
+    }
+  };
+
+  const calculateDifferences = (currentStep: any, templateStep: any) => {
+    const diffs: Array<{field: string, current: any, template: any}> = [];
+    
+    if (currentStep.instruction !== templateStep.instruction) {
+      diffs.push({
+        field: 'Instruction',
+        current: currentStep.instruction || '(empty)',
+        template: templateStep.instruction || '(empty)'
+      });
+    }
+    if (currentStep.step_type !== templateStep.step_type) {
+      diffs.push({
+        field: 'Step Type',
+        current: currentStep.step_type || '(empty)',
+        template: templateStep.step_type || '(empty)'
+      });
+    }
+    if (currentStep.secret_key !== templateStep.secret_key) {
+      diffs.push({
+        field: 'Secret Key',
+        current: currentStep.secret_key || '(empty)',
+        template: templateStep.secret_key || '(empty)'
+      });
+    }
+    if (currentStep.capture_variable !== templateStep.capture_variable) {
+      diffs.push({
+        field: 'Capture Variable',
+        current: currentStep.capture_variable || '(empty)',
+        template: templateStep.capture_variable || '(empty)'
+      });
+    }
+    if (currentStep.validation_type !== templateStep.validation_type) {
+      diffs.push({
+        field: 'Validation Type',
+        current: currentStep.validation_type || '(empty)',
+        template: templateStep.validation_type || '(empty)'
+      });
+    }
+    if (currentStep.validation_operator !== templateStep.validation_operator) {
+      diffs.push({
+        field: 'Validation Operator',
+        current: currentStep.validation_operator || '(empty)',
+        template: templateStep.validation_operator || '(empty)'
+      });
+    }
+    if (currentStep.validation_value !== templateStep.validation_value) {
+      diffs.push({
+        field: 'Validation Value',
+        current: currentStep.validation_value || '(empty)',
+        template: templateStep.validation_value || '(empty)'
+      });
+    }
+    if (currentStep.assertion_variable !== templateStep.assertion_variable) {
+      diffs.push({
+        field: 'Assertion Variable',
+        current: currentStep.assertion_variable || '(empty)',
+        template: templateStep.assertion_variable || '(empty)'
+      });
+    }
+    if (currentStep.value_type !== templateStep.value_type) {
+      diffs.push({
+        field: 'Value Type',
+        current: currentStep.value_type || '(empty)',
+        template: templateStep.value_type || '(empty)'
+      });
+    }
+    
+    setTemplateDifferences(diffs);
   };
 
   const handleSubmit = async () => {
@@ -216,6 +328,20 @@ export default function StepFormModal({
     return true;
   };
 
+  const handleUpdateFromTemplate = async () => {
+    if (!onUpdateFromTemplate) return;
+    
+    setUpdatingFromTemplate(true);
+    try {
+      await onUpdateFromTemplate();
+      onDismiss();
+    } catch (error) {
+      console.error('Failed to update from template:', error);
+    } finally {
+      setUpdatingFromTemplate(false);
+    }
+  };
+
   return (
     <Modal
       onDismiss={onDismiss}
@@ -225,17 +351,19 @@ export default function StepFormModal({
       header={title}
       footer={
         <Box float="right">
-          <Button variant="link" onClick={onDismiss}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleSubmit}
-            loading={saving}
-            disabled={!isFormValid() || saving}
-          >
-            {step ? 'Update Step' : 'Create Step'}
-          </Button>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="link" onClick={onDismiss} disabled={saving || updatingFromTemplate}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSubmit}
+              loading={saving}
+              disabled={!isFormValid() || saving || updatingFromTemplate}
+            >
+              {step ? 'Update Step' : 'Create Step'}
+            </Button>
+          </SpaceBetween>
         </Box>
       }
     >
@@ -559,6 +687,100 @@ export default function StepFormModal({
               </>
             )}
           </>
+        )}
+
+        {/* Template Info Section */}
+        {step?.template_id && (
+          <Container
+            header={
+              <Header variant="h3">
+                Template Information
+              </Header>
+            }
+          >
+            <SpaceBetween direction="vertical" size="m">
+              <div>
+                <Box variant="awsui-key-label">Source Template</Box>
+                <Link
+                  href={`/templates/${step.template_id}`}
+                  external
+                  externalIconAriaLabel="Opens in new tab"
+                >
+                  View Template
+                </Link>
+                {step.template_version && (
+                  <Box variant="span" color="text-body-secondary" margin={{ left: 'xs' }}>
+                    (v{step.template_version})
+                  </Box>
+                )}
+              </div>
+
+              <div>
+                <Box variant="awsui-key-label">Status</Box>
+                {loadingTemplateStep ? (
+                  <Box color="text-body-secondary">
+                    <Spinner /> Checking for updates...
+                  </Box>
+                ) : templateDifferences.length > 0 ? (
+                  <Box color="text-status-warning">
+                    ⚠ Out of sync ({templateDifferences.length} {templateDifferences.length === 1 ? 'change' : 'changes'} detected)
+                  </Box>
+                ) : templateStep ? (
+                  <Box color="text-status-success">
+                    ✓ Up to date
+                  </Box>
+                ) : (
+                  <Box color="text-body-secondary">
+                    Unable to check status
+                  </Box>
+                )}
+              </div>
+
+              {templateDifferences.length > 0 && (
+                <ExpandableSection headerText="View changes" variant="footer">
+                  <SpaceBetween direction="vertical" size="s">
+                    {templateDifferences.map((diff, index) => (
+                      <Container key={index}>
+                        <SpaceBetween direction="vertical" size="xs">
+                          <Box variant="strong" color="text-label">{diff.field}</Box>
+                          <div>
+                            <Box 
+                              padding={{ vertical: 'xs', horizontal: 's' }}
+                              margin={{ bottom: 'xs' }}
+                            >
+                              <SpaceBetween direction="vertical" size="xxs">
+                                <Box variant="small" color="text-status-warning">Current:</Box>
+                                <Box variant="code">{diff.current}</Box>
+                              </SpaceBetween>
+                            </Box>
+                            <Box 
+                              padding={{ vertical: 'xs', horizontal: 's' }}
+                            >
+                              <SpaceBetween direction="vertical" size="xxs">
+                                <Box variant="small" color="text-status-success">Template:</Box>
+                                <Box variant="code">{diff.template}</Box>
+                              </SpaceBetween>
+                            </Box>
+                          </div>
+                        </SpaceBetween>
+                      </Container>
+                    ))}
+                  </SpaceBetween>
+                </ExpandableSection>
+              )}
+
+              {onUpdateFromTemplate && templateDifferences.length > 0 && (
+                <Button
+                  iconName="refresh"
+                  onClick={handleUpdateFromTemplate}
+                  loading={updatingFromTemplate}
+                  disabled={updatingFromTemplate || saving}
+                >
+                  Update from Template
+                </Button>
+              )}
+            </SpaceBetween>
+          </Container>
         )}
       </SpaceBetween>
     </Modal>
