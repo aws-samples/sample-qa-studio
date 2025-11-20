@@ -7,6 +7,7 @@ import Button from "@cloudscape-design/components/button";
 import Box from "@cloudscape-design/components/box";
 import Spinner from "@cloudscape-design/components/spinner";
 import Alert from "@cloudscape-design/components/alert";
+import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
 import { wizardApi, exportImportApi } from '../utils/api';
 import { ErrorState, errorManager } from '../utils/errorManager';
 import { useRetry } from '../utils/retryManager';
@@ -252,7 +253,22 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
 
   if (state.previewMode && state.generatedUsecase) {
     return (
-      <Container header={<Header variant="h1">User Journey Wizard - Preview</Header>}>
+      <SpaceBetween direction="vertical" size="l">
+        <BreadcrumbGroup
+          items={[
+            { text: 'Home', href: '/' },
+            { text: 'Create Use Case', href: '/create' },
+            { text: 'Create from User Journey', href: '/create/journey' }
+          ]}
+          onFollow={(event) => {
+            event.preventDefault();
+            navigate(event.detail.href);
+          }}
+        />
+
+        <Header variant="h1">User Journey Wizard - Preview</Header>
+
+        <Container>
         <UsecasePreview
           usecase={state.generatedUsecase}
           onImport={handleImportUsecase}
@@ -304,19 +320,33 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
             />
           </Box>
         )}
-      </Container>
+        </Container>
+      </SpaceBetween>
     );
   }
 
   return (
-    <Container header={
+    <SpaceBetween direction="vertical" size="l">
+      <BreadcrumbGroup
+        items={[
+          { text: 'Home', href: '/' },
+          { text: 'Create Use Case', href: '/create' },
+          { text: 'Create from User Journey', href: '/create/journey' }
+        ]}
+        onFollow={(event) => {
+          event.preventDefault();
+          navigate(event.detail.href);
+        }}
+      />
+
       <Header 
         variant="h1"
         description="Create automated test use cases by describing your user journey in natural language"
       >
-        User Journey Wizard
+        Create from User Journey
       </Header>
-    }>
+
+      <Container>
       <SpaceBetween direction="vertical" size="l">
         {state.error && (
           <ErrorDisplay
@@ -472,13 +502,14 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
             Generate Use Case
           </Button>
           <Button 
-            onClick={() => navigate('/')} 
+            onClick={() => navigate('/create')} 
             disabled={state.isGenerating}
           >
             Cancel
           </Button>
         </SpaceBetween>
       </SpaceBetween>
-    </Container>
+      </Container>
+    </SpaceBetween>
   );
 }

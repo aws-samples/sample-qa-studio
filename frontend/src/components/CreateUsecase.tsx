@@ -9,6 +9,7 @@ import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Select, {SelectProps} from "@cloudscape-design/components/select";
+import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
 import { api } from '../utils/api';
 import { regionOptions, findRegionOptions } from '../utils/browser_regions';
 
@@ -44,9 +45,29 @@ export default function CreateUsecase() {
   };
 
   return (
-    <Container header={<Header variant="h1">Create New Use Case</Header>}>
-      <SpaceBetween direction="vertical" size="l">
-        <FormField label="Name">
+    <SpaceBetween direction="vertical" size="l">
+      <BreadcrumbGroup
+        items={[
+          { text: 'Home', href: '/' },
+          { text: 'Create Use Case', href: '/create' },
+          { text: 'Create Blank', href: '/create/blank' }
+        ]}
+        onFollow={(event) => {
+          event.preventDefault();
+          navigate(event.detail.href);
+        }}
+      />
+
+      <Header
+        variant="h1"
+        description="Start from scratch and manually configure all use case settings, steps, and validations."
+      >
+        Create Blank
+      </Header>
+
+      <Container>
+        <SpaceBetween direction="vertical" size="l">
+          <FormField label="Name">
           <Input
             value={name}
             onChange={({ detail }) => setName(detail.value)}
@@ -107,15 +128,16 @@ export default function CreateUsecase() {
           </Checkbox>
         </FormField>
         
-        <SpaceBetween direction="horizontal" size="xs">
-          <Button variant="primary" onClick={handleSubmit} loading={loading} disabled={loading}>
-            Create
-          </Button>
-          <Button onClick={() => navigate('/')} disabled={loading}>
-            Cancel
-          </Button>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="primary" onClick={handleSubmit} loading={loading} disabled={loading}>
+              Create
+            </Button>
+            <Button onClick={() => navigate('/create')} disabled={loading}>
+              Cancel
+            </Button>
+          </SpaceBetween>
         </SpaceBetween>
-      </SpaceBetween>
-    </Container>
+      </Container>
+    </SpaceBetween>
   );
 }
