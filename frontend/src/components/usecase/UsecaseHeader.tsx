@@ -76,6 +76,8 @@ export default function UsecaseHeader({ usecaseId, onDeleteUsecase }: UsecaseHea
               onItemClick={({ detail }) => {
                 if (detail.id === 'export') {
                   handleExportUsecase();
+                } else if (detail.id === 'clone') {
+                  navigate(`/create/clone?sourceId=${usecaseId}`);
                 } else if (detail.id === 'delete') {
                   onDeleteUsecase?.();
                 } else {
@@ -95,6 +97,10 @@ export default function UsecaseHeader({ usecaseId, onDeleteUsecase }: UsecaseHea
                 {
                   text: "Admin",
                   items: [
+                    {
+                      id: "clone",
+                      text: "Clone Use Case"
+                    },
                     {
                       id: "export",
                       text: "Export Usecase"

@@ -159,6 +159,16 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       }
     });
 
+    const cloneUsecaseLambda = this.createLambda({
+      memorySize: 256,
+      path: 'clone_usecase',
+      timeout: cdk.Duration.seconds(30),
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        SECRET_PREFIX: props.baseName
+      }
+    });
+
     const generateUsecaseLambda = this.createLambda({
       memorySize: 512,
       path: 'generate_usecase',
@@ -253,6 +263,7 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     [deleteUsecaseLambda,
       deleteExecutionLambda,
       deleteStepLambda,
+      cloneUsecaseLambda,
       props.unsubscribeUsecaseLambda].forEach((lambda: Function) => {
         lambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
       });
@@ -263,6 +274,17 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       actions: [
         'secretsmanager:CreateSecret',
         'secretsmanager:UpdateSecret',
+        'secretsmanager:TagResource'
+      ],
+      resources: ['*']
+    }));
+
+    // Grant Secrets Manager permissions for clone lambda
+    cloneUsecaseLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'secretsmanager:ListSecrets',
+        'secretsmanager:CreateSecret',
         'secretsmanager:TagResource'
       ],
       resources: ['*']
@@ -432,9 +454,12 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     this.addMethod(headers, HttpMethod.POST, createUsecaseHeadersLambda)
     this.addMethod(headers, HttpMethod.GET, getUsecaseHeadersLambda)
 
-    // API Gateway export/import endpoints
+    // API Gateway export/import/clone endpoints
     const exportEndpoint = this.addResource(usecaseId, 'export');
     this.addMethod(exportEndpoint, HttpMethod.GET, exportUsecaseLambda)
+
+    const cloneEndpoint = this.addResource(usecaseId, 'clone');
+    this.addMethod(cloneEndpoint, HttpMethod.POST, cloneUsecaseLambda)
 
     const importEndpoint = this.addResource(apiInstance.root, 'import');
     this.addMethod(importEndpoint, HttpMethod.POST, importUsecaseLambda)

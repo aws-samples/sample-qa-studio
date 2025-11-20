@@ -18,7 +18,10 @@ import { baseName } from "../../configuration.json"
 
 // Lazy load components for code splitting
 const HomeScreen = React.lazy(() => import('./components/HomeScreen'));
+const CreateUsecaseWizard = React.lazy(() => import('./components/CreateUsecaseWizard'));
 const CreateUsecase = React.lazy(() => import('./components/CreateUsecase'));
+const CloneUsecase = React.lazy(() => import('./components/CloneUsecase'));
+const TemplateUsecase = React.lazy(() => import('./components/TemplateUsecase'));
 const UserJourneyWizard = React.lazy(() => import('./components/UserJourneyWizard'));
 const UsecaseDetail = React.lazy(() => import('./components/UsecaseDetailRefactored'));
 const ExecutionDetail = React.lazy(() => import('./components/ExecutionDetailRefactored'));
@@ -49,7 +52,10 @@ function AppContent() {
     // Simple idle preloading
     if ('requestIdleCallback' in window) {
       (window as any).requestIdleCallback(() => {
+        import('./components/CreateUsecaseWizard');
         import('./components/CreateUsecase');
+        import('./components/CloneUsecase');
+        import('./components/TemplateUsecase');
         import('./components/UserJourneyWizard');
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
@@ -59,7 +65,10 @@ function AppContent() {
       });
     } else {
       setTimeout(() => {
+        import('./components/CreateUsecaseWizard');
         import('./components/CreateUsecase');
+        import('./components/CloneUsecase');
+        import('./components/TemplateUsecase');
         import('./components/UserJourneyWizard');
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
@@ -81,9 +90,9 @@ function AppContent() {
           activeHref={activeHref}
           items={[
             { type: "link", text: "Home", href: "/" },
-            { type: "link", text: "Create Use Case", href: "/create-usecase" },
-            { type: "link", text: "User Journey Wizard", href: "/user-journey-wizard" },
+            { type: "link", text: "Create Use Case", href: "/create" },
             { type: "link", text: "Templates", href: "/templates" },
+            { type: "divider" },
             { type: "link", text: "Users", href: "/users" },
             { type: "divider" },
             { type: "link", text: baseName, href: "#" },
@@ -106,14 +115,17 @@ function AppContent() {
           <Routes>
             <Route path="/" element={<HomeScreen />} />
             <Route path="/usecases" element={<Usecases />} />
-            <Route path="/create-usecase" element={<CreateUsecase />} />
-            <Route path="/user-journey-wizard" element={
+            <Route path="/create" element={<CreateUsecaseWizard />} />
+            <Route path="/create/blank" element={<CreateUsecase />} />
+            <Route path="/create/clone" element={<CloneUsecase />} />
+            <Route path="/create/journey" element={
               <ErrorBoundary>
                 <UserJourneyWizard />
               </ErrorBoundary>
             } />
             <Route path="/templates" element={<TemplateLibrary />} />
             <Route path="/templates/:id" element={<TemplateDetail />} />
+            <Route path="/template-usecase" element={<TemplateUsecase />} />
             <Route path="/users" element={<Users />} />
             <Route path="/usecase/:id" element={<UsecaseDetail />} />
             <Route path="/usecase/:usecaseId/execution/:executionId" element={<ExecutionDetail />} />

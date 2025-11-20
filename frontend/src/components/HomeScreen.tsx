@@ -322,7 +322,7 @@ export default function HomeScreen() {
               ]}
               mainAction={{
                 text: 'Create Use Case',
-                onClick: () => navigate('/create-usecase')
+                onClick: () => navigate('/create')
               }}
             />
           </SpaceBetween>
