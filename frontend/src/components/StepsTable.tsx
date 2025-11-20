@@ -21,6 +21,9 @@ interface UsecaseStep {
   validation_value?: string;
   assertion_variable?: string;
   capture_variable?: string;
+  template_id?: string;
+  template_step_id?: string;
+  template_version?: number;
 }
 
 interface StepsTableProps {
@@ -272,7 +275,7 @@ export default function StepsTable({
           maxWidth: 120,
         }
       ]}
-      items={steps}
+      items={[...steps].sort((a, b) => a.sort - b.sort)}
       empty="No workflow steps defined. Click 'Add Step' to create your first step."
     />
     </>

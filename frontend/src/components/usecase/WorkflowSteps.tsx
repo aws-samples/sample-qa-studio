@@ -7,6 +7,7 @@ import Toggle from "@cloudscape-design/components/toggle";
 import StepsTable from '../StepsTable';
 import WorkflowStepsCard from '../WorkflowStepsCard';
 import StepFormModal from './StepFormModal';
+import ImportTemplateModal from '../templates/ImportTemplateModal';
 import { api } from '../../utils/api';
 import { useMultipleAsyncData } from '../common/useAsyncData';
 import { ContainerLoading } from '../common/LoadingStates';
@@ -31,6 +32,7 @@ interface WorkflowStepsProps {
 
 export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [useCardLayout, setUseCardLayout] = useState(true);
 
   const { data, loading, refetch } = useMultipleAsyncData({
@@ -140,6 +142,16 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
     }
   };
 
+  const handleUpdateFromTemplate = async (stepId: string) => {
+    try {
+      await api.post(`usecase/${usecaseId}/steps/${stepId}/update-from-template`);
+      await refreshSteps();
+    } catch (error) {
+      console.error('Failed to update step from template:', error);
+      throw error;
+    }
+  };
+
   if (loading) {
     return (
       <ContainerLoading 
@@ -160,6 +172,16 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
         existingSteps={steps}
       />
 
+      <ImportTemplateModal
+        visible={showImportModal}
+        usecaseId={usecaseId}
+        onDismiss={() => setShowImportModal(false)}
+        onSuccess={() => {
+          setShowImportModal(false);
+          refreshSteps();
+        }}
+      />
+
       <SpaceBetween direction='vertical' size="m">
         <Header
           variant="h1"
@@ -171,7 +193,10 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
               >
                 Card Layout
               </Toggle>
-              <Button onClick={() => setShowCreateModal(true)}>
+              <Button onClick={() => setShowImportModal(true)} iconName="download">
+                Import Template
+              </Button>
+              <Button onClick={() => setShowCreateModal(true)} variant="primary">
                 Add Step
               </Button>
             </SpaceBetween>
@@ -185,6 +210,7 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
             onUpdateStep={handleUpdateStep}
             onDeleteStep={handleDeleteStep}
             onAddStep={handleCreateStep}
+            onUpdateFromTemplate={handleUpdateFromTemplate}
             usecaseId={usecaseId}
           />
         ) : (

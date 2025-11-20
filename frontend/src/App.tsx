@@ -23,6 +23,8 @@ const UserJourneyWizard = React.lazy(() => import('./components/UserJourneyWizar
 const UsecaseDetail = React.lazy(() => import('./components/UsecaseDetailRefactored'));
 const ExecutionDetail = React.lazy(() => import('./components/ExecutionDetailRefactored'));
 const Users = React.lazy(() => import('./components/Users'));
+const TemplateLibrary = React.lazy(() => import('./components/templates/TemplateLibrary'));
+const TemplateDetail = React.lazy(() => import('./components/templates/TemplateDetail'));
 
 Amplify.configure(amplifyconfig);
 
@@ -52,6 +54,8 @@ function AppContent() {
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
         import('./components/Users');
+        import('./components/templates/TemplateLibrary');
+        import('./components/templates/TemplateDetail');
       });
     } else {
       setTimeout(() => {
@@ -60,6 +64,8 @@ function AppContent() {
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
         import('./components/Users');
+        import('./components/templates/TemplateLibrary');
+        import('./components/templates/TemplateDetail');
       }, 2000);
     }
   }, []);
@@ -77,6 +83,7 @@ function AppContent() {
             { type: "link", text: "Home", href: "/" },
             { type: "link", text: "Create Use Case", href: "/create-usecase" },
             { type: "link", text: "User Journey Wizard", href: "/user-journey-wizard" },
+            { type: "link", text: "Templates", href: "/templates" },
             { type: "link", text: "Users", href: "/users" },
             { type: "divider" },
             { type: "link", text: baseName, href: "#" },
@@ -105,6 +112,8 @@ function AppContent() {
                 <UserJourneyWizard />
               </ErrorBoundary>
             } />
+            <Route path="/templates" element={<TemplateLibrary />} />
+            <Route path="/templates/:id" element={<TemplateDetail />} />
             <Route path="/users" element={<Users />} />
             <Route path="/usecase/:id" element={<UsecaseDetail />} />
             <Route path="/usecase/:usecaseId/execution/:executionId" element={<ExecutionDetail />} />

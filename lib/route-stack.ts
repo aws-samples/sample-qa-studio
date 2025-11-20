@@ -456,6 +456,83 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     const user = this.addResource(users, '{username}');
     this.addMethod(user, HttpMethod.DELETE, props.removeUserLambda)
 
+    // Template management Lambda functions
+    const createTemplateLambda = this.defaultCreateLambdaWithTable('create_template')
+    const listTemplatesLambda = this.defaultCreateLambdaWithTable('list_templates')
+    const getTemplateLambda = this.defaultCreateLambdaWithTable('get_template')
+    const updateTemplateLambda = this.defaultCreateLambdaWithTable('update_template')
+    const deleteTemplateLambda = this.defaultCreateLambdaWithTable('delete_template')
+    const listTemplateStepsLambda = this.defaultCreateLambdaWithTable('list_template_steps')
+    const createTemplateStepLambda = this.defaultCreateLambdaWithTable('create_template_step')
+    const updateTemplateStepLambda = this.defaultCreateLambdaWithTable('update_template_step')
+    const deleteTemplateStepLambda = this.defaultCreateLambdaWithTable('delete_template_step')
+    const reorderTemplateStepsLambda = this.defaultCreateLambdaWithTable('reorder_template_steps')
+    const createTemplateVariablesLambda = this.defaultCreateLambdaWithTable('create_template_variables')
+    const getTemplateVariablesLambda = this.defaultCreateLambdaWithTable('get_template_variables')
+    const importTemplateLambda = this.defaultCreateLambdaWithTable('import_template')
+
+    // Grant permissions to template lambdas
+    listTemplatesLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    getTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    listTemplateStepsLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    getTemplateVariablesLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    
+    createTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    updateTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    createTemplateStepLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    updateTemplateStepLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    reorderTemplateStepsLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    createTemplateVariablesLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    
+    // Import template needs both read (to read template) and write (to write to use case)
+    importTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    importTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    
+    deleteTemplateLambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
+    deleteTemplateStepLambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
+
+    // API Gateway template endpoints
+    const templates = this.addResource(apiInstance.root, 'templates');
+    this.addMethod(templates, HttpMethod.GET, listTemplatesLambda)
+    this.addMethod(templates, HttpMethod.POST, createTemplateLambda)
+
+    const template = this.addResource(templates, '{id}');
+    this.addMethod(template, HttpMethod.GET, getTemplateLambda)
+    this.addMethod(template, HttpMethod.PATCH, updateTemplateLambda)
+    this.addMethod(template, HttpMethod.DELETE, deleteTemplateLambda)
+
+    const templateSteps = this.addResource(template, 'steps');
+    this.addMethod(templateSteps, HttpMethod.GET, listTemplateStepsLambda)
+    this.addMethod(templateSteps, HttpMethod.POST, createTemplateStepLambda)
+
+    const reorderTemplateSteps = this.addResource(templateSteps, 'reorder');
+    this.addMethod(reorderTemplateSteps, HttpMethod.PATCH, reorderTemplateStepsLambda)
+
+    const templateStep = this.addResource(templateSteps, '{stepId}');
+    this.addMethod(templateStep, HttpMethod.PATCH, updateTemplateStepLambda)
+    this.addMethod(templateStep, HttpMethod.DELETE, deleteTemplateStepLambda)
+
+    const templateVariables = this.addResource(template, 'variables');
+    this.addMethod(templateVariables, HttpMethod.GET, getTemplateVariablesLambda)
+    this.addMethod(templateVariables, HttpMethod.POST, createTemplateVariablesLambda)
+
+    // Import template into use case
+    const importTemplate = this.addResource(usecaseId, 'import-template');
+    this.addMethod(importTemplate, HttpMethod.POST, importTemplateLambda)
+
+    // Check for template updates
+    const checkTemplateUpdates = this.defaultCreateLambdaWithTable('check_template_updates')
+    checkTemplateUpdates.role?.addManagedPolicy(props.tableReadPolicy);
+    const templateUpdates = this.addResource(usecaseId, 'template-updates');
+    this.addMethod(templateUpdates, HttpMethod.GET, checkTemplateUpdates)
+
+    // Update step from template
+    const updateStepFromTemplateLambda = this.defaultCreateLambdaWithTable('update_step_from_template')
+    updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    const updateFromTemplate = this.addResource(step, 'update-from-template');
+    this.addMethod(updateFromTemplate, HttpMethod.POST, updateStepFromTemplateLambda)
+
     // Create a deployment to push changes to the API Gateway stage
     this.deployment = new Deployment(this, 'ApiDeployment', {
       api: apiInstance,
