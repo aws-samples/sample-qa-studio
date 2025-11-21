@@ -24,6 +24,13 @@ const creationOptions: CreationOption[] = [
     route: '/create/blank'
   },
   {
+    id: 'template',
+    title: 'Start from Template',
+    description: 'Begin with a pre-built template and add your own steps and configurations.',
+    icon: 'folder',
+    route: '/create/template'
+  },
+  {
     id: 'user-journey',
     title: 'Create from User Journey',
     description: 'Describe your test scenario in natural language and let AI generate the use case automatically.',
