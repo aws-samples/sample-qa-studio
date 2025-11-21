@@ -21,6 +21,7 @@ const HomeScreen = React.lazy(() => import('./components/HomeScreen'));
 const CreateUsecaseWizard = React.lazy(() => import('./components/CreateUsecaseWizard'));
 const CreateUsecase = React.lazy(() => import('./components/CreateUsecase'));
 const CloneUsecase = React.lazy(() => import('./components/CloneUsecase'));
+const CreateFromTemplate = React.lazy(() => import('./components/CreateFromTemplate'));
 const TemplateUsecase = React.lazy(() => import('./components/TemplateUsecase'));
 const UserJourneyWizard = React.lazy(() => import('./components/UserJourneyWizard'));
 const UsecaseDetail = React.lazy(() => import('./components/UsecaseDetailRefactored'));
@@ -54,6 +55,7 @@ function AppContent() {
       (window as any).requestIdleCallback(() => {
         import('./components/CreateUsecaseWizard');
         import('./components/CreateUsecase');
+        import('./components/CreateFromTemplate');
         import('./components/CloneUsecase');
         import('./components/TemplateUsecase');
         import('./components/UserJourneyWizard');
@@ -67,6 +69,7 @@ function AppContent() {
       setTimeout(() => {
         import('./components/CreateUsecaseWizard');
         import('./components/CreateUsecase');
+        import('./components/CreateFromTemplate');
         import('./components/CloneUsecase');
         import('./components/TemplateUsecase');
         import('./components/UserJourneyWizard');
@@ -89,8 +92,7 @@ function AppContent() {
         <SideNavigation
           activeHref={activeHref}
           items={[
-            { type: "link", text: "Home", href: "/" },
-            { type: "link", text: "Create Use Case", href: "/create" },
+            { type: "link", text: "Usecases", href: "/" },
             { type: "link", text: "Templates", href: "/templates" },
             { type: "divider" },
             { type: "link", text: "Users", href: "/users" },
@@ -117,6 +119,7 @@ function AppContent() {
             <Route path="/usecases" element={<Usecases />} />
             <Route path="/create" element={<CreateUsecaseWizard />} />
             <Route path="/create/blank" element={<CreateUsecase />} />
+            <Route path="/create/template" element={<CreateFromTemplate />} />
             <Route path="/create/clone" element={<CloneUsecase />} />
             <Route path="/create/journey" element={
               <ErrorBoundary>

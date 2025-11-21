@@ -59,11 +59,11 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
   private addResource(parentResource: IResource, name: string): Resource {
     const resource = parentResource.addResource(name);
 
-    resource.addCorsPreflight({
-      allowOrigins: Cors.ALL_ORIGINS,
-      allowMethods: Cors.ALL_METHODS,
-      allowHeaders: ['Content-Type', 'Authorization', 'X-Amz-Date', 'X-Api-Key', 'X-Amz-Security-Token']
-    })
+    // resource.addCorsPreflight({
+    //   allowOrigins: Cors.ALL_ORIGINS,
+    //   allowMethods: Cors.ALL_METHODS,
+    //   allowHeaders: ['Content-Type', 'Authorization', 'X-Amz-Date', 'X-Api-Key', 'X-Amz-Security-Token']
+    // })
 
     return resource
   }
@@ -540,6 +540,12 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     const templateVariables = this.addResource(template, 'variables');
     this.addMethod(templateVariables, HttpMethod.GET, getTemplateVariablesLambda)
     this.addMethod(templateVariables, HttpMethod.POST, createTemplateVariablesLambda)
+
+    // Apply template to create new use case
+    const applyTemplateLambda = this.defaultCreateLambdaWithTable('apply_template')
+    applyTemplateLambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
+    const applyTemplate = this.addResource(template, 'apply');
+    this.addMethod(applyTemplate, HttpMethod.POST, applyTemplateLambda)
 
     // Import template into use case
     const importTemplate = this.addResource(usecaseId, 'import-template');
