@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-16] - 2025-11-24
+
+### Other Changes
+
+- add a config class (c867c3f)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-15] - 2025-11-24
 
 ### Features
