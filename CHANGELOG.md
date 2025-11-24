@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-17] - 2025-11-24
+
+### Other Changes
+
+- apply env to all stacks (50cbd64)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-16] - 2025-11-24
 
 ### Other Changes
