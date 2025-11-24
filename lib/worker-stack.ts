@@ -7,7 +7,7 @@ import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { CfnScheduleGroup } from 'aws-cdk-lib/aws-scheduler';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
 import { OperatingSystemFamily, FargateTaskDefinition, Cluster, CpuArchitecture, ContainerImage, LogDrivers } from 'aws-cdk-lib/aws-ecs';
-import { Vpc, GatewayVpcEndpointAwsService, InterfaceVpcEndpointAwsService, SecurityGroup } from 'aws-cdk-lib/aws-ec2';
+import { Vpc, IVpc, GatewayVpcEndpointAwsService, InterfaceVpcEndpointAwsService, SecurityGroup, ISecurityGroup } from 'aws-cdk-lib/aws-ec2';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { Function } from 'aws-cdk-lib/aws-lambda';
 import { Platform, DockerImageAsset } from 'aws-cdk-lib/aws-ecr-assets';
@@ -18,7 +18,7 @@ import { Rule } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
-import { defaultRegion, enabledRegions } from '../configuration.json';
+import { defaultRegion, enabledRegions, vpcId, workerSecurityGroupId, createVpcEndpoints } from '../configuration.json';
 
 interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   baseName: string
@@ -53,7 +53,7 @@ interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStack
  * - notificationQueue: SQS queue for notifications
  */
 export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
-  public readonly workerSecurityGroup: SecurityGroup
+  public readonly workerSecurityGroup: ISecurityGroup
   public readonly artefactsBucket: Bucket
   public readonly taskDefinition: FargateTaskDefinition
   public readonly schedulerGroup: CfnScheduleGroup
@@ -95,38 +95,74 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       removalPolicy: RemovalPolicy.DESTROY
     });
 
-    const vpc = new Vpc(this, 'vpc', {
-      vpcName: this.cdkName('vpc'),
-      maxAzs: 2,
-      natGateways: 2,
-    });
+    // VPC Configuration: Use existing VPC or create new one
+    let vpc: IVpc;
+    let shouldCreateVpcEndpoints: boolean;
 
-    vpc.addGatewayEndpoint('S3Endpoint', {
-      service: GatewayVpcEndpointAwsService.S3
-    });
+    if (vpcId) {
+      // Use existing VPC - automatically discovers subnets
+      vpc = Vpc.fromLookup(this, 'existing-vpc', {
+        vpcId: vpcId
+      });
 
-    vpc.addInterfaceEndpoint('EcrDockerEndpoint', {
-      service: InterfaceVpcEndpointAwsService.ECR_DOCKER
-    });
+      // Validate that the VPC has public subnets
+      if (vpc.publicSubnets.length === 0) {
+        throw new Error(`Existing VPC ${vpcId} must have at least one public subnet for ECS tasks`);
+      }
 
-    vpc.addInterfaceEndpoint('EcrEndpoint', {
-      service: InterfaceVpcEndpointAwsService.ECR
-    });
+      // Only create VPC endpoints if explicitly requested for existing VPC
+      shouldCreateVpcEndpoints = createVpcEndpoints ?? false;
+    } else {
+      // Create new VPC with default configuration
+      vpc = new Vpc(this, 'vpc', {
+        vpcName: this.cdkName('vpc'),
+        maxAzs: 2,
+        natGateways: 2,
+      });
 
-    vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
-      service: InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS
-    });
+      // Always create VPC endpoints for new VPC
+      shouldCreateVpcEndpoints = true;
+    }
 
-    vpc.addGatewayEndpoint('DynamoDbEndpoint', {
-      service: GatewayVpcEndpointAwsService.DYNAMODB
-    });
+    // Create VPC endpoints if needed
+    if (shouldCreateVpcEndpoints) {
+      vpc.addGatewayEndpoint('S3Endpoint', {
+        service: GatewayVpcEndpointAwsService.S3
+      });
 
-    // Security Group for ECS tasks
-    this.workerSecurityGroup = new SecurityGroup(this, 'EcsTaskSecurityGroup', {
-      vpc,
-      description: 'Security group for ECS tasks',
-      allowAllOutbound: true
-    });
+      vpc.addInterfaceEndpoint('EcrDockerEndpoint', {
+        service: InterfaceVpcEndpointAwsService.ECR_DOCKER
+      });
+
+      vpc.addInterfaceEndpoint('EcrEndpoint', {
+        service: InterfaceVpcEndpointAwsService.ECR
+      });
+
+      vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
+        service: InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS
+      });
+
+      vpc.addGatewayEndpoint('DynamoDbEndpoint', {
+        service: GatewayVpcEndpointAwsService.DYNAMODB
+      });
+    }
+
+    // Security Group for ECS tasks: Use existing or create new
+    if (workerSecurityGroupId) {
+      // Import existing security group
+      this.workerSecurityGroup = SecurityGroup.fromSecurityGroupId(
+        this,
+        'ImportedSecurityGroup',
+        workerSecurityGroupId
+      );
+    } else {
+      // Create new security group in the VPC (works for both new and existing VPC)
+      this.workerSecurityGroup = new SecurityGroup(this, 'EcsTaskSecurityGroup', {
+        vpc,
+        description: 'Security group for ECS tasks',
+        allowAllOutbound: true
+      });
+    }
 
     // ECS Cluster
     this.cluster = new Cluster(this, 'cluster', {

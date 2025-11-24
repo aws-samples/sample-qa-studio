@@ -63,9 +63,59 @@ Update `configuration.json` with your settings:
 {
   "baseName": "nova-act-qa-studio",
   "adminEmail": "your-email@example.com",
-  "userAgentString": null
+  "apiEndpoint": "/api",
+  "apiDeploymentStage": "api",
+  "enabledRegions": ["us-east-1", "us-west-2"],
+  "defaultRegion": "us-east-1",
+  "userAgentString": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+  "vpcId": null,
+  "workerSecurityGroupId": null,
+  "createVpcEndpoints": false
 }
 ```
+
+#### Configuration Options
+
+**Required:**
+- `baseName`: Unique name for your deployment (used as prefix for all resources)
+- `adminEmail`: Email address for the initial admin user
+- `apiEndpoint`: API Gateway endpoint path (default: "/api")
+- `apiDeploymentStage`: API Gateway deployment stage (default: "api")
+- `enabledRegions`: List of AWS regions where browser automation can run
+- `defaultRegion`: Primary region for deployment and default browser execution
+
+**Optional:**
+- `userAgentString`: Custom user agent for browser automation (default: Chrome on macOS)
+- `vpcId`: Use an existing VPC instead of creating a new one (default: null, creates new VPC)
+- `workerSecurityGroupId`: Use an existing security group for ECS tasks (default: null, creates new)
+- `createVpcEndpoints`: Create VPC endpoints when using existing VPC (default: false)
+
+#### VPC Configuration
+
+By default, Nova Act QA Studio creates a new VPC with NAT Gateways and VPC endpoints. To use an existing VPC:
+
+1. **Set `vpcId`** to your existing VPC ID (e.g., "vpc-0123456789abcdef0")
+2. The VPC **must have at least one public subnet** (workers run with public IP assignment)
+3. Public subnets are automatically discovered based on route table configuration
+4. Optionally provide `workerSecurityGroupId` to use an existing security group
+5. Set `createVpcEndpoints: true` if you want to create VPC endpoints in the existing VPC
+
+**Example with existing VPC:**
+```json
+{
+  "baseName": "nova-act-qa-studio",
+  "adminEmail": "your-email@example.com",
+  "vpcId": "vpc-0123456789abcdef0",
+  "workerSecurityGroupId": "sg-0123456789abcdef0",
+  "createVpcEndpoints": false
+}
+```
+
+**Benefits of using existing VPC:**
+- Reduce costs by sharing VPC infrastructure
+- Integrate with existing network architecture
+- Use existing security group configurations
+- Avoid VPC limits in your AWS account
 
 ### 3. Deploy Everything
 
