@@ -16,7 +16,9 @@ import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
 import { Rule } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
+import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
+import { defaultRegion, enabledRegions } from '../configuration.json';
 
 interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   baseName: string
@@ -63,6 +65,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
   public readonly executeUsecaseLambda: Function
   public readonly stopExecutionLambda: Function
   public readonly generateS3UrlLambda: Function
+  private readonly regionalBucketArns: string[] = []
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioWorkerStackCreateProps) {
     super(scope, id, props);
@@ -74,7 +77,16 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     this.artefactsBucket = new Bucket(this, 'artefacts', {
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
+      versioned: true, // Required for cross-region replication
     });
+
+    // Create cross-region buckets for enabled regions and collect all bucket ARNs
+    this.regionalBucketArns = [
+      this.artefactsBucket.bucketArn,
+      ...enabledRegions
+        .filter((region: string) => region !== defaultRegion)
+        .map((region: string) => this.createCrossRegionBucket(region)),
+    ];
 
     // TODO: Remove this as the local queue feature is not needed anymore
     this.executionQueue = new Queue(this, 'queue', {
@@ -242,6 +254,13 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       assumedBy: new ServicePrincipal('bedrock-agentcore.amazonaws.com'),
     })
 
+    // Grant S3 permissions for all regional buckets
+    const s3Resources: string[] = [];
+    this.regionalBucketArns.forEach(bucketArn => {
+      s3Resources.push(bucketArn);
+      s3Resources.push(`${bucketArn}/*`);
+    });
+
     agentCoreExecutionRole.attachInlinePolicy(new Policy(this, 'agent_core_execution_role_s3', {
       statements: [
         new PolicyStatement({
@@ -251,10 +270,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             "s3:ListMultipartUploadParts",
             "s3:AbortMultipartUpload"
           ],
-          resources: [
-            this.artefactsBucket.bucketArn,
-            `${this.artefactsBucket.bucketArn}/*`
-          ]
+          resources: s3Resources
         })
       ]
     }))
@@ -440,5 +456,149 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     this.log('schedulerGroup', this.schedulerGroup.name!)
     this.log('artefactsBucket', this.artefactsBucket.bucketName)
     this.log('registry', registry.repositoryName)
+  }
+
+  /**
+   * Creates an S3 bucket in a different region using AwsCustomResource
+   * This allows creating buckets in regions other than the stack's region
+   * Configures cross-region replication to the default region bucket
+   * 
+   * @param region - AWS region where the bucket should be created
+   * @returns The ARN of the created bucket
+   */
+  private createCrossRegionBucket(region: string): string {
+    const bucketName = `${this.baseName}-artefacts-${region}`;
+    const bucketArn = `arn:aws:s3:::${bucketName}`;
+
+    // Create replication role
+    const replicationRole = new Role(this, `ReplicationRole-${region}`, {
+      assumedBy: new ServicePrincipal('s3.amazonaws.com'),
+      description: `Replication role for ${bucketName} to ${this.artefactsBucket.bucketName}`,
+    });
+
+    // Grant read permissions on source bucket
+    replicationRole.addToPolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: [
+          's3:GetReplicationConfiguration',
+          's3:ListBucket',
+          's3:GetObjectVersionForReplication',
+          's3:GetObjectVersionAcl',
+        ],
+        resources: [bucketArn, `${bucketArn}/*`],
+      })
+    );
+
+    // Grant write permissions on destination bucket
+    this.artefactsBucket.grantWrite(replicationRole);
+    replicationRole.addToPolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['s3:ReplicateObject', 's3:ReplicateDelete', 's3:ReplicateTags'],
+        resources: [`${this.artefactsBucket.bucketArn}/*`],
+      })
+    );
+
+    const createBucketParams: any = {
+      Bucket: bucketName,
+    };
+
+    // us-east-1 doesn't support LocationConstraint
+    if (region !== 'us-east-1') {
+      createBucketParams.CreateBucketConfiguration = {
+        LocationConstraint: region,
+      };
+    }
+
+    // Create the bucket
+    const bucketResource = new AwsCustomResource(this, `CrossRegionBucket-${region}`, {
+      onCreate: {
+        service: 'S3',
+        action: 'createBucket',
+        parameters: createBucketParams,
+        region: region,
+        physicalResourceId: PhysicalResourceId.of(bucketName),
+      },
+      onDelete: {
+        service: 'S3',
+        action: 'deleteBucket',
+        parameters: {
+          Bucket: bucketName,
+        },
+        region: region,
+      },
+      policy: AwsCustomResourcePolicy.fromSdkCalls({
+        resources: [bucketArn, `${bucketArn}/*`],
+      }),
+    });
+
+    // Enable versioning (required for replication)
+    const versioningResource = new AwsCustomResource(this, `BucketVersioning-${region}`, {
+      onCreate: {
+        service: 'S3',
+        action: 'putBucketVersioning',
+        parameters: {
+          Bucket: bucketName,
+          VersioningConfiguration: {
+            Status: 'Enabled',
+          },
+        },
+        region: region,
+        physicalResourceId: PhysicalResourceId.of(`${bucketName}-versioning`),
+      },
+      policy: AwsCustomResourcePolicy.fromStatements([
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['s3:PutBucketVersioning', 's3:GetBucketVersioning'],
+          resources: [bucketArn],
+        }),
+      ]),
+    });
+    versioningResource.node.addDependency(bucketResource);
+
+    // Configure replication
+    const replicationResource = new AwsCustomResource(this, `BucketReplication-${region}`, {
+      onCreate: {
+        service: 'S3',
+        action: 'putBucketReplication',
+        parameters: {
+          Bucket: bucketName,
+          ReplicationConfiguration: {
+            Role: replicationRole.roleArn,
+            Rules: [
+              {
+                Id: `replicate-to-${defaultRegion}`,
+                Status: 'Enabled',
+                Priority: 1,
+                Filter: {},
+                Destination: {
+                  Bucket: this.artefactsBucket.bucketArn,
+                },
+                DeleteMarkerReplication: {
+                  Status: 'Enabled',
+                },
+              },
+            ],
+          },
+        },
+        region: region,
+        physicalResourceId: PhysicalResourceId.of(`${bucketName}-replication`),
+      },
+      policy: AwsCustomResourcePolicy.fromStatements([
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            's3:PutReplicationConfiguration',
+            's3:GetReplicationConfiguration',
+            'iam:PassRole',
+          ],
+          resources: [bucketArn, replicationRole.roleArn],
+        }),
+      ]),
+    });
+    replicationResource.node.addDependency(versioningResource);
+
+    return bucketArn;
   }
 }

@@ -70,7 +70,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
           onChange={({ detail }) =>
             setSelectedRegion(detail.selectedOption)
           }
-          options={regionOptions}
+          options={regionOptions()}
         />
       </FormField>
 

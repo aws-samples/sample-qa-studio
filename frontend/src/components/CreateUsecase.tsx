@@ -22,7 +22,7 @@ export default function CreateUsecase() {
   const [tags, setTags] = useState('');
   const [headless, setHeadless] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedRegion, setSelectedRegion] = useState(findRegionOptions('eu-central-1') as SelectProps.Option);
+  const [selectedRegion, setSelectedRegion] = useState(findRegionOptions() as SelectProps.Option);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -98,7 +98,7 @@ export default function CreateUsecase() {
           onChange={({ detail }) =>
             setSelectedRegion(detail.selectedOption)
           }
-          options={regionOptions}
+          options={regionOptions()}
         />
       </FormField>
         

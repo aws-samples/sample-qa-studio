@@ -433,7 +433,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
           <Select
             selectedOption={findRegionOptions(state.formData.executionRegion)!}
             onChange={({ detail }) => handleFieldChange('executionRegion', detail.selectedOption.value!)}
-            options={regionOptions}
+            options={regionOptions()}
           />
         </FormField>
         

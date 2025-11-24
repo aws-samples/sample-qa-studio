@@ -241,6 +241,7 @@ export default function ExecutionDetailRefactored() {
             usecaseId={usecaseId}
             executionId={executionId}
             refreshTrigger={refreshTrigger}
+            executionRegion={execution?.region}
           />
 
           {/* Modal for viewing files */}

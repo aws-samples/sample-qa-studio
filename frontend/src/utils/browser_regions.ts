@@ -1,10 +1,14 @@
-export const regionOptions = [
-  { label: "us-east-1", value: "us-east-1" },
-  { label: "us-west-2", value: "us-west-2" },
-  { label: "ap-southeast-2", value: "ap-southeast-2" },
-  { label: "eu-central-1", value: "eu-central-1" },
-]
+import { enabledRegions, defaultRegion } from "../../../configuration.json"
+import { SelectProps } from "@cloudscape-design/components/select";
 
-export const findRegionOptions = (region: string) => {
-  return regionOptions.find(option => option.value === region)
+export const regionOptions = (): SelectProps.Option[] =>  {
+  const regions = enabledRegions.map((region:string) => {
+    return { label: region, value: region }
+  })
+  
+  return regions
+}
+
+export const findRegionOptions = (region: string = defaultRegion) => {
+  return regionOptions().find(option => option.value === region)
 }
