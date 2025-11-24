@@ -76,18 +76,20 @@ Update `configuration.json` with your settings:
 
 #### Configuration Options
 
+The configuration is loaded and validated by `lib/config.ts`, which provides sane defaults for optional fields.
+
 **Required:**
-- `baseName`: Unique name for your deployment (used as prefix for all resources)
-- `adminEmail`: Email address for the initial admin user
+- `baseName`: Unique name for your deployment (used as prefix for all resources, lowercase alphanumeric and hyphens only)
+- `adminEmail`: Email address for the initial admin user (must be valid email format)
+
+**Optional (with defaults):**
 - `apiEndpoint`: API Gateway endpoint path (default: "/api")
 - `apiDeploymentStage`: API Gateway deployment stage (default: "api")
-- `enabledRegions`: List of AWS regions where browser automation can run
-- `defaultRegion`: Primary region for deployment and default browser execution
-
-**Optional:**
+- `enabledRegions`: List of AWS regions where browser automation can run (default: ["us-east-1"])
+- `defaultRegion`: Primary region for deployment and default browser execution (default: "us-east-1", must be in enabledRegions)
 - `userAgentString`: Custom user agent for browser automation (default: Chrome on macOS)
-- `vpcId`: Use an existing VPC instead of creating a new one (default: null, creates new VPC)
-- `workerSecurityGroupId`: Use an existing security group for ECS tasks (default: null, creates new)
+- `vpcId`: Use an existing VPC instead of creating a new one (default: null, creates new VPC, must start with "vpc-")
+- `workerSecurityGroupId`: Use an existing security group for ECS tasks (default: null, creates new, must start with "sg-")
 - `createVpcEndpoints`: Create VPC endpoints when using existing VPC (default: false)
 
 #### VPC Configuration

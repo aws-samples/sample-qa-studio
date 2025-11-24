@@ -10,9 +10,16 @@ import { NovaActQAStudioFrontendDeploymentStack } from '../lib/frontend-deployme
 import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioRouteStack } from '../lib/route-stack';
 import { NovaActQAStudioEventBridgeStack } from '../lib/eventbridge-stack';
-import { adminEmail, baseName, userAgentString, apiEndpoint, apiDeploymentStage } from '../configuration.json'
+import { loadConfig, getStackEnv } from '../lib/config';
+
+// Load and validate configuration with sane defaults
+const config = loadConfig();
+const { adminEmail, baseName, userAgentString, apiEndpoint, apiDeploymentStage } = config;
 
 const app = new App();
+
+// Get stack environment (explicit env needed when using existing VPC)
+const stackEnv = getStackEnv(config);
 
 if (!adminEmail) {
   throw new Error("adminEmail is required")
@@ -65,6 +72,7 @@ const notificationStack = new NovaActQAStudioNotificationStack(app, 'notificatio
 const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   stackName: `${baseName}-worker`,
   baseName,
+  env: stackEnv,
   table: storageStack.table,
   tableReadPolicy: storageStack.tableReadPolicy,
   novaActApiKeySecret: storageStack.novaActApiKeySecret,

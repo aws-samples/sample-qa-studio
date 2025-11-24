@@ -1,4 +1,5 @@
 {
+  "_comment": "Required fields: adminEmail, baseName. All other fields have sane defaults.",
   "adminEmail": "your@email.com",
   "baseName": "nova-act-qa-studio",
   "apiEndpoint": "/api",

@@ -18,7 +18,10 @@ import { Rule } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
-import { defaultRegion, enabledRegions, vpcId, workerSecurityGroupId, createVpcEndpoints } from '../configuration.json';
+import { loadConfig } from './config';
+
+const config = loadConfig();
+const { defaultRegion, enabledRegions, vpcId, workerSecurityGroupId, createVpcEndpoints } = config;
 
 interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   baseName: string
@@ -178,6 +181,17 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         operatingSystemFamily: OperatingSystemFamily.LINUX,
         cpuArchitecture: CpuArchitecture.ARM64
       },
+      taskRole: new Role(this, 'TaskRole', {
+        roleName: this.cdkName('task-role'),
+        assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
+      }),
+      executionRole: new Role(this, 'ExecutionRole', {
+        roleName: this.cdkName('execution-role'),
+        assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
+        managedPolicies: [
+          ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy')
+        ]
+      }),
     });
 
     // Add container to task definition
@@ -312,6 +326,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     }))
 
     const schedulerRole = new Role(this, 'event_bridge_scheduler_role', {
+      roleName: this.cdkName('scheduler-role'),
       assumedBy: new ServicePrincipal('scheduler.amazonaws.com'),
       inlinePolicies: {
         LambdaInvokePolicy: new PolicyDocument({
@@ -508,6 +523,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     // Create replication role
     const replicationRole = new Role(this, `ReplicationRole-${region}`, {
+      roleName: `${this.baseName}-replication-role-${region}`,
       assumedBy: new ServicePrincipal('s3.amazonaws.com'),
       description: `Replication role for ${bucketName} to ${this.artefactsBucket.bucketName}`,
     });
