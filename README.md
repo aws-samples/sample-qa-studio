@@ -65,9 +65,11 @@ cp configuration.json.sample configuration.json
 
 Edit the values in `configuration.json`:
 
-- `adminEmail`: Email address for the initial admin user. After deployment, this email will receive a welcome message from Cognito with a temporary password. The admin can then log in and set a permanent password.
-- `baseName`: Prefix for all AWS resources (DynamoDB tables, S3 buckets, Lambda functions, etc.). Must be unique and contain only lowercase letters, numbers, and hyphens.
+- `adminEmail` (required): Email address for the initial admin user. After deployment, this email will receive a welcome message from Cognito with a temporary password. The admin can then log in and set a permanent password.
+- `bedrockModelId` (required): Amazon Bedrock model ID used to generate test cases in the User Journey feature. See [available model IDs](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) in the AWS documentation.
+- `baseName` Prefix for all AWS resources (DynamoDB tables, S3 buckets, Lambda functions, etc.). Must be unique and contain only lowercase letters, numbers, and hyphens.
 - `apiEndpoint`: API Gateway endpoint path prefix. Default is `api` and typically doesn't need to be changed unless you have specific routing requirements.
+- `apiDeploymentStage`: API Gateway deployment stage name. Default is `api` and typically doesn't need to be changed unless you have specific routing requirements.
 - `userAgentString`: Custom User-Agent string for browser automation requests. Set to empty string (`""`) to use the default Nova Act User-Agent, or provide a custom string for specific requirements.
 
 ### 3. Deploy Everything

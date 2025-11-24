@@ -9,13 +9,19 @@ import { NovaActQAStudioFrontendDeploymentStack } from '../lib/frontend-deployme
 import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioRouteStack } from '../lib/route-stack';
 import { NovaActQAStudioEventBridgeStack } from '../lib/eventbridge-stack';
-import { adminEmail, baseName, userAgentString, apiEndpoint, apiDeploymentStage } from '../configuration.json'
+import config from '../configuration.json';
+
+// Validate required configuration
+const requiredFields = ['adminEmail', 'bedrockModelId'];
+const missing = requiredFields.filter(field => !config[field as keyof typeof config]);
+
+if (missing.length > 0) {
+  throw new Error(`Missing required configuration: ${missing.join(', ')}`);
+}
+
+const { adminEmail, baseName, apiEndpoint, userAgentString, bedrockModelId, apiDeploymentStage } = config;
 
 const app = new App();
-
-if (!adminEmail) {
-  throw new Error("adminEmail is required")
-}
 
 const storageStack = new NovaActQAStudioStorageStack(app, 'storage', {
   stackName: `${baseName}-storage`,
@@ -81,7 +87,7 @@ new NovaActQAStudioEventBridgeStack(app, 'eventbridge', {
 
 new NovaActQAStudioRouteStack(app, 'routes', {
   stackName: `${baseName}-routes`,
-  apiDeploymentStage: apiDeploymentStage,
+  apiDeploymentStage,
   baseName,
   apiId: apiStack.api.restApiId,
   apiRootResourceId: apiStack.api.restApiRootResourceId,
@@ -102,7 +108,8 @@ new NovaActQAStudioRouteStack(app, 'routes', {
   tableReadPolicy: storageStack.tableReadPolicy,
   tableWritePolicy: storageStack.tableWritePolicy,
   tableFullAccessPolicy: storageStack.tableFullAccessPolicy,
-  generateS3UrlLambda: workerStack.generateS3UrlLambda
+  generateS3UrlLambda: workerStack.generateS3UrlLambda,
+  bedrockModelId
 })
 
 // Note: Notification stack uses Fn.importValue() to get the frontend domain name

@@ -1,5 +1,6 @@
 {
   "adminEmail": "",
+  "bedrockModelId": "anthropic.claude-3-5-sonnet-20240620-v1:0",
   "baseName": "nova-act-qa-studio",
   "apiEndpoint": "/api",
   "apiDeploymentStage": "api",

@@ -28,7 +28,8 @@ interface NovaActQAStudioRouteStackCreateProps extends NovaActQAStudioBaseStackC
   subscribeUsecaseLambda: Function,
   unsubscribeUsecaseLambda: Function,
   getUsecaseSubscriptionLambda: Function,
-  generateS3UrlLambda: Function
+  generateS3UrlLambda: Function,
+  bedrockModelId: string
 }
 
 enum HttpMethod {
@@ -175,9 +176,7 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       timeout: cdk.Duration.seconds(60),
       environment: {
         TABLE_NAME: props.table.tableName,
-        BEDROCK_MODEL_ID: 'eu.anthropic.claude-sonnet-4-20250514-v1:0',
-        // BEDROCK_MODEL_ID: 'eu.amazon.nova-pro-v1:0',
-        BEDROCK_REGION: 'eu-central-1'
+        BEDROCK_MODEL_ID: props.bedrockModelId || 'anthropic.claude-3-5-sonnet-20240620-v1:0'
       }
     });
 
