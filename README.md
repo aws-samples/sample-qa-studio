@@ -102,6 +102,8 @@ By default, Nova Act QA Studio creates a new VPC with NAT Gateways and VPC endpo
 4. Optionally provide `workerSecurityGroupId` to use an existing security group
 5. Set `createVpcEndpoints: true` if you want to create VPC endpoints in the existing VPC
 
+**Note:** When using an existing VPC, all CDK stacks are deployed with explicit account/region environment configuration. This is required for VPC lookup and ensures proper cross-stack resource references.
+
 **Example with existing VPC:**
 ```json
 {

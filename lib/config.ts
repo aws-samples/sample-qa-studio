@@ -104,6 +104,10 @@ export function loadConfig(configPath?: string): NovaActQAStudioConfig {
  * Get environment configuration for CDK stacks
  * Returns explicit env when using existing VPC (required for Vpc.fromLookup)
  * Returns undefined for new VPC (allows environment-agnostic synthesis)
+ * 
+ * When using existing VPC, all stacks must have explicit env to avoid
+ * cross-environment resource reference errors. This ensures all IAM roles
+ * and resources can be properly referenced across stacks.
  */
 export function getStackEnv(config: NovaActQAStudioConfig) {
   if (config.vpcId) {

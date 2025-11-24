@@ -27,19 +27,22 @@ if (!adminEmail) {
 
 const storageStack = new NovaActQAStudioStorageStack(app, 'storage', {
   stackName: `${baseName}-storage`,
-  baseName
+  baseName,
+  env: stackEnv,
 })
 
 const authStack = new NovaActQAStudioAuthStack(app, 'auth', {
   stackName: `${baseName}-auth`,
   baseName,
-  adminEmail
+  adminEmail,
+  env: stackEnv,
 })
 
 const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   stackName: `${baseName}-api`,
   baseName,
-  userPool: authStack.userPool
+  userPool: authStack.userPool,
+  env: stackEnv,
 })
 
 // Frontend stack must be created after routes are set up
@@ -48,6 +51,7 @@ const frontendStack = new NovaActQAStudioFrontendStack(app, 'frontend', {
   apiEndpoint: apiEndpoint,
   baseName,
   apiId: apiStack.api.restApiId,
+  env: stackEnv,
 })
 
 new NovaActQAStudioFrontendDeploymentStack(app, 'frontend_deployment', {
@@ -55,6 +59,7 @@ new NovaActQAStudioFrontendDeploymentStack(app, 'frontend_deployment', {
   baseName,
   distribution: frontendStack.distribution,
   frontendBucket: frontendStack.frontendBucket,
+  env: stackEnv,
 })
 
 const notificationStack = new NovaActQAStudioNotificationStack(app, 'notification', {
@@ -63,7 +68,8 @@ const notificationStack = new NovaActQAStudioNotificationStack(app, 'notificatio
   table: storageStack.table,
   tableReadPolicy: storageStack.tableReadPolicy,
   tableFullAccessPolicy: storageStack.tableFullAccessPolicy,
-  distributionDomain: `https://${frontendStack.distribution.domainName}`
+  distributionDomain: `https://${frontendStack.distribution.domainName}`,
+  env: stackEnv,
 })
 
 // Note: Notification stack reads frontend URL from SSM Parameter Store
@@ -85,7 +91,8 @@ new NovaActQAStudioEventBridgeStack(app, 'eventbridge', {
   stackName: `${baseName}-eventbridge`,
   baseName,
   table: storageStack.table,
-  tableWritePolicy: storageStack.tableWritePolicy
+  tableWritePolicy: storageStack.tableWritePolicy,
+  env: stackEnv,
 })
 
 new NovaActQAStudioRouteStack(app, 'routes', {
@@ -111,7 +118,8 @@ new NovaActQAStudioRouteStack(app, 'routes', {
   tableReadPolicy: storageStack.tableReadPolicy,
   tableWritePolicy: storageStack.tableWritePolicy,
   tableFullAccessPolicy: storageStack.tableFullAccessPolicy,
-  generateS3UrlLambda: workerStack.generateS3UrlLambda
+  generateS3UrlLambda: workerStack.generateS3UrlLambda,
+  env: stackEnv,
 })
 
 // Note: Notification stack uses Fn.importValue() to get the frontend domain name
