@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-18] - 2025-11-25
+
+### Documentation
+
+- **README**: expand configuration section; add notes about frontend access in deployment section; fix cli command to upload api key secret; add deployment section for accessing frontend (6d34b38)
+
+### Refactoring
+
+- set bedrock model ID default in config; make bedrock model ID required (eaa52f1)
+
+### Chores
+
+- delete deprecated and unused cdk stack (4777964)
+- add and gitignore static js for dcv lib (60c0e53)
+- cleanup sample config json file (4ea8a7c)
+
+### Other Changes
+
+- integrate latest changes and cleanup (28209cb)
+- new configuration options (f6f2ee9)
+- Minor cleanup (1e808cd)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-17] - 2025-11-24
 
 ### Other Changes
