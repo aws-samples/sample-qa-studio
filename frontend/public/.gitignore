@@ -1,0 +1,2 @@
+# Allow .js files to be tracked
+!*.js

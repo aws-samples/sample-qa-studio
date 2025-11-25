@@ -57,15 +57,20 @@ cd lambda && go mod download && cd ..
 
 ### 2. Configure Your Deployment
 
-Update `configuration.json` with your settings:
+Copy the sample configuration file and update with your settings:
 
-```json
-{
-  "baseName": "nova-act-qa-studio",
-  "adminEmail": "your-email@example.com",
-  "userAgentString": null
-}
+```bash
+cp configuration.json.sample configuration.json
 ```
+
+Edit the values in `configuration.json`:
+
+- `adminEmail` (required): Email address for the initial admin user. After deployment, this email will receive a welcome message from Cognito with a temporary password. The admin can then log in and set a permanent password.
+- `bedrockModelId` (required): Amazon Bedrock model ID used to generate test cases in the User Journey feature. See [available model IDs](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) in the AWS documentation.
+- `baseName` Prefix for all AWS resources (DynamoDB tables, S3 buckets, Lambda functions, etc.). Must be unique and contain only lowercase letters, numbers, and hyphens.
+- `apiEndpoint`: API Gateway endpoint path prefix. Default is `api` and typically doesn't need to be changed unless you have specific routing requirements.
+- `apiDeploymentStage`: API Gateway deployment stage name. Default is `api` and typically doesn't need to be changed unless you have specific routing requirements.
+- `userAgentString`: Custom User-Agent string for browser automation requests. Set to empty string (`""`) to use the default Nova Act User-Agent, or provide a custom string for specific requirements.
 
 ### 3. Deploy Everything
 
@@ -78,7 +83,10 @@ This single command will:
 - Deploy all infrastructure stacks (storage, auth, API, notification, worker, routes, frontend)
 - Generate frontend configuration files automatically
 - Build and deploy the React frontend to S3/CloudFront
+- Send a temporary password to the `adminEmail` configuration to access the frontend
 - Clean up build artifacts
+
+> Take note of the `frontend.CloudFrontDistributionDomain` CloudFormation Output printed to the console after the frontend stack is deployed. You'll use this in a later step to access the web application.
 
 ### 4. Configure Secrets
 
@@ -93,11 +101,20 @@ Upload your Nova Act API Key to Secrets Manager:
 
 # Or via AWS CLI
 aws secretsmanager update-secret \
-  --secret-id nova-act-qa-studio-nova-api-key \
+  --secret-id nova-act-qa-studio-nova-api_key \
   --secret-string "your-nova-act-api-key"
 ```
 
-That's it! Your Nova Act QA Studio is now deployed and ready to use. Access the application through the CloudFront distribution URL from the deployment outputs.
+> This API Key is used at runtime to authenticate with the Nova Act SDK.
+
+### 5. Access the Web Application
+
+1. Check the email inbox for the admin email address configured in `configuration.json` for a temporary password from no-reply@verificationemail.com
+2. Navigate to the CloudFront distribution URL from the `frontend` stack
+3. Login using your admin email and the temporary password
+5. Complete the password setup step
+
+That's it! Your Nova Act QA Studio is now deployed and ready to use.
 
 ### Advanced: Individual Stack Deployment
 
