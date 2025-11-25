@@ -1,6 +1,7 @@
 {
   "_comment": "Required fields: adminEmail, baseName. All other fields have sane defaults.",
   "adminEmail": "your@email.com",
+  "bedrockModelId": "anthropic.claude-3-5-sonnet-20240620-v1:0",
   "baseName": "nova-act-qa-studio",
   "apiEndpoint": "api",
   "apiDeploymentStage": "api",
@@ -10,6 +11,7 @@
   ],
   "defaultRegion": "us-east-1",
   "userAgentString": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+  "dcvRelease": "https://d1uj6qtbmh3dt5.cloudfront.net/webclientsdk/nice-dcv-web-client-sdk-1.9.100-952.zip",
   "vpcId": null,
   "workerSecurityGroupId": null,
   "createVpcEndpoints": false

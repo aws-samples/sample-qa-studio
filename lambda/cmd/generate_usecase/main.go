@@ -175,11 +175,11 @@ type bedrockService struct {
 }
 
 // NewBedrockService creates a new Bedrock service instance
-func NewBedrockService(cfg aws.Config) BedrockService {
+func NewBedrockService(cfg aws.Config) (BedrockService, error) {
 	client := bedrockruntime.NewFromConfig(cfg)
 	modelID := os.Getenv("BEDROCK_MODEL_ID")
 	if modelID == "" {
-		modelID = "anthropic.claude-3-5-sonnet-20241022-v2:0" // Default model
+		return nil, fmt.Errorf("Bedrock model ID is not defined - BEDROCK_MODEL_ID environment variable is required")
 	}
 
 	return &bedrockService{
@@ -187,7 +187,7 @@ func NewBedrockService(cfg aws.Config) BedrockService {
 		modelID:        modelID,
 		retryConfig:    DefaultRetryConfig(),
 		circuitBreaker: globalCircuitBreaker,
-	}
+	}, nil
 }
 
 // GenerateUsecase processes the user journey and generates a structured test case
@@ -826,7 +826,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 
 	// Create Bedrock service
-	bedrockSvc := NewBedrockService(cfg)
+	bedrockSvc, err := NewBedrockService(cfg)
+	if err != nil {
+		logWithContext(logCtx, "ERROR", "Failed to create Bedrock service: %v", err)
+		return createErrorResponseWithCode(500, "Configuration error",
+			"Bedrock service configuration is invalid", "BEDROCK_CONFIG_ERROR"), nil
+	}
 
 	// Generate the usecase using Bedrock
 	logWithContext(logCtx, "INFO", "Calling Bedrock service to generate usecase")

@@ -1,4 +1,5 @@
-import dcv from 'dcv';
+// DCV SDK is loaded as a UMD module and attaches to window.dcv
+declare const dcv: any;
 
 function getScaleToFit(sourceWidth: number, sourceHeight: number, destWidth: number, destHeight: number) {
   const scaleX = destWidth / sourceWidth;

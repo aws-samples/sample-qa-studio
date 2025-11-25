@@ -1,27 +1,21 @@
 #!/usr/bin/env ts-node
 import { CloudFormationClient, DescribeStacksCommand } from '@aws-sdk/client-cloudformation';
-import { writeFileSync, mkdirSync, readFileSync } from 'fs';
+import { writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
+import { loadConfig } from '../lib/config';
 
-// Read configuration from configuration.json
-const configPath = join(__dirname, '..', 'configuration.json');
-let baseName: string;
+// Load configuration using the config class
+let config: ReturnType<typeof loadConfig>;
 
 try {
-  const configContent = readFileSync(configPath, 'utf-8');
-  const config = JSON.parse(configContent);
-  baseName = config.baseName;
-  
-  if (!baseName) {
-    throw new Error('baseName not found in configuration.json');
-  }
+  config = loadConfig();
 } catch (error) {
-  console.error('❌ Error reading configuration.json:', error);
-  console.error('Make sure configuration.json exists and contains a "baseName" field');
+  console.error('❌ Error loading configuration:', error);
   process.exit(1);
 }
 
-const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
+const { baseName, defaultRegion } = config;
+const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || defaultRegion;
 
 async function getStackOutputs(stackName: string) {
   const client = new CloudFormationClient({ region });
@@ -77,19 +71,6 @@ async function main() {
     join(__dirname, '..', 'frontend', 'src', 'amplifyconfiguration.json'),
     amplifyConfig
   );
-
-  // Optionally write API config
-  if (apiOutputs.ApiUrlOutput) {
-    const apiConfig = {
-      apiUrl: apiOutputs.ApiUrlOutput,
-      region: region
-    };
-
-    writeConfig(
-      join(__dirname, '..', 'frontend', 'src', 'api-config.json'),
-      apiConfig
-    );
-  }
 
   console.log('\n✅ All configuration files written successfully');
 }

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { App } from 'aws-cdk-lib';
-// import { NovaActQAStudio } from '../lib/cdk-stack';
 import { NovaActQAStudioStorageStack } from '../lib/storage-stack';
 import { NovaActQAStudioAuthStack } from '../lib/auth-stack';
 import { NovaActQAStudioWorkerStack } from '../lib/worker-stack';
@@ -14,7 +13,7 @@ import { loadConfig, getStackEnv } from '../lib/config';
 
 // Load and validate configuration with sane defaults
 const config = loadConfig();
-const { adminEmail, baseName, userAgentString, apiEndpoint, apiDeploymentStage } = config;
+const { adminEmail, baseName, userAgentString, apiEndpoint, apiDeploymentStage, bedrockModelId } = config;
 
 const app = new App();
 
@@ -97,7 +96,7 @@ new NovaActQAStudioEventBridgeStack(app, 'eventbridge', {
 
 new NovaActQAStudioRouteStack(app, 'routes', {
   stackName: `${baseName}-routes`,
-  apiDeploymentStage: apiDeploymentStage,
+  apiDeploymentStage,
   baseName,
   apiId: apiStack.api.restApiId,
   apiRootResourceId: apiStack.api.restApiRootResourceId,
@@ -119,6 +118,7 @@ new NovaActQAStudioRouteStack(app, 'routes', {
   tableWritePolicy: storageStack.tableWritePolicy,
   tableFullAccessPolicy: storageStack.tableFullAccessPolicy,
   generateS3UrlLambda: workerStack.generateS3UrlLambda,
+  bedrockModelId,
   env: stackEnv,
 })
 
@@ -126,7 +126,3 @@ new NovaActQAStudioRouteStack(app, 'routes', {
 // CloudFormation will automatically handle the dependency through the import/export mechanism
 
 app.synth();
-
-// new NovaActQAStudio(app, 'NovaActQAStudio', {
-//   baseName: baseName
-// });
