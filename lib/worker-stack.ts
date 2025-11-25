@@ -206,7 +206,8 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         QUEUE_URL: this.executionQueue.queueUrl,
         BUCKET_NAME: this.artefactsBucket.bucketName,
         NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
-        NOTIFICATION_QUEUE_URL: props.notificationQueue.queueUrl
+        NOTIFICATION_QUEUE_URL: props.notificationQueue.queueUrl,
+        AWS_REGION: Aws.REGION
       }
     });
 
