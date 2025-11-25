@@ -109,6 +109,7 @@ function createReleaseZip(version: string): string {
   // Copy scripts
   exec(`mkdir -p ${tempDir}/scripts`);
   exec(`cp scripts/write-config.ts ${tempDir}/scripts/`);
+  exec(`cp scripts/download-dcv-sdk.ts ${tempDir}/scripts/`);
 
   // Copy configuration files
   exec(`cp package.json ${tempDir}/`);

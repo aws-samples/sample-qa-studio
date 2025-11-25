@@ -1,4 +1,4 @@
-import { Duration, RemovalPolicy, Aws } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, Aws, Names } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
@@ -519,7 +519,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
    * @returns The ARN of the created bucket
    */
   private createCrossRegionBucket(region: string): string {
-    const bucketName = `${this.baseName}-artefacts-${region}`;
+    const bucketName = `${Names.uniqueId(this)}-${this.baseName}-artefacts-${region}`;
     const bucketArn = `arn:aws:s3:::${bucketName}`;
 
     // Create replication role
