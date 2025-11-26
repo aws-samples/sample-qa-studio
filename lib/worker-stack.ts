@@ -78,6 +78,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       emptyOnDelete: true
     });
     this.artefactsBucket = new Bucket(this, 'artefacts', {
+      bucketName: `${this.account}-${this.baseName}-artefacts-${this.region}`,
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       versioned: true, // Required for cross-region replication
@@ -204,7 +205,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       environment: {
         DYNAMO_TABLE: props.table.tableName,
         QUEUE_URL: this.executionQueue.queueUrl,
-        BUCKET_NAME: this.artefactsBucket.bucketName,
+        S3_BUCKET: this.artefactsBucket.bucketName,
         NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
         NOTIFICATION_QUEUE_URL: props.notificationQueue.queueUrl,
         AWS_REGION: Aws.REGION
@@ -357,6 +358,8 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
         TABLE_NAME: props.table.tableName,
         S3_BUCKET: this.artefactsBucket.bucketName,
+        S3_BUCKET_PREFIX: `${this.account}-${this.baseName}-artefacts`,
+        DEFAULT_REGION: defaultRegion,
         BEDROCK_EXECUTION_ROLE: agentCoreExecutionRole.roleArn,
         NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
         SECRETS_PREFIX: props.baseName,
@@ -519,7 +522,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
    * @returns The ARN of the created bucket
    */
   private createCrossRegionBucket(region: string): string {
-    const bucketName = `${Names.uniqueId(this)}-${this.baseName}-artefacts-${region}`;
+    const bucketName = `${this.account}-${this.baseName}-artefacts-${region}`;
     const bucketArn = `arn:aws:s3:::${bucketName}`;
 
     // Create replication role

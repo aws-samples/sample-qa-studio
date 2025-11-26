@@ -466,18 +466,18 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		log.Println("Trigger ECS", usecaseId, executionId)
 
 		// Determine the correct S3 bucket based on execution region
-		s3Bucket := os.Getenv("S3_BUCKET")
+		s3BucketPrefix := os.Getenv("S3_BUCKET_PREFIX")
 		executionRegion := execution.Region
-		defaultRegion := os.Getenv("AWS_REGION")
+		defaultRegion := os.Getenv("DEFAULT_REGION")
 
-		// If execution region differs from default region, use regional bucket
-		if executionRegion != "" && executionRegion != defaultRegion {
-			// Extract base name from environment (SECRETS_PREFIX contains the baseName)
-			// Regional bucket format: {baseName}-artefacts-{region}
-			baseName := os.Getenv("SECRETS_PREFIX")
-			s3Bucket = fmt.Sprintf("%s-artefacts-%s", baseName, executionRegion)
-			log.Printf("Using regional bucket for region %s: %s", executionRegion, s3Bucket)
+		// All buckets follow the same naming pattern: {account}-{baseName}-artefacts-{region}
+		// Use execution region if specified, otherwise use default region
+		if executionRegion == "" {
+			executionRegion = defaultRegion
 		}
+
+		s3Bucket := fmt.Sprintf("%s-%s", s3BucketPrefix, executionRegion)
+		log.Printf("Using S3 bucket for region %s: %s", executionRegion, s3Bucket)
 
 		// Create ECS task
 		taskInput := &ecs.RunTaskInput{
@@ -516,6 +516,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 							{
 								Name:  aws.String("S3_BUCKET"),
 								Value: aws.String(s3Bucket),
+							},
+							{
+								Name:  aws.String("S3_BUCKET_PREFIX"),
+								Value: aws.String(s3BucketPrefix),
 							},
 							{
 								Name:  aws.String("USER_AGENT"),
