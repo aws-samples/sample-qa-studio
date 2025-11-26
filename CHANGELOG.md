@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-20] - 2025-11-26
+
+### Other Changes
+
+- change bucket names (b7ae1d7)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-19] - 2025-11-25
 
 ### Other Changes
