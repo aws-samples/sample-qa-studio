@@ -3,11 +3,13 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Table from "@cloudscape-design/components/table";
 import Button from "@cloudscape-design/components/button";
+import Alert from "@cloudscape-design/components/alert";
+import SpaceBetween from "@cloudscape-design/components/space-between";
 import { api } from '../../utils/api';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
 // @ts-ignore - configuration.json is outside src directory
-import { apiEndpoint } from '../../../../configuration.json';
+import { apiEndpoint, defaultRegion } from '../../../../configuration.json';
 
 interface DownloadedFile {
   fileName: string;
@@ -19,11 +21,13 @@ interface DownloadedFilesProps {
   usecaseId: string;
   executionId: string;
   refreshTrigger?: number;
+  executionRegion?: string;
 }
 
-export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger }: DownloadedFilesProps) {
+export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger, executionRegion }: DownloadedFilesProps) {
   const [files, setFiles] = useState<DownloadedFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const isCrossRegion = executionRegion && executionRegion !== defaultRegion;
 
   useEffect(() => {
     fetchDownloads();
@@ -98,9 +102,16 @@ export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger
 
   return (
     <Container header={<Header variant="h2">Downloaded Files</Header>}>
-      <Table
-        variant="embedded"
-        columnDefinitions={[
+      <SpaceBetween size="m">
+        {isCrossRegion && (
+          <Alert type="info" header="Cross-Region Replication">
+            This execution ran in {executionRegion}, which is different from the default region ({defaultRegion}). 
+            Downloaded files are being replicated to the default region and may take a few minutes to appear.
+          </Alert>
+        )}
+        <Table
+          variant="embedded"
+          columnDefinitions={[
           {
             id: 'fileName',
             header: 'File Name',
@@ -136,7 +147,8 @@ export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger
         ]}
         items={files}
         empty="No files downloaded."
-      />
+        />
+      </SpaceBetween>
     </Container>
   );
 }

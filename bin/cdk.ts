@@ -9,35 +9,39 @@ import { NovaActQAStudioFrontendDeploymentStack } from '../lib/frontend-deployme
 import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioRouteStack } from '../lib/route-stack';
 import { NovaActQAStudioEventBridgeStack } from '../lib/eventbridge-stack';
-import config from '../configuration.json';
+import { loadConfig, getStackEnv } from '../lib/config';
 
-// Validate required configuration
-const requiredFields = ['adminEmail', 'bedrockModelId'];
-const missing = requiredFields.filter(field => !config[field as keyof typeof config]);
-
-if (missing.length > 0) {
-  throw new Error(`Missing required configuration: ${missing.join(', ')}`);
-}
-
-const { adminEmail, baseName, apiEndpoint, userAgentString, bedrockModelId, apiDeploymentStage } = config;
+// Load and validate configuration with sane defaults
+const config = loadConfig();
+const { adminEmail, baseName, userAgentString, apiEndpoint, apiDeploymentStage, bedrockModelId } = config;
 
 const app = new App();
 
+// Get stack environment (explicit env needed when using existing VPC)
+const stackEnv = getStackEnv(config);
+
+if (!adminEmail) {
+  throw new Error("adminEmail is required")
+}
+
 const storageStack = new NovaActQAStudioStorageStack(app, 'storage', {
   stackName: `${baseName}-storage`,
-  baseName
+  baseName,
+  env: stackEnv,
 })
 
 const authStack = new NovaActQAStudioAuthStack(app, 'auth', {
   stackName: `${baseName}-auth`,
   baseName,
-  adminEmail
+  adminEmail,
+  env: stackEnv,
 })
 
 const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   stackName: `${baseName}-api`,
   baseName,
-  userPool: authStack.userPool
+  userPool: authStack.userPool,
+  env: stackEnv,
 })
 
 // Frontend stack must be created after routes are set up
@@ -46,6 +50,7 @@ const frontendStack = new NovaActQAStudioFrontendStack(app, 'frontend', {
   apiEndpoint: apiEndpoint,
   baseName,
   apiId: apiStack.api.restApiId,
+  env: stackEnv,
 })
 
 new NovaActQAStudioFrontendDeploymentStack(app, 'frontend_deployment', {
@@ -53,6 +58,7 @@ new NovaActQAStudioFrontendDeploymentStack(app, 'frontend_deployment', {
   baseName,
   distribution: frontendStack.distribution,
   frontendBucket: frontendStack.frontendBucket,
+  env: stackEnv,
 })
 
 const notificationStack = new NovaActQAStudioNotificationStack(app, 'notification', {
@@ -61,7 +67,8 @@ const notificationStack = new NovaActQAStudioNotificationStack(app, 'notificatio
   table: storageStack.table,
   tableReadPolicy: storageStack.tableReadPolicy,
   tableFullAccessPolicy: storageStack.tableFullAccessPolicy,
-  distributionDomain: `https://${frontendStack.distribution.domainName}`
+  distributionDomain: `https://${frontendStack.distribution.domainName}`,
+  env: stackEnv,
 })
 
 // Note: Notification stack reads frontend URL from SSM Parameter Store
@@ -70,6 +77,7 @@ const notificationStack = new NovaActQAStudioNotificationStack(app, 'notificatio
 const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   stackName: `${baseName}-worker`,
   baseName,
+  env: stackEnv,
   table: storageStack.table,
   tableReadPolicy: storageStack.tableReadPolicy,
   novaActApiKeySecret: storageStack.novaActApiKeySecret,
@@ -82,7 +90,8 @@ new NovaActQAStudioEventBridgeStack(app, 'eventbridge', {
   stackName: `${baseName}-eventbridge`,
   baseName,
   table: storageStack.table,
-  tableWritePolicy: storageStack.tableWritePolicy
+  tableWritePolicy: storageStack.tableWritePolicy,
+  env: stackEnv,
 })
 
 new NovaActQAStudioRouteStack(app, 'routes', {
@@ -109,7 +118,8 @@ new NovaActQAStudioRouteStack(app, 'routes', {
   tableWritePolicy: storageStack.tableWritePolicy,
   tableFullAccessPolicy: storageStack.tableFullAccessPolicy,
   generateS3UrlLambda: workerStack.generateS3UrlLambda,
-  bedrockModelId
+  bedrockModelId,
+  env: stackEnv,
 })
 
 // Note: Notification stack uses Fn.importValue() to get the frontend domain name

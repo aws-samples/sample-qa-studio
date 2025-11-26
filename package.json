@@ -1,6 +1,6 @@
 {
   "name": "cdk",
-  "version": "0.1.1-14",
+  "version": "0.1.1-20",
   "bin": {
     "cdk": "bin/cdk.js"
   },
@@ -22,8 +22,9 @@
     "deploy:eventbridge": "cdk deploy eventbridge --require-approval never",
     "deploy:routes": "cdk deploy routes --require-approval never",
     "config:write": "ts-node scripts/write-config.ts",
-    "deploy": "npm run build:lambdas && npm run deploy:storage && npm run deploy:auth && npm run deploy:api && npm run deploy:frontend && npm run config:write && npm run deploy:notification && npm run deploy:worker && npm run deploy:eventbridge && npm run deploy:routes && npm run deploy:frontend-build && npm run deploy:frontend-deployment && npm run clean:lambdas",
-    "deploy:release": "cd frontend && npm install && cd .. && npm run deploy:storage && npm run deploy:auth && npm run deploy:api && npm run deploy:frontend && npm run config:write && npm run deploy:notification && npm run deploy:worker && npm run deploy:eventbridge && npm run deploy:routes && npm run deploy:frontend-build && npm run deploy:frontend-deployment",
+    "dcv:download": "ts-node scripts/download-dcv-sdk.ts",
+    "deploy": "npm run build:lambdas && npm run deploy:storage && npm run deploy:auth && npm run deploy:api && npm run deploy:frontend && npm run config:write && npm run deploy:notification && npm run deploy:worker && npm run deploy:eventbridge && npm run deploy:routes && npm run dcv:download && npm run deploy:frontend-build && npm run deploy:frontend-deployment && npm run clean:lambdas",
+    "deploy:release": "cd frontend && npm install && cd .. && npm run deploy:storage && npm run deploy:auth && npm run deploy:api && npm run deploy:frontend && npm run config:write && npm run deploy:notification && npm run deploy:worker && npm run deploy:eventbridge && npm run deploy:routes && npm run dcv:download && npm run deploy:frontend-build && npm run deploy:frontend-deployment",
     "changelog": "ts-node scripts/generate-changelog.ts",
     "release:patch": "ts-node scripts/release.ts patch",
     "release:minor": "ts-node scripts/release.ts minor",

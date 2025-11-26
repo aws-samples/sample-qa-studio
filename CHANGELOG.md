@@ -2,6 +2,111 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-20] - 2025-11-26
+
+### Other Changes
+
+- change bucket names (b7ae1d7)
+
+All notable changes to this project will be documented in this file.
+
+## [0.1.1-19] - 2025-11-25
+
+### Other Changes
+
+- cleanups (b1c745a)
+
+All notable changes to this project will be documented in this file.
+
+## [0.1.1-18] - 2025-11-25
+
+### Documentation
+
+- **README**: expand configuration section; add notes about frontend access in deployment section; fix cli command to upload api key secret; add deployment section for accessing frontend (6d34b38)
+
+### Refactoring
+
+- set bedrock model ID default in config; make bedrock model ID required (eaa52f1)
+
+### Chores
+
+- delete deprecated and unused cdk stack (4777964)
+- add and gitignore static js for dcv lib (60c0e53)
+- cleanup sample config json file (4ea8a7c)
+
+### Other Changes
+
+- integrate latest changes and cleanup (28209cb)
+- new configuration options (f6f2ee9)
+- Minor cleanup (1e808cd)
+
+All notable changes to this project will be documented in this file.
+
+## [0.1.1-17] - 2025-11-24
+
+### Other Changes
+
+- apply env to all stacks (50cbd64)
+
+All notable changes to this project will be documented in this file.
+
+## [0.1.1-16] - 2025-11-24
+
+### Other Changes
+
+- add a config class (c867c3f)
+
+All notable changes to this project will be documented in this file.
+
+## [0.1.1-15] - 2025-11-24
+
+### Features
+
+- allow users to configure a VPC instead of creating a new one (924efa1)
+- Allow cross region execution of agents and collect assets back in the central default region (ddaafef)
+- Allow users to create a new use case from a template #68 (246ae8a)
+- Allow users to create a new use case from a template #68 (a92f06f)
+- Allow users to build templates and use them within their use cases #59 (b6212b6)
+- refactor the create use case experience #65 (f89cd00)
+- refactor the create use case experience #65 (502e84f)
+- enable batch deletion of use cases #60 (6e9ea39)
+- enable batch deletion of use cases #60 (4b4fb6b)
+- Allow users to build templates and use them within their use cases #59 (d80ffd1)
+- Allow users to batch execute use cases and get the status on the landing page #57 (cd2f6b4)
+- Allow users to batch execute use cases and get the status on the landing page #57 (269295c)
+- Allow users to trigger multiple use cases at once #25 (71d1bc3)
+- Allow users to trigger multiple use cases at once #25 (88c73fc)
+- show the current step in the live view #48 (efcc3a7)
+- Enhaced integration with ECS, allowing stopping of a task, direct link to CW logs and capturing exits during task startup #49 (3316ed1)
+- allow variables to be used in header values #46 (738aa22)
+- show the current step in the live view #48 (6864995)
+- Enhaced integration with ECS, allowing stopping of a task, direct link to CW logs and capturing exits during task startup #49 (d1fc254)
+- allow variables to be used in header values #46 (551d38a)
+- Implement downloading a file (90c18d9)
+- Implement downloads as its own step type (b4b1ca4)
+- Improve workflow creation and editing (232c908)
+
+### Refactoring
+
+- cleaning up the use case table to provide clearer readibility #63 (523835d)
+- cleaning up the use case table to provide clearer readibility #63 (c584a69)
+- reuse the cloudscape steps component instead of a custom one (8572e4c)
+
+### Other Changes
+
+- merge main (440e858)
+- Merge branch 'main' into 59-feat-allow-for-pipeline-building-blocks (d41bd36)
+- Merge branch 'main' into 59-feat-allow-for-pipeline-building-blocks (a8ad9d7)
+- change the table layout a bit more (a31f960)
+- add custom css (95267ff)
+- fix steps modal and download step color (ec26471)
+- Merge pull request #41 from aws-samples/34-improve-use-case-step-reordering-ux (0e95bf7)
+- Merge pull request #42 from aws-samples/32-use-the-steps-component-to-indicate-the-process-of-a-usecase-execution (36658e6)
+- Execution recording not available after moving to bedrock-agents-core (99da52b)
+- cleanup to least priviledge (d1fbad5)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-14] - 2025-10-31
 
 ### Features

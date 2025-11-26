@@ -31,8 +31,11 @@ Makefile
 
 frontend/.env
 frontend/src/amplifyconfiguration.json
-frontend/src/api-config.json
 configuration.json
+
+# DCV SDK downloads
+frontend/public/dcv/*
+.tmp-dcv-download/
 
 # Release artifacts
 release/

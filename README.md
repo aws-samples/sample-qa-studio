@@ -63,14 +63,81 @@ Copy the sample configuration file and update with your settings:
 cp configuration.json.sample configuration.json
 ```
 
-Edit the values in `configuration.json`:
+Edit `configuration.json` with your specific values. The configuration is loaded and validated by `lib/config.ts`, which provides sensible defaults for optional fields.
 
-- `adminEmail` (required): Email address for the initial admin user. After deployment, this email will receive a welcome message from Cognito with a temporary password. The admin can then log in and set a permanent password.
-- `bedrockModelId` (required): Amazon Bedrock model ID used to generate test cases in the User Journey feature. See [available model IDs](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) in the AWS documentation.
-- `baseName` Prefix for all AWS resources (DynamoDB tables, S3 buckets, Lambda functions, etc.). Must be unique and contain only lowercase letters, numbers, and hyphens.
-- `apiEndpoint`: API Gateway endpoint path prefix. Default is `api` and typically doesn't need to be changed unless you have specific routing requirements.
-- `apiDeploymentStage`: API Gateway deployment stage name. Default is `api` and typically doesn't need to be changed unless you have specific routing requirements.
-- `userAgentString`: Custom User-Agent string for browser automation requests. Set to empty string (`""`) to use the default Nova Act User-Agent, or provide a custom string for specific requirements.
+#### Configuration Properties
+
+| Property | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `adminEmail` | Email address for the initial admin user. After deployment, this email will receive a temporary password from Cognito. Must be a valid email format. | **Yes** | - |
+| `baseName` | Unique name prefix for all AWS resources (DynamoDB tables, S3 buckets, Lambda functions, etc.). Must contain only lowercase letters, numbers, and hyphens. | **Yes** | - |
+| `apiEndpoint` | API Gateway endpoint path prefix. | No | `api` |
+| `apiDeploymentStage` | API Gateway deployment stage name. | No | `api` |
+| `enabledRegions` | List of AWS regions where browser automation can run. | No | `["us-east-1"]` |
+| `defaultRegion` | Primary region for deployment and default browser execution. Must be included in `enabledRegions`. | No | `us-east-1` |
+| `userAgentString` | Custom User-Agent string for browser automation requests. | No | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36` |
+| `bedrockModelId` | Amazon Bedrock model ID used to generate test cases in the User Journey feature. See [available models](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html). | No | `anthropic.claude-3-5-sonnet-20240620-v1:0` |
+| `dcvRelease` | URL to the NICE DCV Web Client SDK archive. Used for remote browser session viewing. | No | `https://d1uj6qtbmh3dt5.cloudfront.net/webclientsdk/nice-dcv-web-client-sdk-1.9.100-952.zip` |
+| `vpcId` | Existing VPC ID to use instead of creating a new one. Must start with `vpc-`. Set to `null` to create a new VPC. | No | `null` (creates new VPC) |
+| `workerSecurityGroupId` | Existing security group ID for ECS tasks. Must start with `sg-`. Set to `null` to create a new security group. | No | `null` (creates new) |
+| `createVpcEndpoints` | Whether to create VPC endpoints when using an existing VPC. | No | `false` |
+
+#### Example Configuration
+
+**Minimal configuration (using defaults):**
+```json
+{
+  "adminEmail": "your-email@example.com",
+  "baseName": "nova-act-qa-studio"
+}
+```
+
+**Full configuration with custom values:**
+```json
+{
+  "adminEmail": "your-email@example.com",
+  "baseName": "my-qa-studio",
+  "apiEndpoint": "api",
+  "apiDeploymentStage": "prod",
+  "enabledRegions": ["us-east-1", "us-west-2", "eu-central-1"],
+  "defaultRegion": "us-east-1",
+  "userAgentString": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+  "bedrockModelId": "anthropic.claude-3-5-sonnet-20240620-v1:0",
+  "dcvRelease": "https://d1uj6qtbmh3dt5.cloudfront.net/webclientsdk/nice-dcv-web-client-sdk-1.9.100-952.zip",
+  "vpcId": null,
+  "workerSecurityGroupId": null,
+  "createVpcEndpoints": false
+}
+```
+
+#### Using an Existing VPC
+
+By default, Nova Act QA Studio creates a new VPC with NAT Gateways and VPC endpoints. To use an existing VPC:
+
+1. Set `vpcId` to your existing VPC ID (e.g., `"vpc-0123456789abcdef0"`)
+2. The VPC must have at least one public subnet (workers run with public IP assignment)
+3. Public subnets are automatically discovered based on route table configuration
+4. Optionally provide `workerSecurityGroupId` to use an existing security group
+5. Set `createVpcEndpoints: true` if you want to create VPC endpoints in the existing VPC
+
+**Example with existing VPC:**
+```json
+{
+  "adminEmail": "your-email@example.com",
+  "baseName": "nova-act-qa-studio",
+  "vpcId": "vpc-0123456789abcdef0",
+  "workerSecurityGroupId": "sg-0123456789abcdef0",
+  "createVpcEndpoints": false
+}
+```
+
+**Note:** When using an existing VPC, all CDK stacks are deployed with explicit account/region environment configuration. This is required for VPC lookup and ensures proper cross-stack resource references.
+
+**Benefits of using existing VPC:**
+- Reduce costs by sharing VPC infrastructure
+- Integrate with existing network architecture
+- Use existing security group configurations
+- Avoid VPC limits in your AWS account
 
 ### 3. Deploy Everything
 
@@ -82,9 +149,12 @@ This single command will:
 - Build all Lambda functions for ARM64 architecture
 - Deploy all infrastructure stacks (storage, auth, API, notification, worker, routes, frontend)
 - Generate frontend configuration files automatically
+- **Download the NICE DCV Web Client SDK** (automatically downloads ~2.7MB SDK for remote browser viewing)
 - Build and deploy the React frontend to S3/CloudFront
 - Send a temporary password to the `adminEmail` configuration to access the frontend
 - Clean up build artifacts
+
+> **Note:** During deployment, the NICE DCV Web Client SDK will be automatically downloaded from AWS CloudFront. This SDK enables remote browser session viewing in the web interface. The download is cached and only re-downloads when the SDK version changes.
 
 > Take note of the `frontend.CloudFrontDistributionDomain` CloudFormation Output printed to the console after the frontend stack is deployed. You'll use this in a later step to access the web application.
 
@@ -189,6 +259,7 @@ Secret steps ensure sensitive data never appears in logs or execution history, p
 - `npm run build:lambdas` - Build all Lambda functions for ARM64
 - `npm run clean:lambdas` - Remove Lambda build artifacts
 - `npm run config:write` - Generate frontend config from CloudFormation outputs
+- `npm run dcv:download` - Download NICE DCV Web Client SDK (runs automatically during deployment)
 - `npm run deploy:frontend-build` - Build React frontend application
 - `npm run build` - Compile TypeScript CDK code
 - `npm run watch` - Watch TypeScript files for changes
@@ -281,9 +352,12 @@ npm run deploy:release
 1. Installs frontend dependencies
 2. Deploys backend stacks (storage, auth, API, etc.)
 3. Automatically generates `amplifyconfiguration.json` with Cognito pool IDs
-4. Builds and deploys the frontend
+4. Downloads the NICE DCV Web Client SDK (~2.7MB)
+5. Builds and deploys the frontend
 
 Users need Node.js and npm, but not Go (Lambdas are pre-built).
+
+**Note:** The DCV SDK download requires `curl` and `unzip` (pre-installed on macOS/Linux).
 
 ## Contributing
 

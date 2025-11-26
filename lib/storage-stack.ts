@@ -1,4 +1,4 @@
-import * as cdk from 'aws-cdk-lib';
+import { Names, RemovalPolicy } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table, AttributeType } from 'aws-cdk-lib/aws-dynamodb';
 import { BackupPlan, BackupVault, BackupPlanRule, BackupResource } from 'aws-cdk-lib/aws-backup';
@@ -45,12 +45,12 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
         name: 'sk',
         type: AttributeType.STRING
       },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: RemovalPolicy.DESTROY,
     });
 
     const backupVault = new BackupVault(this, "dynamodb_backup_vault", {
-      backupVaultName: this.cdkName("dynamodb_backup_vault"),
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      backupVaultName: `${Names.uniqueId(this)}-${this.cdkName("dynamodb_backup_vault")}`,
+      removalPolicy: RemovalPolicy.DESTROY,
     })
     const plan = new BackupPlan(this, "dynamodb_backup_plan")
     plan.addRule(BackupPlanRule.daily(backupVault))

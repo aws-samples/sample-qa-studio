@@ -13,8 +13,8 @@ import Spinner from "@cloudscape-design/components/spinner";
 import Box from "@cloudscape-design/components/box";
 import ErrorBoundary from './components/ErrorBoundary';
 
-import { baseName } from "../../configuration.json"
-// Removed complex chunk loader imports for compatibility
+// Configuration loaded from lib/config.ts at build time via Vite
+const { baseName } = __APP_CONFIG__;
 
 // Lazy load components for code splitting
 const HomeScreen = React.lazy(() => import('./components/HomeScreen'));
