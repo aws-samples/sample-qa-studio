@@ -37,7 +37,7 @@ Amplify.configure(amplifyconfig);
 function Usecases() {
   return (
     <div>
-      <h1>Usecases</h1>
+      <h1>Use cases</h1>
       <p>This is the usecases page.</p>
     </div>
   );
@@ -92,7 +92,7 @@ function AppContent() {
         <SideNavigation
           activeHref={activeHref}
           items={[
-            { type: "link", text: "Usecases", href: "/" },
+            { type: "link", text: "Use cases", href: "/" },
             { type: "link", text: "Templates", href: "/templates" },
             { type: "divider" },
             { type: "link", text: "Users", href: "/users" },

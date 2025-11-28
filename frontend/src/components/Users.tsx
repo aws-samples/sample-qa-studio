@@ -102,43 +102,41 @@ const Users: React.FC = () => {
   }, [error, success]);
 
   return (
-    <Container
-      header={
-        <Header
-          variant="h1"
-          actions={
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button
-                onClick={fetchUsers}
-                iconName="refresh"
-                variant="icon"
-              />
-              <Button
-                variant="primary"
-                onClick={() => setShowCreateModal(true)}
-              >
-                Create User
-              </Button>
-            </SpaceBetween>
-          }
-        >
-          User Management
-        </Header>
-      }
-    >
-      <SpaceBetween size="l">
-        {error && (
-          <Alert type="error" dismissible onDismiss={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
+    <SpaceBetween direction="vertical" size="l">
+      <Header
+        variant="h1"
+        actions={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              onClick={fetchUsers}
+              iconName="refresh"
+              variant="icon"
+            />
+            <Button
+              variant="primary"
+              onClick={() => setShowCreateModal(true)}
+            >
+              Create User
+            </Button>
+          </SpaceBetween>
+        }
+      >
+        User Management
+      </Header>
 
-        {success && (
-          <Alert type="success" dismissible onDismiss={() => setSuccess(null)}>
-            {success}
-          </Alert>
-        )}
+      {error && (
+        <Alert type="error" dismissible onDismiss={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
 
+      {success && (
+        <Alert type="success" dismissible onDismiss={() => setSuccess(null)}>
+          {success}
+        </Alert>
+      )}
+
+      <Container>
         <Table
           variant="embedded"
           columnDefinitions={[
@@ -188,9 +186,10 @@ const Users: React.FC = () => {
             </Box>
           }
         />
+      </Container>
 
-        {/* Create User Modal */}
-        <Modal
+      {/* Create User Modal */}
+      <Modal
           onDismiss={() => setShowCreateModal(false)}
           visible={showCreateModal}
           closeAriaLabel="Close modal"
@@ -264,8 +263,7 @@ const Users: React.FC = () => {
             ? This action cannot be undone.
           </Box>
         </Modal>
-      </SpaceBetween>
-    </Container>
+    </SpaceBetween>
   );
 };
 

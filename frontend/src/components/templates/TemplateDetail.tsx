@@ -16,6 +16,7 @@ import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import { api } from '../../utils/api';
 import StepFormModal from '../usecase/StepFormModal';
 import WorkflowStepsCard from '../WorkflowStepsCard';
+import Breadcrumb from '../common/Breadcrumb';
 
 interface Template {
   id: string;
@@ -260,6 +261,14 @@ export default function TemplateDetail() {
 
   return (
     <SpaceBetween direction="vertical" size="l">
+      <Breadcrumb
+        items={[
+          { text: 'Home', href: '/' },
+          { text: 'Templates', href: '/templates' },
+          { text: template.name }
+        ]}
+      />
+      
       <Header
         variant="h1"
         actions={
