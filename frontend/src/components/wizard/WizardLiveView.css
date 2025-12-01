@@ -1,0 +1,26 @@
+/* Wizard Live View Styles - Following AWS AgentCore sample pattern */
+
+/* Constrain the RemoteBrowser container */
+[data-dcv-container] .RemoteBrowserContainer {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+}
+
+/* Constrain the DCV display element */
+[data-dcv-container] #dcv-display {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+}
+
+/* Let DCV SDK handle canvas sizing naturally */
+[data-dcv-container] #dcv-display canvas {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+}

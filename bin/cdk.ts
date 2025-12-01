@@ -118,6 +118,11 @@ new NovaActQAStudioRouteStack(app, 'routes', {
   tableWritePolicy: storageStack.tableWritePolicy,
   tableFullAccessPolicy: storageStack.tableFullAccessPolicy,
   generateS3UrlLambda: workerStack.generateS3UrlLambda,
+  startWizardLambda: workerStack.startWizardLambda,
+  addWizardStepLambda: workerStack.addWizardStepLambda,
+  acceptWizardStepLambda: workerStack.acceptWizardStepLambda,
+  restartWizardLambda: workerStack.restartWizardLambda,
+  terminateWizardLambda: workerStack.terminateWizardLambda,
   bedrockModelId,
   env: stackEnv,
 })

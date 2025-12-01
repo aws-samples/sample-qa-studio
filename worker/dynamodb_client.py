@@ -419,3 +419,136 @@ class DynamoDBClient:
         except Exception as e:
             logger.error(f"Unexpected error updating live view for execution {execution_id}: {e}")
             return False
+
+    def update_execution_last_activity(self, usecase_id: str, execution_id: str, timestamp: str) -> bool:
+        """Update last activity timestamp for wizard execution"""
+        try:
+            self.table.update_item(
+                Key={
+                    'pk': f'USECASE_EXECUTION#{usecase_id}',
+                    'sk': f'EXECUTION#{execution_id}'
+                },
+                UpdateExpression="SET last_activity = :timestamp",
+                ExpressionAttributeValues={
+                    ":timestamp": timestamp
+                }
+            )
+            return True
+        except ClientError as e:
+            logger.error(f"Error updating last activity for execution {execution_id}: {e}")
+            return False
+
+    def get_execution_step(self, execution_id: str, step_id: str) -> Optional[ExecutionStep]:
+        """Get a single execution step by ID"""
+        try:
+            response = self.table.get_item(
+                Key={
+                    'pk': f'EXECUTION#{execution_id}',
+                    'sk': f'EXECUTION_STEP#{step_id}'
+                }
+            )
+            
+            if 'Item' not in response:
+                return None
+            
+            item = response['Item']
+            return ExecutionStep(
+                pk=item['pk'],
+                sk=item['sk'],
+                step_id=item['step_id'],
+                sort=item.get('sort', 0),
+                instruction=item['instruction'],
+                artefact=item.get('artefact', ''),
+                logs=item.get('logs', []),
+                created_at=item['created_at'],
+                secret_key=item.get('secret_key', ''),
+                step_type=item['step_type'],
+                validation_type=item.get('validation_type', ''),
+                validation_operator=item.get('validation_operator', ''),
+                validation_value=item.get('validation_value', ''),
+                capture_variable=item.get('capture_variable', ''),
+                value_type=item.get('value_type', ''),
+                assertion_variable=item.get('assertion_variable', '')
+            )
+        except ClientError as e:
+            logger.error(f"Error getting execution step {step_id}: {e}")
+            return None
+
+    def get_accepted_execution_steps(self, execution_id: str) -> List[ExecutionStep]:
+        """Get all accepted steps for wizard execution, sorted by sort order"""
+        try:
+            response = self.table.query(
+                KeyConditionExpression=Key('pk').eq(f'EXECUTION#{execution_id}') & 
+                                     Key('sk').begins_with(f'EXECUTION_STEP#'),
+                FilterExpression='acceptance_status = :status',
+                ExpressionAttributeValues={
+                    ':status': 'accepted'
+                },
+                ScanIndexForward=True
+            )
+            
+            steps = []
+            for item in response['Items']:
+                step = ExecutionStep(
+                    pk=item['pk'],
+                    sk=item['sk'],
+                    step_id=item['step_id'],
+                    sort=item['sort'],
+                    instruction=item['instruction'],
+                    artefact=item.get('artefact', ''),
+                    logs=item.get('logs', []),
+                    created_at=item['created_at'],
+                    secret_key=item.get('secret_key', ''),
+                    step_type=item['step_type'],
+                    validation_type=item.get('validation_type', ''),
+                    validation_operator=item.get('validation_operator', ''),
+                    validation_value=item.get('validation_value', ''),
+                    capture_variable=item.get('capture_variable', ''),
+                    value_type=item.get('value_type', ''),
+                    assertion_variable=item.get('assertion_variable', '')
+                )
+                steps.append(step)
+            
+            # Sort by sort field
+            steps.sort(key=lambda x: x.sort)
+            return steps
+            
+        except ClientError as e:
+            logger.error(f"Error getting accepted execution steps for {execution_id}: {e}")
+            return []
+
+    def poll_wizard_commands(self, session_id: str, limit: int = 1) -> List[dict]:
+        """
+        Poll DynamoDB for wizard commands for a specific session.
+        Returns commands in chronological order (oldest first).
+        """
+        try:
+            response = self.table.query(
+                KeyConditionExpression=Key('pk').eq(f'WIZARD_COMMAND#{session_id}'),
+                ScanIndexForward=True,  # Oldest first
+                Limit=limit
+            )
+            
+            commands = response.get('Items', [])
+            logger.info(f"Polled {len(commands)} command(s) for session {session_id}")
+            return commands
+            
+        except ClientError as e:
+            logger.error(f"Error polling wizard commands for session {session_id}: {e}")
+            return []
+    
+    def delete_wizard_command(self, session_id: str, command_sk: str) -> bool:
+        """Delete a wizard command after processing"""
+        try:
+            self.table.delete_item(
+                Key={
+                    'pk': f'WIZARD_COMMAND#{session_id}',
+                    'sk': command_sk
+                }
+            )
+            logger.info(f"Deleted command {command_sk} for session {session_id}")
+            return True
+            
+        except ClientError as e:
+            logger.error(f"Error deleting wizard command: {e}")
+            return False

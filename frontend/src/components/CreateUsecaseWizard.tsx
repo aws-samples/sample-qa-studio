@@ -17,6 +17,13 @@ interface CreationOption {
 
 const creationOptions: CreationOption[] = [
   {
+    id: 'wizard',
+    title: 'Interactive Wizard',
+    description: 'Build your use case step-by-step with live browser feedback. Add steps, see them execute in real-time, and accept when ready.',
+    icon: 'status-in-progress',
+    route: '/create/wizard/setup'
+  },
+  {
     id: 'blank',
     title: 'Create Blank',
     description: 'Start from scratch and manually configure all use case settings, steps, and validations.',
