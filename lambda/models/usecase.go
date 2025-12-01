@@ -106,6 +106,10 @@ type Execution struct {
 	TaskArn           string `json:"taskArn,omitempty" dynamodbav:"task_arn,omitempty"`
 	TaskID            string `json:"taskId,omitempty" dynamodbav:"task_id,omitempty"`
 	CloudWatchLogsURL string `json:"cloudWatchLogsUrl,omitempty" dynamodbav:"cloudwatch_logs_url,omitempty"`
+	// Wizard mode fields
+	Mode         string `json:"mode,omitempty" dynamodbav:"mode,omitempty"`                  // "batch" or "wizard"
+	WizardStatus string `json:"wizardStatus,omitempty" dynamodbav:"wizard_status,omitempty"` // "active" or "closed"
+	LastActivity string `json:"lastActivity,omitempty" dynamodbav:"last_activity,omitempty"` // ISO timestamp
 }
 
 type ExecutionStep struct {
@@ -117,15 +121,18 @@ type ExecutionStep struct {
 	StepType    string `json:"step_type" dynamodbav:"step_type"`
 	SecretKey   string `json:"secret_key,omitempty" dynamodbav:"secret_key,omitempty"`
 	// Validation step fields
-	CaptureVariable    string   `json:"capture_variable,omitempty" dynamodbav:"capture_variable,omitempty"`
-	ValidationType     string   `json:"validation_type,omitempty" dynamodbav:"validation_type,omitempty"`
-	ValidationOperator string   `json:"validation_operator,omitempty" dynamodbav:"validation_operator,omitempty"`
-	ValidationValue    string   `json:"validation_value,omitempty" dynamodbav:"validation_value,omitempty"`
-	AssertionVariable  string   `json:"assertion_variable,omitempty" dynamodbav:"assertion_variable,omitempty"`
-	Artefact           string   `json:"artefact" dynamodbav:"artefact"`
-	Logs               []string `json:"logs" dynamodbav:"logs"`
-	CreatedAt          string   `json:"createdAt" dynamodbav:"created_at"`
-	ValueType          string   `json:"value_type,omitempty" dynamodbav:"value_type,omitempty"`
+	CaptureVariable    string `json:"capture_variable,omitempty" dynamodbav:"capture_variable,omitempty"`
+	ValidationType     string `json:"validation_type,omitempty" dynamodbav:"validation_type,omitempty"`
+	ValidationOperator string `json:"validation_operator,omitempty" dynamodbav:"validation_operator,omitempty"`
+	ValidationValue    string `json:"validation_value,omitempty" dynamodbav:"validation_value,omitempty"`
+	AssertionVariable  string `json:"assertion_variable,omitempty" dynamodbav:"assertion_variable,omitempty"`
+	Artefact           string `json:"artefact" dynamodbav:"artefact"`
+	Logs               string `json:"logs" dynamodbav:"logs"` // Changed from []string to string for compatibility
+	CreatedAt          string `json:"createdAt" dynamodbav:"created_at"`
+	ValueType          string `json:"value_type,omitempty" dynamodbav:"value_type,omitempty"`
+	// Wizard mode fields
+	AcceptanceStatus string `json:"acceptanceStatus,omitempty" dynamodbav:"acceptance_status,omitempty"` // "pending_acceptance", "accepted", "rejected"
+	Temporary        bool   `json:"temporary,omitempty" dynamodbav:"temporary,omitempty"`                // True for steps not yet accepted
 }
 
 type QueueMessage struct {
@@ -319,4 +326,39 @@ type CreateTemplateStepRequest struct {
 type ImportTemplateRequest struct {
 	TemplateID     string `json:"template_id"`
 	InsertPosition int    `json:"insert_position"` // 0 = beginning, -1 = end, or specific position
+}
+
+// Wizard mode types
+type WizardCommand struct {
+	Action    string             `json:"action"` // "execute_step", "restart", "terminate"
+	SessionID string             `json:"session_id"`
+	Step      *CreateStepRequest `json:"step,omitempty"`
+	StepID    string             `json:"step_id,omitempty"`
+}
+
+type StartWizardRequest struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	StartingURL string   `json:"starting_url"`
+	Tags        []string `json:"tags"`
+	Region      string   `json:"region"`
+}
+
+type AddWizardStepRequest struct {
+	Instruction        string `json:"instruction"`
+	StepType           string `json:"step_type"`
+	SecretKey          string `json:"secret_key,omitempty"`
+	ValidationType     string `json:"validation_type,omitempty"`
+	ValidationOperator string `json:"validation_operator,omitempty"`
+	ValidationValue    string `json:"validation_value,omitempty"`
+	CaptureVariable    string `json:"capture_variable,omitempty"`
+	AssertionVariable  string `json:"assertion_variable,omitempty"`
+	ValueType          string `json:"value_type,omitempty"`
+}
+
+type WizardSessionResponse struct {
+	SessionID   string `json:"session_id"`
+	UsecaseID   string `json:"usecase_id"`
+	Status      string `json:"status"`
+	LiveViewURL string `json:"live_view_url,omitempty"`
 }

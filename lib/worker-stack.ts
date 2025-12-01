@@ -14,7 +14,7 @@ import { Platform, DockerImageAsset } from 'aws-cdk-lib/aws-ecr-assets';
 import { ECRDeployment, DockerImageName } from 'cdk-ecr-deployment';
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
-import { Rule } from 'aws-cdk-lib/aws-events';
+import { Rule, EventBus } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
@@ -68,6 +68,11 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
   public readonly executeUsecaseLambda: Function
   public readonly stopExecutionLambda: Function
   public readonly generateS3UrlLambda: Function
+  public readonly startWizardLambda: Function
+  public readonly addWizardStepLambda: Function
+  public readonly acceptWizardStepLambda: Function
+  public readonly restartWizardLambda: Function
+  public readonly terminateWizardLambda: Function
   private readonly regionalBucketArns: string[] = []
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioWorkerStackCreateProps) {
@@ -97,6 +102,18 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       queueName: this.cdkName('workhorse'),
       visibilityTimeout: Duration.minutes(10),
       removalPolicy: RemovalPolicy.DESTROY
+    });
+
+    // Wizard mode queue (deprecated - will be replaced by EventBridge)
+    const wizardQueue = new Queue(this, 'wizard_queue', {
+      queueName: this.cdkName('wizard-commands'),
+      visibilityTimeout: Duration.seconds(30),
+      removalPolicy: RemovalPolicy.DESTROY
+    });
+
+    // EventBridge Event Bus for wizard commands
+    const wizardEventBus = new EventBus(this, 'wizard_event_bus', {
+      eventBusName: this.cdkName('wizard-events')
     });
 
     // VPC Configuration: Use existing VPC or create new one
@@ -215,6 +232,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // Grant permissions to task roles (must be after container is added)
     // TODO: Remove queue
     this.executionQueue.grantConsumeMessages(this.taskDefinition.taskRole);
+    wizardQueue.grantConsumeMessages(this.taskDefinition.taskRole);
     props.table.grantFullAccess(this.taskDefinition.taskRole);
     this.artefactsBucket.grantReadWrite(this.taskDefinition.taskRole);
     props.notificationQueue.grantSendMessages(this.taskDefinition.taskRole);
@@ -425,6 +443,100 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     this.generateS3UrlLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.artefactsBucket.grantRead(this.generateS3UrlLambda)
+
+    // Wizard mode Lambda functions
+    this.startWizardLambda = this.createLambda({
+      path: 'start_wizard_session',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        ECS_CLUSTER: this.cluster.clusterArn,
+        ECS_TASK_DEFINITION: this.taskDefinition.taskDefinitionArn,
+        SUBNET_ID: vpc.publicSubnets[0].subnetId,
+        SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
+        WIZARD_QUEUE_URL: wizardQueue.queueUrl,
+        S3_BUCKET: this.artefactsBucket.bucketName,
+        BEDROCK_EXECUTION_ROLE: agentCoreExecutionRole.roleArn,
+        NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
+      }
+    });
+
+    this.addWizardStepLambda = this.createLambda({
+      path: 'add_wizard_step',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        WIZARD_QUEUE_URL: wizardQueue.queueUrl,
+        WIZARD_EVENT_BUS_NAME: wizardEventBus.eventBusName,
+      }
+    });
+
+    this.acceptWizardStepLambda = this.createLambda({
+      path: 'accept_wizard_step',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+      }
+    });
+
+    this.restartWizardLambda = this.createLambda({
+      path: 'restart_wizard',
+      environment: {
+        WIZARD_QUEUE_URL: wizardQueue.queueUrl,
+        WIZARD_EVENT_BUS_NAME: wizardEventBus.eventBusName,
+      }
+    });
+
+    this.terminateWizardLambda = this.createLambda({
+      path: 'terminate_wizard_session',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        WIZARD_QUEUE_URL: wizardQueue.queueUrl,
+        WIZARD_EVENT_BUS_NAME: wizardEventBus.eventBusName,
+      }
+    });
+
+    // EventBridge command processor Lambda
+    const processWizardCommandLambda = this.createLambda({
+      path: 'process_wizard_command',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+      }
+    });
+
+    // EventBridge rule to process wizard commands
+    new Rule(this, 'wizard_command_rule', {
+      eventBus: wizardEventBus,
+      eventPattern: {
+        source: ['wizard.commands'],
+        detailType: ['WizardCommand'],
+      },
+      targets: [new LambdaFunction(processWizardCommandLambda)],
+    });
+
+    // Grant permissions for wizard Lambdas
+    props.table.grantFullAccess(this.startWizardLambda);
+    props.table.grantFullAccess(this.addWizardStepLambda);
+    props.table.grantFullAccess(this.acceptWizardStepLambda);
+    props.table.grantFullAccess(this.terminateWizardLambda);
+    props.table.grantFullAccess(processWizardCommandLambda);
+
+    wizardQueue.grantSendMessages(this.startWizardLambda);
+    wizardQueue.grantSendMessages(this.addWizardStepLambda);
+    wizardQueue.grantSendMessages(this.restartWizardLambda);
+    wizardQueue.grantSendMessages(this.terminateWizardLambda);
+
+    // Grant EventBridge permissions
+    wizardEventBus.grantPutEventsTo(this.addWizardStepLambda);
+    wizardEventBus.grantPutEventsTo(this.restartWizardLambda);
+    wizardEventBus.grantPutEventsTo(this.terminateWizardLambda);
+
+    this.startWizardLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['ecs:RunTask', 'iam:PassRole'],
+      resources: [
+        this.taskDefinition.taskDefinitionArn,
+        this.taskDefinition.taskRole.roleArn,
+        this.taskDefinition.executionRole!.roleArn
+      ]
+    }));
 
     // Grant EventBridge Scheduler permissions
     this.createScheduleLambda.addToRolePolicy(new PolicyStatement({

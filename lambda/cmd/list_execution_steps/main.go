@@ -32,6 +32,9 @@ type ExecutionStep struct {
 	Status             string `json:"status" dynamodbav:"status"`
 	StepType           string `json:"stepType" dynamodbav:"step_type"`
 	AssertionVariable  string `json:"assertionVariable" dynamodbav:"assertion_variable"`
+	AcceptanceStatus   string `json:"acceptanceStatus" dynamodbav:"acceptance_status"`
+	Temporary          bool   `json:"temporary" dynamodbav:"temporary"`
+	StepID             string `json:"stepId" dynamodbav:"step_id"`
 }
 
 type Response struct {

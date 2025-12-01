@@ -24,6 +24,8 @@ const CloneUsecase = React.lazy(() => import('./components/CloneUsecase'));
 const CreateFromTemplate = React.lazy(() => import('./components/CreateFromTemplate'));
 const TemplateUsecase = React.lazy(() => import('./components/TemplateUsecase'));
 const UserJourneyWizard = React.lazy(() => import('./components/UserJourneyWizard'));
+const WizardSetup = React.lazy(() => import('./components/wizard/WizardSetup'));
+const InteractiveWizard = React.lazy(() => import('./components/wizard/InteractiveWizard'));
 const UsecaseDetail = React.lazy(() => import('./components/UsecaseDetailRefactored'));
 const ExecutionDetail = React.lazy(() => import('./components/ExecutionDetailRefactored'));
 const Users = React.lazy(() => import('./components/Users'));
@@ -59,6 +61,8 @@ function AppContent() {
         import('./components/CloneUsecase');
         import('./components/TemplateUsecase');
         import('./components/UserJourneyWizard');
+        import('./components/wizard/WizardSetup');
+        import('./components/wizard/InteractiveWizard');
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
         import('./components/Users');
@@ -73,6 +77,8 @@ function AppContent() {
         import('./components/CloneUsecase');
         import('./components/TemplateUsecase');
         import('./components/UserJourneyWizard');
+        import('./components/wizard/WizardSetup');
+        import('./components/wizard/InteractiveWizard');
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
         import('./components/Users');
@@ -124,6 +130,12 @@ function AppContent() {
             <Route path="/create/journey" element={
               <ErrorBoundary>
                 <UserJourneyWizard />
+              </ErrorBoundary>
+            } />
+            <Route path="/create/wizard/setup" element={<WizardSetup />} />
+            <Route path="/wizard/:sessionId" element={
+              <ErrorBoundary>
+                <InteractiveWizard />
               </ErrorBoundary>
             } />
             <Route path="/templates" element={<TemplateLibrary />} />

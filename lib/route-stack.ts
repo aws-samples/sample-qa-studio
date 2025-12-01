@@ -29,7 +29,12 @@ interface NovaActQAStudioRouteStackCreateProps extends NovaActQAStudioBaseStackC
   unsubscribeUsecaseLambda: Function,
   getUsecaseSubscriptionLambda: Function,
   generateS3UrlLambda: Function,
-  bedrockModelId: string
+  bedrockModelId: string,
+  startWizardLambda: Function,
+  addWizardStepLambda: Function,
+  acceptWizardStepLambda: Function,
+  restartWizardLambda: Function,
+  terminateWizardLambda: Function
 }
 
 enum HttpMethod {
@@ -447,6 +452,27 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     this.addMethod(secrets, HttpMethod.GET, getUsecaseSecretsLambda)
     this.addMethod(secrets, HttpMethod.DELETE, deleteUsecaseSecretsLambda)
     this.addMethod(secrets, HttpMethod.PATCH, updateUsecaseSecretsLambda)
+
+    // API Gateway wizard endpoints
+    const wizard = this.addResource(apiInstance.root, 'wizard');
+    const wizardStart = this.addResource(wizard, 'start');
+    this.addMethod(wizardStart, HttpMethod.POST, props.startWizardLambda)
+
+    const wizardSession = this.addResource(wizard, '{sessionId}');
+    const wizardStep = this.addResource(wizardSession, 'step');
+    this.addMethod(wizardStep, HttpMethod.POST, props.addWizardStepLambda)
+
+    const wizardAccept = this.addResource(wizardSession, 'accept');
+    const wizardAcceptStep = this.addResource(wizardAccept, '{stepId}');
+    const wizardAcceptStepUsecase = this.addResource(wizardAcceptStep, '{usecaseId}');
+    this.addMethod(wizardAcceptStepUsecase, HttpMethod.POST, props.acceptWizardStepLambda)
+
+    const wizardRestart = this.addResource(wizardSession, 'restart');
+    this.addMethod(wizardRestart, HttpMethod.POST, props.restartWizardLambda)
+
+    const wizardTerminate = this.addResource(wizardSession, 'terminate');
+    const wizardTerminateUsecase = this.addResource(wizardTerminate, '{usecaseId}');
+    this.addMethod(wizardTerminateUsecase, HttpMethod.POST, props.terminateWizardLambda)
 
     // API Gateway headers endpoints
     const headers = this.addResource(usecaseId, 'headers');

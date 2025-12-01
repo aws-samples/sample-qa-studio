@@ -49,7 +49,6 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
     });
 
     const backupVault = new BackupVault(this, "dynamodb_backup_vault", {
-      backupVaultName: `${Names.uniqueId(this)}-${this.cdkName("dynamodb_backup_vault")}`,
       removalPolicy: RemovalPolicy.DESTROY,
     })
     const plan = new BackupPlan(this, "dynamodb_backup_plan")

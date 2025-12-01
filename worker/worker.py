@@ -31,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def main():
+def main_batch():
     """Main worker function"""
     
     # Get required environment variables
@@ -305,6 +305,18 @@ def main():
     
     logger.info(f"Execution {execution_id} completed successfully")
     return True
+
+def main():
+    """Main entry point - routes to batch or wizard mode"""
+    worker_mode = os.getenv('WORKER_MODE', 'batch')
+    
+    if worker_mode == 'wizard':
+        logger.info("Starting in wizard mode")
+        import wizard_worker
+        return wizard_worker.main()
+    else:
+        logger.info("Starting in batch mode")
+        return main_batch()
 
 if __name__ == "__main__":
     success = main()
