@@ -7,7 +7,7 @@ and runs Nova Act directly in the same shell.
 import os
 import logging
 import boto3
-from nova_act import NovaAct
+from nova_act import NovaAct, Workflow
 from nova_act.util.s3_writer import S3Writer
 from utils import get_region, remove_prefix, get_time
 from browser import start_browser, create_browser, delete_browser
@@ -30,6 +30,8 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+from nova_act_workflow import ensure_workflow_definition, NOVA_ACT_REGION
 
 def main_batch():
     """Main worker function"""
@@ -129,8 +131,7 @@ def main_batch():
     
     except Exception as e:
         logger.error(f"Execution failed: {e}")
-        db_client.update_execution_status(usecase_id, execution_id, "error", completed_at=get_time())
-        
+        db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=get_time())
         return False
         
     # Execute workflow
@@ -145,48 +146,120 @@ def main_batch():
         # Store live view URL in DynamoDB
         db_client.create_live_view(execution_id, live_view_url)
 
-        with NovaAct(
-            cdp_endpoint_url=ws_url,
-            cdp_headers=headers,
-            starting_page=execution.starting_url,
-            # record_video=True,
-            headless=execution.headless,
-            logs_directory=execution_logs_dir,
-            ignore_https_errors=True,
-            chrome_channel="chromium",
-            stop_hooks=[s3_writer],
-            nova_act_api_key=nova_api_key,
-            user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
-        ) as nova:
+        # Check if using GA service
+        use_ga_service = os.getenv('USE_NOVA_ACT_GA', 'false').lower() == 'true'
 
-            # Set custom HTTP headers if configured
-            if execution_headers and execution_headers.headers:
-                logger.info(f"Setting {len(execution_headers.headers)} custom HTTP headers")
-                
-                # Parse headers for variable substitution
-                parsed_headers = {}
-                for header_name, header_value in execution_headers.headers.items():
-                    parsed_value = template_parser.parse_instruction(header_value)
-                    parsed_headers[header_name] = parsed_value
-                    logger.info(f"Header: {header_name} = {parsed_value}")
-                
-                nova.page.set_extra_http_headers(parsed_headers)
-                # Navigate to starting URL to apply headers
-                nova.go_to_url(execution.starting_url)
-
-            logger.info("NovaAct initialized successfully")
-                
-            # Get the session ID from Nova Act and update the execution record
-            session_id = nova.get_session_id()
-            logger.info(f"Nova Act session ID: {session_id}")
+        if use_ga_service:
+            # Nova Act GA Service
+            logger.info(f"Using Nova Act GA service in {NOVA_ACT_REGION}")
+            workflow_name = ensure_workflow_definition(usecase_id)
             
-            # Update execution with session ID
-            db_client.update_execution_session_id(usecase_id, execution_id, session_id)
+            # Get model_id from execution, default to nova-act-v1.0
+            model_id = getattr(execution, 'model_id', None) or 'nova-act-v1.0'
+            logger.info(f"Using model: {model_id}")
+            
+            with Workflow(
+                workflow_definition_name=workflow_name,
+                model_id=model_id,
+                boto_session_kwargs={
+                    "region_name": NOVA_ACT_REGION
+                }
+            ) as workflow:
+                with NovaAct(
+                    cdp_endpoint_url=ws_url,
+                    cdp_headers=headers,
+                    starting_page=execution.starting_url,
+                    workflow=workflow,
+                    headless=execution.headless,
+                    logs_directory=execution_logs_dir,
+                    ignore_https_errors=True,
+                    chrome_channel="chromium",
+                    stop_hooks=[s3_writer],
+                    user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
+                ) as nova:
+                        all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
+        else:
+            # Nova Act Preview API
+            logger.info("Using Nova Act Preview API")
+            
+            with NovaAct(
+                cdp_endpoint_url=ws_url,
+                cdp_headers=headers,
+                starting_page=execution.starting_url,
+                headless=execution.headless,
+                logs_directory=execution_logs_dir,
+                ignore_https_errors=True,
+                chrome_channel="chromium",
+                stop_hooks=[s3_writer],
+                nova_act_api_key=nova_api_key,
+                user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
+            ) as nova:
+                all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
+    
+    except Exception as nova_error:
+        logger.error(f"Nova Act execution failed: {nova_error}")
+        all_success = False
+        # Ensure execution status is updated on Nova Act failures
+        try:
+            db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=get_time())
+        except Exception as db_error:
+            logger.error(f"Failed to update execution status after Nova Act error: {str(db_error)}")
         
-            # Execute each step
-            all_success = True
+        # Clean up live view URL on error
+        try:
+            db_client.delete_live_view(execution_id)
+        except Exception as cleanup_error:
+            logger.error(f"Failed to cleanup live view URL: {str(cleanup_error)}")
+        
+        return False
+    
+    browser.stop()
+    delete_browser(browser_id, execution.region)
+    
+    # Clean up live view URL
+    db_client.delete_live_view(execution_id)
+    
+    # Update execution status to completed
+    if not all_success:
+        db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=get_time())
+        return False
 
-            for step in steps:
+    db_client.update_execution_status(usecase_id, execution_id, "success", completed_at=get_time())
+    
+    logger.info(f"Execution {execution_id} completed successfully")
+    return True
+
+
+def _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps):
+    """Execute all steps - extracted to avoid code duplication"""
+    all_success = True
+
+    # Set custom HTTP headers if configured
+    if execution_headers and execution_headers.headers:
+        logger.info(f"Setting {len(execution_headers.headers)} custom HTTP headers")
+        
+        # Parse headers for variable substitution
+        parsed_headers = {}
+        for header_name, header_value in execution_headers.headers.items():
+            parsed_value = template_parser.parse_instruction(header_value)
+            parsed_headers[header_name] = parsed_value
+            logger.info(f"Header: {header_name} = {parsed_value}")
+        
+        nova.page.set_extra_http_headers(parsed_headers)
+        # Navigate to starting URL to apply headers
+        nova.go_to_url(execution.starting_url)
+
+    logger.info("NovaAct initialized successfully")
+        
+    # Get the session ID from Nova Act and update the execution record
+    session_id = nova.get_session_id()
+    logger.info(f"Nova Act session ID: {session_id}")
+    
+    # Update execution with session ID
+    db_client.update_execution_session_id(usecase_id, execution_id, session_id)
+
+    # Execute each step
+    for step in steps:
                 act_id = ""
                 result = None
                 status = "success"
@@ -243,11 +316,15 @@ def main_batch():
                             if runtime_variables:
                                 db_client.update_runtime_variables(execution_id, runtime_variables)
                         except Exception as var_error:
-                            logger.error(f"Failed to capture runtime variable {runtime_var_name}: {str(var_error)}")
+                            logger.error(f"Captured runtime variable {runtime_var_name}: {str(var_error)}")
                             # Don't fail the step execution for variable capture errors
                     
-                    response_text = result.parsed_response if result else "No response"
-                    logger.info(f"Step: {parsed_step.sort}\tActID:\t{act_id}\tStatus: {status}\tResponse: {response_text}")
+                    # Only log parsed_response for steps that return values (validation, retrieve_value)
+                    if parsed_step.step_type in ['validation', 'retrieve_value'] and result and hasattr(result, 'parsed_response'):
+                        response_text = result.parsed_response
+                        logger.info(f"Step: {parsed_step.sort}\tActID:\t{act_id}\tStatus: {status}\tResponse: {response_text}")
+                    else:
+                        logger.info(f"Step: {parsed_step.sort}\tActID:\t{act_id}\tStatus: {status}")
                     
                 except Exception as step_error:
                     logger.error(f"Unexpected error executing step {step.sort}: {str(step_error)}")
@@ -273,38 +350,21 @@ def main_batch():
                     logger.info(f"Stopping execution due to failed step {parsed_step.sort}")
                     break
     
-    except Exception as nova_error:
-        logger.error(f"Nova Act execution failed: {nova_error}")
-        all_success = False
-        # Ensure execution status is updated on Nova Act failures
-        try:
-            db_client.update_execution_status(usecase_id, execution_id, "error", completed_at=get_time())
-        except Exception as db_error:
-            logger.error(f"Failed to update execution status after Nova Act error: {str(db_error)}")
-        
-        # Clean up live view URL on error
-        try:
-            db_client.delete_live_view(execution_id)
-        except Exception as cleanup_error:
-            logger.error(f"Failed to cleanup live view URL: {str(cleanup_error)}")
-        
-        return False
-    
-    browser.stop()
-    delete_browser(browser_id, execution.region)
-    
-    # Clean up live view URL
-    db_client.delete_live_view(execution_id)
-    
-    # Update execution status to completed
-    if not all_success:
-        db_client.update_execution_status(usecase_id, execution_id, "error", completed_at=get_time())
-        return False
+    return all_success
 
-    db_client.update_execution_status(usecase_id, execution_id, "success", completed_at=get_time())
+
+def main():
+    """Main entry point - routes to batch or wizard mode"""
+    worker_mode = os.getenv('WORKER_MODE', 'batch')
     
-    logger.info(f"Execution {execution_id} completed successfully")
-    return True
+    if worker_mode == 'wizard':
+        logger.info("Starting in wizard mode")
+        import wizard_worker
+        return wizard_worker.main()
+    else:
+        logger.info("Starting in batch mode")
+        return main_batch()
+
 
 def main():
     """Main entry point - routes to batch or wizard mode"""

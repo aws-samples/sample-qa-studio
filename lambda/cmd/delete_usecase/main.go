@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"lambda/models"
 	"log"
+	"regexp"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -14,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/service/novaact"
 )
 
 func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -29,6 +32,9 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 
 	client := dynamodb.NewFromConfig(cfg)
+
+	// Delete Nova Act workflow definition if it exists
+	deleteWorkflowDefinition(ctx, usecaseId)
 
 	// Delete usecase metadata
 	_, err = client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
@@ -162,6 +168,43 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		},
 		Body: string(response),
 	}, nil
+}
+
+func deleteWorkflowDefinition(ctx context.Context, usecaseId string) {
+	// Sanitize workflow name to match Python logic
+	// Workflow names: 1-40 chars, a-z A-Z 0-9 - _, no spaces
+	reg := regexp.MustCompile(`[^a-zA-Z0-9\-_]`)
+	workflowName := reg.ReplaceAllString(usecaseId, "-")
+
+	// Ensure max 40 chars
+	if len(workflowName) > 40 {
+		workflowName = workflowName[:40]
+	}
+
+	// Create Nova Act client in us-east-1 (GA region)
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion("us-east-1"))
+	if err != nil {
+		log.Printf("Warning: Could not load config for Nova Act client: %v", err)
+		return
+	}
+
+	novaActClient := novaact.NewFromConfig(cfg)
+
+	// Try to delete the workflow definition
+	_, err = novaActClient.DeleteWorkflowDefinition(ctx, &novaact.DeleteWorkflowDefinitionInput{
+		WorkflowDefinitionName: aws.String(workflowName),
+	})
+
+	if err != nil {
+		// Check if it's a ResourceNotFoundException (workflow doesn't exist)
+		if strings.Contains(err.Error(), "ResourceNotFoundException") {
+			log.Printf("Workflow definition '%s' does not exist, nothing to delete", workflowName)
+		} else {
+			log.Printf("Warning: Could not delete workflow definition '%s': %v", workflowName, err)
+		}
+	} else {
+		log.Printf("Successfully deleted workflow definition '%s' for usecase %s", workflowName, usecaseId)
+	}
 }
 
 func main() {

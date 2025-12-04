@@ -28,7 +28,6 @@ def execute_assertion_step(step: ExecutionStep, runtime_variables: dict):
     result = SimpleNamespace()
     result.metadata = SimpleNamespace()
     result.metadata.act_id = ''
-    result.parsed_response = None
 
     try:
         # Get the actual value from runtime variables
@@ -147,9 +146,6 @@ def execute_assertion_step(step: ExecutionStep, runtime_variables: dict):
             logger.error(f"Unknown validation type '{step.validation_type}' or operator '{step.validation_operator}' for assertion step {step.sort}")
             success = False
             logs = f"Unknown validation type '{step.validation_type}' or operator '{step.validation_operator}'"
-
-        # Set the result for consistency
-        result.parsed_response = actual_value
 
     except Exception as e:
         logger.error(f"Error executing assertion step {step.sort}: {str(e)}")

@@ -44,6 +44,7 @@ type UseCase struct {
 	Tags                []string `json:"tags" dynamodbav:"tags"`
 	CreatedAt           string   `json:"createdAt" dynamodbav:"createdAt"`
 	Region              string   `json:"region" dynamodbav:"execution_region"`
+	ModelID             string   `json:"model_id,omitempty" dynamodbav:"model_id,omitempty"`
 	LastExecutionID     string   `json:"last_execution_id,omitempty" dynamodbav:"last_execution_id,omitempty"`
 	LastExecutionStatus string   `json:"last_execution_status,omitempty" dynamodbav:"last_execution_status,omitempty"`
 	LastExecutionTime   string   `json:"last_execution_time,omitempty" dynamodbav:"last_execution_time,omitempty"`
@@ -57,6 +58,7 @@ type CreateUsecaseRequest struct {
 	Headless    bool     `json:"headless"`
 	Tags        []string `json:"tags"`
 	Region      string   `json:"region"`
+	ModelID     string   `json:"model_id"`
 }
 
 type UpdateUsecaseRequest struct {
@@ -67,6 +69,7 @@ type UpdateUsecaseRequest struct {
 	Headless    bool     `json:"headless"`
 	Tags        []string `json:"tags"`
 	Region      string   `json:"region"`
+	ModelID     string   `json:"model_id"`
 }
 
 type Step struct {
@@ -103,6 +106,7 @@ type Execution struct {
 	TriggerType       string `json:"triggerType" dynamodbav:"trigger_type"`
 	NovaActSessionID  string `json:"novaActSessionId" dynamodbav:"nova_session_id"`
 	Region            string `json:"region" dynamodbav:"execution_region"`
+	ModelID           string `json:"model_id,omitempty" dynamodbav:"model_id,omitempty"`
 	TaskArn           string `json:"taskArn,omitempty" dynamodbav:"task_arn,omitempty"`
 	TaskID            string `json:"taskId,omitempty" dynamodbav:"task_id,omitempty"`
 	CloudWatchLogsURL string `json:"cloudWatchLogsUrl,omitempty" dynamodbav:"cloudwatch_logs_url,omitempty"`
@@ -342,6 +346,7 @@ type StartWizardRequest struct {
 	StartingURL string   `json:"starting_url"`
 	Tags        []string `json:"tags"`
 	Region      string   `json:"region"`
+	ModelID     string   `json:"model_id"`
 }
 
 type AddWizardStepRequest struct {

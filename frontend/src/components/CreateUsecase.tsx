@@ -12,6 +12,7 @@ import Select, {SelectProps} from "@cloudscape-design/components/select";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
 import { api } from '../utils/api';
 import { regionOptions, findRegionOptions } from '../utils/browser_regions';
+import { useModels } from '../hooks/useModels';
 
 export default function CreateUsecase() {
   const navigate = useNavigate();
@@ -23,6 +24,15 @@ export default function CreateUsecase() {
   const [headless, setHeadless] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState(findRegionOptions() as SelectProps.Option);
+  const { modelOptions, findModelOption, loading: modelsLoading } = useModels();
+  const [selectedModel, setSelectedModel] = useState<SelectProps.Option | null>(null);
+
+  // Set default model once models are loaded
+  React.useEffect(() => {
+    if (!modelsLoading && !selectedModel) {
+      setSelectedModel(findModelOption());
+    }
+  }, [modelsLoading, selectedModel, findModelOption]);
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -34,6 +44,7 @@ export default function CreateUsecase() {
         active,
         headless,
         region: selectedRegion.value,
+        model_id: selectedModel?.value,
         tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag)
       });
       navigate('/');
@@ -99,6 +110,22 @@ export default function CreateUsecase() {
             setSelectedRegion(detail.selectedOption)
           }
           options={regionOptions()}
+        />
+      </FormField>
+
+      <FormField 
+        label="Model"
+        description="Select the Nova Act model to use for this use case"
+      >
+        <Select
+          selectedOption={selectedModel}
+          onChange={({ detail }) =>
+            setSelectedModel(detail.selectedOption)
+          }
+          options={modelOptions()}
+          placeholder="Select a model"
+          loadingText="Loading models..."
+          statusType={modelsLoading ? "loading" : "finished"}
         />
       </FormField>
         

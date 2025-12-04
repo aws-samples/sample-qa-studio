@@ -185,7 +185,7 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
             # Use expect_download to detect the download
             with nova.page.expect_download(timeout=20000) as download_info:
                 result = nova.act(step.instruction)
-                logger.info(f"Action executed: {result.parsed_response}")
+                logger.info("Action executed to trigger download")
             
             playwright_download = download_info.value
             logger.info(f"Playwright detected download: {playwright_download.suggested_filename}")
@@ -280,7 +280,6 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
         result = SimpleNamespace()
         result.metadata = SimpleNamespace()
         result.metadata.act_id = e.metadata.act_id if hasattr(e, 'metadata') else "error"
-        result.parsed_response = "Download timeout"
         
     except Exception as e:
         logger.error(f"Error executing download step {step.sort}: {str(e)}")
@@ -292,7 +291,6 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
         result = SimpleNamespace()
         result.metadata = SimpleNamespace()
         result.metadata.act_id = e.metadata.act_id if hasattr(e, 'metadata') else "error"
-        result.parsed_response = "Exception occurred"
     
     finally:
         # Close CDP session if it was created

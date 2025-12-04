@@ -25,7 +25,6 @@ def execute_url_step(nova: NovaAct, step: ExecutionStep):
         result = SimpleNamespace()
         result.metadata = SimpleNamespace()
         result.metadata.act_id = "error"
-        result.parsed_response = f"Failed to navigate to {step.instruction}"
 
     status = "success" if success else "error"
     logger.info(f"URL step {step.sort} completed with status: {status}")

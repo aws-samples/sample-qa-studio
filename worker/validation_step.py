@@ -27,7 +27,8 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
           
     elif step.validation_type == 'string' and step.validation_operator == 'exact':
       result = nova.act(step.instruction, schema=STRING_SCHEMA)
-      expected_value = step.validation_value.strip()
+      # Strip whitespace and remove surrounding quotes if present
+      expected_value = step.validation_value.strip().strip('"').strip("'")
       actual_value = str(result.parsed_response).strip() if result.parsed_response is not None else ""
           
       if actual_value != expected_value:
@@ -35,7 +36,8 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
     
     elif step.validation_type == 'string' and step.validation_operator == 'exact_case_insensitive':
       result = nova.act(step.instruction, schema=STRING_SCHEMA)
-      expected_value = step.validation_value.strip().lower()
+      # Strip whitespace and remove surrounding quotes if present
+      expected_value = step.validation_value.strip().strip('"').strip("'").lower()
       actual_value = str(result.parsed_response).strip().lower() if result.parsed_response is not None else ""
           
       if actual_value != expected_value:
@@ -43,7 +45,8 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
     
     elif step.validation_type == 'string' and step.validation_operator == 'contains':
       result = nova.act(step.instruction, schema=STRING_SCHEMA)
-      expected_value = step.validation_value.strip()
+      # Strip whitespace and remove surrounding quotes if present
+      expected_value = step.validation_value.strip().strip('"').strip("'")
       actual_value = str(result.parsed_response).strip() if result.parsed_response is not None else ""
       
       if not re.search(re.escape(expected_value), actual_value):
@@ -51,7 +54,8 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
 
     elif step.validation_type == 'string' and step.validation_operator == 'contains_case_insensitive':
       result = nova.act(step.instruction, schema=STRING_SCHEMA)
-      expected_value = step.validation_value.strip()
+      # Strip whitespace and remove surrounding quotes if present
+      expected_value = step.validation_value.strip().strip('"').strip("'")
       actual_value = str(result.parsed_response).strip() if result.parsed_response is not None else ""
       
       if not re.search(re.escape(expected_value), actual_value, re.IGNORECASE):

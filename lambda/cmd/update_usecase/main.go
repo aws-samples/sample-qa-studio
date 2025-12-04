@@ -50,6 +50,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		":execution_region": &types.AttributeValueMemberS{Value: req.Region},
 	}
 
+	// Update model_id if provided
+	if req.ModelID != "" {
+		updateExpr += ", model_id = :model_id"
+		exprAttrValues[":model_id"] = &types.AttributeValueMemberS{Value: req.ModelID}
+	}
+
 	// Only update tags if provided and not empty (DynamoDB String Sets cannot be empty)
 	if len(req.Tags) > 0 {
 		updateExpr += ", tags = :tags"

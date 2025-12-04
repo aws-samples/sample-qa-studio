@@ -9,7 +9,7 @@ import logging
 import boto3
 import json
 import time
-from nova_act import NovaAct
+from nova_act import NovaAct, Workflow
 from nova_act.util.s3_writer import S3Writer
 from utils import get_region, get_time
 from browser import start_browser, create_browser, delete_browser
@@ -32,6 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 INACTIVITY_TIMEOUT = 30 * 60  # 30 minutes in seconds
+from nova_act_workflow import ensure_workflow_definition, NOVA_ACT_REGION
 
 def execute_single_step(nova, step, template_parser, usecase_id, execution_id, s3_bucket_name, db_client):
     """Execute a single step and return results"""
@@ -90,8 +91,12 @@ def execute_single_step(nova, step, template_parser, usecase_id, execution_id, s
             except Exception as var_error:
                 logger.error(f"Failed to capture runtime variable {runtime_var_name}: {str(var_error)}")
         
-        response_text = result.parsed_response if result else "No response"
-        logger.info(f"Step: {parsed_step.sort}\tActID:\t{act_id}\tStatus: {status}\tResponse: {response_text}")
+        # Only log parsed_response for steps that return values (validation, retrieve_value)
+        if parsed_step.step_type in ['validation', 'retrieve_value'] and result and hasattr(result, 'parsed_response'):
+            response_text = result.parsed_response
+            logger.info(f"Step: {parsed_step.sort}\tActID:\t{act_id}\tStatus: {status}\tResponse: {response_text}")
+        else:
+            logger.info(f"Step: {parsed_step.sort}\tActID:\t{act_id}\tStatus: {status}")
         
     except Exception as step_error:
         logger.error(f"Unexpected error executing step: {str(step_error)}")
@@ -140,12 +145,12 @@ def main():
         execution = db_client.get_execution(usecase_id, session_id)
         if not execution:
             logger.error(f"Execution {session_id} not found for usecase {usecase_id}")
-            db_client.update_execution_status(usecase_id, session_id, "error", completed_at=get_time())
+            db_client.update_execution_status(usecase_id, session_id, "failed", completed_at=get_time())
             return False
         
         if not execution.starting_url:
             logger.error(f"Execution {session_id} missing starting_url field")
-            db_client.update_execution_status(usecase_id, session_id, "error", completed_at=get_time())
+            db_client.update_execution_status(usecase_id, session_id, "failed", completed_at=get_time())
             return False
         
         logger.info(f"Loaded execution: status={execution.status}, url={execution.starting_url}")
@@ -193,232 +198,475 @@ def main():
         logger.info(f"Live view URL: {live_view_url}")
         db_client.create_live_view(session_id, live_view_url)
         
-        # Initialize NovaAct
-        with NovaAct(
-            cdp_endpoint_url=ws_url,
-            cdp_headers=headers,
-            starting_page=execution.starting_url,
-            headless=execution.headless,
-            logs_directory=execution_logs_dir,
-            ignore_https_errors=True,
-            chrome_channel="chromium",
-            stop_hooks=[s3_writer],
-            nova_act_api_key=nova_api_key,
-            user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
-        ) as nova:
+        # Check if using GA service
+        use_ga_service = os.getenv('USE_NOVA_ACT_GA', 'false').lower() == 'true'
+
+        if use_ga_service:
+            # Nova Act GA Service
+            logger.info(f"Using Nova Act GA service in {NOVA_ACT_REGION}")
+            workflow_name = ensure_workflow_definition(usecase_id)
             
-            # Set custom HTTP headers if configured
-            if execution_headers and execution_headers.headers:
-                logger.info(f"Setting {len(execution_headers.headers)} custom HTTP headers")
-                parsed_headers = {}
-                for header_name, header_value in execution_headers.headers.items():
-                    parsed_value = template_parser.parse_instruction(header_value)
-                    parsed_headers[header_name] = parsed_value
-                nova.page.set_extra_http_headers(parsed_headers)
-                nova.go_to_url(execution.starting_url)
+            # Get model_id from execution, default to nova-act-v1.0
+            model_id = getattr(execution, 'model_id', None) or 'nova-act-v1.0'
+            logger.info(f"Using model: {model_id}")
             
-            logger.info("NovaAct initialized successfully")
-            
-            # Get session ID and update execution
-            session_id_nova = nova.get_session_id()
-            logger.info(f"Nova Act session ID: {session_id_nova}")
-            db_client.update_execution_session_id(usecase_id, session_id, session_id_nova)
-            
-            # Update last activity
-            last_activity = time.time()
-            db_client.update_execution_last_activity(usecase_id, session_id, get_time())
-            
-            # Main command loop
-            logger.info("Entering command loop...")
-            use_eventbridge = os.getenv('USE_EVENTBRIDGE_COMMANDS', 'true').lower() == 'true'
-            logger.info(f"Command mode: {'EventBridge/DynamoDB' if use_eventbridge else 'SQS'}")
-            
-            while True:
-                # Check for inactivity timeout
-                if time.time() - last_activity > INACTIVITY_TIMEOUT:
-                    logger.info("Inactivity timeout reached, terminating session")
-                    db_client.update_execution_status(usecase_id, session_id, "timeout", completed_at=get_time())
-                    break
-                
-                try:
-                    command = None
+            with Workflow(
+                workflow_definition_name=workflow_name,
+                model_id=model_id,
+                boto_session_kwargs={
+                    "region_name": NOVA_ACT_REGION
+                }
+            ) as workflow:
+                with NovaAct(
+                    cdp_endpoint_url=ws_url,
+                    cdp_headers=headers,
+                    starting_page=execution.starting_url,
+                    workflow=workflow,
+                    headless=execution.headless,
+                    logs_directory=execution_logs_dir,
+                    ignore_https_errors=True,
+                    chrome_channel="chromium",
+                    stop_hooks=[s3_writer],
+                    user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
+                ) as nova:
                     
-                    if use_eventbridge:
-                        # Poll DynamoDB for commands (EventBridge mode)
-                        commands = db_client.poll_wizard_commands(session_id, limit=1)
-                        
-                        if not commands:
-                            # No commands, sleep briefly and continue
-                            time.sleep(1)
-                            continue
-                        
-                        command_record = commands[0]
-                        command = {
-                            'action': command_record.get('action'),
-                            'sessionId': command_record.get('sessionId') or command_record.get('session_id'),
-                            'stepId': command_record.get('stepId') or command_record.get('step_id'),
-                            'step_id': command_record.get('stepId') or command_record.get('step_id')  # For compatibility
-                        }
-                        
-                        logger.info(f"Received command from DynamoDB for session {session_id}")
-                        logger.info(f"Command details: {json.dumps(command, indent=2)}")
-                        logger.info(f"Full command record: {json.dumps(command_record, indent=2, default=str)}")
-                        
-                        # Delete command from DynamoDB after reading
-                        db_client.delete_wizard_command(session_id, command_record['sk'])
-                        
-                        last_activity = time.time()
-                        db_client.update_execution_last_activity(usecase_id, session_id, get_time())
-                        
-                    else:
-                        # Poll SQS for commands (legacy mode)
-                        response = sqs_client.receive_message(
-                            QueueUrl=wizard_queue_url,
-                            MaxNumberOfMessages=1,
-                            WaitTimeSeconds=20,
-                            MessageAttributeNames=['All']
-                        )
-                        
-                        if 'Messages' not in response:
-                            continue
-                        
-                        message = response['Messages'][0]
-                        command = json.loads(message['Body'])
-                        command_session_id = command.get('session_id') or command.get('SessionID')
-                        
-                        # Validate this message is for our session
-                        if command_session_id != session_id:
-                            logger.warning(f"Ignoring command for different session: {command_session_id} (ours: {session_id})")
-                            continue
-                        
-                        logger.info(f"Received command from SQS for session {session_id}")
-                        logger.info(f"Command details: {json.dumps(command, indent=2)}")
-                        
-                        # Delete message from queue
-                        sqs_client.delete_message(
-                            QueueUrl=wizard_queue_url,
-                            ReceiptHandle=message['ReceiptHandle']
-                        )
-                        
-                        last_activity = time.time()
-                        db_client.update_execution_last_activity(usecase_id, session_id, get_time())
+                    # Set custom HTTP headers if configured
+                    if execution_headers and execution_headers.headers:
+                        logger.info(f"Setting {len(execution_headers.headers)} custom HTTP headers")
+                        parsed_headers = {}
+                        for header_name, header_value in execution_headers.headers.items():
+                            parsed_value = template_parser.parse_instruction(header_value)
+                            parsed_headers[header_name] = parsed_value
+                        nova.page.set_extra_http_headers(parsed_headers)
+                        nova.go_to_url(execution.starting_url)
                     
-                    # Process command (unified for both modes)
-                    if not command:
-                        continue
+                    logger.info("NovaAct initialized successfully")
                     
-                    logger.info(f"Processing command: {command['action']}")
+                    # Get session ID and update execution
+                    session_id_nova = nova.get_session_id()
+                    logger.info(f"Nova Act session ID: {session_id_nova}")
+                    db_client.update_execution_session_id(usecase_id, session_id, session_id_nova)
                     
-                    if command['action'] == 'execute_step':
-                        # Get step from DynamoDB
-                        step_id = command['step_id']
-                        step = db_client.get_execution_step(session_id, step_id)
+                    # Update last activity
+                    last_activity = time.time()
+                    db_client.update_execution_last_activity(usecase_id, session_id, get_time())
+                    
+                    # Main command loop
+                    logger.info("Entering command loop...")
+                    use_eventbridge = os.getenv('USE_EVENTBRIDGE_COMMANDS', 'true').lower() == 'true'
+                    logger.info(f"Command mode: {'EventBridge/DynamoDB' if use_eventbridge else 'SQS'}")
+                    
+                    while True:
+                        # Check for inactivity timeout
+                        if time.time() - last_activity > INACTIVITY_TIMEOUT:
+                            logger.info("Inactivity timeout reached, terminating session")
+                            db_client.update_execution_status(usecase_id, session_id, "timeout", completed_at=get_time())
+                            break
                         
-                        if step:
-                            act_id, status, success, logs, actual_value = execute_single_step(
-                                nova, step, template_parser, usecase_id, session_id, s3_bucket_name, db_client
-                            )
+                        try:
+                            command = None
                             
-                            # Update step status
-                            db_client.update_execution_step_status(
-                                session_id, step_id, act_id, status, logs, actual_value
-                            )
-                        else:
-                            logger.error(f"Step {step_id} not found")
-                    
-                    elif command['action'] == 'restart':
-                        logger.info("Restarting wizard session...")
-                        # Close current browser
-                        nova.close()
-                        browser.stop()
-                        delete_browser(browser_id, execution.region)
+                            if use_eventbridge:
+                                # Poll DynamoDB for commands (EventBridge mode)
+                                commands = db_client.poll_wizard_commands(session_id, limit=1)
+                                
+                                if not commands:
+                                    # No commands, sleep briefly and continue
+                                    time.sleep(1)
+                                    continue
+                                
+                                command_record = commands[0]
+                                command = {
+                                    'action': command_record.get('action'),
+                                    'sessionId': command_record.get('sessionId') or command_record.get('session_id'),
+                                    'stepId': command_record.get('stepId') or command_record.get('step_id'),
+                                    'step_id': command_record.get('stepId') or command_record.get('step_id')  # For compatibility
+                                }
+                                
+                                logger.info(f"Received command from DynamoDB for session {session_id}")
+                                logger.info(f"Command details: {json.dumps(command, indent=2)}")
+                                logger.info(f"Full command record: {json.dumps(command_record, indent=2, default=str)}")
+                                
+                                # Delete command from DynamoDB after reading
+                                db_client.delete_wizard_command(session_id, command_record['sk'])
+                                
+                                last_activity = time.time()
+                                db_client.update_execution_last_activity(usecase_id, session_id, get_time())
+                                
+                            else:
+                                # Poll SQS for commands (legacy mode)
+                                response = sqs_client.receive_message(
+                                    QueueUrl=wizard_queue_url,
+                                    MaxNumberOfMessages=1,
+                                    WaitTimeSeconds=20,
+                                    MessageAttributeNames=['All']
+                                )
+                                
+                                if 'Messages' not in response:
+                                    continue
+                                
+                                message = response['Messages'][0]
+                                command = json.loads(message['Body'])
+                                command_session_id = command.get('session_id') or command.get('SessionID')
+                                
+                                # Validate this message is for our session
+                                if command_session_id != session_id:
+                                    logger.warning(f"Ignoring command for different session: {command_session_id} (ours: {session_id})")
+                                    continue
+                                
+                                logger.info(f"Received command from SQS for session {session_id}")
+                                logger.info(f"Command details: {json.dumps(command, indent=2)}")
+                                
+                                # Delete message from queue
+                                sqs_client.delete_message(
+                                    QueueUrl=wizard_queue_url,
+                                    ReceiptHandle=message['ReceiptHandle']
+                                )
+                                
+                                last_activity = time.time()
+                                db_client.update_execution_last_activity(usecase_id, session_id, get_time())
+                            
+                            # Process command (unified for both modes)
+                            if not command:
+                                continue
+                            
+                            logger.info(f"Processing command: {command['action']}")
+                            
+                            if command['action'] == 'execute_step':
+                                # Get step from DynamoDB
+                                step_id = command['step_id']
+                                step = db_client.get_execution_step(session_id, step_id)
+                                
+                                if step:
+                                    act_id, status, success, logs, actual_value = execute_single_step(
+                                        nova, step, template_parser, usecase_id, session_id, s3_bucket_name, db_client
+                                    )
+                                    
+                                    # Update step status
+                                    db_client.update_execution_step_status(
+                                        session_id, step_id, act_id, status, logs, actual_value
+                                    )
+                                else:
+                                    logger.error(f"Step {step_id} not found")
+                            
+                            elif command['action'] == 'restart':
+                                logger.info("Restarting wizard session...")
+                                # Close current browser
+                                nova.close()
+                                browser.stop()
+                                delete_browser(browser_id, execution.region)
+                                
+                                # Create new browser
+                                browser_id = create_browser(
+                                    template_parser.get_all_variables()['UniqueID'],
+                                    session_id,
+                                    s3_bucket_name,
+                                    f"{usecase_id}/{session_id}/recording/",
+                                    execution.region
+                                )
+                                browser = start_browser(browser_id, session_id, execution.region)
+                                ws_url, headers = browser.generate_ws_headers()
+                                live_view_url = browser.generate_live_view_url()
+                                db_client.create_live_view(session_id, live_view_url)
+                                
+                                # Reinitialize NovaAct (Preview API mode)
+                                nova = NovaAct(
+                                    cdp_endpoint_url=ws_url,
+                                    cdp_headers=headers,
+                                    starting_page=execution.starting_url,
+                                    headless=execution.headless,
+                                    logs_directory=execution_logs_dir,
+                                    ignore_https_errors=True,
+                                    chrome_channel="chromium",
+                                    stop_hooks=[s3_writer],
+                                    nova_act_api_key=nova_api_key,
+                                    user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
+                                )
+                                nova.__enter__()
+                                
+                                # Replay accepted steps
+                                accepted_steps = db_client.get_accepted_execution_steps(session_id)
+                                logger.info(f"Replaying {len(accepted_steps)} accepted steps")
+                                
+                                for step in accepted_steps:
+                                    act_id, status, success, logs, actual_value = execute_single_step(
+                                        nova, step, template_parser, usecase_id, session_id, s3_bucket_name, db_client
+                                    )
+                                    if not success:
+                                        logger.error(f"Failed to replay step {step.sort}")
+                                        break
+                                
+                                logger.info("Restart complete")
+                            
+                            elif command['action'] == 'terminate':
+                                logger.info("Terminating wizard session - starting graceful shutdown")
+                                
+                                # Update execution status to success (wizard completed successfully)
+                                db_client.update_execution_status(usecase_id, session_id, "success", completed_at=get_time())
+                                
+                                # Close browser gracefully
+                                try:
+                                    logger.info("Closing NovaAct session...")
+                                    nova.close()
+                                except Exception as close_err:
+                                    logger.error(f"Error closing NovaAct: {close_err}")
                         
-                        # Create new browser
-                        browser_id = create_browser(
-                            template_parser.get_all_variables()['UniqueID'],
-                            session_id,
-                            s3_bucket_name,
-                            f"{usecase_id}/{session_id}/recording/",
-                            execution.region
-                        )
-                        browser = start_browser(browser_id, session_id, execution.region)
-                        ws_url, headers = browser.generate_ws_headers()
-                        live_view_url = browser.generate_live_view_url()
-                        db_client.create_live_view(session_id, live_view_url)
-                        
-                        # Reinitialize NovaAct
-                        nova = NovaAct(
-                            cdp_endpoint_url=ws_url,
-                            cdp_headers=headers,
-                            starting_page=execution.starting_url,
-                            headless=execution.headless,
-                            logs_directory=execution_logs_dir,
-                            ignore_https_errors=True,
-                            chrome_channel="chromium",
-                            stop_hooks=[s3_writer],
-                            nova_act_api_key=nova_api_key,
-                            user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
-                        )
-                        nova.__enter__()
-                        
-                        # Replay accepted steps
-                        accepted_steps = db_client.get_accepted_execution_steps(session_id)
-                        logger.info(f"Replaying {len(accepted_steps)} accepted steps")
-                        
-                        for step in accepted_steps:
-                            act_id, status, success, logs, actual_value = execute_single_step(
-                                nova, step, template_parser, usecase_id, session_id, s3_bucket_name, db_client
-                            )
-                            if not success:
-                                logger.error(f"Failed to replay step {step.sort}")
+                                # Stop browser
+                                try:
+                                    logger.info("Stopping browser...")
+                                    browser.stop()
+                                except Exception as stop_err:
+                                    logger.error(f"Error stopping browser: {stop_err}")
+                                
+                                # Delete browser
+                                try:
+                                    logger.info("Deleting browser...")
+                                    delete_browser(browser_id, execution.region)
+                                except Exception as delete_err:
+                                    logger.error(f"Error deleting browser: {delete_err}")
+                                
+                                # Delete live view
+                                try:
+                                    logger.info("Deleting live view...")
+                                    db_client.delete_live_view(session_id)
+                                except Exception as lv_err:
+                                    logger.error(f"Error deleting live view: {lv_err}")
+                                
+                                logger.info("Graceful shutdown complete - exiting")
                                 break
                         
-                        logger.info("Restart complete")
+                        except Exception as e:
+                            logger.error(f"Error in command loop: {e}")
+                            continue
+        else:
+            # Nova Act Preview API
+            logger.info("Using Nova Act Preview API")
+            
+            with NovaAct(
+                cdp_endpoint_url=ws_url,
+                cdp_headers=headers,
+                starting_page=execution.starting_url,
+                headless=execution.headless,
+                logs_directory=execution_logs_dir,
+                ignore_https_errors=True,
+                chrome_channel="chromium",
+                stop_hooks=[s3_writer],
+                nova_act_api_key=nova_api_key,
+                user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
+            ) as nova:
                     
-                    elif command['action'] == 'terminate':
-                        logger.info("Terminating wizard session - starting graceful shutdown")
+                    # Set custom HTTP headers if configured
+                    if execution_headers and execution_headers.headers:
+                        logger.info(f"Setting {len(execution_headers.headers)} custom HTTP headers")
+                        parsed_headers = {}
+                        for header_name, header_value in execution_headers.headers.items():
+                            parsed_value = template_parser.parse_instruction(header_value)
+                            parsed_headers[header_name] = parsed_value
+                        nova.page.set_extra_http_headers(parsed_headers)
+                        nova.go_to_url(execution.starting_url)
+                    
+                    logger.info("NovaAct initialized successfully")
+                    
+                    # Get session ID and update execution
+                    session_id_nova = nova.get_session_id()
+                    logger.info(f"Nova Act session ID: {session_id_nova}")
+                    db_client.update_execution_session_id(usecase_id, session_id, session_id_nova)
+                    
+                    # Update last activity
+                    last_activity = time.time()
+                    db_client.update_execution_last_activity(usecase_id, session_id, get_time())
+                    
+                    # Main command loop
+                    logger.info("Entering command loop...")
+                    use_eventbridge = os.getenv('USE_EVENTBRIDGE_COMMANDS', 'true').lower() == 'true'
+                    logger.info(f"Command mode: {'EventBridge/DynamoDB' if use_eventbridge else 'SQS'}")
+                    
+                    while True:
+                        # Check for inactivity timeout
+                        if time.time() - last_activity > INACTIVITY_TIMEOUT:
+                            logger.info("Inactivity timeout reached, terminating session")
+                            db_client.update_execution_status(usecase_id, session_id, "timeout", completed_at=get_time())
+                            break
                         
-                        # Update execution status to success (wizard completed successfully)
-                        db_client.update_execution_status(usecase_id, session_id, "success", completed_at=get_time())
-                        
-                        # Close browser gracefully
                         try:
-                            logger.info("Closing NovaAct session...")
-                            nova.close()
-                        except Exception as close_err:
-                            logger.error(f"Error closing NovaAct: {close_err}")
+                            command = None
+                            
+                            if use_eventbridge:
+                                # Poll DynamoDB for commands (EventBridge mode)
+                                commands = db_client.poll_wizard_commands(session_id, limit=1)
+                                
+                                if not commands:
+                                    # No commands, sleep briefly and continue
+                                    time.sleep(1)
+                                    continue
+                                
+                                command_record = commands[0]
+                                command = {
+                                    'action': command_record.get('action'),
+                                    'sessionId': command_record.get('sessionId') or command_record.get('session_id'),
+                                    'stepId': command_record.get('stepId') or command_record.get('step_id'),
+                                    'step_id': command_record.get('stepId') or command_record.get('step_id')  # For compatibility
+                                }
+                                
+                                logger.info(f"Received command from DynamoDB for session {session_id}")
+                                logger.info(f"Command details: {json.dumps(command, indent=2)}")
+                                logger.info(f"Full command record: {json.dumps(command_record, indent=2, default=str)}")
+                                
+                                # Delete command from DynamoDB after reading
+                                db_client.delete_wizard_command(session_id, command_record['sk'])
+                                
+                                last_activity = time.time()
+                                db_client.update_execution_last_activity(usecase_id, session_id, get_time())
+                                
+                            else:
+                                # Poll SQS for commands (legacy mode)
+                                response = sqs_client.receive_message(
+                                    QueueUrl=wizard_queue_url,
+                                    MaxNumberOfMessages=1,
+                                    WaitTimeSeconds=20,
+                                    MessageAttributeNames=['All']
+                                )
+                                
+                                if 'Messages' not in response:
+                                    continue
+                                
+                                message = response['Messages'][0]
+                                command = json.loads(message['Body'])
+                                command_session_id = command.get('session_id') or command.get('SessionID')
+                                
+                                # Validate this message is for our session
+                                if command_session_id != session_id:
+                                    logger.warning(f"Ignoring command for different session: {command_session_id} (ours: {session_id})")
+                                    continue
+                                
+                                logger.info(f"Received command from SQS for session {session_id}")
+                                logger.info(f"Command details: {json.dumps(command, indent=2)}")
+                                
+                                # Delete message from queue
+                                sqs_client.delete_message(
+                                    QueueUrl=wizard_queue_url,
+                                    ReceiptHandle=message['ReceiptHandle']
+                                )
+                                
+                                last_activity = time.time()
+                                db_client.update_execution_last_activity(usecase_id, session_id, get_time())
+                            
+                            # Process command (unified for both modes)
+                            if not command:
+                                continue
+                            
+                            logger.info(f"Processing command: {command['action']}")
+                            
+                            if command['action'] == 'execute_step':
+                                # Get step from DynamoDB
+                                step_id = command['step_id']
+                                step = db_client.get_execution_step(session_id, step_id)
+                                
+                                if step:
+                                    act_id, status, success, logs, actual_value = execute_single_step(
+                                        nova, step, template_parser, usecase_id, session_id, s3_bucket_name, db_client
+                                    )
+                                    
+                                    # Update step status
+                                    db_client.update_execution_step_status(
+                                        session_id, step_id, act_id, status, logs, actual_value
+                                    )
+                                else:
+                                    logger.error(f"Step {step_id} not found")
+                            
+                            elif command['action'] == 'restart':
+                                logger.info("Restarting wizard session...")
+                                # Close current browser
+                                nova.close()
+                                browser.stop()
+                                delete_browser(browser_id, execution.region)
+                                
+                                # Create new browser
+                                browser_id = create_browser(
+                                    template_parser.get_all_variables()['UniqueID'],
+                                    session_id,
+                                    s3_bucket_name,
+                                    f"{usecase_id}/{session_id}/recording/",
+                                    execution.region
+                                )
+                                browser = start_browser(browser_id, session_id, execution.region)
+                                ws_url, headers = browser.generate_ws_headers()
+                                live_view_url = browser.generate_live_view_url()
+                                db_client.create_live_view(session_id, live_view_url)
+                                
+                                # Reinitialize NovaAct (Preview API mode)
+                                nova = NovaAct(
+                                    cdp_endpoint_url=ws_url,
+                                    cdp_headers=headers,
+                                    starting_page=execution.starting_url,
+                                    headless=execution.headless,
+                                    logs_directory=execution_logs_dir,
+                                    ignore_https_errors=True,
+                                    chrome_channel="chromium",
+                                    stop_hooks=[s3_writer],
+                                    nova_act_api_key=nova_api_key,
+                                    user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
+                                )
+                                nova.__enter__()
+                                
+                                # Replay accepted steps
+                                accepted_steps = db_client.get_accepted_execution_steps(session_id)
+                                logger.info(f"Replaying {len(accepted_steps)} accepted steps")
+                                
+                                for step in accepted_steps:
+                                    act_id, status, success, logs, actual_value = execute_single_step(
+                                        nova, step, template_parser, usecase_id, session_id, s3_bucket_name, db_client
+                                    )
+                                    if not success:
+                                        logger.error(f"Failed to replay step {step.sort}")
+                                        break
+                                
+                                logger.info("Restart complete")
+                            
+                            elif command['action'] == 'terminate':
+                                logger.info("Terminating wizard session - starting graceful shutdown")
+                                
+                                # Update execution status to success (wizard completed successfully)
+                                db_client.update_execution_status(usecase_id, session_id, "success", completed_at=get_time())
+                                
+                                # Close browser gracefully
+                                try:
+                                    logger.info("Closing NovaAct session...")
+                                    nova.close()
+                                except Exception as close_err:
+                                    logger.error(f"Error closing NovaAct: {close_err}")
+                                
+                                # Stop browser
+                                try:
+                                    logger.info("Stopping browser...")
+                                    browser.stop()
+                                except Exception as stop_err:
+                                    logger.error(f"Error stopping browser: {stop_err}")
+                                
+                                # Delete browser
+                                try:
+                                    logger.info("Deleting browser...")
+                                    delete_browser(browser_id, execution.region)
+                                except Exception as delete_err:
+                                    logger.error(f"Error deleting browser: {delete_err}")
+                                
+                                # Delete live view
+                                try:
+                                    logger.info("Deleting live view...")
+                                    db_client.delete_live_view(session_id)
+                                except Exception as lv_err:
+                                    logger.error(f"Error deleting live view: {lv_err}")
+                                
+                                logger.info("Graceful shutdown complete - exiting")
+                                break
                         
-                        # Stop browser
-                        try:
-                            logger.info("Stopping browser...")
-                            browser.stop()
-                        except Exception as stop_err:
-                            logger.error(f"Error stopping browser: {stop_err}")
-                        
-                        # Delete browser
-                        try:
-                            logger.info("Deleting browser...")
-                            delete_browser(browser_id, execution.region)
-                        except Exception as delete_err:
-                            logger.error(f"Error deleting browser: {delete_err}")
-                        
-                        # Delete live view
-                        try:
-                            logger.info("Deleting live view...")
-                            db_client.delete_live_view(session_id)
-                        except Exception as lv_err:
-                            logger.error(f"Error deleting live view: {lv_err}")
-                        
-                        logger.info("Graceful shutdown complete - exiting")
-                        break
-                
-                except Exception as e:
-                    logger.error(f"Error in command loop: {e}")
-                    continue
+                        except Exception as e:
+                            logger.error(f"Error in command loop: {e}")
+                            continue
     
     except Exception as e:
         logger.error(f"Wizard worker failed: {e}")
-        db_client.update_execution_status(usecase_id, session_id, "error", completed_at=get_time())
+        db_client.update_execution_status(usecase_id, session_id, "failed", completed_at=get_time())
         return False
     
     finally:

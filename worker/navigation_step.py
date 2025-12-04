@@ -22,7 +22,6 @@ def execute_navigation_step(nova: NovaAct, step: ExecutionStep):
     result = SimpleNamespace()
     result.metadata = SimpleNamespace()
     result.metadata.act_id = e.metadata.act_id if hasattr(e, 'metadata') else "error"
-    result.parsed_response = "Exception occurred"
 
   status = "success" if success else "error"
   logger.info(f"Navigation step {step.sort} completed with status: {status}")

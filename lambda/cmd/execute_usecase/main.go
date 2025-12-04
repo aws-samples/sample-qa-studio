@@ -218,6 +218,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		CreatedAt:   createdAtTime,
 		TriggerType: triggerType,
 		Region:      usecase.Region,
+		ModelID:     usecase.ModelID,
 	}
 
 	item, err := attributevalue.MarshalMap(execution)

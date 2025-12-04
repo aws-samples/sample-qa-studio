@@ -225,7 +225,11 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         S3_BUCKET: this.artefactsBucket.bucketName,
         NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
         NOTIFICATION_QUEUE_URL: props.notificationQueue.queueUrl,
-        AWS_REGION: Aws.REGION
+        AWS_REGION: Aws.REGION,
+        // Nova Act GA Service configuration
+        USE_NOVA_ACT_GA: config.useNovaActGa.toString(),
+        NOVA_ACT_REGION: 'us-east-1',
+        NOVA_ACT_S3_BUCKET: `${this.baseName}-artefacts-us-east-1`,
       }
     });
 
@@ -239,6 +243,68 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     registry.grantPull(this.taskDefinition.executionRole!);
     registry.grantPull(this.taskDefinition.taskRole!);
+
+    // Nova Act GA Service permissions (only if enabled)
+    if (config.useNovaActGa) {
+      this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'nova_act_ga_policy', {
+        statements: [
+          // Nova Act workflow permissions
+          new PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: [
+              'nova-act:CreateWorkflowDefinition',
+              'nova-act:GetWorkflowDefinition',
+              'nova-act:ListWorkflowDefinitions',
+              'nova-act:DeleteWorkflowDefinition',
+              'nova-act:CreateWorkflowRun',
+              'nova-act:GetWorkflowRun',
+              'nova-act:ListWorkflowRuns',
+              'nova-act:CreateSession',
+              'nova-act:GetSession',
+              'nova-act:ListSessions',
+              'nova-act:CreateAct',
+              'nova-act:GetAct',
+              'nova-act:ListActs',
+              'nova-act:InvokeActStep',
+              'nova-act:UpdateAct',
+            ],
+            resources: ['*'],
+            conditions: {
+              StringEquals: {
+                'aws:RequestedRegion': 'us-east-1'
+              }
+            }
+          }),
+          // Service-linked role creation permission
+          new PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: ['iam:CreateServiceLinkedRole'],
+            resources: [
+              'arn:aws:iam::*:role/aws-service-role/nova-act.amazonaws.com/AWSServiceRoleForNovaAct'
+            ],
+            conditions: {
+              StringLike: {
+                'iam:AWSServiceName': 'nova-act.amazonaws.com'
+              }
+            }
+          }),
+          // S3 permissions for us-east-1 bucket
+          new PolicyStatement({
+            effect: Effect.ALLOW,
+            actions: [
+              's3:GetObject',
+              's3:PutObject',
+              's3:ListBucket',
+              's3:DeleteObject'
+            ],
+            resources: [
+              `arn:aws:s3:::${this.account}-${this.baseName}-artefacts-us-east-1`,
+              `arn:aws:s3:::${this.account}-${this.baseName}-artefacts-us-east-1/*`
+            ]
+          })
+        ]
+      }));
+    }
 
     // Add ECR permissions to execution role
     this.taskDefinition.executionRole!.attachInlinePolicy(new Policy(this, 'ecr_access_policy', {

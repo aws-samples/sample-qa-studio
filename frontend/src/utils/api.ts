@@ -282,6 +282,25 @@ export const subscriptionApi = {
   },
 }
 
+// Models API
+export interface ModelResponse {
+  modelId: string;
+  modelName: string;
+  isDefault: boolean;
+  description?: string;
+}
+
+export interface ListModelsResponse {
+  models: ModelResponse[];
+  defaultModel: string;
+}
+
+export const modelsApi = {
+  list: async (): Promise<ListModelsResponse> => {
+    return api.get('models');
+  },
+}
+
 // User Management API
 export interface User {
   username: string;
