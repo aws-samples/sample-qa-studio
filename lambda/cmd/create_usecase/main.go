@@ -54,6 +54,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	id := idObject.String()
 
+	// Set default model if not provided
+	modelID := req.ModelID
+	if modelID == "" {
+		modelID = "nova-act-v1.0"
+	}
+
 	usecase := models.UseCase{
 		PK:          "USECASES",
 		SK:          "USECASE#" + id,
@@ -66,6 +72,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Tags:        req.Tags,
 		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
 		Region:      req.Region,
+		ModelID:     modelID,
 	}
 
 	item, err := attributevalue.MarshalMap(usecase)

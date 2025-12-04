@@ -41,7 +41,6 @@ def execute_secret_step(nova: NovaAct, step: ExecutionStep, usecase_id: str):
     result = SimpleNamespace()
     result.metadata = SimpleNamespace()
     result.metadata.act_id = e.metadata.act_id if hasattr(e, 'metadata') else "error"
-    result.parsed_response = "Secret missing"
     
   except Exception as e:
     logger.error(f"Error executing secret step {step.sort}: {str(e)}")
@@ -52,7 +51,6 @@ def execute_secret_step(nova: NovaAct, step: ExecutionStep, usecase_id: str):
     result = SimpleNamespace()
     result.metadata = SimpleNamespace()
     result.metadata.act_id = "error"
-    result.parsed_response = "Exception occurred"
 
   status = "success" if success else "error"
   logger.info(f"Secret step {step.sort} completed with status: {status}")

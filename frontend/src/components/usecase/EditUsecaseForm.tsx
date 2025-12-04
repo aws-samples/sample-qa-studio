@@ -7,6 +7,7 @@ import Checkbox from "@cloudscape-design/components/checkbox";
 import Button from "@cloudscape-design/components/button";
 import Select, { SelectProps } from "@cloudscape-design/components/select";
 import { regionOptions, findRegionOptions } from './../../utils/browser_regions';
+import { useModels } from '../../hooks/useModels';
 
 interface EditUsecaseFormProps {
   usecase: any;
@@ -22,6 +23,15 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
   const [headless, setHeadless] = useState(usecase.headless || false);
   const [tags, setTags] = useState(usecase.tags?.join(', ') || '');
   const [selectedRegion, setSelectedRegion] = useState(findRegionOptions(usecase.region) as SelectProps.Option);
+  const { modelOptions, findModelOption, loading: modelsLoading } = useModels();
+  const [selectedModel, setSelectedModel] = useState<SelectProps.Option | null>(null);
+
+  // Set model from usecase or default
+  React.useEffect(() => {
+    if (!modelsLoading && !selectedModel) {
+      setSelectedModel(findModelOption(usecase.model_id));
+    }
+  }, [modelsLoading, selectedModel, usecase.model_id, findModelOption]);
 
   const handleSave = () => {
     const updatedUsecase = {
@@ -31,6 +41,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
       active,
       headless,
       region: selectedRegion.value,
+      model_id: selectedModel?.value,
       tags: tags.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0)
     };
     onSave(updatedUsecase);
@@ -71,6 +82,22 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
             setSelectedRegion(detail.selectedOption)
           }
           options={regionOptions()}
+        />
+      </FormField>
+
+      <FormField 
+        label="Model"
+        description="Select the Nova Act model to use for this use case"
+      >
+        <Select
+          selectedOption={selectedModel}
+          onChange={({ detail }) =>
+            setSelectedModel(detail.selectedOption)
+          }
+          options={modelOptions()}
+          placeholder="Select a model"
+          loadingText="Loading models..."
+          statusType={modelsLoading ? "loading" : "finished"}
         />
       </FormField>
 

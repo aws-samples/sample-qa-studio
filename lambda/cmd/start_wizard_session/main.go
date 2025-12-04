@@ -61,6 +61,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	usecaseIDStr := usecaseID.String()
 	sessionIDStr := sessionID.String()
 
+	// Set default model if not provided
+	modelID := req.ModelID
+	if modelID == "" {
+		modelID = "nova-act-v1.0"
+	}
+
 	// Create use case record
 	usecase := models.UseCase{
 		PK:          "USECASES",
@@ -74,6 +80,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Tags:        req.Tags,
 		CreatedAt:   createdAt,
 		Region:      req.Region,
+		ModelID:     modelID,
 	}
 
 	usecaseItem, err := attributevalue.MarshalMap(usecase)
@@ -101,6 +108,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		CreatedAt:    createdAt,
 		TriggerType:  "Wizard",
 		Region:       req.Region,
+		ModelID:      modelID,
 		Mode:         "wizard",
 		WizardStatus: "active",
 		LastActivity: createdAt,

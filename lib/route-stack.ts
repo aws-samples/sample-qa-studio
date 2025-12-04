@@ -118,6 +118,7 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     const reorderStepsLambda = this.defaultCreateLambdaWithTable('reorder_steps')
     const getExecutionVariablesLambda = this.defaultCreateLambdaWithTable('get_execution_variables')
     const getLiveViewLambda = this.defaultCreateLambdaWithTable('get_live_view')
+    const listModelsLambda = this.createLambda({ path: 'list_models' })
 
     const createUsecaseSecretsLambda = this.createLambda({
       path: 'create_usecase_secrets',
@@ -272,6 +273,25 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
         lambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
       });
 
+    // Grant Nova Act workflow deletion permissions to delete_usecase Lambda
+    deleteUsecaseLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'nova-act:DeleteWorkflowDefinition',
+        'nova-act:GetWorkflowDefinition'
+      ],
+      resources: ['*']
+    }));
+
+    // Grant Nova Act list models permissions to list_models Lambda
+    listModelsLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'nova-act:ListModels'
+      ],
+      resources: ['*']
+    }));
+
     // Grant Secrets Manager permissions
     createUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
@@ -357,6 +377,9 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     // API Gateway endpoints
     const usecases = this.addResource(apiInstance.root, 'usecases')
     this.addMethod(usecases, HttpMethod.GET, listUsecasesLambda)
+
+    const models = this.addResource(apiInstance.root, 'models')
+    this.addMethod(models, HttpMethod.GET, listModelsLambda)
 
     const usecase = this.addResource(apiInstance.root, 'usecase')
     this.addMethod(usecase, HttpMethod.POST, createUsecaseLambda)
