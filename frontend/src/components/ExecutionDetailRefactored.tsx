@@ -218,17 +218,18 @@ export default function ExecutionDetailRefactored() {
 
             <SpaceBetween direction='vertical' size='m'>
               <ExecutionTimeline execution={execution} />
-              {/* Live View Panel - Show for executing or recently completed executions */}
-              {(execution?.status === 'executing') && (
-                <LiveViewPanel
-                  usecaseId={usecaseId}
-                  executionId={executionId}
-                  executionStatus={execution?.status}
-                  currentStep={getCurrentStep(executionSteps)}
-                />
-              )}
             </SpaceBetween>
           </Grid>
+
+          {/* Live View Panel - Full width above steps table */}
+          {(execution?.status === 'executing') && (
+            <LiveViewPanel
+              usecaseId={usecaseId}
+              executionId={executionId}
+              executionStatus={execution?.status}
+              currentStep={getCurrentStep(executionSteps)}
+            />
+          )}
 
           <ExecutionSteps
             executionSteps={executionSteps}
