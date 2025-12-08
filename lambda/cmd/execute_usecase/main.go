@@ -198,23 +198,12 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 	executionId := idObject.String()
 
-	headless := false
-	if usecase.Headless {
-		headless = true
-	}
-
-	// override in case of scheduled task or OnDemandHeadless
-	if triggerType == "Scheduled" || triggerType == "OnDemandHeadless" {
-		headless = true
-	}
-
 	// Create execution record
 	execution := models.Execution{
 		PK:          fmt.Sprintf("USECASE_EXECUTION#%s", usecaseId),
 		SK:          "EXECUTION#" + executionId,
 		StartingURL: usecase.StartingURL,
 		Status:      "pending",
-		Headless:    headless,
 		CreatedAt:   createdAtTime,
 		TriggerType: triggerType,
 		Region:      usecase.Region,

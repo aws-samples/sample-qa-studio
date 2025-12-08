@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Header,
@@ -7,23 +8,17 @@ import {
   Table,
   Box,
   Modal,
-  FormField,
-  Input,
   Alert,
   StatusIndicator
 } from '@cloudscape-design/components';
-import { userApi, User, CreateUserRequest } from '../utils/api';
+import { userApi, User } from '../utils/api';
 import { ErrorState } from '../utils/errorManager';
 
 const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
-  const [createUserData, setCreateUserData] = useState<CreateUserRequest>({
-    email: ''
-  });
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -40,20 +35,7 @@ const Users: React.FC = () => {
     }
   };
 
-  const createUser = async () => {
-    try {
-      await userApi.create(createUserData);
-      setSuccess('User created successfully with auto-generated password. Welcome email sent.');
-      setShowCreateModal(false);
-      setCreateUserData({
-        email: ''
-      });
-      fetchUsers();
-    } catch (err) {
-      const errorState = err as ErrorState;
-      setError(errorState.message || 'Failed to create user');
-    }
-  };
+  const navigate = useNavigate();
 
   const deleteUser = async () => {
     if (!userToDelete) return;
@@ -114,7 +96,7 @@ const Users: React.FC = () => {
             />
             <Button
               variant="primary"
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => navigate('/users/create')}
             >
               Create User
             </Button>
@@ -182,58 +164,13 @@ const Users: React.FC = () => {
               <Box padding={{ bottom: 's' }} variant="p" color="inherit">
                 No users to display.
               </Box>
-              <Button onClick={() => setShowCreateModal(true)}>Create User</Button>
+              <Button onClick={() => navigate('/users/create')}>Create User</Button>
             </Box>
           }
         />
       </Container>
 
-      {/* Create User Modal */}
-      <Modal
-          onDismiss={() => setShowCreateModal(false)}
-          visible={showCreateModal}
-          closeAriaLabel="Close modal"
-          footer={
-            <Box float="right">
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button variant="link" onClick={() => setShowCreateModal(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={createUser}
-                  disabled={!createUserData.email}
-                >
-                  Create User
-                </Button>
-              </SpaceBetween>
-            </Box>
-          }
-          header="Create New User"
-        >
-          <SpaceBetween size="m">
-            <FormField
-              label="Email Address"
-              description="The user's email address. A temporary password will be auto-generated and sent via welcome email."
-            >
-              <Input
-                value={createUserData.email}
-                onChange={({ detail }) =>
-                  setCreateUserData({ ...createUserData, email: detail.value })
-                }
-                placeholder="user@example.com"
-                type="email"
-              />
-            </FormField>
-
-            <Alert type="info">
-              A secure temporary password will be automatically generated and sent to the user via welcome email.
-              The user will be required to change this password on first login.
-            </Alert>
-          </SpaceBetween>
-        </Modal>
-
-        {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal */}
         <Modal
           onDismiss={() => setShowDeleteModal(false)}
           visible={showDeleteModal}

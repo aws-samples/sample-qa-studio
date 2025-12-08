@@ -129,7 +129,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Description: applyReq.Description,
 		StartingURL: applyReq.StartingURL,
 		Active:      true,
-		Headless:    false,
 		Region:      "eu-central-1",
 		Tags:        []string{},
 		CreatedAt:   now,
@@ -169,6 +168,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	}
 
 	// Copy steps from template
+	log.Printf("Copying steps from template %s to usecase %s", templateId, newUsecaseId)
 	stepsResult, err := client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(models.GetTableName()),
 		KeyConditionExpression: aws.String("pk = :pk AND begins_with(sk, :sk)"),
@@ -180,6 +180,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	if err != nil {
 		log.Printf("Error getting template steps: %v", err)
 	} else {
+		log.Printf("Found %d template steps", len(stepsResult.Items))
 		steps := make([]models.TemplateStep, 0)
 		for _, item := range stepsResult.Items {
 			var step models.TemplateStep
@@ -196,7 +197,9 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 			return steps[i].Sort < steps[j].Sort
 		})
 
+		log.Printf("Sorted %d steps, creating new steps for usecase", len(steps))
 		// Create new steps (they will be at the beginning since we start from sort 1)
+		successCount := 0
 		for _, step := range steps {
 			newStepId := uuid.New().String()
 			newStep := models.Step{
@@ -218,7 +221,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 			stepItem, err := attributevalue.MarshalMap(newStep)
 			if err != nil {
-				log.Printf("Error marshaling new step: %v", err)
+				log.Printf("Error marshaling new step %d: %v", step.Sort, err)
 				continue
 			}
 
@@ -227,9 +230,13 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 				Item:      stepItem,
 			})
 			if err != nil {
-				log.Printf("Error saving new step: %v", err)
+				log.Printf("Error saving new step %d: %v", step.Sort, err)
+			} else {
+				successCount++
+				log.Printf("Successfully saved step %d (ID: %s)", step.Sort, newStepId)
 			}
 		}
+		log.Printf("Successfully copied %d out of %d steps", successCount, len(steps))
 	}
 
 	// Copy variables from template

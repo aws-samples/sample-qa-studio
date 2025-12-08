@@ -37,7 +37,7 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	client := dynamodb.NewFromConfig(cfg)
 
 	// Build update expression and attribute values dynamically
-	updateExpr := "SET #name = :name, description = :description, starting_url = :starting_url, active = :active, headless = :headless, execution_region = :execution_region"
+	updateExpr := "SET #name = :name, description = :description, starting_url = :starting_url, active = :active, execution_region = :execution_region"
 	exprAttrNames := map[string]string{
 		"#name": "name",
 	}
@@ -46,7 +46,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		":description":      &types.AttributeValueMemberS{Value: req.Description},
 		":starting_url":     &types.AttributeValueMemberS{Value: req.StartingURL},
 		":active":           &types.AttributeValueMemberBOOL{Value: req.Active},
-		":headless":         &types.AttributeValueMemberBOOL{Value: req.Headless},
 		":execution_region": &types.AttributeValueMemberS{Value: req.Region},
 	}
 

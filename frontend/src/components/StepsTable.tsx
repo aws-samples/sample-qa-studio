@@ -136,7 +136,17 @@ export default function StepsTable({
         const expectedValue = item.validation_value === 'true' ? 'True' : 'False';
         details.push(`Validation: Boolean expects ${expectedValue}`);
       } else if (item.validation_type === 'string') {
-        const operator = item.validation_operator === 'exact' ? 'exactly matches' : 'contains';
+        const getStringOperatorText = (op?: string) => {
+          switch (op) {
+            case 'exact': return 'exactly matches';
+            case 'exact_case_insensitive': return 'exactly matches (case insensitive)';
+            case 'not_equal': return 'does not equal';
+            case 'contains': return 'contains';
+            case 'contains_case_insensitive': return 'contains (case insensitive)';
+            default: return 'exactly matches';
+          }
+        };
+        const operator = getStringOperatorText(item.validation_operator);
         details.push(`Validation: Text ${operator} "${item.validation_value}"`);
       } else if (item.validation_type === 'number') {
         const getOperatorText = (op?: string) => {
@@ -158,7 +168,17 @@ export default function StepsTable({
         const expectedValue = item.validation_value === 'true' ? 'True' : 'False';
         details.push(`Assertion: Boolean expects ${expectedValue}`);
       } else if (item.validation_type === 'string') {
-        const operator = item.validation_operator === 'exact' ? 'exactly matches' : 'contains';
+        const getStringOperatorText = (op?: string) => {
+          switch (op) {
+            case 'exact': return 'exactly matches';
+            case 'exact_case_insensitive': return 'exactly matches (case insensitive)';
+            case 'not_equal': return 'does not equal';
+            case 'contains': return 'contains';
+            case 'contains_case_insensitive': return 'contains (case insensitive)';
+            default: return 'exactly matches';
+          }
+        };
+        const operator = getStringOperatorText(item.validation_operator);
         details.push(`Assertion: Text ${operator} "${item.validation_value}"`);
       } else if (item.validation_type === 'number') {
         const getOperatorText = (op?: string) => {

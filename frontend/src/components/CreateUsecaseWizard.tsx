@@ -50,6 +50,13 @@ const creationOptions: CreationOption[] = [
     description: 'Duplicate an existing use case and modify it to create a new test scenario.',
     icon: 'copy',
     route: '/create/clone'
+  },
+  {
+    id: 'import',
+    title: 'Import Use Case',
+    description: 'Import a previously exported use case from a JSON file.',
+    icon: 'upload',
+    route: '/create/import'
   }
 ];
 

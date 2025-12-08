@@ -21,7 +21,6 @@ export default function CreateUsecase() {
   const [startingUrl, setStartingUrl] = useState('');
   const [active, setActive] = useState(true);
   const [tags, setTags] = useState('');
-  const [headless, setHeadless] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState(findRegionOptions() as SelectProps.Option);
   const { modelOptions, findModelOption, loading: modelsLoading } = useModels();
@@ -42,7 +41,6 @@ export default function CreateUsecase() {
         description, 
         starting_url: startingUrl,
         active,
-        headless,
         region: selectedRegion.value,
         model_id: selectedModel?.value,
         tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag)
@@ -143,15 +141,6 @@ export default function CreateUsecase() {
             onChange={({ detail }) => setActive(detail.checked)}
           >
             Active
-          </Checkbox>
-        </FormField>
-        
-        <FormField>
-          <Checkbox
-            checked={headless}
-            onChange={({ detail }) => setHeadless(detail.checked)}
-          >
-            Headless Mode
           </Checkbox>
         </FormField>
         

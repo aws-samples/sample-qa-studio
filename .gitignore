@@ -39,3 +39,6 @@ frontend/public/dcv/*
 
 # Release artifacts
 release/
+
+# test cases for nova-act-qa-studio
+test-usecases/*

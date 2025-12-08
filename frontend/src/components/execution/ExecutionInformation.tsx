@@ -12,6 +12,19 @@ interface ExecutionInformationProps {
   onViewRecording: () => void;
 }
 
+// Helper function to map execution status to StatusIndicator type
+function getStatusType(status: string) {
+  switch (status) {
+    case 'success': return 'success';
+    case 'error': 
+    case 'failed': return 'error';
+    case 'executing': return 'in-progress';
+    case 'pending': return 'pending';
+    case 'stopped': return 'stopped';
+    default: return 'pending';
+  }
+}
+
 export default function ExecutionInformation({ 
   execution, 
   usecaseId, 
@@ -41,7 +54,7 @@ export default function ExecutionInformation({
           },
           {
             label: "Status",
-            value: <StatusIndicator type={execution.status}>
+            value: <StatusIndicator type={getStatusType(execution.status)}>
               {execution.status}
             </StatusIndicator>,
           },

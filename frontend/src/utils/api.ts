@@ -21,7 +21,6 @@ export interface ExecutionModel {
   sk: string;
   status: string;
   starting_url: string;
-  headless: boolean;
   createdAt: string;
   completedAt: string;
   executingAt: string;

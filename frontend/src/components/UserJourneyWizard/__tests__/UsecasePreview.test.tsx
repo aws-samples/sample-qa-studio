@@ -14,7 +14,7 @@ describe('UsecasePreview', () => {
       description: 'Generated from user journey: User logs in to the application',
       starting_url: 'https://example.com/login',
       active: true,
-      headless: false,
+      
       region: 'us-east-1',
       tags: ['login', 'authentication']
     },
@@ -294,7 +294,7 @@ describe('UsecasePreview', () => {
           description: 'Basic test case',
           starting_url: 'https://example.com',
           active: true,
-          headless: false,
+          
           region: 'us-east-1',
           tags: []
         },

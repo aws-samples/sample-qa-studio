@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Link from "@cloudscape-design/components/link";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Button from "@cloudscape-design/components/button";
 import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import Table from "@cloudscape-design/components/table";
+import TextFilter from "@cloudscape-design/components/text-filter";
 import { api } from '../utils/api';
 import Badge from "@cloudscape-design/components/badge";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
-import ImportUsecaseModal from './ImportUsecaseModal';
 import DeleteUsecaseModal from './DeleteUsecaseModal';
 import Flashbar from "@cloudscape-design/components/flashbar";
 // import { usePreloadOnHover } from './common/ComponentPreloader';
@@ -56,20 +56,24 @@ function getStatusType(status: string) {
     case 'failed': return 'error';
     case 'executing': return 'in-progress';
     case 'pending': return 'pending';
+    case 'stopped': return 'stopped';
     default: return 'pending';
   }
 }
 
 export default function HomeScreen() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [usecases, setUsecases] = useState<Usecase[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showImportModal, setShowImportModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
   const [batchExecuting, setBatchExecuting] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [flashbarItems, setFlashbarItems] = useState<any[]>([]);
+  
+  // Get filter text from URL parameter
+  const filteringText = searchParams.get('search') || '';
 
   // Preload UsecaseDetail when hovering over usecase links
   // const usecaseDetailPreload = usePreloadOnHover(
@@ -92,19 +96,7 @@ export default function HomeScreen() {
     fetchUsecases();
   }, []);
 
-  const handleImportSuccess = () => {
-    setShowImportModal(false);
-    // Refresh the usecases list
-    const fetchUsecases = async () => {
-      try {
-        const data = await api.get('usecases');
-        setUsecases(data.usecases || []);
-      } catch (error) {
-        console.error('Failed to fetch usecases:', error);
-      }
-    };
-    fetchUsecases();
-  };
+
 
   const handleBatchExecute = async () => {
     if (selectedItems.length === 0) {
@@ -276,6 +268,19 @@ export default function HomeScreen() {
     }
   };
 
+  // Filter usecases based on search text
+  const filteredUsecases = usecases.filter(usecase => {
+    if (!filteringText) return true;
+    
+    const searchText = filteringText.toLowerCase();
+    const nameMatch = usecase.name.toLowerCase().includes(searchText);
+    const descriptionMatch = usecase.description?.toLowerCase().includes(searchText);
+    const tagsMatch = usecase.tags?.some(tag => tag.toLowerCase().includes(searchText));
+    const statusMatch = usecase.last_execution_status?.toLowerCase().includes(searchText);
+    
+    return nameMatch || descriptionMatch || tagsMatch || statusMatch;
+  });
+
   return (
     <SpaceBetween direction="vertical" size="l">
       <Flashbar items={flashbarItems} />
@@ -296,9 +301,7 @@ export default function HomeScreen() {
               loading={batchExecuting || batchDeleting}
               disabled={batchExecuting || batchDeleting || loading}
               onItemClick={({ detail }) => {
-                if (detail.id === 'import') {
-                  setShowImportModal(true);
-                } else if (detail.id === 'execute-selected') {
+                if (detail.id === 'execute-selected') {
                   handleBatchExecute();
                 } else if (detail.id === 'delete-selected') {
                   handleDeleteClick();
@@ -314,10 +317,6 @@ export default function HomeScreen() {
                   id: 'delete-selected',
                   text: `Delete Selected (${selectedItems.length})`,
                   disabled: selectedItems.length === 0
-                },
-                {
-                  id: 'import',
-                  text: 'Import Use Case'
                 }
               ]}
               mainAction={{
@@ -395,20 +394,34 @@ export default function HomeScreen() {
             )
           }
         ]}
-        items={usecases}
+        items={filteredUsecases}
         loading={loading}
         loadingText="Loading use cases..."
-        empty="No use cases found"
+        empty={
+          filteringText 
+            ? `No use cases match "${filteringText}"`
+            : "No use cases found"
+        }
+        filter={
+          <TextFilter
+            filteringText={filteringText}
+            onChange={({ detail }) => {
+              const newSearchParams = new URLSearchParams(searchParams);
+              if (detail.filteringText) {
+                newSearchParams.set('search', detail.filteringText);
+              } else {
+                newSearchParams.delete('search');
+              }
+              setSearchParams(newSearchParams);
+            }}
+            filteringPlaceholder="Search use cases by name, description, tags, or status"
+            countText={`${filteredUsecases.length} ${filteredUsecases.length === 1 ? 'match' : 'matches'}`}
+          />
+        }
         selectionType="multi"
         selectedItems={selectedItems}
         onSelectionChange={({ detail }) => setSelectedItems(detail.selectedItems)}
         resizableColumns
-      />
-      
-      <ImportUsecaseModal
-        visible={showImportModal}
-        onDismiss={() => setShowImportModal(false)}
-        onImportSuccess={handleImportSuccess}
       />
 
       <DeleteUsecaseModal

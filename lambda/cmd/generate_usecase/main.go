@@ -419,7 +419,6 @@ Generate a JSON object that matches this EXACT schema. This JSON will be importe
     "description": "Generated from user journey: ` + escapedJourney + `",
     "starting_url": "` + request.StartingURL + `",
     "active": true,
-    "headless": false,
     "region": "` + request.Region + `",
     "tags": []
   },

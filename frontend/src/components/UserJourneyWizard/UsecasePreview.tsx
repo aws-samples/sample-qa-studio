@@ -18,7 +18,6 @@ interface GeneratedUsecase {
     description: string;
     starting_url: string;
     active: boolean;
-    headless: boolean;
     region: string;
     tags: string[];
   };
@@ -223,12 +222,6 @@ export default function UsecasePreview({ usecase, onImport, onRegenerate, isImpo
               <Box variant="awsui-key-label">Active</Box>
               <Badge color={usecase.usecase.active ? 'green' : 'red'}>
                 {usecase.usecase.active ? 'Yes' : 'No'}
-              </Badge>
-            </div>
-            <div>
-              <Box variant="awsui-key-label">Headless Mode</Box>
-              <Badge color={usecase.usecase.headless ? 'blue' : 'grey'}>
-                {usecase.usecase.headless ? 'Enabled' : 'Disabled'}
               </Badge>
             </div>
             <div>

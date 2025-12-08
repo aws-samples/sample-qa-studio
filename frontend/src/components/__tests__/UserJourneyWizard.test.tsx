@@ -225,7 +225,7 @@ describe('UserJourneyWizard', () => {
         description: 'Generated test case',
         starting_url: 'https://example.com',
         active: true,
-        headless: false,
+        
         region: 'us-east-1',
         tags: []
       },
@@ -400,7 +400,7 @@ describe('UserJourneyWizard', () => {
         description: 'Generated test case',
         starting_url: 'https://example.com',
         active: true,
-        headless: false,
+        
         region: 'us-east-1',
         tags: []
       },
@@ -657,7 +657,7 @@ describe('UserJourneyWizard', () => {
         success: true,
         usecaseData: JSON.stringify({
           exportVersion: '1.0',
-          usecase: { name: 'Test', description: 'Test', starting_url: 'https://example.com', active: true, headless: false, region: 'us-east-1', tags: [] },
+          usecase: { name: 'Test', description: 'Test', starting_url: 'https://example.com', active: true,  region: 'us-east-1', tags: [] },
           steps: [],
           variables: [],
           secrets: [],

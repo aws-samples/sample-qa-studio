@@ -68,7 +68,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Description: req.Description,
 		StartingURL: req.StartingURL,
 		Active:      req.Active,
-		Headless:    req.Headless,
 		Tags:        req.Tags,
 		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
 		Region:      req.Region,
