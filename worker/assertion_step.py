@@ -51,32 +51,45 @@ def execute_assertion_step(step: ExecutionStep, runtime_variables: dict):
                 logs = f"Boolean assertion failed: expected {expected_bool}, got {actual_bool}"
             
         elif step.validation_type == 'string' and step.validation_operator == 'exact':
-            expected_str = str(expected_value).strip()
-            actual_str = str(actual_value).strip()
+            # Strip whitespace and remove surrounding quotes if present
+            expected_str = str(expected_value).strip().strip('"').strip("'")
+            actual_str = str(actual_value).strip().strip('"').strip("'")
             
             if actual_str != expected_str:
                 success = False
                 logs = f"String exact match failed: expected '{expected_str}', got '{actual_str}'"
         
         elif step.validation_type == 'string' and step.validation_operator == 'exact_case_insensitive':
-            expected_str = str(expected_value).strip().lower()
-            actual_str = str(actual_value).strip().lower()
+            # Strip whitespace and remove surrounding quotes if present
+            expected_str = str(expected_value).strip().strip('"').strip("'").lower()
+            actual_str = str(actual_value).strip().strip('"').strip("'").lower()
             
             if actual_str != expected_str:
                 success = False
                 logs = f"String exact match (case insensitive) failed: expected '{expected_str}', got '{actual_str}'"
         
+        elif step.validation_type == 'string' and step.validation_operator == 'not_equal':
+            # Strip whitespace and remove surrounding quotes if present
+            expected_str = str(expected_value).strip().strip('"').strip("'")
+            actual_str = str(actual_value).strip().strip('"').strip("'")
+            
+            if actual_str == expected_str:
+                success = False
+                logs = f"String not equal failed: expected value to not equal '{expected_str}', but got '{actual_str}'"
+        
         elif step.validation_type == 'string' and step.validation_operator == 'contains':
-            expected_str = str(expected_value).strip()
-            actual_str = str(actual_value).strip()
+            # Strip whitespace and remove surrounding quotes if present
+            expected_str = str(expected_value).strip().strip('"').strip("'")
+            actual_str = str(actual_value).strip().strip('"').strip("'")
             
             if not re.search(re.escape(expected_str), actual_str):
                 success = False
                 logs = f"String contains failed: '{actual_str}' does not contain '{expected_str}'"
 
         elif step.validation_type == 'string' and step.validation_operator == 'contains_case_insensitive':
-            expected_str = str(expected_value).strip()
-            actual_str = str(actual_value).strip()
+            # Strip whitespace and remove surrounding quotes if present
+            expected_str = str(expected_value).strip().strip('"').strip("'")
+            actual_str = str(actual_value).strip().strip('"').strip("'")
             
             if not re.search(re.escape(expected_str), actual_str, re.IGNORECASE):
                 success = False

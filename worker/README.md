@@ -132,7 +132,6 @@ Ensure your AWS credentials have permissions for:
 If the container runs out of memory:
 1. Increase Docker memory limits
 2. Monitor Chrome processes
-3. Consider running in headless mode
 
 ## Logs
 

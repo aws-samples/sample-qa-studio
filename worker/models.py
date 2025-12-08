@@ -12,7 +12,6 @@ class Execution:
     sk: str
     status: str
     starting_url: str
-    headless: bool
     created_at: str
     completed_at: Optional[str]
     executing_at: Optional[str]

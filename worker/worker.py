@@ -127,7 +127,7 @@ def main_batch():
         
         # Execute Nova Act directly in the same shell
         logger.info("Starting execution...")
-        logger.info(f"Config: starting_page={execution.starting_url}, headless={execution.headless}")
+        logger.info(f"Config: starting_page={execution.starting_url}")
     
     except Exception as e:
         logger.error(f"Execution failed: {e}")
@@ -170,7 +170,7 @@ def main_batch():
                     cdp_headers=headers,
                     starting_page=execution.starting_url,
                     workflow=workflow,
-                    headless=execution.headless,
+                    headless=True,
                     logs_directory=execution_logs_dir,
                     ignore_https_errors=True,
                     chrome_channel="chromium",
@@ -186,7 +186,7 @@ def main_batch():
                 cdp_endpoint_url=ws_url,
                 cdp_headers=headers,
                 starting_page=execution.starting_url,
-                headless=execution.headless,
+                headless=True,
                 logs_directory=execution_logs_dir,
                 ignore_https_errors=True,
                 chrome_channel="chromium",
