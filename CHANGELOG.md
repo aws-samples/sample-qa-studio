@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1-21] - 2025-12-08
+
+### Features
+
+- remove headless options and polish UI #76 (f131b2b)
+- remove headless options and polish UI #76 (6175f0b)
+- Use nova-act ga service cross region for now #75 (9f27696)
+- Use nova-act ga service cross region for now #75 (567dfbd)
+- Allow users to build a new use case with a live view wizzard #72 (374c6d9)
+- Allow users to build a new use case with a live view w izzard #72 (21c824d)
+
+### Bug Fixes
+
+- Liveview in execution details has been overflowing on small screens #77 (d8110e4)
+- Liveview in execution details has been overflowing on small screens #77 (9300d50)
+
+### Refactoring
+
+- cleanup inconsitent page layouts (c014139)
+
+### Other Changes
+
+- 67 initial deployment and cross geo compatibilties (00f2fdc)
+
+All notable changes to this project will be documented in this file.
+
 ## [0.1.1-20] - 2025-11-26
 
 ### Other Changes
