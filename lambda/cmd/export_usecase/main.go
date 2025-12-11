@@ -37,7 +37,6 @@ type UsecaseExport struct {
 	Description string   `json:"description"`
 	StartingURL string   `json:"starting_url"`
 	Active      bool     `json:"active"`
-	Headless    bool     `json:"headless"`
 	Region      string   `json:"region"`
 	Tags        []string `json:"tags"`
 }
@@ -249,7 +248,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Description: usecase.Description,
 		StartingURL: usecase.StartingURL,
 		Active:      usecase.Active,
-		Headless:    usecase.Headless,
 		Region:      usecase.Region,
 		Tags:        usecase.Tags,
 	}

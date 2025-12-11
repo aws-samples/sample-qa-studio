@@ -40,7 +40,6 @@ type UseCase struct {
 	Description         string   `json:"description" dynamodbav:"description"`
 	StartingURL         string   `json:"starting_url" dynamodbav:"starting_url"`
 	Active              bool     `json:"active" dynamodbav:"active"`
-	Headless            bool     `json:"headless" dynamodbav:"headless"`
 	Tags                []string `json:"tags" dynamodbav:"tags"`
 	CreatedAt           string   `json:"createdAt" dynamodbav:"createdAt"`
 	Region              string   `json:"region" dynamodbav:"execution_region"`
@@ -55,7 +54,6 @@ type CreateUsecaseRequest struct {
 	Description string   `json:"description"`
 	StartingURL string   `json:"starting_url"`
 	Active      bool     `json:"active"`
-	Headless    bool     `json:"headless"`
 	Tags        []string `json:"tags"`
 	Region      string   `json:"region"`
 	ModelID     string   `json:"model_id"`
@@ -66,7 +64,6 @@ type UpdateUsecaseRequest struct {
 	Description string   `json:"description"`
 	StartingURL string   `json:"starting_url"`
 	Active      bool     `json:"active"`
-	Headless    bool     `json:"headless"`
 	Tags        []string `json:"tags"`
 	Region      string   `json:"region"`
 	ModelID     string   `json:"model_id"`
@@ -99,7 +96,6 @@ type Execution struct {
 	SK                string `json:"sk" dynamodbav:"sk"`
 	Status            string `json:"status" dynamodbav:"status"`
 	StartingURL       string `json:"starting_url" dynamodbav:"starting_url"`
-	Headless          bool   `json:"headless" dynamodbav:"headless"`
 	CreatedAt         string `json:"createdAt" dynamodbav:"created_at"`
 	CompletedAt       string `json:"completedAt" dynamodbav:"completed_at"`
 	ExecutingAt       string `json:"executingAt" dynamodbav:"executing_at"`

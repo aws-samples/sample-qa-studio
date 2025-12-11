@@ -131,7 +131,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Description: sourceUsecase.Description,
 		StartingURL: sourceUsecase.StartingURL,
 		Active:      sourceUsecase.Active,
-		Headless:    sourceUsecase.Headless,
 		Region:      sourceUsecase.Region,
 		Tags:        sourceUsecase.Tags,
 		CreatedAt:   now,

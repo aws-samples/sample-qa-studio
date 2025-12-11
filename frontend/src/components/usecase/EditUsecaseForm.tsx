@@ -20,7 +20,6 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
   const [description, setDescription] = useState(usecase.description || '');
   const [startingUrl, setStartingUrl] = useState(usecase.starting_url || '');
   const [active, setActive] = useState(usecase.active || false);
-  const [headless, setHeadless] = useState(usecase.headless || false);
   const [tags, setTags] = useState(usecase.tags?.join(', ') || '');
   const [selectedRegion, setSelectedRegion] = useState(findRegionOptions(usecase.region) as SelectProps.Option);
   const { modelOptions, findModelOption, loading: modelsLoading } = useModels();
@@ -39,7 +38,6 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
       description,
       starting_url: startingUrl,
       active,
-      headless,
       region: selectedRegion.value,
       model_id: selectedModel?.value,
       tags: tags.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0)
@@ -109,21 +107,14 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
         />
       </FormField>
 
-      <SpaceBetween direction="vertical" size="s">
+      <FormField>
         <Checkbox
           checked={active}
           onChange={({ detail }) => setActive(detail.checked)}
         >
           Active
         </Checkbox>
-
-        <Checkbox
-          checked={headless}
-          onChange={({ detail }) => setHeadless(detail.checked)}
-        >
-          Run in headless mode
-        </Checkbox>
-      </SpaceBetween>
+      </FormField>
 
       <SpaceBetween direction="horizontal" size="xs">
         <Button variant="primary" onClick={handleSave}>

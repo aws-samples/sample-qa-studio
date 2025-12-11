@@ -229,7 +229,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         // Nova Act GA Service configuration
         USE_NOVA_ACT_GA: config.useNovaActGa.toString(),
         NOVA_ACT_REGION: 'us-east-1',
-        NOVA_ACT_S3_BUCKET: `${this.baseName}-artefacts-us-east-1`,
+        NOVA_ACT_S3_BUCKET: `${this.account}-${this.baseName}-artefacts-us-east-1`,
       }
     });
 

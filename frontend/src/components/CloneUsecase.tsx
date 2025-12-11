@@ -20,7 +20,6 @@ interface Usecase {
   description: string;
   starting_url?: string;
   active?: boolean;
-  headless?: boolean;
   tags?: string[];
 }
 
@@ -201,10 +200,6 @@ export default function CloneUsecase() {
               <div>
                 <Box variant="awsui-key-label">Starting URL</Box>
                 <div>{usecaseDetail.starting_url || '-'}</div>
-              </div>
-              <div>
-                <Box variant="awsui-key-label">Mode</Box>
-                <div>{usecaseDetail.headless ? 'Headless' : 'Standard'}</div>
               </div>
               <div>
                 <Box variant="awsui-key-label">Steps</Box>

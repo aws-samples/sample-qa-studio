@@ -42,7 +42,6 @@ class DynamoDBClient:
                 sk=item['sk'],
                 status=item['status'],
                 starting_url=item['starting_url'],
-                headless=item['headless'],
                 created_at=item['created_at'],
                 completed_at=item.get('completed_at'),
                 executing_at=item.get('executing_at'),

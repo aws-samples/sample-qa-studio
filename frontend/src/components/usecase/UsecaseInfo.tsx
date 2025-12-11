@@ -126,14 +126,6 @@ export default function UsecaseInfo({ usecaseId }: UsecaseInfoProps) {
               value: new Date(usecase.createdAt).toLocaleDateString(),
             },
             {
-              label: "Headless Mode",
-              value: usecase.headless ? (
-                <Badge color="blue">Enabled</Badge>
-              ) : (
-                <Badge color="grey">Disabled</Badge>
-              ),
-            },
-            {
               label: "Tags",
               value: usecase.tags?.length > 0 ? usecase.tags.join(', ') : 'No tags',
             },

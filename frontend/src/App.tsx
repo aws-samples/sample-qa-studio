@@ -21,6 +21,7 @@ const { baseName } = __APP_CONFIG__;
 const HomeScreen = React.lazy(() => import('./components/HomeScreen'));
 const CreateUsecaseWizard = React.lazy(() => import('./components/CreateUsecaseWizard'));
 const CreateUsecase = React.lazy(() => import('./components/CreateUsecase'));
+const ImportUsecase = React.lazy(() => import('./components/ImportUsecase'));
 const CloneUsecase = React.lazy(() => import('./components/CloneUsecase'));
 const CreateFromTemplate = React.lazy(() => import('./components/CreateFromTemplate'));
 const TemplateUsecase = React.lazy(() => import('./components/TemplateUsecase'));
@@ -30,6 +31,7 @@ const InteractiveWizard = React.lazy(() => import('./components/wizard/Interacti
 const UsecaseDetail = React.lazy(() => import('./components/UsecaseDetailRefactored'));
 const ExecutionDetail = React.lazy(() => import('./components/ExecutionDetailRefactored'));
 const Users = React.lazy(() => import('./components/Users'));
+const CreateUser = React.lazy(() => import('./components/CreateUser'));
 const TemplateLibrary = React.lazy(() => import('./components/templates/TemplateLibrary'));
 const TemplateDetail = React.lazy(() => import('./components/templates/TemplateDetail'));
 
@@ -126,6 +128,7 @@ function AppContent() {
             <Route path="/usecases" element={<Usecases />} />
             <Route path="/create" element={<CreateUsecaseWizard />} />
             <Route path="/create/blank" element={<CreateUsecase />} />
+            <Route path="/create/import" element={<ImportUsecase />} />
             <Route path="/create/template" element={<CreateFromTemplate />} />
             <Route path="/create/clone" element={<CloneUsecase />} />
             <Route path="/create/journey" element={
@@ -143,6 +146,7 @@ function AppContent() {
             <Route path="/templates/:id" element={<TemplateDetail />} />
             <Route path="/template-usecase" element={<TemplateUsecase />} />
             <Route path="/users" element={<Users />} />
+            <Route path="/users/create" element={<CreateUser />} />
             <Route path="/usecase/:id" element={<UsecaseDetail />} />
             <Route path="/usecase/:usecaseId/execution/:executionId" element={<ExecutionDetail />} />
           </Routes>

@@ -36,7 +36,6 @@ type Execution struct {
 	SK               string `json:"sk" dynamodbav:"sk"`
 	Status           string `json:"status" dynamodbav:"status"`
 	StartingURL      string `json:"starting_url" dynamodbav:"starting_url"`
-	Headless         bool   `json:"headless" dynamodbav:"headless"`
 	CreatedAt        string `json:"createdAt" dynamodbav:"created_at"`
 	CompletedAt      string `json:"completedAt" dynamodbav:"completed_at"`
 	ExecutingAt      string `json:"executingAt" dynamodbav:"executing_at"`

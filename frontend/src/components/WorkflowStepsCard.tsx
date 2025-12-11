@@ -164,7 +164,17 @@ function SortableStepCard({
         const expectedValue = step.validation_value === 'true' ? 'True' : 'False';
         details.push(`Validation: Boolean expects ${expectedValue}`);
       } else if (step.validation_type === 'string') {
-        const operator = step.validation_operator === 'exact' ? 'exactly matches' : 'contains';
+        const getStringOperatorText = (op?: string) => {
+          switch (op) {
+            case 'exact': return 'exactly matches';
+            case 'exact_case_insensitive': return 'exactly matches (case insensitive)';
+            case 'not_equal': return 'does not equal';
+            case 'contains': return 'contains';
+            case 'contains_case_insensitive': return 'contains (case insensitive)';
+            default: return 'exactly matches';
+          }
+        };
+        const operator = getStringOperatorText(step.validation_operator);
         details.push(`Validation: Text ${operator} "${step.validation_value}"`);
       } else if (step.validation_type === 'number') {
         const getOperatorText = (op?: string) => {
@@ -186,7 +196,17 @@ function SortableStepCard({
         details.push(`Variable: ${(step as any).assertion_variable}`);
         details.push(`Assertion: Boolean expects ${expectedValue}`);
       } else if (step.validation_type === 'string') {
-        const operator = step.validation_operator === 'exact' ? 'exactly matches' : 'contains';
+        const getStringOperatorText = (op?: string) => {
+          switch (op) {
+            case 'exact': return 'exactly matches';
+            case 'exact_case_insensitive': return 'exactly matches (case insensitive)';
+            case 'not_equal': return 'does not equal';
+            case 'contains': return 'contains';
+            case 'contains_case_insensitive': return 'contains (case insensitive)';
+            default: return 'exactly matches';
+          }
+        };
+        const operator = getStringOperatorText(step.validation_operator);
         details.push(`Variable: ${(step as any).assertion_variable}`);
         details.push(`Assertion: Text ${operator} "${step.validation_value}"`);
       } else if (step.validation_type === 'number') {

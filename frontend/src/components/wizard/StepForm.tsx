@@ -58,6 +58,7 @@ const VALIDATION_OPERATOR_OPTIONS = {
   string: [
     { label: 'Exact Match', value: 'exact' },
     { label: 'Exact Match (Case Insensitive)', value: 'exact_case_insensitive' },
+    { label: 'Not Equal', value: 'not_equal' },
     { label: 'Contains', value: 'contains' },
     { label: 'Contains (Case Insensitive)', value: 'contains_case_insensitive' }
   ],

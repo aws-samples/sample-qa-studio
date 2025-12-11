@@ -25,7 +25,6 @@ type UsecaseSchema struct {
 	Description string   `json:"description"`
 	StartingURL string   `json:"starting_url"`
 	Active      bool     `json:"active"`
-	Headless    bool     `json:"headless"`
 	Tags        []string `json:"tags"`
 }
 

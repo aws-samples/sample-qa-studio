@@ -36,7 +36,6 @@ type UsecaseImport struct {
 	Description string   `json:"description"`
 	StartingURL string   `json:"starting_url"`
 	Active      bool     `json:"active"`
-	Headless    bool     `json:"headless"`
 	Region      string   `json:"region"`
 	Tags        []string `json:"tags"`
 }
@@ -125,7 +124,6 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 		Description: importReq.Usecase.Description,
 		StartingURL: importReq.Usecase.StartingURL,
 		Active:      importReq.Usecase.Active,
-		Headless:    importReq.Usecase.Headless,
 		Region:      importReq.Usecase.Region,
 		Tags:        importReq.Usecase.Tags,
 		CreatedAt:   now,

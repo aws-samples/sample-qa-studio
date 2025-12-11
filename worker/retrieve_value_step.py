@@ -29,6 +29,9 @@ def execute_retrieve_value_step(nova: NovaAct, step: ExecutionStep):
         # Convert result to string for consistent storage
         if result and result.parsed_response is not None:
             retrieved_value = str(result.parsed_response)
+            # Strip surrounding quotes if present (for string values)
+            if step.value_type == 'string' or not hasattr(step, 'value_type'):
+                retrieved_value = retrieved_value.strip().strip('"').strip("'")
             logger.info(f"Retrieved value: {retrieved_value}")
         else:
             success = False

@@ -21,7 +21,6 @@ interface Template {
   description: string;
   starting_url?: string;
   active?: boolean;
-  headless?: boolean;
   tags?: string[];
 }
 
