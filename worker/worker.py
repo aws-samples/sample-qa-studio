@@ -7,11 +7,12 @@ and runs Nova Act directly in the same shell.
 import os
 import logging
 import boto3
+import time
+from datetime import datetime
 from nova_act import NovaAct, Workflow
 from nova_act.util.s3_writer import S3Writer
 from utils import get_region, remove_prefix, get_time
 from browser import start_browser, create_browser, delete_browser
-import time
 
 from dynamodb_client import DynamoDBClient
 from template_parser import TemplateParser
@@ -107,12 +108,19 @@ def main_batch():
         else:
             logger.info("No headers found")
         
-        # Load Nova API key from Secrets Manager
-        nova_api_key = secrets_client._get_secret_value_by_name(os.getenv('NOVA_ACT_API_KEY_NAME'))
-        if not nova_api_key:
-            logger.error("Nova API key not found in Secrets Manager")
-            return False
-        logger.info("Nova API key loaded successfully")
+        # Check if using GA service
+        use_ga_service = os.getenv('USE_NOVA_ACT_GA', 'false').lower() == 'true'
+        
+        # Load Nova API key from Secrets Manager only if not using GA service
+        nova_api_key = None
+        if not use_ga_service:
+            nova_api_key = secrets_client._get_secret_value_by_name(os.getenv('NOVA_ACT_API_KEY_NAME'))
+            if not nova_api_key:
+                logger.error("Nova API key not found in Secrets Manager")
+                return False
+            logger.info("Nova API key loaded successfully")
+        else:
+            logger.info("Using Nova Act GA service - API key not required")
         
         # Initialize template parser (steps will be parsed at runtime)
         template_parser = TemplateParser(execution_id, execution.created_at, execution_variables)
@@ -137,6 +145,7 @@ def main_batch():
     # Execute workflow
     try:
         logger.info("Initializing NovaAct context manager...")
+        # Create browser with network configuration (VPC settings from CDK stack environment variables or PUBLIC mode)
         browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/recording/", execution.region)
         browser = start_browser(browser_id, execution_id, execution.region)
         ws_url, headers = browser.generate_ws_headers()
@@ -145,9 +154,6 @@ def main_batch():
         
         # Store live view URL in DynamoDB
         db_client.create_live_view(execution_id, live_view_url)
-
-        # Check if using GA service
-        use_ga_service = os.getenv('USE_NOVA_ACT_GA', 'false').lower() == 'true'
 
         if use_ga_service:
             # Nova Act GA Service
@@ -174,8 +180,8 @@ def main_batch():
                     logs_directory=execution_logs_dir,
                     ignore_https_errors=True,
                     chrome_channel="chromium",
-                    stop_hooks=[s3_writer],
-                    user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
+                    stop_hooks=[s3_writer]
+                    #user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
                 ) as nova:
                         all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
         else:
@@ -191,8 +197,8 @@ def main_batch():
                 ignore_https_errors=True,
                 chrome_channel="chromium",
                 stop_hooks=[s3_writer],
-                nova_act_api_key=nova_api_key,
-                user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
+                nova_act_api_key=nova_api_key
+                #user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
             ) as nova:
                 all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
     

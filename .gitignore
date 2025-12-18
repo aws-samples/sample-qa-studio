@@ -15,7 +15,9 @@ cdk.out
 
 lambda/cmd/worker/logs
 lambda/cmd/worker/accept_ai-env
+
 .DS_Store
+
 worker/logs
 worker/test_logs
 worker/user_dir
@@ -31,6 +33,7 @@ Makefile
 
 frontend/.env
 frontend/src/amplifyconfiguration.json
+
 configuration.json
 
 # DCV SDK downloads

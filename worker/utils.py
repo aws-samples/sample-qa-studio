@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 import boto3
 import uuid
@@ -17,6 +18,46 @@ def remove_prefix(s, prefix):
 
 def get_time():
   return datetime.now().strftime(TIME_FORMAT)
+
+def validate_vpc_configuration():
+  """Validate VPC configuration parameters from environment variables"""
+  # Check if AgentCore VPC mode is enabled via environment variable
+  agent_core_vpc = os.getenv('AGENT_CORE_VPC', 'false').lower() == 'true'
+  
+  if not agent_core_vpc:
+    return True, "VPC disabled - using PUBLIC network mode"
+  
+  # If AgentCoreVPC is true, validate that required environment variables are set
+  # These should be set by the CDK worker-stack.ts
+  required_env_vars = ['AC_VPC_ID', 'AC_SUBNET_ID', 'AC_SECURITY_GROUP_ID']
+  missing_env_vars = []
+  
+  for env_var in required_env_vars:
+    if not os.getenv(env_var):
+      missing_env_vars.append(env_var)
+  
+  if missing_env_vars:
+    error_msg = f"AgentCoreVPC is enabled but missing required environment variables: {', '.join(missing_env_vars)}. These should be set by the CDK worker-stack.ts"
+    return False, error_msg
+  
+  return True, "VPC configuration validated successfully"
+
+def get_vpc_configuration():
+  """Get VPC configuration from environment variables set by CDK stack"""
+  # Check if AgentCore VPC mode is enabled via environment variable
+  agent_core_vpc = os.getenv('AGENT_CORE_VPC', 'false').lower() == 'true'
+  
+  if not agent_core_vpc:
+    return None
+  
+  # Get VPC configuration from environment variables set by worker-stack.ts
+  vpc_config = {
+    'vpc_id': os.getenv('AC_VPC_ID'),
+    'subnet_id': os.getenv('AC_SUBNET_ID'), 
+    'security_group_id': os.getenv('AC_SECURITY_GROUP_ID')
+  }
+  
+  return vpc_config
 
 
 def _create_client():

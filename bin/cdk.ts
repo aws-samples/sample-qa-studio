@@ -13,7 +13,7 @@ import { loadConfig, getStackEnv } from '../lib/config';
 
 // Load and validate configuration with sane defaults
 const config = loadConfig();
-const { adminEmail, baseName, userAgentString, apiEndpoint, apiDeploymentStage, bedrockModelId } = config;
+const { adminEmail, baseName, apiEndpoint, apiDeploymentStage, bedrockModelId } = config;
 
 const app = new App();
 
@@ -82,7 +82,6 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   tableReadPolicy: storageStack.tableReadPolicy,
   novaActApiKeySecret: storageStack.novaActApiKeySecret,
   notificationQueue: notificationStack.notificationQueue,
-  userAgentString: userAgentString,
 })
 
 // EventBridge stack for execution status events
