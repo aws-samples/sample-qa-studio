@@ -9,8 +9,7 @@
 /coverage
 
 # production
-/build/*
-!/build/.gitkeep
+/build
 /dist
 
 # compiled TypeScript
