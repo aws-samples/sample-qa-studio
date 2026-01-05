@@ -14,7 +14,7 @@ export interface NovaActQAStudioConfig {
   workerSecurityGroupId: string | null;
   createVpcEndpoints: boolean;
   useNovaActGa: boolean;
-  AgentCoreVPC: boolean;
+  agentCoreVPC: boolean;
 }
 
 const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
@@ -28,7 +28,7 @@ const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
   workerSecurityGroupId: null,
   createVpcEndpoints: false,
   useNovaActGa: false,
-  AgentCoreVPC: false,
+  agentCoreVPC: false,
 };
 
 /**

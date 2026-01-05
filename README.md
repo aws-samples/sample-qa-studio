@@ -79,7 +79,7 @@ Edit `configuration.json` with your specific values. The configuration is loaded
 | `vpcId` | Existing VPC ID to use instead of creating a new one. Must start with `vpc-`. Set to `null` to create a new VPC. | No | `null` (creates new VPC) |
 | `workerSecurityGroupId` | Existing security group ID for ECS tasks. Must start with `sg-`. Set to `null` to create a new security group. | No | `null` (creates new) |
 | `createVpcEndpoints` | Whether to create VPC endpoints when using an existing VPC. | No | `false` |
-| `AgentCoreVPC` | Enable VPC support for AgentCore browsers. When `true`, AgentCore browsers run within the VPC (either existing or newly created) for enhanced security and network isolation. Works with both new and existing VPCs. | No | `false` |
+| `agentCoreVPC` | Enable VPC support for AgentCore browsers. When `true`, AgentCore browsers run within the VPC (either existing or newly created) for enhanced security and network isolation. Works with both new and existing VPCs. | No | `false` |
 
 #### Example Configuration
 
@@ -104,7 +104,7 @@ Edit `configuration.json` with your specific values. The configuration is loaded
   "vpcId": null,
   "workerSecurityGroupId": null,
   "createVpcEndpoints": false,
-  "AgentCoreVPC": false
+  "agentCoreVPC": false
 }
 ```
 
@@ -117,7 +117,7 @@ By default, Nova Act QA Studio creates a new VPC with NAT Gateways and VPC endpo
 3. Private subnets are automatically discovered based on route table configuration
 4. Optionally provide `workerSecurityGroupId` to use an existing security group
 5. Set `createVpcEndpoints: true` if you want to create VPC endpoints in the existing VPC for enhanced security
-6. Set `AgentCoreVPC: true` to enable VPC support for AgentCore browsers (recommended for production)
+6. Set `agentCoreVPC: true` to enable VPC support for AgentCore browsers (recommended for production)
 
 **Example with existing VPC:**
 ```json
@@ -127,7 +127,7 @@ By default, Nova Act QA Studio creates a new VPC with NAT Gateways and VPC endpo
   "vpcId": "vpc-0123456789abcdef0",
   "workerSecurityGroupId": "sg-0123456789abcdef0",
   "createVpcEndpoints": true,
-  "AgentCoreVPC": true
+  "agentCoreVPC": true
 }
 ```
 
@@ -137,7 +137,7 @@ By default, Nova Act QA Studio creates a new VPC with NAT Gateways and VPC endpo
   "adminEmail": "your-email@example.com",
   "baseName": "nova-act-qa-studio",
   "vpcId": null,
-  "AgentCoreVPC": true,
+  "agentCoreVPC": true,
   "useNovaActGa": true
 }
 ```

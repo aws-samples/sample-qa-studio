@@ -21,7 +21,7 @@ import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from '.
 import { loadConfig } from './config';
 
 const config = loadConfig();
-const { defaultRegion, enabledRegions, vpcId, workerSecurityGroupId, createVpcEndpoints, AgentCoreVPC } = config;
+const { defaultRegion, enabledRegions, vpcId, workerSecurityGroupId, createVpcEndpoints, agentCoreVPC } = config;
 
 interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   baseName: string
@@ -225,8 +225,8 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       NOVA_ACT_S3_BUCKET: `${this.account}-${this.baseName}-artefacts-us-east-1`,
     };
 
-    // Add VPC environment variables if AgentCoreVPC is enabled
-    const containerEnvironment = AgentCoreVPC ? {
+    // Add VPC environment variables if agentCoreVPC is enabled
+    const containerEnvironment = agentCoreVPC ? {
       ...baseEnvironment,
       // VPC configuration for AgentCore browsers
       AGENT_CORE_VPC: 'true',
