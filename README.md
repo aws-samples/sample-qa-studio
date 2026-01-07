@@ -75,12 +75,11 @@ Edit `configuration.json` with your specific values. The configuration is loaded
 | `apiDeploymentStage` | API Gateway deployment stage name. | No | `api` |
 | `enabledRegions` | List of AWS regions where browser automation can run. | No | `["us-east-1"]` |
 | `defaultRegion` | Primary region for deployment and default browser execution. Must be included in `enabledRegions`. | No | `us-east-1` |
-| `userAgentString` | Custom User-Agent string for browser automation requests. | No | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36` |
-| `bedrockModelId` | Amazon Bedrock model ID used to generate test cases in the User Journey feature. See [available models](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html). | No | `anthropic.claude-3-5-sonnet-20240620-v1:0` |
-| `dcvRelease` | URL to the NICE DCV Web Client SDK archive. Used for remote browser session viewing. | No | `https://d1uj6qtbmh3dt5.cloudfront.net/webclientsdk/nice-dcv-web-client-sdk-1.9.100-952.zip` |
+| `useNovaActGa` | Enable Nova Act GA (Generally Available) service for browser automation. When `true`, uses the production Nova Act service. When `false`, uses alternative browser automation methods. | No | `true` |
 | `vpcId` | Existing VPC ID to use instead of creating a new one. Must start with `vpc-`. Set to `null` to create a new VPC. | No | `null` (creates new VPC) |
 | `workerSecurityGroupId` | Existing security group ID for ECS tasks. Must start with `sg-`. Set to `null` to create a new security group. | No | `null` (creates new) |
 | `createVpcEndpoints` | Whether to create VPC endpoints when using an existing VPC. | No | `false` |
+| `agentCoreVPC` | Enable VPC support for AgentCore browsers. When `true`, AgentCore browsers run within the VPC (either existing or newly created) for enhanced security and network isolation. Works with both new and existing VPCs. | No | `false` |
 
 #### Example Configuration
 
@@ -92,7 +91,7 @@ Edit `configuration.json` with your specific values. The configuration is loaded
 }
 ```
 
-**Full configuration with custom values:**
+**Full configuration with all available options:**
 ```json
 {
   "adminEmail": "your-email@example.com",
@@ -101,12 +100,11 @@ Edit `configuration.json` with your specific values. The configuration is loaded
   "apiDeploymentStage": "prod",
   "enabledRegions": ["us-east-1", "us-west-2", "eu-central-1"],
   "defaultRegion": "us-east-1",
-  "userAgentString": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
-  "bedrockModelId": "anthropic.claude-3-5-sonnet-20240620-v1:0",
-  "dcvRelease": "https://d1uj6qtbmh3dt5.cloudfront.net/webclientsdk/nice-dcv-web-client-sdk-1.9.100-952.zip",
+  "useNovaActGa": true,
   "vpcId": null,
   "workerSecurityGroupId": null,
-  "createVpcEndpoints": false
+  "createVpcEndpoints": false,
+  "agentCoreVPC": false
 }
 ```
 
@@ -115,10 +113,11 @@ Edit `configuration.json` with your specific values. The configuration is loaded
 By default, Nova Act QA Studio creates a new VPC with NAT Gateways and VPC endpoints. To use an existing VPC:
 
 1. Set `vpcId` to your existing VPC ID (e.g., `"vpc-0123456789abcdef0"`)
-2. The VPC must have at least one public subnet (workers run with public IP assignment)
-3. Public subnets are automatically discovered based on route table configuration
+2. The VPC must have at least one public subnet with NAT Gateway for internet access (workers run in private subnets for security)
+3. Private subnets are automatically discovered based on route table configuration
 4. Optionally provide `workerSecurityGroupId` to use an existing security group
-5. Set `createVpcEndpoints: true` if you want to create VPC endpoints in the existing VPC
+5. Set `createVpcEndpoints: true` if you want to create VPC endpoints in the existing VPC for enhanced security
+6. Set `agentCoreVPC: true` to enable VPC support for AgentCore browsers (recommended for production)
 
 **Example with existing VPC:**
 ```json
@@ -127,7 +126,19 @@ By default, Nova Act QA Studio creates a new VPC with NAT Gateways and VPC endpo
   "baseName": "nova-act-qa-studio",
   "vpcId": "vpc-0123456789abcdef0",
   "workerSecurityGroupId": "sg-0123456789abcdef0",
-  "createVpcEndpoints": false
+  "createVpcEndpoints": true,
+  "agentCoreVPC": true
+}
+```
+
+**Example with new VPC and AgentCore VPC support:**
+```json
+{
+  "adminEmail": "your-email@example.com",
+  "baseName": "nova-act-qa-studio",
+  "vpcId": null,
+  "agentCoreVPC": true,
+  "useNovaActGa": true
 }
 ```
 
@@ -138,6 +149,13 @@ By default, Nova Act QA Studio creates a new VPC with NAT Gateways and VPC endpo
 - Integrate with existing network architecture
 - Use existing security group configurations
 - Avoid VPC limits in your AWS account
+
+**AgentCore VPC Benefits:**
+- Enhanced security: Browser automation runs within your VPC
+- Network isolation: AgentCore browsers are isolated from public internet
+- Compliance: Meet security requirements for sensitive automation tasks
+- Integration: Access internal resources and services directly
+- Works with both new and existing VPCs
 
 ### 3. Deploy Everything
 

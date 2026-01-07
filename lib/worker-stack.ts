@@ -21,14 +21,13 @@ import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from '.
 import { loadConfig } from './config';
 
 const config = loadConfig();
-const { defaultRegion, enabledRegions, vpcId, workerSecurityGroupId, createVpcEndpoints } = config;
+const { defaultRegion, enabledRegions, vpcId, workerSecurityGroupId, createVpcEndpoints, agentCoreVPC } = config;
 
 interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   baseName: string
   table: Table
   novaActApiKeySecret: Secret
   notificationQueue: Queue
-  userAgentString: string,
   tableReadPolicy: ManagedPolicy,
 }
 
@@ -126,9 +125,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         vpcId: vpcId
       });
 
-      // Validate that the VPC has public subnets
-      if (vpc.publicSubnets.length === 0) {
-        throw new Error(`Existing VPC ${vpcId} must have at least one public subnet for ECS tasks`);
+      // Validate that the VPC has private subnets with NAT Gateway routes for internet access
+      if (vpc.privateSubnets.length === 0) {
+        throw new Error(`Existing VPC ${vpcId} must have at least one private subnet with NAT Gateway for ECS tasks and AgentCore browsers`);
       }
 
       // Only create VPC endpoints if explicitly requested for existing VPC
@@ -212,6 +211,30 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }),
     });
 
+    // Prepare base environment variables
+    const baseEnvironment = {
+      DYNAMO_TABLE: props.table.tableName,
+      QUEUE_URL: this.executionQueue.queueUrl,
+      S3_BUCKET: this.artefactsBucket.bucketName,
+      NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
+      NOTIFICATION_QUEUE_URL: props.notificationQueue.queueUrl,
+      AWS_REGION: Aws.REGION,
+      // Nova Act GA Service configuration
+      USE_NOVA_ACT_GA: config.useNovaActGa.toString(),
+      NOVA_ACT_REGION: 'us-east-1',
+      NOVA_ACT_S3_BUCKET: `${this.account}-${this.baseName}-artefacts-us-east-1`,
+    };
+
+    // Add VPC environment variables if agentCoreVPC is enabled
+    const containerEnvironment = agentCoreVPC ? {
+      ...baseEnvironment,
+      // VPC configuration for AgentCore browsers
+      AGENT_CORE_VPC: 'true',
+      AC_VPC_ID: vpc.vpcId,
+      AC_SUBNET_ID: vpc.privateSubnets[0].subnetId,
+      AC_SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
+    } : baseEnvironment;
+
     // Add container to task definition
     this.taskDefinition.addContainer('container', {
       image: ContainerImage.fromEcrRepository(registry, 'latest'),
@@ -219,18 +242,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         streamPrefix: this.cdkName('logs'),
         logRetention: RetentionDays.FIVE_DAYS,
       }),
-      environment: {
-        DYNAMO_TABLE: props.table.tableName,
-        QUEUE_URL: this.executionQueue.queueUrl,
-        S3_BUCKET: this.artefactsBucket.bucketName,
-        NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
-        NOTIFICATION_QUEUE_URL: props.notificationQueue.queueUrl,
-        AWS_REGION: Aws.REGION,
-        // Nova Act GA Service configuration
-        USE_NOVA_ACT_GA: config.useNovaActGa.toString(),
-        NOVA_ACT_REGION: 'us-east-1',
-        NOVA_ACT_S3_BUCKET: `${this.account}-${this.baseName}-artefacts-us-east-1`,
-      }
+      environment: containerEnvironment
     });
 
     // Grant permissions to task roles (must be after container is added)
@@ -438,7 +450,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         QUEUE_URL: this.executionQueue.queueUrl,
         ECS_CLUSTER: this.cluster.clusterArn,
         ECS_TASK_DEFINITION: this.taskDefinition.taskDefinitionArn,
-        SUBNET_ID: vpc.publicSubnets[0].subnetId,
+        SUBNET_ID: vpc.privateSubnets[0].subnetId,
         SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
         TABLE_NAME: props.table.tableName,
         S3_BUCKET: this.artefactsBucket.bucketName,
@@ -447,7 +459,6 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         BEDROCK_EXECUTION_ROLE: agentCoreExecutionRole.roleArn,
         NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
         SECRETS_PREFIX: props.baseName,
-        USER_AGENT: props.userAgentString,
         LOG_GROUP_NAME: logGroupName,
         LOG_STREAM_PREFIX: logStreamPrefix
       }
@@ -517,7 +528,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         TABLE_NAME: props.table.tableName,
         ECS_CLUSTER: this.cluster.clusterArn,
         ECS_TASK_DEFINITION: this.taskDefinition.taskDefinitionArn,
-        SUBNET_ID: vpc.publicSubnets[0].subnetId,
+        SUBNET_ID: vpc.privateSubnets[0].subnetId,
         SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
         WIZARD_QUEUE_URL: wizardQueue.queueUrl,
         S3_BUCKET: this.artefactsBucket.bucketName,
