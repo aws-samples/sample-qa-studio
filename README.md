@@ -71,8 +71,8 @@ Edit `configuration.json` with your specific values. The configuration is loaded
 |----------|-------------|----------|---------|
 | `adminEmail` | Email address for the initial admin user. After deployment, this email will receive a temporary password from Cognito. Must be a valid email format. | **Yes** | - |
 | `baseName` | Unique name prefix for all AWS resources (DynamoDB tables, S3 buckets, Lambda functions, etc.). Must contain only lowercase letters, numbers, and hyphens. | **Yes** | - |
-| `enabledRegions` | List of AWS regions where browser automation can run. | **Yes** | - |
-| `defaultRegion` | Primary region for deployment and default browser execution. Must be included in `enabledRegions`. | **Yes** | - |
+| `enabledRegions` | List of AWS regions where browser automation can run, e.g. `["us-east-1"]`. | **Yes** | - |
+| `defaultRegion` | Primary region for deployment and default browser execution, e.g. `us-east-1`. Must be included in `enabledRegions`. | **Yes** | - |
 | `apiEndpoint` | API Gateway endpoint path prefix. | No | `api` |
 | `apiDeploymentStage` | API Gateway deployment stage name. | No | `api` |
 | `userAgentString` | Custom User-Agent string for browser automation requests. | No | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36` |
