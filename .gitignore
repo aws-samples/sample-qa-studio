@@ -45,3 +45,17 @@ release/
 
 # test cases for nova-act-qa-studio
 test-usecases/*
+
+# Frontend build outputs (if not already covered by *.js)
+frontend/build/
+frontend/dist/
+frontend/node_modules/
+
+# CDK context (can be regenerated)
+cdk.context.json
+
+# Additional log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

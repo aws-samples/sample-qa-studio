@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { App } from 'aws-cdk-lib';
+import * as fs from 'fs';
+import * as path from 'path';
 import { NovaActQAStudioStorageStack } from '../lib/storage-stack';
 import { NovaActQAStudioAuthStack } from '../lib/auth-stack';
 import { NovaActQAStudioWorkerStack } from '../lib/worker-stack';
@@ -14,6 +16,11 @@ import { loadConfig, getStackEnv } from '../lib/config';
 // Load and validate configuration with sane defaults
 const config = loadConfig();
 const { adminEmail, baseName, apiEndpoint, apiDeploymentStage, bedrockModelId } = config;
+
+// Read version from package.json
+const packageJsonPath = path.join(__dirname, '..', 'package.json');
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+const version = packageJson.version;
 
 const app = new App();
 
@@ -82,6 +89,7 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   tableReadPolicy: storageStack.tableReadPolicy,
   novaActApiKeySecret: storageStack.novaActApiKeySecret,
   notificationQueue: notificationStack.notificationQueue,
+  version,
 })
 
 // EventBridge stack for execution status events
