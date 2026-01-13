@@ -395,16 +395,10 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       platform: Platform.LINUX_ARM64
     });
 
-    // Deploy with version tag
+    // Deploy with version tag only
     new ECRDeployment(this, 'container_deployment', {
       src: new DockerImageName(workerImage.imageUri),
       dest: new DockerImageName(`${Aws.ACCOUNT_ID}.dkr.ecr.${Aws.REGION}.amazonaws.com/${registry.repositoryName}:${this.version}`),
-    });
-
-    // Also deploy with latest tag for backward compatibility
-    new ECRDeployment(this, 'container_deployment_latest', {
-      src: new DockerImageName(workerImage.imageUri),
-      dest: new DockerImageName(`${Aws.ACCOUNT_ID}.dkr.ecr.${Aws.REGION}.amazonaws.com/${registry.repositoryName}:latest`),
     });
 
     const agentCoreExecutionRole = new Role(this, 'agent_core_execution_role', {
