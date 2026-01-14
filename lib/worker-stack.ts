@@ -73,12 +73,10 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
   public readonly acceptWizardStepLambda: Function
   public readonly restartWizardLambda: Function
   public readonly terminateWizardLambda: Function
-  private readonly version: string
   private readonly regionalBucketArns: string[] = []
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioWorkerStackCreateProps) {
     super(scope, id, props);
-    this.version = props.version;
 
     const registry = new Repository(this, 'images_repository', {
       removalPolicy: RemovalPolicy.DESTROY,
@@ -240,7 +238,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     // Add container to task definition
     this.taskDefinition.addContainer('container', {
-      image: ContainerImage.fromEcrRepository(registry, this.version),
+      image: ContainerImage.fromEcrRepository(registry, props.version),
       logging: LogDrivers.awsLogs({
         streamPrefix: this.cdkName('logs'),
         logRetention: RetentionDays.FIVE_DAYS,
@@ -398,7 +396,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // Deploy with version tag only
     new ECRDeployment(this, 'container_deployment', {
       src: new DockerImageName(workerImage.imageUri),
-      dest: new DockerImageName(`${Aws.ACCOUNT_ID}.dkr.ecr.${Aws.REGION}.amazonaws.com/${registry.repositoryName}:${this.version}`),
+      dest: new DockerImageName(`${Aws.ACCOUNT_ID}.dkr.ecr.${Aws.REGION}.amazonaws.com/${registry.repositoryName}:${props.version}`),
     });
 
     const agentCoreExecutionRole = new Role(this, 'agent_core_execution_role', {
