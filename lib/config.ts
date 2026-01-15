@@ -14,7 +14,7 @@ export interface NovaActQAStudioConfig {
   workerSecurityGroupId: string | null;
   createVpcEndpoints: boolean;
   useNovaActGa: boolean;
-  AgentCoreVPC: boolean;
+  agentCoreVPC: boolean;
   dockerImageVersion?: string;
 }
 
