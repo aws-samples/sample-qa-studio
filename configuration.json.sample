@@ -14,5 +14,5 @@
   "vpcId": null,
   "workerSecurityGroupId": null,
   "createVpcEndpoints": false,
-  "AgentCoreVPC": false
+  "agentCoreVPC": false
 }

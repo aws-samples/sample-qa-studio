@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
   workerSecurityGroupId: null,
   createVpcEndpoints: false,
   useNovaActGa: false,
-  AgentCoreVPC: false,
+  agentCoreVPC: false,
 };
 
 /**
