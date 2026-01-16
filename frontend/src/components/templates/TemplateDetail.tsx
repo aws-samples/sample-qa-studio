@@ -17,6 +17,7 @@ import { api } from '../../utils/api';
 import StepFormModal from '../usecase/StepFormModal';
 import WorkflowStepsCard from '../WorkflowStepsCard';
 import Breadcrumb from '../common/Breadcrumb';
+import DeleteTemplateModal from '../DeleteTemplateModal';
 
 interface Template {
   id: string;
@@ -66,6 +67,10 @@ export default function TemplateDetail() {
   const [variableKey, setVariableKey] = useState('');
   const [variableValue, setVariableValue] = useState('');
   const [savingVariables, setSavingVariables] = useState(false);
+  
+  // Delete modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = async () => {
     if (!id) return;
@@ -92,13 +97,15 @@ export default function TemplateDetail() {
   }, [id]);
 
   const handleDelete = async () => {
-    if (!id || !window.confirm('Are you sure you want to delete this template?')) return;
+    if (!id) return;
 
+    setDeleting(true);
     try {
       await api.delete(`templates/${id}`);
       navigate('/templates');
     } catch (error) {
       console.error('Failed to delete template:', error);
+      setDeleting(false);
     }
   };
 
@@ -171,7 +178,7 @@ export default function TemplateDetail() {
   };
 
   const handleDeleteStep = async (stepId: string) => {
-    if (!id || !window.confirm('Are you sure you want to delete this step?')) return;
+    if (!id) return;
 
     try {
       // Remove STEP# prefix if present
@@ -180,6 +187,7 @@ export default function TemplateDetail() {
       await fetchData();
     } catch (error) {
       console.error('Failed to delete step:', error);
+      throw error;
     }
   };
 
@@ -276,7 +284,7 @@ export default function TemplateDetail() {
             <Button onClick={() => navigate('/templates')}>
               Back to Templates
             </Button>
-            <Button onClick={handleDelete}>
+            <Button onClick={() => setShowDeleteModal(true)}>
               Delete Template
             </Button>
           </SpaceBetween>
@@ -485,6 +493,15 @@ export default function TemplateDetail() {
           </FormField>
         </SpaceBetween>
       </Modal>
+
+      {/* Delete Template Modal */}
+      <DeleteTemplateModal
+        visible={showDeleteModal}
+        templateName={template?.name || ''}
+        onDismiss={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+        deleting={deleting}
+      />
     </SpaceBetween>
   );
 }

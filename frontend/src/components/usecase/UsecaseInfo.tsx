@@ -111,7 +111,7 @@ export default function UsecaseInfo({ usecaseId }: UsecaseInfoProps) {
             },
             {
               label: "Execution Region",
-              value: usecase.region,
+              value: usecase.execution_region,
             },
             {
               label: "Starting URL",
@@ -123,7 +123,7 @@ export default function UsecaseInfo({ usecaseId }: UsecaseInfoProps) {
             },
             {
               label: "Created",
-              value: new Date(usecase.createdAt).toLocaleDateString(),
+              value: new Date(usecase.created_at).toLocaleDateString(),
             },
             {
               label: "Tags",

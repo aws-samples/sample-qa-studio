@@ -18,7 +18,7 @@ interface EditUsecaseFormProps {
 export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUsecaseFormProps) {
   const [name, setName] = useState(usecase.name || '');
   const [description, setDescription] = useState(usecase.description || '');
-  const [startingUrl, setStartingUrl] = useState(usecase.starting_url || '');
+  const [starting_url, setStartingUrl] = useState(usecase.starting_url || '');
   const [active, setActive] = useState(usecase.active || false);
   const [tags, setTags] = useState(usecase.tags?.join(', ') || '');
   const [selectedRegion, setSelectedRegion] = useState(findRegionOptions(usecase.region) as SelectProps.Option);
@@ -36,7 +36,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
     const updatedUsecase = {
       name,
       description,
-      starting_url: startingUrl,
+      starting_url,
       active,
       region: selectedRegion.value,
       model_id: selectedModel?.value,
@@ -66,7 +66,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
 
       <FormField label="Starting URL">
         <Input
-          value={startingUrl}
+          value={starting_url}
           onChange={({ detail }) => setStartingUrl(detail.value)}
           placeholder="https://example.com"
           type="url"

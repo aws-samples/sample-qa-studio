@@ -74,15 +74,6 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     return resource
   }
 
-  private defaultCreateLambdaWithTable(path: string): Function {
-    return this.createLambda({
-      path: path,
-      environment: {
-        TABLE_NAME: this.table.tableName
-      }
-    });
-  }
-
   constructor(scope: Construct, id: string, props: NovaActQAStudioRouteStackCreateProps) {
     super(scope, id, props);
     this.authorizer = props.authorizer
@@ -94,79 +85,196 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     })
 
     // Lambda Functions
-    const listUsecasesLambda = this.defaultCreateLambdaWithTable('list_usecases')
-    const createUsecaseLambda = this.defaultCreateLambdaWithTable('create_usecase')
-    const getUsecaseLambda = this.defaultCreateLambdaWithTable('get_usecase')
-    const createStepLambda = this.defaultCreateLambdaWithTable('create_step')
-    const listStepsLambda = this.defaultCreateLambdaWithTable('list_steps')
-    const updateStepLambda = this.defaultCreateLambdaWithTable('update_step')
-    const deleteStepLambda = this.defaultCreateLambdaWithTable('delete_step')
-    const updateUsecaseLambda = this.defaultCreateLambdaWithTable('update_usecase')
-    const listExecutionsLambda = this.defaultCreateLambdaWithTable('list_executions')
-    const deleteUsecaseLambda = this.defaultCreateLambdaWithTable('delete_usecase')
-    const deleteExecutionLambda = this.defaultCreateLambdaWithTable('delete_execution')
-    const updateExecutionStepLambda = this.defaultCreateLambdaWithTable('update_execution_step')
-    const getExecutionStepLambda = this.defaultCreateLambdaWithTable('get_execution_step')
-    const getExecutionLambda = this.defaultCreateLambdaWithTable('get_execution')
-    const listExecutionStepsLambda = this.defaultCreateLambdaWithTable('list_execution_steps')
-    const createUsecaseVariablesLambda = this.defaultCreateLambdaWithTable('create_usecase_variables')
-    const getUsecaseVariablesLambda = this.defaultCreateLambdaWithTable('get_usecase_variables')
-    const createUsecaseHooksLambda = this.defaultCreateLambdaWithTable('create_usecase_hooks')
-    const getUsercaseHooksLambda = this.defaultCreateLambdaWithTable('get_usecase_hooks')
-    const createUsecaseHeadersLambda = this.defaultCreateLambdaWithTable('create_usecase_headers')
-    const getUsecaseHeadersLambda = this.defaultCreateLambdaWithTable('get_usecase_headers')
-    const reorderStepsLambda = this.defaultCreateLambdaWithTable('reorder_steps')
-    const getExecutionVariablesLambda = this.defaultCreateLambdaWithTable('get_execution_variables')
-    const getLiveViewLambda = this.defaultCreateLambdaWithTable('get_live_view')
-    const listModelsLambda = this.createLambda({ path: 'list_models' })
+    const listUsecasesLambda = this.createPythonLambda({
+      path: 'list_usecases',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const createUsecaseLambda = this.createPythonLambda({
+      path: 'create_usecase',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const getUsecaseLambda = this.createPythonLambda({
+      path: 'get_usecase',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const createStepLambda = this.createPythonLambda({
+      path: 'create_step',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const listStepsLambda = this.createPythonLambda({
+      path: 'list_steps',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const updateStepLambda = this.createPythonLambda({
+      path: 'update_step',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const deleteStepLambda = this.createPythonLambda({
+      path: 'delete_step',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const updateUsecaseLambda = this.createPythonLambda({
+      path: 'update_usecase',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const listExecutionsLambda = this.createPythonLambda({
+      path: 'list_executions',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const deleteUsecaseLambda = this.createPythonLambda({
+      path: 'delete_usecase',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const deleteExecutionLambda = this.createPythonLambda({
+      path: 'delete_execution',
+      environment: {
+        TABLE_NAME: this.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+    const getExecutionStepLambda = this.createPythonLambda({
+      path: 'get_execution_step',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const getExecutionLambda = this.createPythonLambda({
+      path: 'get_execution',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const listExecutionStepsLambda = this.createPythonLambda({
+      path: 'list_execution_steps',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const createUsecaseVariablesLambda = this.createPythonLambda({
+      path: 'create_usecase_variables',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const getUsecaseVariablesLambda = this.createPythonLambda({
+      path: 'get_usecase_variables',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const createUsecaseHooksLambda = this.createPythonLambda({
+      path: 'create_usecase_hooks',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const getUsercaseHooksLambda = this.createPythonLambda({
+      path: 'get_usecase_hooks',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const createUsecaseHeadersLambda = this.createPythonLambda({
+      path: 'create_usecase_headers',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const getUsecaseHeadersLambda = this.createPythonLambda({
+      path: 'get_usecase_headers',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const reorderStepsLambda = this.createPythonLambda({
+      path: 'reorder_steps',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const getExecutionVariablesLambda = this.createPythonLambda({
+      path: 'get_execution_variables',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const getLiveViewLambda = this.createPythonLambda({
+      path: 'get_live_view',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const listModelsLambda = this.createPythonLambda({ path: 'list_models' })
 
-    const createUsecaseSecretsLambda = this.createLambda({
+    const createUsecaseSecretsLambda = this.createPythonLambda({
       path: 'create_usecase_secrets',
       environment: {
         SECRET_PREFIX: props.baseName
       }
     });
 
-    const getUsecaseSecretsLambda = this.createLambda({
+    const getUsecaseSecretsLambda = this.createPythonLambda({
       path: 'get_usecase_secrets',
       environment: {
         SECRET_PREFIX: props.baseName
       }
     });
 
-    const deleteUsecaseSecretsLambda = this.createLambda({
+    const deleteUsecaseSecretsLambda = this.createPythonLambda({
       path: 'delete_usecase_secrets',
       environment: {
         SECRET_PREFIX: props.baseName
       }
     });
 
-    const updateUsecaseSecretsLambda = this.createLambda({
+    const updateUsecaseSecretsLambda = this.createPythonLambda({
       path: 'update_usecase_secrets',
       environment: {
         SECRET_PREFIX: props.baseName
       }
     });
 
-    const exportUsecaseLambda = this.createLambda({
+    const exportUsecaseLambda = this.createPythonLambda({
       memorySize: 256,
       path: 'export_usecase',
       timeout: cdk.Duration.seconds(30),
       environment: {
         TABLE_NAME: props.table.tableName,
+        SECRET_PREFIX: props.baseName
       }
     });
 
-    const importUsecaseLambda = this.createLambda({
+    const importUsecaseLambda = this.createPythonLambda({
       memorySize: 256,
       path: 'import_usecase',
       timeout: cdk.Duration.seconds(30),
       environment: {
         TABLE_NAME: props.table.tableName,
+        SECRET_PREFIX: props.baseName
       }
     });
 
-    const cloneUsecaseLambda = this.createLambda({
+    const cloneUsecaseLambda = this.createPythonLambda({
       memorySize: 256,
       path: 'clone_usecase',
       timeout: cdk.Duration.seconds(30),
@@ -176,7 +284,7 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    const generateUsecaseLambda = this.createLambda({
+    const generateUsecaseLambda = this.createPythonLambda({
       memorySize: 512,
       path: 'generate_usecase',
       timeout: cdk.Duration.seconds(60),
@@ -187,46 +295,42 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     });
 
     // Lambda for listing recording batches
-    const listRecordingBatchesLambda = this.createLambda({
+    const listRecordingBatchesLambda = this.createPythonLambda({
       path: 'list_recording_batches',
       environment: {
-        BUCKET_NAME: props.artefactsBucket.bucketName,
-        TABLE_NAME: props.table.tableName
+        BUCKET_NAME: props.artefactsBucket.bucketName
       }
     });
 
     props.artefactsBucket.grantRead(listRecordingBatchesLambda)
 
     // Lambda for getting a specific recording batch
-    const getRecordingBatchLambda = this.createLambda({
+    const getRecordingBatchLambda = this.createPythonLambda({
       path: 'get_recording_batch',
       timeout: cdk.Duration.seconds(30),
       memorySize: 1024,
       environment: {
-        BUCKET_NAME: props.artefactsBucket.bucketName,
-        TABLE_NAME: props.table.tableName
+        BUCKET_NAME: props.artefactsBucket.bucketName
       }
     });
 
     props.artefactsBucket.grantRead(getRecordingBatchLambda);
 
     // Lambda for listing downloads
-    const listDownloadsLambda = this.createLambda({
+    const listDownloadsLambda = this.createPythonLambda({
       path: 'list_downloads',
       environment: {
-        BUCKET_NAME: props.artefactsBucket.bucketName,
-        TABLE_NAME: props.table.tableName
+        BUCKET_NAME: props.artefactsBucket.bucketName
       }
     });
 
     props.artefactsBucket.grantRead(listDownloadsLambda);
 
     // Lambda for downloading a specific file (redirects to presigned URL)
-    const downloadFileLambda = this.createLambda({
+    const downloadFileLambda = this.createPythonLambda({
       path: 'download_file',
       environment: {
-        BUCKET_NAME: props.artefactsBucket.bucketName,
-        TABLE_NAME: props.table.tableName
+        BUCKET_NAME: props.artefactsBucket.bucketName
       }
     });
 
@@ -258,7 +362,6 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       updateUsecaseLambda,
       importUsecaseLambda,
       createUsecaseHooksLambda,
-      updateExecutionStepLambda,
       createUsecaseHeadersLambda,
       createUsecaseVariablesLambda,
       props.subscribeUsecaseLambda].forEach((lambda: Function) => {
@@ -268,7 +371,6 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     [deleteUsecaseLambda,
       deleteExecutionLambda,
       deleteStepLambda,
-      cloneUsecaseLambda,
       props.unsubscribeUsecaseLambda].forEach((lambda: Function) => {
         lambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
       });
@@ -313,6 +415,7 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
       ],
       resources: ['*']
     }));
+    cloneUsecaseLambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
 
     getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
@@ -530,19 +633,85 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     this.addMethod(user, HttpMethod.DELETE, props.removeUserLambda)
 
     // Template management Lambda functions
-    const createTemplateLambda = this.defaultCreateLambdaWithTable('create_template')
-    const listTemplatesLambda = this.defaultCreateLambdaWithTable('list_templates')
-    const getTemplateLambda = this.defaultCreateLambdaWithTable('get_template')
-    const updateTemplateLambda = this.defaultCreateLambdaWithTable('update_template')
-    const deleteTemplateLambda = this.defaultCreateLambdaWithTable('delete_template')
-    const listTemplateStepsLambda = this.defaultCreateLambdaWithTable('list_template_steps')
-    const createTemplateStepLambda = this.defaultCreateLambdaWithTable('create_template_step')
-    const updateTemplateStepLambda = this.defaultCreateLambdaWithTable('update_template_step')
-    const deleteTemplateStepLambda = this.defaultCreateLambdaWithTable('delete_template_step')
-    const reorderTemplateStepsLambda = this.defaultCreateLambdaWithTable('reorder_template_steps')
-    const createTemplateVariablesLambda = this.defaultCreateLambdaWithTable('create_template_variables')
-    const getTemplateVariablesLambda = this.defaultCreateLambdaWithTable('get_template_variables')
-    const importTemplateLambda = this.defaultCreateLambdaWithTable('import_template')
+    const createTemplateLambda = this.createPythonLambda({
+      path: 'create_template',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const listTemplatesLambda = this.createPythonLambda({
+      path: 'list_templates',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const getTemplateLambda = this.createPythonLambda({
+      path: 'get_template',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const updateTemplateLambda = this.createPythonLambda({
+      path: 'update_template',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const deleteTemplateLambda = this.createPythonLambda({
+      path: 'delete_template',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const listTemplateStepsLambda = this.createPythonLambda({
+      path: 'list_template_steps',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const createTemplateStepLambda = this.createPythonLambda({
+      path: 'create_template_step',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const updateTemplateStepLambda = this.createPythonLambda({
+      path: 'update_template_step',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const deleteTemplateStepLambda = this.createPythonLambda({
+      path: 'delete_template_step',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const reorderTemplateStepsLambda = this.createPythonLambda({
+      path: 'reorder_template_steps',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const createTemplateVariablesLambda = this.createPythonLambda({
+      path: 'create_template_variables',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const getTemplateVariablesLambda = this.createPythonLambda({
+      path: 'get_template_variables',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    const importTemplateLambda = this.createPythonLambda({
+      path: 'import_template',
+      timeout: cdk.Duration.seconds(30),
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
 
     // Grant permissions to template lambdas
     listTemplatesLambda.role?.addManagedPolicy(props.tableReadPolicy);
@@ -590,8 +759,14 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     this.addMethod(templateVariables, HttpMethod.POST, createTemplateVariablesLambda)
 
     // Apply template to create new use case
-    const applyTemplateLambda = this.defaultCreateLambdaWithTable('apply_template')
-    applyTemplateLambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
+    const applyTemplateLambda = this.createPythonLambda({
+      path: 'apply_template',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
+    applyTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    applyTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy);
     const applyTemplate = this.addResource(template, 'apply');
     this.addMethod(applyTemplate, HttpMethod.POST, applyTemplateLambda)
 
@@ -600,13 +775,23 @@ export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
     this.addMethod(importTemplate, HttpMethod.POST, importTemplateLambda)
 
     // Check for template updates
-    const checkTemplateUpdates = this.defaultCreateLambdaWithTable('check_template_updates')
+    const checkTemplateUpdates = this.createPythonLambda({
+      path: 'check_template_updates',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
     checkTemplateUpdates.role?.addManagedPolicy(props.tableReadPolicy);
     const templateUpdates = this.addResource(usecaseId, 'template-updates');
     this.addMethod(templateUpdates, HttpMethod.GET, checkTemplateUpdates)
 
     // Update step from template
-    const updateStepFromTemplateLambda = this.defaultCreateLambdaWithTable('update_step_from_template')
+    const updateStepFromTemplateLambda = this.createPythonLambda({
+      path: 'update_step_from_template',
+      environment: {
+        TABLE_NAME: this.table.tableName
+      }
+    })
     updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy);
     updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy);
     const updateFromTemplate = this.addResource(step, 'update-from-template');

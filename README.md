@@ -338,7 +338,7 @@ The release process automatically:
 ### Release Archive Contents
 
 The generated zip file (`nova-act-qa-studio-vX.Y.Z.zip`) contains:
-- Pre-built Lambda functions in `lambda/cmd/*/bootstrap` (no Go compiler needed)
+- Python Lambda functions in `endpoints/` directory (no build needed)
 - Frontend source code (will be built during deployment)
 - Worker source code and Dockerfile
 - CDK TypeScript source code

@@ -444,7 +444,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     const logGroupName = containerDefinition?.logDriverConfig?.options?.['awslogs-group'] || `/ecs/${this.cdkName('logs')}`;
     const logStreamPrefix = containerDefinition?.logDriverConfig?.options?.['awslogs-stream-prefix'] || this.cdkName('logs');
 
-    this.executeUsecaseLambda = this.createLambda({
+    this.executeUsecaseLambda = this.createPythonLambda({
       path: 'execute_usecase',
       environment: {
         QUEUE_URL: this.executionQueue.queueUrl,
@@ -467,7 +467,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     props.table.grantFullAccess(this.executeUsecaseLambda)
 
     // Stop Execution Lambda - stops running ECS tasks
-    this.stopExecutionLambda = this.createLambda({
+    this.stopExecutionLambda = this.createPythonLambda({
       path: 'stop_execution',
       environment: {
         TABLE_NAME: props.table.tableName,
@@ -487,7 +487,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       resources: ['*'] // StopTask requires wildcard for task resources
     }));
 
-    this.createScheduleLambda = this.createLambda({
+    this.createScheduleLambda = this.createPythonLambda({
       path: 'create_schedule',
       environment: {
         SCHEDULER_GROUP_NAME: this.schedulerGroup.name!,
@@ -496,21 +496,21 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    this.getScheduleLambda = this.createLambda({
+    this.getScheduleLambda = this.createPythonLambda({
       path: 'get_schedule',
       environment: {
         SCHEDULER_GROUP_NAME: this.schedulerGroup.name!
       }
     });
 
-    this.deleteScheduleLambda = this.createLambda({
+    this.deleteScheduleLambda = this.createPythonLambda({
       path: 'delete_schedule',
       environment: {
         SCHEDULER_GROUP_NAME: this.schedulerGroup.name!
       }
     });
 
-    this.generateS3UrlLambda = this.createLambda({
+    this.generateS3UrlLambda = this.createPythonLambda({
       path: 'generate_s3_url',
       environment: {
         BUCKET_NAME: this.artefactsBucket.bucketName,
@@ -522,7 +522,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     this.artefactsBucket.grantRead(this.generateS3UrlLambda)
 
     // Wizard mode Lambda functions
-    this.startWizardLambda = this.createLambda({
+    this.startWizardLambda = this.createPythonLambda({
       path: 'start_wizard_session',
       environment: {
         TABLE_NAME: props.table.tableName,
@@ -537,7 +537,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    this.addWizardStepLambda = this.createLambda({
+    this.addWizardStepLambda = this.createPythonLambda({
       path: 'add_wizard_step',
       environment: {
         TABLE_NAME: props.table.tableName,
@@ -546,14 +546,14 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    this.acceptWizardStepLambda = this.createLambda({
+    this.acceptWizardStepLambda = this.createPythonLambda({
       path: 'accept_wizard_step',
       environment: {
         TABLE_NAME: props.table.tableName,
       }
     });
 
-    this.restartWizardLambda = this.createLambda({
+    this.restartWizardLambda = this.createPythonLambda({
       path: 'restart_wizard',
       environment: {
         WIZARD_QUEUE_URL: wizardQueue.queueUrl,
@@ -561,7 +561,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    this.terminateWizardLambda = this.createLambda({
+    this.terminateWizardLambda = this.createPythonLambda({
       path: 'terminate_wizard_session',
       environment: {
         TABLE_NAME: props.table.tableName,
@@ -571,7 +571,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     });
 
     // EventBridge command processor Lambda
-    const processWizardCommandLambda = this.createLambda({
+    const processWizardCommandLambda = this.createPythonLambda({
       path: 'process_wizard_command',
       environment: {
         TABLE_NAME: props.table.tableName,
@@ -670,7 +670,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     }));
 
     // Task State Change Handler Lambda - monitors ECS task failures
-    const taskStateChangeLambda = this.createLambda({
+    const taskStateChangeLambda = this.createPythonLambda({
       path: 'handle_task_state_change',
       environment: {
         TABLE_NAME: props.table.tableName

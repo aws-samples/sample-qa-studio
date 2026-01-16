@@ -8,6 +8,7 @@ import Badge from "@cloudscape-design/components/badge";
 import Link from "@cloudscape-design/components/link";
 import { api } from '../../utils/api';
 import CreateTemplateModal from './CreateTemplateModal';
+import DeleteTemplateModal from '../DeleteTemplateModal';
 
 interface Template {
   id: string;
@@ -25,6 +26,8 @@ export default function TemplateLibrary() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Template[]>([]);
 
   const fetchTemplates = async () => {
@@ -47,17 +50,27 @@ export default function TemplateLibrary() {
     fetchTemplates();
   };
 
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
+    if (selectedItems.length > 0) {
+      setShowDeleteModal(true);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
     if (selectedItems.length === 0) return;
 
+    setDeleting(true);
     try {
       await Promise.all(
         selectedItems.map(template => api.delete(`templates/${template.id}`))
       );
       setSelectedItems([]);
+      setShowDeleteModal(false);
       fetchTemplates();
     } catch (error) {
       console.error('Failed to delete templates:', error);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -69,7 +82,7 @@ export default function TemplateLibrary() {
           <SpaceBetween direction="horizontal" size="xs">
             <Button
               disabled={selectedItems.length === 0}
-              onClick={handleDelete}
+              onClick={handleDeleteClick}
             >
               Delete
             </Button>
@@ -144,6 +157,18 @@ export default function TemplateLibrary() {
         visible={showCreateModal}
         onDismiss={() => setShowCreateModal(false)}
         onSuccess={handleCreateSuccess}
+      />
+
+      <DeleteTemplateModal
+        visible={showDeleteModal}
+        templateName={
+          selectedItems.length === 1 
+            ? selectedItems[0].name 
+            : `${selectedItems.length} templates`
+        }
+        onDismiss={() => setShowDeleteModal(false)}
+        onConfirm={handleDeleteConfirm}
+        deleting={deleting}
       />
     </SpaceBetween>
   );

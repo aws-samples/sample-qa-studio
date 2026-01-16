@@ -60,11 +60,11 @@ export default function ExecutionInformation({
           },
           {
             label: "Created",
-            value: new Date(execution.createdAt).toLocaleString(),
+            value: new Date(execution.created_at).toLocaleString(),
           },
           {
             label: "Execution Region",
-            value: execution.region,
+            value: execution.execution_region || execution.region,
           },
           {
             label: "Starting URL",
@@ -77,14 +77,14 @@ export default function ExecutionInformation({
                 copyButtonAriaLabel="Copy NovaAct Session ID"
                 copyErrorText="failed to copy"
                 copySuccessText="copied"
-                textToCopy={execution.novaActSessionId}
+                textToCopy={execution.nova_session_id}
                 variant="inline"
               />
             ),
           },
           {
             label: "Recording",
-            value: execution.novaActSessionId ? (
+            value: execution.nova_session_id ? (
               <Button
                 variant="inline-link"
                 iconName="play"

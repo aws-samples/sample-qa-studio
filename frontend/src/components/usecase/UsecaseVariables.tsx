@@ -37,8 +37,16 @@ export default function UsecaseVariables({ usecaseId }: UsecaseVariablesProps) {
     try {
       const response = await api.get(`usecase/${usecaseId}/variables`);
       const fetchedVariables = response.variables || [];
-      setVariables(fetchedVariables);
-      setLocalVariables(fetchedVariables);
+      
+      // Ensure variables are properly structured
+      const normalizedVariables = fetchedVariables.map((v: any) => ({
+        key: v.key || '',
+        value: v.value || ''
+      }));
+      
+      console.log('Fetched variables:', normalizedVariables);
+      setVariables(normalizedVariables);
+      setLocalVariables(JSON.parse(JSON.stringify(normalizedVariables))); // Deep clone
     } catch (err: any) {
       console.error('Failed to fetch variables:', err);
       
@@ -103,13 +111,30 @@ export default function UsecaseVariables({ usecaseId }: UsecaseVariablesProps) {
   const handleUpdateVariable = useCallback((itemIndex: number, field: 'key' | 'value', value: string) => {
     setLocalVariables(prev => {
       const newVariables = [...prev];
-      newVariables[itemIndex][field] = value;
+      newVariables[itemIndex] = {
+        ...newVariables[itemIndex],
+        [field]: value
+      };
       return newVariables;
     });
   }, []);
 
   // Check if there are unsaved changes
-  const hasUnsavedChanges = JSON.stringify(variables) !== JSON.stringify(localVariables);
+  // Deep comparison to detect any changes in variables
+  const hasUnsavedChanges = React.useMemo(() => {
+    // Serialize both arrays to JSON for comparison
+    const originalJson = JSON.stringify(variables);
+    const localJson = JSON.stringify(localVariables);
+    
+    const hasChanges = originalJson !== localJson;
+    
+    console.log('=== Dirty State Check ===');
+    console.log('Original JSON:', originalJson);
+    console.log('Local JSON:', localJson);
+    console.log('Has changes:', hasChanges);
+    
+    return hasChanges;
+  }, [variables, localVariables]);
 
   const predefinedVariables = [
     { key: "UniqueID", description: "Random 5-character string" },

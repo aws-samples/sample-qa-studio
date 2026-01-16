@@ -48,8 +48,8 @@ function bumpVersion(releaseType: string): string {
 }
 
 function buildLambdas(): void {
-  console.log('\n🔨 Building Lambda functions...');
-  exec('npm run build:lambdas');
+  console.log('\n🔨 Checking Lambda functions...');
+  console.log('   Python lambdas are in endpoints/ directory (no build needed)');
 }
 
 function createReleaseDir(): void {
@@ -78,16 +78,10 @@ function createReleaseZip(version: string): string {
 
   console.log('   Copying files...');
 
-  // Copy Lambda functions with proper structure (lambda/cmd/function_name/bootstrap)
-  exec(`mkdir -p ${tempDir}/lambda/cmd`);
-  const lambdaDirs = execQuiet('ls lambda/cmd').split('\n').filter(d => d.trim());
-  lambdaDirs.forEach(dir => {
-    const bootstrapPath = `lambda/cmd/${dir}/bootstrap`;
-    if (existsSync(bootstrapPath)) {
-      exec(`mkdir -p ${tempDir}/lambda/cmd/${dir}`);
-      exec(`cp ${bootstrapPath} ${tempDir}/lambda/cmd/${dir}/`);
-    }
-  });
+  // Copy Python Lambda functions (endpoints directory)
+  exec(`mkdir -p ${tempDir}/endpoints`);
+  exec(`cp endpoints/*.py ${tempDir}/endpoints/`);
+  exec(`cp endpoints/requirements.txt ${tempDir}/endpoints/`);
 
   // Copy entire frontend folder (excluding node_modules and build)
   exec(`mkdir -p ${tempDir}/frontend`);
@@ -143,8 +137,7 @@ function createReleaseZip(version: string): string {
 
 function cleanupBuildArtifacts(): void {
   console.log('\n🧹 Cleaning up build artifacts...');
-  exec('npm run clean:lambdas');
-  console.log('✅ Build artifacts cleaned');
+  console.log('   No build artifacts to clean (Python lambdas)');
 }
 
 function gitCommitAndTag(version: string): void {
