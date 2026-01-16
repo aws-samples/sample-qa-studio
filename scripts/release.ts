@@ -47,6 +47,12 @@ function bumpVersion(releaseType: string): string {
   return newVersion;
 }
 
+function updateDockerReferences(newVersion: string): void {
+  console.log(`\n🐳 Docker images will be tagged with version: ${newVersion}`);
+  console.log('   - ECR deployment will create both versioned and latest tags');
+  console.log('   - ECS tasks will reference the versioned image');
+}
+
 function buildLambdas(): void {
   console.log('\n🔨 Building Lambda functions...');
   exec('npm run build:lambdas');
@@ -57,8 +63,6 @@ function createReleaseDir(): void {
     mkdirSync(RELEASE_DIR, { recursive: true });
   }
 }
-
-function createReleaseZip(version: string): string {
   console.log('\n📦 Creating release archive...');
 
   const zipName = `nova-act-qa-studio-v${version}.zip`;
@@ -200,6 +204,7 @@ function main(): void {
 
     // Bump version
     const newVersion = bumpVersion(releaseType);
+    updateDockerReferences(newVersion);
 
     // Generate changelog
     console.log('\n📝 Generating changelog...');

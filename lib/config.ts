@@ -15,6 +15,7 @@ export interface NovaActQAStudioConfig {
   createVpcEndpoints: boolean;
   useNovaActGa: boolean;
   agentCoreVPC: boolean;
+  dockerImageVersion?: string;
 }
 
 const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
@@ -53,6 +54,13 @@ export function loadConfig(configPath?: string): NovaActQAStudioConfig {
     ...DEFAULT_CONFIG,
     ...rawConfig,
   } as NovaActQAStudioConfig;
+
+  // If dockerImageVersion is not specified, use package.json version
+  if (!config.dockerImageVersion) {
+    const packageJsonPath = path.join(__dirname, '..', 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    config.dockerImageVersion = packageJson.version;
+  }
 
   // Validate required fields
   if (!config.adminEmail) {
@@ -102,8 +110,6 @@ export function loadConfig(configPath?: string): NovaActQAStudioConfig {
   if (config.workerSecurityGroupId && !config.workerSecurityGroupId.startsWith('sg-')) {
     throw new Error(`Configuration error: workerSecurityGroupId "${config.workerSecurityGroupId}" must start with "sg-"`);
   }
-
-
 
   return config;
 }
