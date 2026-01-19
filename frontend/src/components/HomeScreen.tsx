@@ -273,10 +273,10 @@ export default function HomeScreen() {
     if (!filteringText) return true;
     
     const searchText = filteringText.toLowerCase();
-    const nameMatch = usecase.name.toLowerCase().includes(searchText);
-    const descriptionMatch = usecase.description?.toLowerCase().includes(searchText);
-    const tagsMatch = usecase.tags?.some(tag => tag.toLowerCase().includes(searchText));
-    const statusMatch = usecase.last_execution_status?.toLowerCase().includes(searchText);
+    const nameMatch = usecase.name?.toLowerCase().includes(searchText) || false;
+    const descriptionMatch = usecase.description?.toLowerCase().includes(searchText) || false;
+    const tagsMatch = usecase.tags?.some(tag => tag?.toLowerCase().includes(searchText)) || false;
+    const statusMatch = usecase.last_execution_status?.toLowerCase().includes(searchText) || false;
     
     return nameMatch || descriptionMatch || tagsMatch || statusMatch;
   });

@@ -22,7 +22,7 @@ export class NovaActQAStudioEventBridgeStack extends NovaActQAStudioBaseStack {
     this.eventBus = EventBus.fromEventBusName(this, 'default_event_bus', 'default');
 
     // Lambda to update usecase with latest execution info
-    this.updateUsecaseLastExecutionLambda = this.createLambda({
+    this.updateUsecaseLastExecutionLambda = this.createPythonLambda({
       path: 'update_usecase_last_execution',
       environment: {
         TABLE_NAME: props.table.tableName

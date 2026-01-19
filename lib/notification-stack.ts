@@ -35,7 +35,7 @@ export class NovaActQAStudioNotificationStack extends NovaActQAStudioBaseStack {
       displayName: 'Usecase Execution Notifications'
     });
 
-    const sendNotificationLambda = this.createLambda({
+    const sendNotificationLambda = this.createPythonLambda({
       path: 'send_notification',
       environment: {
         TABLE_NAME: props.table.tableName,
@@ -45,7 +45,7 @@ export class NovaActQAStudioNotificationStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    this.getUsecaseSubscriptionLambda = this.createLambda({
+    this.getUsecaseSubscriptionLambda = this.createPythonLambda({
       path: 'get_usecase_subscription',
       environment: {
         TABLE_NAME: props.table.tableName,
@@ -53,7 +53,7 @@ export class NovaActQAStudioNotificationStack extends NovaActQAStudioBaseStack {
     });
 
     // Usecase Subscription Lambdas
-    this.subscribeUsecaseLambda = this.createLambda({
+    this.subscribeUsecaseLambda = this.createPythonLambda({
       path: 'subscribe_usecase',
       environment: {
         TABLE_NAME: props.table.tableName,
@@ -61,7 +61,7 @@ export class NovaActQAStudioNotificationStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    this.unsubscribeUsecaseLambda = this.createLambda({
+    this.unsubscribeUsecaseLambda = this.createPythonLambda({
       path: 'unsubscribe_usecase',
       environment: {
         TABLE_NAME: props.table.tableName,

@@ -197,67 +197,97 @@ export default function StepFormModal({
   const calculateDifferences = (currentStep: any, templateStep: any) => {
     const diffs: Array<{field: string, current: any, template: any}> = [];
     
-    if (currentStep.instruction !== templateStep.instruction) {
+    // Helper to check if a value is empty (null, undefined, or empty string)
+    const isEmpty = (val: any) => val === null || val === undefined || val === '';
+    
+    // Helper to check if values are different (ignoring empty values on both sides)
+    const isDifferent = (current: any, template: any) => {
+      const currentEmpty = isEmpty(current);
+      const templateEmpty = isEmpty(template);
+      
+      // If both are empty, they're not different
+      if (currentEmpty && templateEmpty) return false;
+      
+      // If one is empty and the other isn't, they're different
+      if (currentEmpty !== templateEmpty) return true;
+      
+      // Compare actual values
+      return current !== template;
+    };
+    
+    // Always compare instruction and step_type
+    if (isDifferent(currentStep.instruction, templateStep.instruction)) {
       diffs.push({
         field: 'Instruction',
         current: currentStep.instruction || '(empty)',
         template: templateStep.instruction || '(empty)'
       });
     }
-    if (currentStep.step_type !== templateStep.step_type) {
+    if (isDifferent(currentStep.step_type, templateStep.step_type)) {
       diffs.push({
         field: 'Step Type',
         current: currentStep.step_type || '(empty)',
         template: templateStep.step_type || '(empty)'
       });
     }
-    if (currentStep.secret_key !== templateStep.secret_key) {
+    
+    // Only compare step-type-specific fields
+    const stepType = templateStep.step_type || currentStep.step_type;
+    
+    if (stepType === 'secret' && isDifferent(currentStep.secret_key, templateStep.secret_key)) {
       diffs.push({
         field: 'Secret Key',
         current: currentStep.secret_key || '(empty)',
         template: templateStep.secret_key || '(empty)'
       });
     }
-    if (currentStep.capture_variable !== templateStep.capture_variable) {
-      diffs.push({
-        field: 'Capture Variable',
-        current: currentStep.capture_variable || '(empty)',
-        template: templateStep.capture_variable || '(empty)'
-      });
+    
+    if (stepType === 'retrieve_value') {
+      if (isDifferent(currentStep.capture_variable, templateStep.capture_variable)) {
+        diffs.push({
+          field: 'Capture Variable',
+          current: currentStep.capture_variable || '(empty)',
+          template: templateStep.capture_variable || '(empty)'
+        });
+      }
+      if (isDifferent(currentStep.value_type, templateStep.value_type)) {
+        diffs.push({
+          field: 'Value Type',
+          current: currentStep.value_type || '(empty)',
+          template: templateStep.value_type || '(empty)'
+        });
+      }
     }
-    if (currentStep.validation_type !== templateStep.validation_type) {
-      diffs.push({
-        field: 'Validation Type',
-        current: currentStep.validation_type || '(empty)',
-        template: templateStep.validation_type || '(empty)'
-      });
+    
+    if (stepType === 'validation' || stepType === 'assertion') {
+      if (isDifferent(currentStep.validation_type, templateStep.validation_type)) {
+        diffs.push({
+          field: 'Validation Type',
+          current: currentStep.validation_type || '(empty)',
+          template: templateStep.validation_type || '(empty)'
+        });
+      }
+      if (isDifferent(currentStep.validation_operator, templateStep.validation_operator)) {
+        diffs.push({
+          field: 'Validation Operator',
+          current: currentStep.validation_operator || '(empty)',
+          template: templateStep.validation_operator || '(empty)'
+        });
+      }
+      if (isDifferent(currentStep.validation_value, templateStep.validation_value)) {
+        diffs.push({
+          field: 'Validation Value',
+          current: currentStep.validation_value || '(empty)',
+          template: templateStep.validation_value || '(empty)'
+        });
+      }
     }
-    if (currentStep.validation_operator !== templateStep.validation_operator) {
-      diffs.push({
-        field: 'Validation Operator',
-        current: currentStep.validation_operator || '(empty)',
-        template: templateStep.validation_operator || '(empty)'
-      });
-    }
-    if (currentStep.validation_value !== templateStep.validation_value) {
-      diffs.push({
-        field: 'Validation Value',
-        current: currentStep.validation_value || '(empty)',
-        template: templateStep.validation_value || '(empty)'
-      });
-    }
-    if (currentStep.assertion_variable !== templateStep.assertion_variable) {
+    
+    if (stepType === 'assertion' && isDifferent(currentStep.assertion_variable, templateStep.assertion_variable)) {
       diffs.push({
         field: 'Assertion Variable',
         current: currentStep.assertion_variable || '(empty)',
         template: templateStep.assertion_variable || '(empty)'
-      });
-    }
-    if (currentStep.value_type !== templateStep.value_type) {
-      diffs.push({
-        field: 'Value Type',
-        current: currentStep.value_type || '(empty)',
-        template: templateStep.value_type || '(empty)'
       });
     }
     

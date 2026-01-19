@@ -180,14 +180,14 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
             ),
           },
           { 
-            id: 'createdAt', 
+            id: 'created_at', 
             header: 'Created', 
-            cell: item => new Date(item.createdAt).toLocaleString(),
+            cell: item => new Date(item.created_at).toLocaleString(),
           },
           { 
-            id: 'triggerType', 
+            id: 'trigger_type', 
             header: 'Trigger', 
-            cell: item => item.triggerType || 'Manual',
+            cell: item => item.trigger_type || 'Manual',
           }
         ]}
         items={executions}

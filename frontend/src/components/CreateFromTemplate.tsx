@@ -40,7 +40,7 @@ export default function CreateFromTemplate() {
   
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [startingUrl, setStartingUrl] = useState('');
+  const [starting_url, setStartingUrl] = useState('');
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -95,7 +95,7 @@ export default function CreateFromTemplate() {
       const response = await api.post(`templates/${selectedTemplate.value}/apply`, {
         name,
         description,
-        starting_url: startingUrl
+        starting_url
       });
       
       if (response.usecaseId) {
@@ -232,7 +232,7 @@ export default function CreateFromTemplate() {
 
             <FormField label="Starting URL" description="The URL where the test will begin">
               <Input
-                value={startingUrl}
+                value={starting_url}
                 onChange={({ detail }) => setStartingUrl(detail.value)}
                 placeholder="https://example.com"
                 disabled={!selectedTemplate || creating}
@@ -244,7 +244,7 @@ export default function CreateFromTemplate() {
                 variant="primary"
                 onClick={handleCreate}
                 loading={creating}
-                disabled={!selectedTemplate || !name.trim() || !startingUrl.trim() || creating}
+                disabled={!selectedTemplate || !name.trim() || !starting_url.trim() || creating}
               >
                 Create
               </Button>
