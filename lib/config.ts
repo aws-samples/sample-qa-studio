@@ -8,13 +8,14 @@ export interface NovaActQAStudioConfig {
   apiDeploymentStage: string;
   enabledRegions: string[];
   defaultRegion: string;
-  userAgentString: string;
   bedrockModelId: string;
   dcvRelease: string;
   vpcId: string | null;
   workerSecurityGroupId: string | null;
   createVpcEndpoints: boolean;
   useNovaActGa: boolean;
+  agentCoreVPC: boolean;
+  dockerImageVersion?: string;
 }
 
 const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
@@ -22,13 +23,13 @@ const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
   apiDeploymentStage: 'api',
   enabledRegions: ['us-east-1'],
   defaultRegion: 'us-east-1',
-  userAgentString: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
   bedrockModelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
   dcvRelease: 'https://d1uj6qtbmh3dt5.cloudfront.net/webclientsdk/nice-dcv-web-client-sdk-1.9.100-952.zip',
   vpcId: null,
   workerSecurityGroupId: null,
   createVpcEndpoints: false,
   useNovaActGa: false,
+  agentCoreVPC: false,
 };
 
 /**
@@ -53,6 +54,13 @@ export function loadConfig(configPath?: string): NovaActQAStudioConfig {
     ...DEFAULT_CONFIG,
     ...rawConfig,
   } as NovaActQAStudioConfig;
+
+  // If dockerImageVersion is not specified, use package.json version
+  if (!config.dockerImageVersion) {
+    const packageJsonPath = path.join(__dirname, '..', 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    config.dockerImageVersion = packageJson.version;
+  }
 
   // Validate required fields
   if (!config.adminEmail) {

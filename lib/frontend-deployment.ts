@@ -29,8 +29,9 @@ export class NovaActQAStudioFrontendDeploymentStack extends NovaActQAStudioBaseS
     new BucketDeployment(this, 'frontendDeployment', {
       sources: [Source.asset('./frontend/build')],
       destinationBucket: props.frontendBucket,
-      distribution: props.distribution,
-      distributionPaths: ['/*']
+      // Remove distribution and distributionPaths to avoid invalidation issues
+      // distribution: props.distribution,
+      // distributionPaths: ['/*']
     });
   }
 }
