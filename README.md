@@ -71,10 +71,13 @@ Edit `configuration.json` with your specific values. The configuration is loaded
 |----------|-------------|----------|---------|
 | `adminEmail` | Email address for the initial admin user. After deployment, this email will receive a temporary password from Cognito. Must be a valid email format. | **Yes** | - |
 | `baseName` | Unique name prefix for all AWS resources (DynamoDB tables, S3 buckets, Lambda functions, etc.). Must contain only lowercase letters, numbers, and hyphens. | **Yes** | - |
+| `enabledRegions` | List of AWS regions where browser automation can run, e.g. `["us-east-1"]`. | **Yes** | - |
+| `defaultRegion` | Primary region for deployment and default browser execution, e.g. `us-east-1`. Must be included in `enabledRegions`. | **Yes** | - |
 | `apiEndpoint` | API Gateway endpoint path prefix. | No | `api` |
 | `apiDeploymentStage` | API Gateway deployment stage name. | No | `api` |
-| `enabledRegions` | List of AWS regions where browser automation can run. | No | `["us-east-1"]` |
-| `defaultRegion` | Primary region for deployment and default browser execution. Must be included in `enabledRegions`. | No | `us-east-1` |
+| `userAgentString` | Custom User-Agent string for browser automation requests. | No | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36` |
+| `bedrockModelId` | Amazon Bedrock model ID used to generate test cases in the User Journey feature. See [available models](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html). | No | `anthropic.claude-3-5-sonnet-20240620-v1:0` |
+| `dcvRelease` | URL to the NICE DCV Web Client SDK archive. Used for remote browser session viewing. | No | `https://d1uj6qtbmh3dt5.cloudfront.net/webclientsdk/nice-dcv-web-client-sdk-1.9.100-952.zip` |
 | `useNovaActGa` | Enable Nova Act GA (Generally Available) service for browser automation. When `true`, uses the production Nova Act service. When `false`, uses alternative browser automation methods. | No | `true` |
 | `vpcId` | Existing VPC ID to use instead of creating a new one. Must start with `vpc-`. Set to `null` to create a new VPC. | No | `null` (creates new VPC) |
 | `workerSecurityGroupId` | Existing security group ID for ECS tasks. Must start with `sg-`. Set to `null` to create a new security group. | No | `null` (creates new) |
