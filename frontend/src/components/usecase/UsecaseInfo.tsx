@@ -111,7 +111,7 @@ export default function UsecaseInfo({ usecaseId }: UsecaseInfoProps) {
             },
             {
               label: "Execution Region",
-              value: usecase.execution_region,
+              value: usecase.executing_region,
             },
             {
               label: "Starting URL",

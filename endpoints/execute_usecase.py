@@ -3,7 +3,7 @@ import os
 import uuid
 import boto3
 from urllib.parse import quote
-from utils import create_response, get_table_name, get_current_timestamp
+from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7
 
 dynamodb = boto3.client('dynamodb')
 sqs = boto3.client('sqs')
@@ -127,12 +127,16 @@ def handler(event, context):
             return create_response(404, {'error': 'Usecase not found'})
         
         usecase = usecase_result['Item']
+        print(usecase)
         starting_url = usecase.get('starting_url', {}).get('S', '')
-        region = usecase.get('region', {}).get('S', '')
+        # Get executing_region from usecase, use default if empty or missing
+        region = usecase.get('executing_region', {}).get('S', '').strip()
+        if not region:
+            region = os.environ.get('DEFAULT_REGION', 'us-east-1')
         model_id = usecase.get('model_id', {}).get('S', '')
         
-        # Generate execution ID
-        execution_id = str(uuid.uuid4())
+        # Generate execution ID (UUIDv7 for time-ordered sorting)
+        execution_id = generate_uuid7()
         
         # Create execution record
         dynamodb.put_item(
@@ -144,7 +148,7 @@ def handler(event, context):
                 'status': {'S': 'pending'},
                 'created_at': {'S': created_at},
                 'trigger_type': {'S': trigger_type},
-                'region': {'S': region},
+                'executing_region': {'S': region},
                 'model_id': {'S': model_id}
             }
         )
@@ -169,7 +173,7 @@ def handler(event, context):
         
         # Create execution step records
         for step in steps:
-            step_execution_id = str(uuid.uuid4())
+            step_execution_id = generate_uuid7()
             
             execution_step = {
                 'pk': {'S': f'EXECUTION#{execution_id}'},

@@ -51,6 +51,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Set default model if not provided
         model_id = body.get('model_id', 'nova-act-v1.0')
         
+        # Set default region if not provided (use environment variable or fallback)
+        default_region = os.environ.get('DEFAULT_REGION', 'us-east-1')
+        executing_region = body.get('executing_region', default_region) or default_region  # Handle empty string too
+        
         # Create usecase
         usecase = {
             'pk': 'USECASES',
@@ -62,7 +66,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'active': body.get('active', False),
             'tags': body.get('tags', []),
             'created_at': now,
-            'region': body.get('region', ''),
+            'executing_region': executing_region,
             'model_id': model_id
         }
         

@@ -168,7 +168,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'description': usecase.get('description', ''),
             'starting_url': usecase.get('starting_url', ''),
             'active': usecase.get('active', False),
-            'region': usecase.get('region', ''),
+            'executing_region': usecase.get('executing_region', ''),
             'tags': usecase.get('tags', [])
         }
         

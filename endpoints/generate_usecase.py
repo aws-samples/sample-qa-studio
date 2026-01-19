@@ -124,7 +124,7 @@ Generate a JSON object that matches this EXACT schema. This JSON will be importe
     "description": "Generated from user journey: {escaped_journey}",
     "starting_url": "{starting_url}",
     "active": true,
-    "region": "{region}",
+    "executing_region": "{region}",
     "tags": []
   }},
   "steps": [

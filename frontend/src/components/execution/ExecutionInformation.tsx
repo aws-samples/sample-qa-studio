@@ -64,7 +64,7 @@ export default function ExecutionInformation({
           },
           {
             label: "Execution Region",
-            value: execution.execution_region || execution.region,
+            value: execution.executing_region || execution.region,
           },
           {
             label: "Starting URL",

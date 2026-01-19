@@ -2,9 +2,54 @@
 import json
 import os
 import logging
+import time
+import secrets
 from decimal import Decimal
 from datetime import datetime, timezone
 from typing import Any
+
+
+def generate_uuid7() -> str:
+    """
+    Generate a UUIDv7 (time-ordered UUID).
+    
+    UUIDv7 format:
+    - 48 bits: Unix timestamp in milliseconds
+    - 12 bits: sub-millisecond precision / sequence counter
+    - 2 bits: variant (10)
+    - 6 bits: version (0111 = 7)
+    - 62 bits: random data
+    
+    Returns:
+        String representation of UUIDv7
+    """
+    # Get current timestamp in milliseconds
+    timestamp_ms = int(time.time() * 1000)
+    
+    # Generate random bytes for the rest
+    random_bytes = secrets.token_bytes(10)
+    
+    # Build the UUID
+    # First 48 bits: timestamp
+    uuid_int = timestamp_ms << 80
+    
+    # Next 12 bits: sub-ms precision (use random for simplicity)
+    uuid_int |= (random_bytes[0] & 0x0F) << 76
+    uuid_int |= random_bytes[1] << 68
+    
+    # Version (4 bits) = 7
+    uuid_int |= 0x7 << 76
+    
+    # Variant (2 bits) = 10
+    uuid_int |= 0x2 << 62
+    
+    # Remaining random bits
+    for i in range(2, 10):
+        uuid_int |= random_bytes[i] << ((9 - i) * 8)
+    
+    # Format as UUID string
+    hex_str = f'{uuid_int:032x}'
+    return f'{hex_str[0:8]}-{hex_str[8:12]}-{hex_str[12:16]}-{hex_str[16:20]}-{hex_str[20:32]}'
 
 
 class DynamoDBEncoder(json.JSONEncoder):

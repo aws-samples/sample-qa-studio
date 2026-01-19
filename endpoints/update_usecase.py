@@ -33,7 +33,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         description = body.get('description')
         starting_url = body.get('starting_url')
         active = body.get('active')
-        region = body.get('region')
+        executing_region = body.get('executing_region', '').strip()
+        # Use default region if empty
+        if not executing_region:
+            import os
+            executing_region = os.environ.get('DEFAULT_REGION', 'us-east-1')
         model_id = body.get('model_id', '')
         tags = body.get('tags', [])
         
@@ -53,13 +57,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         update_expression_parts.append('description = :description')
         update_expression_parts.append('starting_url = :starting_url')
         update_expression_parts.append('active = :active')
-        update_expression_parts.append('region = :region')
+        update_expression_parts.append('executing_region = :executing_region')
         
         expression_attribute_values[':name'] = name
         expression_attribute_values[':description'] = description
         expression_attribute_values[':starting_url'] = starting_url
         expression_attribute_values[':active'] = active
-        expression_attribute_values[':region'] = region
+        expression_attribute_values[':executing_region'] = executing_region
         
         # Update model_id if provided
         if model_id:

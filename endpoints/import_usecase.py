@@ -72,7 +72,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'description': usecase_data.get('description', ''),
             'starting_url': usecase_data.get('starting_url', ''),
             'active': usecase_data.get('active', False),
-            'region': usecase_data.get('region', ''),
+            'executing_region': usecase_data.get('executing_region', usecase_data.get('region', '')),  # Support both field names for backward compatibility
             'tags': usecase_data.get('tags', []),
             'created_at': now
         }

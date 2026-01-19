@@ -47,7 +47,7 @@ class DynamoDBClient:
                 executing_at=item.get('executing_at'),
                 trigger_type=item.get('trigger_type'),
                 session_id=item.get('session_id'),
-                region=item.get('execution_region', 'us-east-1')
+                region=item.get('executing_region', 'us-east-1')  # Read from executing_region field
             )
             
         except ClientError as e:

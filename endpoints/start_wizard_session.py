@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp
+from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7
 
 dynamodb = boto3.client('dynamodb')
 ecs = boto3.client('ecs')
@@ -32,7 +32,10 @@ def handler(event, context):
     name = body.get('name', '').strip()
     starting_url = body.get('starting_url', '').strip()
     description = body.get('description', '')
-    region = body.get('region', '')
+    executing_region = body.get('executing_region', '').strip()
+    # Use default region if empty
+    if not executing_region:
+        executing_region = os.environ.get('DEFAULT_REGION', 'us-east-1')
     model_id = body.get('model_id', 'nova-act-v1.0')
     tags = body.get('tags', [])
     
@@ -40,13 +43,13 @@ def handler(event, context):
     if not name or not starting_url:
         return create_response(400, {'error': 'name and starting_url are required'})
     
-    print(f'Starting wizard session: name={name}, starting_url={starting_url}, region={region}')
+    print(f'Starting wizard session: name={name}, starting_url={starting_url}, executing_region={executing_region}')
     
     table_name = get_table_name()
     
-    # Generate IDs
-    usecase_id = str(uuid.uuid4())
-    session_id = str(uuid.uuid4())
+    # Generate IDs (UUIDv7 for time-ordered sorting)
+    usecase_id = generate_uuid7()
+    session_id = generate_uuid7()
     created_at = get_current_timestamp()
     
     try:
@@ -63,7 +66,7 @@ def handler(event, context):
                 'active': {'BOOL': True},
                 'tags': {'L': [{'S': tag} for tag in tags]},
                 'created_at': {'S': created_at},
-                'region': {'S': region},
+                'executing_region': {'S': executing_region},
                 'model_id': {'S': model_id}
             }
         )
@@ -79,7 +82,7 @@ def handler(event, context):
                 'status': {'S': 'pending'},
                 'created_at': {'S': created_at},
                 'trigger_type': {'S': 'Wizard'},
-                'region': {'S': region},
+                'executing_region': {'S': executing_region},
                 'model_id': {'S': model_id},
                 'mode': {'S': 'wizard'},
                 'wizard_status': {'S': 'active'},
