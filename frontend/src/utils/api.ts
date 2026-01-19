@@ -1,9 +1,9 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { errorManager, ErrorState } from './errorManager';
-import { apiEndpoint } from '../../../configuration.json'
 
 function buildRestEndpoint(path: string): string {
   let endpoint = `/api/`
+  const apiEndpoint = __APP_CONFIG__.apiEndpoint;
 
   if(apiEndpoint.startsWith('https://') && apiEndpoint.endsWith('/')) {
     endpoint = apiEndpoint
