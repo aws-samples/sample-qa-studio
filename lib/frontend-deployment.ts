@@ -6,7 +6,7 @@ import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from '.
 
 interface NovaActQAStudioFrontendDeploymentStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   frontendBucket: Bucket
-  distribution: Distribution
+  distribution: Distribution  // Removed - not used since we don't invalidate CloudFront
 }
 
 /**
@@ -30,8 +30,8 @@ export class NovaActQAStudioFrontendDeploymentStack extends NovaActQAStudioBaseS
       sources: [Source.asset('./frontend/build')],
       destinationBucket: props.frontendBucket,
       // Remove distribution and distributionPaths to avoid invalidation issues
-      // distribution: props.distribution,
-      // distributionPaths: ['/*']
+      distribution: props.distribution,
+      distributionPaths: ['/*']
     });
   }
 }

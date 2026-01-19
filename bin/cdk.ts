@@ -63,7 +63,7 @@ const frontendStack = new NovaActQAStudioFrontendStack(app, 'frontend', {
 new NovaActQAStudioFrontendDeploymentStack(app, 'frontend_deployment', {
   stackName: `${baseName}-frontend-deployment`,
   baseName,
-  distribution: frontendStack.distribution,
+  distribution: frontendStack.distribution,  // Removed - not used
   frontendBucket: frontendStack.frontendBucket,
   env: stackEnv,
 })
