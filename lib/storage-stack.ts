@@ -1,9 +1,11 @@
-import { Names, RemovalPolicy } from 'aws-cdk-lib';
+import { Names, RemovalPolicy, CustomResource, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table, AttributeType } from 'aws-cdk-lib/aws-dynamodb';
 import { BackupPlan, BackupVault, BackupPlanRule, BackupResource } from 'aws-cdk-lib/aws-backup';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import { Runtime, Architecture, Code, Function as LambdaFunction } from 'aws-cdk-lib/aws-lambda';
+import { Provider } from 'aws-cdk-lib/custom-resources';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
 interface NovaActQAStudioStorageStackCreateProps extends NovaActQAStudioBaseStackCreateProps { }
@@ -48,12 +50,57 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    const backupVault = new BackupVault(this, "dynamodb_backup_vault_5")
-    const plan = new BackupPlan(this, "dynamodb_backup_plan_5")
+    const backupVault = new BackupVault(this, "dynamodb_backup_vault", {
+      backupVaultName: this.cdkName('backup-vault'),
+      removalPolicy: RemovalPolicy.DESTROY,
+    })
+    const plan = new BackupPlan(this, "dynamodb_backup_plan")
     plan.addRule(BackupPlanRule.daily(backupVault))
     plan.addSelection("data", {
       resources: [BackupResource.fromDynamoDbTable(this.table)]
     })
+
+    // Create Lambda function to clean up backup vault recovery points
+    const cleanupLambda = new LambdaFunction(this, 'BackupVaultCleanupLambda', {
+      functionName: this.cdkName('backup-vault-cleanup'),
+      runtime: Runtime.PYTHON_3_13,
+      architecture: Architecture.ARM_64,
+      handler: 'index.handler',
+      code: Code.fromAsset('lambda/python/cleanup_backup_vault'),
+      timeout: Duration.minutes(15),
+      memorySize: 256,
+      description: 'Cleans up AWS Backup recovery points before vault deletion',
+    });
+
+    // Grant permissions to the Lambda function
+    cleanupLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'backup:ListRecoveryPointsByBackupVault',
+        'backup:DeleteRecoveryPoint',
+        'backup:DescribeRecoveryPoint',
+      ],
+      resources: ['*'],
+    }));
+
+    // Create custom resource provider
+    const cleanupProvider = new Provider(this, 'BackupVaultCleanupProvider', {
+      onEventHandler: cleanupLambda,
+    });
+
+    // Create custom resource that triggers cleanup on stack deletion
+    // The cleanup resource depends on the vault (needs its name)
+    const cleanupResource = new CustomResource(this, 'BackupVaultCleanup', {
+      serviceToken: cleanupProvider.serviceToken,
+      properties: {
+        BackupVaultName: backupVault.backupVaultName,
+      },
+    });
+
+    // Make cleanup resource depend on the vault and plan
+    // This ensures the vault exists when cleanup runs
+    cleanupResource.node.addDependency(backupVault);
+    cleanupResource.node.addDependency(plan);
 
     // Create managed policies for DynamoDB table access
     this.tableReadPolicy = new ManagedPolicy(this, 'TableReadPolicy', {

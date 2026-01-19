@@ -17,6 +17,7 @@
     "deploy:frontend-deployment": "cdk deploy frontend_deployment --require-approval never",
     "deploy:notification": "cdk deploy notification --require-approval never",
     "deploy:worker": "cdk deploy worker --require-approval never",
+    "deploy:worker:versioned": "npm run build && cdk deploy worker --require-approval never",
     "deploy:eventbridge": "cdk deploy eventbridge --require-approval never",
     "deploy:routes": "cdk deploy routes --require-approval never",
     "config:write": "ts-node scripts/write-config.ts",
@@ -27,7 +28,8 @@
     "release:patch": "ts-node scripts/release.ts patch",
     "release:minor": "ts-node scripts/release.ts minor",
     "release:major": "ts-node scripts/release.ts major",
-    "release:prerelease": "ts-node scripts/release.ts prerelease"
+    "release:prerelease": "ts-node scripts/release.ts prerelease",
+    "version:check": "echo \"Current version: $(node -p \\\"require('./package.json').version\\\")\""
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

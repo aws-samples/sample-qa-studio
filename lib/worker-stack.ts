@@ -29,6 +29,7 @@ interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStack
   novaActApiKeySecret: Secret
   notificationQueue: Queue
   tableReadPolicy: ManagedPolicy,
+  version: string
 }
 
 /**
@@ -237,7 +238,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     // Add container to task definition
     this.taskDefinition.addContainer('container', {
-      image: ContainerImage.fromEcrRepository(registry, 'latest'),
+      image: ContainerImage.fromEcrRepository(registry, props.version),
       logging: LogDrivers.awsLogs({
         streamPrefix: this.cdkName('logs'),
         logRetention: RetentionDays.FIVE_DAYS,
@@ -392,9 +393,10 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       platform: Platform.LINUX_ARM64
     });
 
+    // Deploy with version tag only
     new ECRDeployment(this, 'container_deployment', {
       src: new DockerImageName(workerImage.imageUri),
-      dest: new DockerImageName(`${Aws.ACCOUNT_ID}.dkr.ecr.${Aws.REGION}.amazonaws.com/${registry.repositoryName}:latest`),
+      dest: new DockerImageName(`${Aws.ACCOUNT_ID}.dkr.ecr.${Aws.REGION}.amazonaws.com/${registry.repositoryName}:${props.version}`),
     });
 
     const agentCoreExecutionRole = new Role(this, 'agent_core_execution_role', {
