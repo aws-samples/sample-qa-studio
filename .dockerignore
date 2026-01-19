@@ -1,0 +1,11 @@
+**/node_modules/
+frontend/node_modules/
+node_modules/
+.git/
+# Go packages and modules
+lambda/vendor/
+# Build artifacts and cache
+.npm/
+.cache/
+dist/
+build/

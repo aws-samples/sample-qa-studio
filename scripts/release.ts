@@ -183,25 +183,35 @@ function printSummary(version: string, zipPath: string): void {
 function main(): void {
   const releaseType = process.argv[2];
 
-  if (!['patch', 'minor', 'major', 'prerelease'].includes(releaseType)) {
-    console.error('Usage: ts-node release.ts <patch|minor|major|prerelease>');
+  if (!['patch', 'minor', 'major', 'prerelease', 'package'].includes(releaseType)) {
+    console.error('Usage: ts-node release.ts <patch|minor|major|prerelease|package>');
     process.exit(1);
   }
 
   console.log('🚀 Starting release process...\n');
   console.log(`Release type: ${releaseType}`);
 
+  const isPackageOnly = releaseType === 'package';
+
   try {
-    // Pre-flight checks
-    checkGitStatus();
+    let newVersion: string;
 
-    // Bump version
-    const newVersion = bumpVersion(releaseType);
-    updateDockerReferences(newVersion);
+    if (isPackageOnly) {
+      // For package-only builds, use current version and skip git checks
+      newVersion = getCurrentVersion();
+      console.log(`\n� Creatingg package for current version: ${newVersion}`);
+    } else {
+      // Pre-flight checks for full releases
+      checkGitStatus();
 
-    // Generate changelog
-    console.log('\n📝 Generating changelog...');
-    exec(`npx ts-node scripts/generate-changelog.ts ${newVersion}`);
+      // Bump version
+      newVersion = bumpVersion(releaseType);
+      updateDockerReferences(newVersion);
+
+      // Generate changelog
+      console.log('\n📝 Generating changelog...');
+      exec(`npx ts-node scripts/generate-changelog.ts ${newVersion}`);
+    }
 
     // Build Lambdas only (frontend will be built during deployment)
     buildLambdas();
@@ -213,12 +223,18 @@ function main(): void {
     // Cleanup
     cleanupBuildArtifacts();
 
-    // Git operations
-    gitCommitAndTag(newVersion);
-    pushToRemote();
+    if (!isPackageOnly) {
+      // Git operations (skip for package-only builds)
+      gitCommitAndTag(newVersion);
+      pushToRemote();
+    }
 
     // Summary
-    printSummary(newVersion, zipPath);
+    if (isPackageOnly) {
+      printPackageSummary(newVersion, zipPath);
+    } else {
+      printSummary(newVersion, zipPath);
+    }
 
   } catch (error) {
     console.error('\n❌ Release failed:', (error as Error).message);

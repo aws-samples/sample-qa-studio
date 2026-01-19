@@ -8,9 +8,6 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { api } from '../../utils/api';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-// @ts-ignore - configuration.json is outside src directory
-import { apiEndpoint, defaultRegion } from '../../../../configuration.json';
-
 interface DownloadedFile {
   fileName: string;
   size: number;
@@ -27,7 +24,7 @@ interface DownloadedFilesProps {
 export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger, executionRegion }: DownloadedFilesProps) {
   const [files, setFiles] = useState<DownloadedFile[]>([]);
   const [loading, setLoading] = useState(true);
-  const isCrossRegion = executionRegion && executionRegion !== defaultRegion;
+  const isCrossRegion = executionRegion && executionRegion !== __APP_CONFIG__.defaultRegion;
 
   useEffect(() => {
     fetchDownloads();
@@ -58,7 +55,7 @@ export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger
       }
 
       // Construct download URL
-      const downloadUrl = `${apiEndpoint}usecase/${usecaseId}/executions/${executionId}/downloads/${encodeURIComponent(fileName)}`;
+      const downloadUrl = `${__APP_CONFIG__.apiEndpoint}usecase/${usecaseId}/executions/${executionId}/downloads/${encodeURIComponent(fileName)}`;
 
       // Make a fetch request with auth header - the Lambda will redirect to presigned URL
       const response = await fetch(downloadUrl, {
@@ -105,7 +102,7 @@ export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger
       <SpaceBetween size="m">
         {isCrossRegion && (
           <Alert type="info" header="Cross-Region Replication">
-            This execution ran in {executionRegion}, which is different from the default region ({defaultRegion}). 
+            This execution ran in {executionRegion}, which is different from the default region ({__APP_CONFIG__.defaultRegion}). 
             Downloaded files are being replicated to the default region and may take a few minutes to appear.
           </Alert>
         )}

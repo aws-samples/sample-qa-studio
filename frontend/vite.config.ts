@@ -32,6 +32,7 @@ export default defineConfig({
       defaultRegion: JSON.stringify(config.defaultRegion),
       enabledRegions: JSON.stringify(config.enabledRegions),
       bedrockModelId: JSON.stringify(config.bedrockModelId),
+      apiEndpoint: JSON.stringify(config.apiEndpoint),
     }
   }
 })
