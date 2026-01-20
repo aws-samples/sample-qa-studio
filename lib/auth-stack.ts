@@ -35,6 +35,13 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
       userPoolName: this.cdkName('user-pool'),
       signInAliases: { email: true },
       selfSignUpEnabled: false,
+      passwordPolicy: {
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: true,
+      },
     });
 
     this.userPoolClient = new UserPoolClient(this, 'user_pool_client', {

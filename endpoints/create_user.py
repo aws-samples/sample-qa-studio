@@ -13,9 +13,29 @@ logger.setLevel(logging.INFO)
 
 
 def generate_secure_password(length: int = 16) -> str:
-    """Generate a cryptographically secure random password."""
-    charset = string.ascii_letters + string.digits + "!@#$%^&*"
-    return ''.join(secrets.choice(charset) for _ in range(length))
+    """
+    Generate a cryptographically secure random password that meets Cognito requirements.
+    Ensures at least one uppercase, lowercase, digit, and symbol character.
+    """
+    # Use symbols that are definitely accepted by Cognito
+    symbols = "!@#$%^&*"
+    
+    # Ensure we have at least one of each required character type
+    password_chars = [
+        secrets.choice(string.ascii_uppercase),  # At least one uppercase
+        secrets.choice(string.ascii_lowercase),  # At least one lowercase
+        secrets.choice(string.digits),           # At least one digit
+        secrets.choice(symbols),                 # At least one symbol
+    ]
+    
+    # Fill the rest with random characters from all categories
+    all_chars = string.ascii_letters + string.digits + symbols
+    password_chars.extend(secrets.choice(all_chars) for _ in range(length - 4))
+    
+    # Shuffle to avoid predictable patterns
+    secrets.SystemRandom().shuffle(password_chars)
+    
+    return ''.join(password_chars)
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
