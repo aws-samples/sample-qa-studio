@@ -18,13 +18,13 @@ export default function WizardSetup() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [startingUrl, setStartingUrl] = useState('');
+  const [starting_url, setStartingUrl] = useState('');
   const [region, setRegion] = useState('us-east-1');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleStart = async () => {
-    if (!name.trim() || !startingUrl.trim()) {
+    if (!name.trim() || !starting_url.trim()) {
       setError('Name and Starting URL are required');
       return;
     }
@@ -36,7 +36,7 @@ export default function WizardSetup() {
       const response = await api.post('wizard/start', {
         name: name.trim(),
         description: description.trim(),
-        starting_url: startingUrl.trim(),
+        starting_url: starting_url.trim(),
         tags: [],
         region: region
       });
@@ -129,7 +129,7 @@ export default function WizardSetup() {
                 description="The URL where the test should begin"
               >
                 <Input
-                  value={startingUrl}
+                  value={starting_url}
                   onChange={({ detail }) => setStartingUrl(detail.value)}
                   placeholder="https://example.com"
                   type="url"
@@ -159,7 +159,7 @@ export default function WizardSetup() {
                   variant="primary"
                   onClick={handleStart}
                   loading={creating}
-                  disabled={!name.trim() || !startingUrl.trim()}
+                  disabled={!name.trim() || !starting_url.trim()}
                 >
                   Start Wizard
                 </Button>

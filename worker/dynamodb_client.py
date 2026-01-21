@@ -47,7 +47,7 @@ class DynamoDBClient:
                 executing_at=item.get('executing_at'),
                 trigger_type=item.get('trigger_type'),
                 session_id=item.get('session_id'),
-                region=item.get('execution_region', 'us-east-1')
+                region=item.get('executing_region', 'us-east-1')  # Read from executing_region field
             )
             
         except ClientError as e:
@@ -65,25 +65,31 @@ class DynamoDBClient:
             
             steps = []
             for item in response['Items']:
-                step = ExecutionStep(
-                    pk=item['pk'],
-                    sk=item['sk'],
-                    step_id=item['step_id'],
-                    sort=item['sort'],
-                    instruction=item['instruction'],
-                    artefact=item.get('artefact', ''),
-                    logs=item.get('logs', []),
-                    created_at=item['created_at'],
-                    secret_key=item.get('secret_key', ''),
-                    step_type=item['step_type'],
-                    validation_type=item.get('validation_type', ''),
-                    validation_operator=item.get('validation_operator', ''),
-                    validation_value=item.get('validation_value', ''),
-                    capture_variable=item.get('capture_variable', ''),
-                    value_type=item.get('value_type', ''),
-                    assertion_variable=item.get('assertion_variable', '')
-                )
-                steps.append(step)
+                # Defensive field access with defaults
+                try:
+                    step = ExecutionStep(
+                        pk=item.get('pk', ''),
+                        sk=item.get('sk', ''),
+                        step_id=item.get('step_id', ''),
+                        sort=item.get('sort', 0),
+                        instruction=item.get('instruction', ''),
+                        artefact=item.get('artefact', ''),
+                        logs=item.get('logs', []),
+                        created_at=item.get('created_at', ''),
+                        secret_key=item.get('secret_key', ''),
+                        step_type=item.get('step_type', ''),
+                        validation_type=item.get('validation_type', ''),
+                        validation_operator=item.get('validation_operator', ''),
+                        validation_value=item.get('validation_value', ''),
+                        capture_variable=item.get('capture_variable', ''),
+                        value_type=item.get('value_type', ''),
+                        assertion_variable=item.get('assertion_variable', '')
+                    )
+                    steps.append(step)
+                except Exception as e:
+                    logger.error(f"Error parsing step {item.get('sk', 'unknown')}: {e}")
+                    logger.error(f"Step data: {item}")
+                    continue
             
             # Sort by sort field to ensure proper order
             steps.sort(key=lambda x: x.sort)
@@ -109,26 +115,35 @@ class DynamoDBClient:
             
             item = response['Item']
 
-            variables = [
-                KeyValuePair(key=var['Key'], value=var['Value'])
-                for var in item.get('variables', [])
-            ]
+            # Handle both uppercase and lowercase keys for compatibility
+            variables = []
+            for var in item.get('variables', []):
+                if isinstance(var, dict):
+                    key = var.get('key') or var.get('Key', '')
+                    value = var.get('value') or var.get('Value', '')
+                    variables.append(KeyValuePair(key=key, value=value))
             
-            runtime_variables = [
-                KeyValuePair(key=var['Key'], value=var['Value'])
-                for var in item.get('runtime_variables', [])
-            ]
+            runtime_variables = []
+            for var in item.get('runtime_variables', []):
+                if isinstance(var, dict):
+                    key = var.get('key') or var.get('Key', '')
+                    value = var.get('value') or var.get('Value', '')
+                    runtime_variables.append(KeyValuePair(key=key, value=value))
             
             return ExecutionVariables(
-                pk=item['pk'],
-                sk=item['sk'],
+                pk=item.get('pk', ''),
+                sk=item.get('sk', ''),
                 variables=variables,
                 runtime_variables=runtime_variables,
-                created_at=item['created_at']
+                created_at=item.get('created_at', '')
             )
             
         except ClientError as e:
             logger.error(f"Error getting execution variables for {execution_id}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error getting execution variables for {execution_id}: {e}")
+            logger.error(f"Item data: {item if 'item' in locals() else 'N/A'}")
             return None
     
     def update_execution_status(self, usecase_id: str, execution_id: str, status: str, 
@@ -330,14 +345,17 @@ class DynamoDBClient:
             item = response['Item']
             
             return ExecutionHeaders(
-                pk=item['pk'],
-                sk=item['sk'],
+                pk=item.get('pk', ''),
+                sk=item.get('sk', ''),
                 headers=item.get('headers', {}),
-                created_at=item['created_at']
+                created_at=item.get('created_at', '')
             )
             
         except ClientError as e:
             logger.error(f"Error getting execution headers for {execution_id}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error getting execution headers for {execution_id}: {e}")
             return None
 
     def create_live_view(self, execution_id: str, live_url: str) -> bool:

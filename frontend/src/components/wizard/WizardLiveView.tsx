@@ -61,7 +61,7 @@ export default function WizardLiveView({
     }
   };
   
-  const isStepCompleted = pendingStep && (pendingStep.actId || pendingStep.act_id) && pendingStep.status !== 'executing';
+  const isStepCompleted = pendingStep && pendingStep.act_id && pendingStep.status !== 'executing';
   
   // For wizard mode, treat "not found" as "still loading" rather than an error
   const isWaitingForLiveView = !hasLiveView && !isExpired;

@@ -7,12 +7,13 @@ export interface NovaActQAStudioBaseStackCreateProps extends StackProps {
   baseName: string
 }
 
-export interface createLambdaProps {
-  // name: string,
+export interface createPythonLambdaProps {
   path: string,
+  handler?: string,
   memorySize?: number,
   environment?: { [key: string]: string; },
   timeout?: Duration,
+  runtime?: Runtime,
 }
 
 export class NovaActQAStudioBaseStack extends Stack {
@@ -36,16 +37,16 @@ export class NovaActQAStudioBaseStack extends Stack {
     });
   }
 
-  protected createLambda(props: createLambdaProps): Function {
+  protected createPythonLambda(props: createPythonLambdaProps): Function {
     const name = this.cdkName(this.snakeToPascal(props.path))
     const fn = new Function(this, `lambda_${name}`, {
       functionName: name,
-      runtime: Runtime.PROVIDED_AL2023,
+      runtime: props.runtime || Runtime.PYTHON_3_13,
       architecture: Architecture.ARM_64,
       memorySize: props.memorySize || 128,
-      code: Code.fromAsset(`lambda/cmd/${props.path}`),
+      code: Code.fromAsset('endpoints'),
       timeout: props.timeout || Duration.seconds(5),
-      handler: 'import.handler',
+      handler: props.handler || `${props.path}.handler`,
       environment: props.environment,
       logRetention: 5
     });

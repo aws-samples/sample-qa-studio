@@ -45,10 +45,10 @@ export default function ExecutionTimeline({ execution }: ExecutionTimelineProps)
     }
   };
 
-  // Get timestamps with fallback to different field names
-  const createdAt = execution.createdAt || execution.created_at;
-  const executingAt = execution.executingAt || execution.executing_at;
-  const completedAt = execution.completedAt || execution.completed_at;
+  // Get timestamps
+  const createdAt = execution.created_at;
+  const executingAt = execution.executing_at;
+  const completedAt = execution.completed_at;
 
   // Build steps data for Cloudscape Steps component
   const steps = [];

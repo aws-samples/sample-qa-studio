@@ -35,6 +35,13 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
       userPoolName: this.cdkName('user-pool'),
       signInAliases: { email: true },
       selfSignUpEnabled: false,
+      passwordPolicy: {
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: true,
+      },
     });
 
     this.userPoolClient = new UserPoolClient(this, 'user_pool_client', {
@@ -78,21 +85,21 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
     });
 
     // Management Lambdas
-    this.listUsersLambda = this.createLambda({
+    this.listUsersLambda = this.createPythonLambda({
       path: 'list_users',
       environment: {
         USER_POOL_ID: this.userPool.userPoolId
       }
     });
 
-    this.addUserLambda = this.createLambda({
+    this.addUserLambda = this.createPythonLambda({
       path: 'create_user',
       environment: {
         USER_POOL_ID: this.userPool.userPoolId
       }
     });
 
-    this.removeUserLambda = this.createLambda({
+    this.removeUserLambda = this.createPythonLambda({
       path: 'delete_user',
       environment: {
         USER_POOL_ID: this.userPool.userPoolId
