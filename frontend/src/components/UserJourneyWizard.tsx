@@ -31,7 +31,7 @@ interface UserJourneyWizardProps {
 interface WizardState {
   formData: {
     title: string;
-    starting_url: string;
+    startingUrl: string;
     userJourney: string;
     executionRegion: string;
   };
@@ -54,7 +54,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
   const [state, setState] = useState<WizardState>({
     formData: {
       title: '',
-      starting_url: '',
+      startingUrl: '',
       userJourney: '',
       executionRegion: 'eu-central-1'
     },
@@ -101,7 +101,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
     try {
       const response = await wizardApi.generateUsecase({
         title: state.formData.title,
-        starting_url: state.formData.starting_url,
+        starting_url: state.formData.startingUrl,
         userJourney: state.formData.userJourney,
         region: state.formData.executionRegion
       });
@@ -165,7 +165,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
           // Clear form for reuse
           setState(prev => ({
             ...prev,
-            formData: { title: '', starting_url: '', userJourney: '', executionRegion: '' },
+            formData: { title: '', startingUrl: '', userJourney: '', executionRegion: 'eu-central-1' },
             generatedUsecase: null,
             previewMode: false,
             isImporting: false,
@@ -412,14 +412,14 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
               </Popover>
             </SpaceBetween>
           }
-          errorText={state.validationErrors.starting_url}
+          errorText={state.validationErrors.startingUrl}
         >
           <Input
-            value={state.formData.starting_url}
-            onChange={({ detail }) => handleFieldChange('starting_url', detail.value)}
+            value={state.formData.startingUrl}
+            onChange={({ detail }) => handleFieldChange('startingUrl', detail.value)}
             placeholder="https://example.com/login"
             disabled={state.isGenerating}
-            invalid={!!state.validationErrors.starting_url}
+            invalid={!!state.validationErrors.startingUrl}
           />
         </FormField>
 
