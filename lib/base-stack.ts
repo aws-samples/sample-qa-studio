@@ -2,6 +2,7 @@ import { Duration, Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Runtime, Architecture, Code, Function } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import { RestApi, LambdaIntegration, AuthorizationType, Method, Resource, IAuthorizer, IResource } from 'aws-cdk-lib/aws-apigateway';
 
 export interface NovaActQAStudioBaseStackCreateProps extends StackProps {
   baseName: string
@@ -16,8 +17,38 @@ export interface createPythonLambdaProps {
   runtime?: Runtime,
 }
 
+export enum HttpMethod {
+  GET = 'GET',
+  POST = 'POST',
+  PUT = 'PUT',
+  DELETE = 'DELETE',
+  PATCH = 'PATCH',
+}
+
 export class NovaActQAStudioBaseStack extends Stack {
   protected baseName: string = ""
+  protected authorizer?: IAuthorizer
+  protected routes: Method[] = []
+
+  protected addMethod(resource: Resource, method: HttpMethod, lambda: Function): Method {
+    if (!this.authorizer) {
+      throw new Error('Authorizer must be set before adding methods');
+    }
+
+    const resourceMethod = resource.addMethod(method, new LambdaIntegration(lambda), {
+      authorizer: this.authorizer,
+      authorizationType: AuthorizationType.COGNITO
+    });
+
+    this.routes.push(resourceMethod)
+
+    return resourceMethod
+  }
+
+  protected addResource(parentResource: IResource, name: string): Resource {
+    const resource = parentResource.addResource(name);
+    return resource
+  }
 
   protected cdkName(name: string): string {
     return `${this.baseName}-${name.toLocaleLowerCase().replace("_", "-")}`

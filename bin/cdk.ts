@@ -10,6 +10,7 @@ import { NovaActQAStudioFrontendStack } from '../lib/frontend-stack';
 import { NovaActQAStudioFrontendDeploymentStack } from '../lib/frontend-deployment';
 import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioRouteStack } from '../lib/route-stack';
+import { NovaActQAStudioRoutesAuthStack } from '../lib/routes-auth-stack';
 import { NovaActQAStudioEventBridgeStack } from '../lib/eventbridge-stack';
 import { loadConfig, getStackEnv } from '../lib/config';
 
@@ -98,6 +99,17 @@ new NovaActQAStudioEventBridgeStack(app, 'eventbridge', {
   baseName,
   table: storageStack.table,
   tableWritePolicy: storageStack.tableWritePolicy,
+  env: stackEnv,
+})
+
+// Auth routes stack for OAuth client management
+new NovaActQAStudioRoutesAuthStack(app, 'routes-auth', {
+  stackName: `${baseName}-routes-auth`,
+  baseName,
+  apiId: apiStack.api.restApiId,
+  apiRootResourceId: apiStack.api.restApiRootResourceId,
+  authorizer: apiStack.authorizer,
+  userPool: authStack.userPool,
   env: stackEnv,
 })
 

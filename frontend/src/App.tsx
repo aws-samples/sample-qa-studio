@@ -32,6 +32,8 @@ const UsecaseDetail = React.lazy(() => import('./components/UsecaseDetailRefacto
 const ExecutionDetail = React.lazy(() => import('./components/ExecutionDetailRefactored'));
 const Users = React.lazy(() => import('./components/Users'));
 const CreateUser = React.lazy(() => import('./components/CreateUser'));
+const OAuthClients = React.lazy(() => import('./components/OAuthClients'));
+const CreateOAuthClient = React.lazy(() => import('./components/CreateOAuthClient'));
 const TemplateLibrary = React.lazy(() => import('./components/templates/TemplateLibrary'));
 const TemplateDetail = React.lazy(() => import('./components/templates/TemplateDetail'));
 
@@ -69,6 +71,8 @@ function AppContent() {
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
         import('./components/Users');
+        import('./components/OAuthClients');
+        import('./components/CreateOAuthClient');
         import('./components/templates/TemplateLibrary');
         import('./components/templates/TemplateDetail');
       });
@@ -85,6 +89,8 @@ function AppContent() {
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
         import('./components/Users');
+        import('./components/OAuthClients');
+        import('./components/CreateOAuthClient');
         import('./components/templates/TemplateLibrary');
         import('./components/templates/TemplateDetail');
       }, 2000);
@@ -105,6 +111,7 @@ function AppContent() {
             { type: "link", text: "Templates", href: "/templates" },
             { type: "divider" },
             { type: "link", text: "Users", href: "/users" },
+            { type: "link", text: "OAuth Clients", href: "/oauth-clients" },
             { type: "divider" },
             { type: "link", text: baseName, href: "#" },
           ]}
@@ -147,6 +154,8 @@ function AppContent() {
             <Route path="/template-usecase" element={<TemplateUsecase />} />
             <Route path="/users" element={<Users />} />
             <Route path="/users/create" element={<CreateUser />} />
+            <Route path="/oauth-clients" element={<OAuthClients />} />
+            <Route path="/oauth-clients/create" element={<CreateOAuthClient />} />
             <Route path="/usecase/:id" element={<UsecaseDetail />} />
             <Route path="/usecase/:usecaseId/execution/:executionId" element={<ExecutionDetail />} />
           </Routes>

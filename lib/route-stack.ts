@@ -1,11 +1,11 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { RestApi, LambdaIntegration, AuthorizationType, Method, Resource, IAuthorizer, Cors, IResource, Deployment, Stage } from 'aws-cdk-lib/aws-apigateway';
+import { RestApi, IAuthorizer, Deployment, Stage } from 'aws-cdk-lib/aws-apigateway';
 import { Function } from 'aws-cdk-lib/aws-lambda';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { PolicyStatement, Effect, ManagedPolicy } from 'aws-cdk-lib/aws-iam';
-import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
+import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps, HttpMethod } from './base-stack';
 
 interface NovaActQAStudioRouteStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   apiId: string
@@ -37,42 +37,9 @@ interface NovaActQAStudioRouteStackCreateProps extends NovaActQAStudioBaseStackC
   terminateWizardLambda: Function
 }
 
-enum HttpMethod {
-  GET = 'GET',
-  POST = 'POST',
-  PUT = 'PUT',
-  DELETE = 'DELETE',
-  PATCH = 'PATCH',
-}
-
 export class NovaActQAStudioRouteStack extends NovaActQAStudioBaseStack {
-  private authorizer: IAuthorizer
   private table: Table
   private deployment: Deployment
-  private routes: Method[] = []
-
-  private addMethod(resource: Resource, method: HttpMethod, lambda: Function): Method {
-    const resourceMethod = resource.addMethod(method, new LambdaIntegration(lambda), {
-      authorizer: this.authorizer,
-      authorizationType: AuthorizationType.COGNITO
-    });
-
-    this.routes.push(resourceMethod)
-
-    return resourceMethod
-  }
-
-  private addResource(parentResource: IResource, name: string): Resource {
-    const resource = parentResource.addResource(name);
-
-    // resource.addCorsPreflight({
-    //   allowOrigins: Cors.ALL_ORIGINS,
-    //   allowMethods: Cors.ALL_METHODS,
-    //   allowHeaders: ['Content-Type', 'Authorization', 'X-Amz-Date', 'X-Api-Key', 'X-Amz-Security-Token']
-    // })
-
-    return resource
-  }
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioRouteStackCreateProps) {
     super(scope, id, props);
