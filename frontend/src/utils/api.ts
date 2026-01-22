@@ -126,7 +126,7 @@ export const hooksApi = {
 // User Journey Wizard API interfaces
 export interface GenerateUsecaseRequest {
   title: string;
-  startingUrl: string;
+  starting_url: string;
   userJourney: string;
   region: string;
 }
@@ -171,7 +171,7 @@ export const wizardApi = {
       throw errorManager.createError('validation', 'Use case title is required');
     }
 
-    if (!request.startingUrl?.trim()) {
+    if (!request.starting_url?.trim()) {
       throw errorManager.createError('validation', 'Starting URL is required');
     }
 
@@ -185,7 +185,7 @@ export const wizardApi = {
 
     // URL validation
     try {
-      new URL(request.startingUrl);
+      new URL(request.starting_url);
     } catch {
       throw errorManager.createError('validation',
         'Please enter a valid URL (including http:// or https://)');

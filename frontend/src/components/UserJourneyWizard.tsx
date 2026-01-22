@@ -101,7 +101,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
     try {
       const response = await wizardApi.generateUsecase({
         title: state.formData.title,
-        startingUrl: state.formData.startingUrl,
+        starting_url: state.formData.startingUrl,
         userJourney: state.formData.userJourney,
         region: state.formData.executionRegion
       });
@@ -165,7 +165,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
           // Clear form for reuse
           setState(prev => ({
             ...prev,
-            formData: { title: '', startingUrl: '', userJourney: '', executionRegion: '' },
+            formData: { title: '', startingUrl: '', userJourney: '', executionRegion: 'eu-central-1' },
             generatedUsecase: null,
             previewMode: false,
             isImporting: false,

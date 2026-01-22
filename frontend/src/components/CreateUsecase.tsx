@@ -18,7 +18,7 @@ export default function CreateUsecase() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [startingUrl, setStartingUrl] = useState('');
+  const [starting_url, setStartingUrl] = useState('');
   const [active, setActive] = useState(true);
   const [tags, setTags] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,7 +39,7 @@ export default function CreateUsecase() {
       await api.post('usecase', { 
         name, 
         description, 
-        starting_url: startingUrl,
+        starting_url,
         active,
         region: selectedRegion.value,
         model_id: selectedModel?.value,
@@ -95,7 +95,7 @@ export default function CreateUsecase() {
         
         <FormField label="Starting URL">
           <Input
-            value={startingUrl}
+            value={starting_url}
             onChange={({ detail }) => setStartingUrl(detail.value)}
             placeholder="https://example.com"
           />
