@@ -1,19 +1,19 @@
-# Nova Act QA Studio - Web Automation Platform
+# Nova Act QA Studio - Web Testing Automation Platform
 
-Nova Act QA Studio is a cloud-native web automation platform that enables users to create, manage, and execute browser-based workflows without writing code. Built on AWS with a modern serverless architecture, it combines the power of AI-driven browser automation through Nova Act with an intuitive web interface for creating complex automation scenarios.
+Nova Act QA Studio is a cloud-native QA automation reference application that enables users to create, manage, and execute automated web application tests without writing code. Built on AWS with a modern serverless architecture, it combines the power of AI-driven browser automation through Nova Act with an intuitive web interface for creating test scenarios.
 
 ## What is Nova Act QA Studio?
 
-Nova Act QA Studio transforms web automation from a developer-only task into an accessible tool for anyone. Users can:
+Nova Act QA Studio democratizes QA automation, making test creation accessible to anyone from QA engineers to product managers. Users can:
 
-- **Create Automation Workflows**: Define step-by-step browser interactions through a visual interface
-- **Execute with AI**: Leverage Nova Act's AI-powered browser automation for intelligent web interactions
-- **Schedule Executions**: Set up recurring automation tasks with flexible scheduling
-- **Monitor & Debug**: Track execution progress with video recordings, screenshots, and detailed logs
-- **Template Variables**: Create dynamic workflows with customizable parameters
-- **Scale Automatically**: Cloud-native architecture handles concurrent executions seamlessly
+- **Create test workflows**: Define step-by-step test scenarios in natural language through a visual interface
+- **Execute with AI**: Leverage Nova Act's AI-powered browser automation for intelligent test execution
+- **Schedule test runs**: Set up recurring test executions with flexible scheduling
+- **Monitor & debug**: Track test results with video recordings, screenshots, and detailed logs
+- **Template variables**: Create dynamic test scenarios with customizable parameters
+- **Scale automatically**: Cloud-native architecture handles concurrent test executions seamlessly
 
-The platform is perfect for web scraping, automated testing, data collection, form filling, and any repetitive browser-based tasks that traditionally required custom scripting.
+The platform is purpose-built for automated QA testing, supporting web scraping, data collection, and other browser-based automation tasks required for QA automation.
 
 ## Architecture Overview
 
@@ -23,11 +23,12 @@ Nova Act QA Studio follows a modern serverless architecture pattern:
 - **API Layer**: AWS API Gateway with Lambda functions (Go)
 - **Authentication**: AWS Cognito with AWS Amplify SDK for secure user management
 - **Data Storage**: DynamoDB with single-table design
-- **Execution Engine**: ECS Fargate containers running Python workers
-- **Artifact Storage**: S3 for videos, screenshots, and logs
-- **Scheduling**: EventBridge Scheduler for automated executions
-- **Queue System**: SQS for reliable execution orchestration
+- **Runtime**: ECS Fargate containers running Nova Act SDK with Python workers
+- **Test Execution**: Amazon Nova Act performs browser automation and test validation
 - **Browser**: Bedrock AgentCore Browser Tool for a running Nova Act on a fully managed remote browser
+- **Queue System**: SQS for reliable execution orchestration
+- **Scheduling**: EventBridge Scheduler for automated executions
+- **Artifact Storage**: S3 for videos, screenshots, and logs
 
 ## Prerequisites
 

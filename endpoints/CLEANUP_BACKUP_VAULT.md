@@ -38,6 +38,10 @@ The Lambda function requires the following AWS Backup permissions:
 The function is automatically integrated into the storage stack as a custom resource:
 
 ```typescript
+const cleanupProvider = new Provider(this, 'BackupVaultCleanupProvider', {
+  onEventHandler: cleanupLambda,
+});
+
 const cleanupResource = new CustomResource(this, 'BackupVaultCleanup', {
   serviceToken: cleanupProvider.serviceToken,
   properties: {

@@ -9,6 +9,7 @@
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
+    "lambda:install-deps": "pip install -r endpoints/requirements.txt -t endpoints/dependencies --upgrade",
     "deploy:storage": "cdk deploy storage --require-approval never",
     "deploy:auth": "cdk deploy auth --require-approval never",
     "deploy:api": "cdk deploy api --require-approval never",

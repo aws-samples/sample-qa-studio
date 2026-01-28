@@ -1,10 +1,9 @@
-import { Names, RemovalPolicy, CustomResource, Duration } from 'aws-cdk-lib';
+import { RemovalPolicy, CustomResource, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table, AttributeType } from 'aws-cdk-lib/aws-dynamodb';
 import { BackupPlan, BackupVault, BackupPlanRule, BackupResource } from 'aws-cdk-lib/aws-backup';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
-import { Runtime, Architecture, Code, Function as LambdaFunction } from 'aws-cdk-lib/aws-lambda';
 import { Provider } from 'aws-cdk-lib/custom-resources';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
@@ -61,15 +60,10 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
     })
 
     // Create Lambda function to clean up backup vault recovery points
-    const cleanupLambda = new LambdaFunction(this, 'BackupVaultCleanupLambda', {
-      functionName: this.cdkName('backup-vault-cleanup'),
-      runtime: Runtime.PYTHON_3_13,
-      architecture: Architecture.ARM_64,
-      handler: 'index.handler',
-      code: Code.fromAsset('lambda/python/cleanup_backup_vault'),
+    const cleanupLambda = this.createPythonLambda({
+      path: 'cleanup_backup_vault',
       timeout: Duration.minutes(15),
       memorySize: 256,
-      description: 'Cleans up AWS Backup recovery points before vault deletion',
     });
 
     // Grant permissions to the Lambda function
