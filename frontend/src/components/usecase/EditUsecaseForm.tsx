@@ -21,7 +21,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
   const [starting_url, setStartingUrl] = useState(usecase.starting_url || '');
   const [active, setActive] = useState(usecase.active || false);
   const [tags, setTags] = useState(usecase.tags?.join(', ') || '');
-  const [selectedRegion, setSelectedRegion] = useState(findRegionOptions(usecase.region) as SelectProps.Option);
+  const [selectedRegion, setSelectedRegion] = useState(findRegionOptions(usecase.executing_region) as SelectProps.Option);
   const { modelOptions, findModelOption, loading: modelsLoading } = useModels();
   const [selectedModel, setSelectedModel] = useState<SelectProps.Option | null>(null);
 
@@ -38,7 +38,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
       description,
       starting_url,
       active,
-      region: selectedRegion.value,
+      executing_region: selectedRegion.value,
       model_id: selectedModel?.value,
       tags: tags.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0)
     };
