@@ -15,6 +15,7 @@ import {
 } from 'aws-cdk-lib/aws-cloudfront';
 import { S3BucketOrigin, HttpOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
 interface NovaActQAStudioFrontendStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
@@ -88,13 +89,21 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
     });
 
     this.log('CloudFrontDistributionDomain', `https://${this.distribution.distributionDomainName}`)
-      this.log('frontendBucket', this.frontendBucket.bucketName)
+    this.log('frontendBucket', this.frontendBucket.bucketName)
 
     // Export the distribution domain name for use in other stacks
     new CfnOutput(this, 'DistributionDomainName', {
-        value: this.distribution.distributionDomainName,
-        description: 'CloudFront Distribution Domain Name',
-        exportName: `${props.baseName}-distribution-domain-name`
-      });
+      value: this.distribution.distributionDomainName,
+      description: 'CloudFront Distribution Domain Name',
+      exportName: `${props.baseName}-distribution-domain-name`
+    });
+
+    // Deploy frontend build to S3 bucket
+    new BucketDeployment(this, 'FrontendDeployment', {
+      sources: [Source.asset('./frontend/build')],
+      destinationBucket: this.frontendBucket,
+      distribution: this.distribution,
+      distributionPaths: ['/*']
+    });
   }
 }

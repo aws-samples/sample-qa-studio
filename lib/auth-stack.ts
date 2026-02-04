@@ -1,8 +1,6 @@
 import { Construct } from 'constructs';
 import { CfnOutput } from 'aws-cdk-lib';
 import { UserPool, UserPoolClient, OAuthScope, CfnUserPoolUser } from 'aws-cdk-lib/aws-cognito';
-import { Function } from 'aws-cdk-lib/aws-lambda';
-import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
 interface NovaActQAStudioAuthStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
@@ -24,9 +22,6 @@ interface NovaActQAStudioAuthStackCreateProps extends NovaActQAStudioBaseStackCr
 export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
   public readonly userPool: UserPool
   public readonly userPoolClient: UserPoolClient
-  public readonly listUsersLambda: Function
-  public readonly addUserLambda: Function
-  public readonly removeUserLambda: Function
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioAuthStackCreateProps) {
     super(scope, id, props);
@@ -83,53 +78,6 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
       forceAliasCreation: false,
       // messageAction: 'SUPPRESS' to skip welcome email, or omit to send one
     });
-
-    // Management Lambdas
-    this.listUsersLambda = this.createPythonLambda({
-      path: 'list_users',
-      environment: {
-        USER_POOL_ID: this.userPool.userPoolId
-      }
-    });
-
-    this.addUserLambda = this.createPythonLambda({
-      path: 'create_user',
-      environment: {
-        USER_POOL_ID: this.userPool.userPoolId
-      }
-    });
-
-    this.removeUserLambda = this.createPythonLambda({
-      path: 'delete_user',
-      environment: {
-        USER_POOL_ID: this.userPool.userPoolId
-      }
-    });
-
-    // Grant Cognito permissions for user management
-    this.listUsersLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: [
-        'cognito-idp:ListUsers'
-      ],
-      resources: [this.userPool.userPoolArn]
-    }));
-
-    this.addUserLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: [
-        'cognito-idp:*'
-      ],
-      resources: [this.userPool.userPoolArn]
-    }));
-
-    this.removeUserLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: [
-        'cognito-idp:AdminDeleteUser'
-      ],
-      resources: [this.userPool.userPoolArn]
-    }));
 
     this.log('userPoolId', this.userPool.userPoolId)
     this.log('userPoolClientId', this.userPoolClient.userPoolClientId)
