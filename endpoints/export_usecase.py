@@ -2,6 +2,7 @@ import logging
 import json
 from typing import Any, Dict, List, Optional
 from datetime import datetime
+from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
@@ -10,6 +11,32 @@ from utils import create_response, get_table_name, get_secret_prefix
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+
+def convert_dynamodb_types(obj):
+    """
+    Recursively convert DynamoDB types (sets, Decimals) to JSON-serializable types.
+    
+    Args:
+        obj: Object to convert (can be dict, list, set, Decimal, or primitive)
+        
+    Returns:
+        Object with all DynamoDB types converted to JSON-serializable types
+    """
+    if isinstance(obj, set):
+        return list(obj)
+    elif isinstance(obj, Decimal):
+        # Convert Decimal to int if it's a whole number, otherwise to float
+        if obj % 1 == 0:
+            return int(obj)
+        else:
+            return float(obj)
+    elif isinstance(obj, dict):
+        return {key: convert_dynamodb_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_dynamodb_types(item) for item in obj]
+    else:
+        return obj
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -169,7 +196,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'starting_url': usecase.get('starting_url', ''),
             'active': usecase.get('active', False),
             'executing_region': usecase.get('executing_region', ''),
-            'tags': usecase.get('tags', [])
+            'tags': list(usecase.get('tags', [])) if usecase.get('tags') else []
         }
         
         # Create export data
@@ -185,6 +212,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Add hooks if present
         if hooks:
             export_data['hooks'] = hooks
+        
+        # Convert any DynamoDB types (sets, Decimals) to JSON-serializable types
+        export_data = convert_dynamodb_types(export_data)
         
         # Create response with download headers
         return {
