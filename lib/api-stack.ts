@@ -1,6 +1,6 @@
 import { Construct } from 'constructs';
 import { CfnOutput } from 'aws-cdk-lib';
-import { RestApi, CognitoUserPoolsAuthorizer, Cors, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, Deployment } from 'aws-cdk-lib/aws-apigateway';
+import { RestApi, CognitoUserPoolsAuthorizer, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, Deployment } from 'aws-cdk-lib/aws-apigateway';
 import { UserPool } from 'aws-cdk-lib/aws-cognito';
 import { Function } from 'aws-cdk-lib/aws-lambda';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
@@ -66,11 +66,7 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
       endpointTypes: [
         EndpointType.REGIONAL
       ],
-      defaultCorsPreflightOptions: {
-        allowOrigins: Cors.ALL_ORIGINS,
-        allowMethods: Cors.ALL_METHODS,
-        allowHeaders: ['Content-Type', 'Authorization', 'X-Amz-Date', 'X-Api-Key', 'X-Amz-Security-Token']
-      }
+      deploy: false  // We'll create our own deployment with custom stage name
     });
     
     // Cognito Authorizer
@@ -306,11 +302,14 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
 
     this.deployment.addToLogicalId(new Date().toISOString())
 
-    this.log('apigatewayDomain', this.api.url)
+    // Construct API URL manually since deploy: false
+    const apiUrl = `https://${this.api.restApiId}.execute-api.${this.region}.amazonaws.com/${props.apiDeploymentStage}/`;
+    
+    this.log('apigatewayDomain', apiUrl)
 
     // Export API URL for post-deployment config generation
     new CfnOutput(this, 'ApiUrlOutput', {
-      value: this.api.url,
+      value: apiUrl,
       description: 'API Gateway URL',
       exportName: `${props.baseName}-api-url`
     });

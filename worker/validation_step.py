@@ -18,7 +18,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
 
   try:
     if step.validation_type == 'bool':
-      result = nova.act(step.instruction, schema=BOOL_SCHEMA)
+      result = nova.act_get(step.instruction, schema=BOOL_SCHEMA)
       expected_value = step.validation_value.lower() == 'true'
       actual_value = result.parsed_response
       
@@ -26,7 +26,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
         success = False
           
     elif step.validation_type == 'string' and step.validation_operator == 'exact':
-      result = nova.act(step.instruction, schema=STRING_SCHEMA)
+      result = nova.act_get(step.instruction, schema=STRING_SCHEMA)
       # Strip whitespace and remove surrounding quotes if present
       expected_value = step.validation_value.strip().strip('"').strip("'")
       actual_value = str(result.parsed_response).strip().strip('"').strip("'") if result.parsed_response is not None else ""
@@ -35,7 +35,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
         success = False
     
     elif step.validation_type == 'string' and step.validation_operator == 'exact_case_insensitive':
-      result = nova.act(step.instruction, schema=STRING_SCHEMA)
+      result = nova.act_get(step.instruction, schema=STRING_SCHEMA)
       # Strip whitespace and remove surrounding quotes if present
       expected_value = step.validation_value.strip().strip('"').strip("'").lower()
       actual_value = str(result.parsed_response).strip().strip('"').strip("'").lower() if result.parsed_response is not None else ""
@@ -44,7 +44,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
         success = False
     
     elif step.validation_type == 'string' and step.validation_operator == 'contains':
-      result = nova.act(step.instruction, schema=STRING_SCHEMA)
+      result = nova.act_get(step.instruction, schema=STRING_SCHEMA)
       # Strip whitespace and remove surrounding quotes if present
       expected_value = step.validation_value.strip().strip('"').strip("'")
       actual_value = str(result.parsed_response).strip().strip('"').strip("'") if result.parsed_response is not None else ""
@@ -53,7 +53,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
         success = False
 
     elif step.validation_type == 'string' and step.validation_operator == 'contains_case_insensitive':
-      result = nova.act(step.instruction, schema=STRING_SCHEMA)
+      result = nova.act_get(step.instruction, schema=STRING_SCHEMA)
       # Strip whitespace and remove surrounding quotes if present
       expected_value = step.validation_value.strip().strip('"').strip("'")
       actual_value = str(result.parsed_response).strip().strip('"').strip("'") if result.parsed_response is not None else ""
@@ -62,7 +62,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
         success = False
 
     elif step.validation_type == 'string' and step.validation_operator == 'not_equal':
-      result = nova.act(step.instruction, schema=STRING_SCHEMA)
+      result = nova.act_get(step.instruction, schema=STRING_SCHEMA)
       # Strip whitespace and remove surrounding quotes if present
       expected_value = step.validation_value.strip().strip('"').strip("'")
       actual_value = str(result.parsed_response).strip().strip('"').strip("'") if result.parsed_response is not None else ""
@@ -72,7 +72,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
 
     # number equals
     elif step.validation_type == 'number' and step.validation_operator == 'equals':
-      result = nova.act(step.instruction, schema=NUMBER_SCHEMA)
+      result = nova.act_get(step.instruction, schema=NUMBER_SCHEMA)
       expected_value = float(step.validation_value)
       actual_value = float(result.parsed_response) if result.parsed_response is not None else 0.0
       
@@ -81,7 +81,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
 
     # number greater_then
     elif step.validation_type == 'number' and step.validation_operator == 'greater_then':
-      result = nova.act(step.instruction, schema=NUMBER_SCHEMA)
+      result = nova.act_get(step.instruction, schema=NUMBER_SCHEMA)
       expected_value = float(step.validation_value)
       actual_value = float(result.parsed_response) if result.parsed_response is not None else 0.0
       
@@ -90,7 +90,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
 
     # number less_then
     elif step.validation_type == 'number' and step.validation_operator == 'less_then':
-      result = nova.act(step.instruction, schema=NUMBER_SCHEMA)
+      result = nova.act_get(step.instruction, schema=NUMBER_SCHEMA)
       expected_value = float(step.validation_value)
       actual_value = float(result.parsed_response) if result.parsed_response is not None else 0.0
       
@@ -99,7 +99,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
 
     # number greater_or_equal
     elif step.validation_type == 'number' and step.validation_operator == 'greater_or_equal_then':
-      result = nova.act(step.instruction, schema=NUMBER_SCHEMA)
+      result = nova.act_get(step.instruction, schema=NUMBER_SCHEMA)
       expected_value = float(step.validation_value)
       actual_value = float(result.parsed_response) if result.parsed_response is not None else 0.0
       
@@ -108,7 +108,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
 
     # number less_or_equal
     elif step.validation_type == 'number' and step.validation_operator == 'less_or_equal_then':
-      result = nova.act(step.instruction, schema=NUMBER_SCHEMA)
+      result = nova.act_get(step.instruction, schema=NUMBER_SCHEMA)
       expected_value = float(step.validation_value)
       actual_value = float(result.parsed_response) if result.parsed_response is not None else 0.0
       
@@ -117,7 +117,7 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
 
     else:
       logger.error(f"Unknown validation type '{step.validation_type}' for step {step.sort}")
-      result = nova.act(step.instruction, schema=BOOL_SCHEMA)
+      result = nova.act_get(step.instruction, schema=BOOL_SCHEMA)
       expected_value = "unknown"
       actual_value = result.parsed_response if result else None
 

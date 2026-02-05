@@ -24,7 +24,7 @@ def execute_retrieve_value_step(nova: NovaAct, step: ExecutionStep):
             # Default to STRING_SCHEMA for 'string' or unknown types
         
         # Execute the instruction to retrieve the value
-        result = nova.act(step.instruction, schema=schema)
+        result = nova.act_get(step.instruction, schema=schema)
         
         # Convert result to string for consistent storage
         if result and result.parsed_response is not None:

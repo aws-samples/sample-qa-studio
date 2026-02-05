@@ -322,6 +322,17 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     this.artefactsBucket.grantReadWrite(this.taskDefinition.taskRole);
     notificationQueue.grantSendMessages(this.taskDefinition.taskRole);
 
+    // Grant EventBridge PutEvents permission for execution status events
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_eventbridge_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['events:PutEvents'],
+          resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/default`]
+        })
+      ]
+    }));
+
     registry.grantPull(this.taskDefinition.executionRole!);
     registry.grantPull(this.taskDefinition.taskRole!);
 
@@ -340,6 +351,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
               'nova-act:CreateWorkflowRun',
               'nova-act:GetWorkflowRun',
               'nova-act:ListWorkflowRuns',
+              'nova-act:UpdateWorkflowRun',
               'nova-act:CreateSession',
               'nova-act:GetSession',
               'nova-act:ListSessions',
@@ -447,6 +459,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
           ],
           resources: [
             `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser/*`,
+            `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser-custom/*`,
             `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser-session/*`
           ]
         })
@@ -493,6 +506,17 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         })
       ]
     }))
+
+    // Allow task role to pass the AgentCore execution role to the browser service
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_pass_agentcore_role', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['iam:PassRole'],
+          resources: [this.agentCoreExecutionRole.roleArn]
+        })
+      ]
+    }));
 
     this.schedulerRole = new Role(this, 'event_bridge_scheduler_role', {
       roleName: this.cdkName('scheduler-role'),
