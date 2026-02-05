@@ -33,6 +33,7 @@ ENV/
 
 # Lambda dependencies
 endpoints/dependencies/
+endpoints/.cache/
 
 .kiro
 Makefile

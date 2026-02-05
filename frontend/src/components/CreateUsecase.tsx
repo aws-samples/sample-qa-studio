@@ -41,7 +41,7 @@ export default function CreateUsecase() {
         description, 
         starting_url,
         active,
-        region: selectedRegion.value,
+        executing_region: selectedRegion.value,
         model_id: selectedModel?.value,
         tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag)
       });
