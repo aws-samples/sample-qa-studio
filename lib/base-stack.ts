@@ -1,7 +1,7 @@
 import { Duration, Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Runtime, Architecture, Code, Function } from 'aws-cdk-lib/aws-lambda';
-import { PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
+import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
 export interface NovaActQAStudioBaseStackCreateProps extends StackProps {
   baseName: string
@@ -51,15 +51,16 @@ export class NovaActQAStudioBaseStack extends Stack {
       logRetention: 5
     });
 
+    // Explicitly add CloudWatch Logs permissions
     fn.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
       actions: [
         'logs:CreateLogGroup',
         'logs:CreateLogStream',
         'logs:PutLogEvents'
       ],
-      resources: ['*'],
-      effect: Effect.ALLOW
-    }))
+      resources: [`arn:aws:logs:*:*:*`]
+    }));
 
     return fn
   }

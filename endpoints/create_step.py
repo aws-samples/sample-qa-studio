@@ -36,6 +36,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         capture_variable = body.get('capture_variable', '')
         assertion_variable = body.get('assertion_variable', '')
         value_type = body.get('value_type', '')
+        enable_advanced_click_types = body.get('enable_advanced_click_types', False)
         
         if not usecase_id or sort is None or not instruction:
             return create_response(400, {'error': 'Missing required fields'})
@@ -63,6 +64,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'capture_variable': capture_variable,
             'assertion_variable': assertion_variable,
             'value_type': value_type,
+            'enable_advanced_click_types': enable_advanced_click_types,
             'created_at': now
         }
         

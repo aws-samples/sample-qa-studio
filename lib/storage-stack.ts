@@ -74,7 +74,7 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
         'backup:DeleteRecoveryPoint',
         'backup:DescribeRecoveryPoint',
       ],
-      resources: ['*'],
+      resources: [backupVault.backupVaultArn, `${backupVault.backupVaultArn}/*`],
     }));
 
     // Create custom resource provider

@@ -64,16 +64,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         hooks_data = body.get('hooks')
         
         # Create new usecase with proper pk/sk
+        usecase_tags = usecase_data.get('tags', [])
+        # Add "imported" tag if not already present
+        if 'imported' not in usecase_tags:
+            usecase_tags.append('imported')
+        
         new_usecase = {
             'pk': 'USECASES',
             'sk': f'USECASE#{new_usecase_id}',
             'id': new_usecase_id,
-            'name': usecase_data.get('name', '') + ' (Imported)',
+            'name': usecase_data.get('name', ''),
             'description': usecase_data.get('description', ''),
             'starting_url': usecase_data.get('starting_url', ''),
             'active': usecase_data.get('active', False),
-            'executing_region': usecase_data.get('executing_region', usecase_data.get('region', '')),  # Support both field names for backward compatibility
-            'tags': usecase_data.get('tags', []),
+            'executing_region': usecase_data.get('executing_region', ''),
+            'tags': usecase_tags,
             'created_at': now
         }
         

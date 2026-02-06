@@ -37,6 +37,7 @@ class ExecutionStep:
     capture_variable: str
     value_type: str
     assertion_variable: str
+    enable_advanced_click_types: bool = False
 
 @dataclass
 class ExecutionVariables:

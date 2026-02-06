@@ -1,8 +1,8 @@
-import { Duration, RemovalPolicy, Aws, Names } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, Aws } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
-import { PolicyStatement, Policy, Effect, Role, ServicePrincipal, PolicyDocument } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, Policy, Effect, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { CfnScheduleGroup } from 'aws-cdk-lib/aws-scheduler';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
@@ -10,12 +10,14 @@ import { OperatingSystemFamily, FargateTaskDefinition, Cluster, CpuArchitecture,
 import { Vpc, IVpc, GatewayVpcEndpointAwsService, InterfaceVpcEndpointAwsService, SecurityGroup, ISecurityGroup } from 'aws-cdk-lib/aws-ec2';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { Function } from 'aws-cdk-lib/aws-lambda';
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Platform, DockerImageAsset } from 'aws-cdk-lib/aws-ecr-assets';
 import { ECRDeployment, DockerImageName } from 'cdk-ecr-deployment';
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
 import { Rule, EventBus } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
+import { Topic } from 'aws-cdk-lib/aws-sns';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 import { loadConfig } from './config';
@@ -27,8 +29,7 @@ interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStack
   baseName: string
   table: Table
   novaActApiKeySecret: Secret
-  notificationQueue: Queue
-  tableReadPolicy: ManagedPolicy,
+  tableReadPolicy: ManagedPolicy
   version: string
 }
 
@@ -62,17 +63,20 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
   public readonly schedulerGroup: CfnScheduleGroup
   public readonly executionQueue: Queue
   public readonly cluster: Cluster
+  public readonly vpc: IVpc
+  public readonly subnetId: string
+  public readonly wizardQueue: Queue
+  public readonly wizardEventBus: EventBus
+  public readonly agentCoreExecutionRole: Role
+  public readonly schedulerRole: Role
   public readonly createScheduleLambda: Function
-  public readonly deleteScheduleLambda: Function
-  public readonly getScheduleLambda: Function
   public readonly executeUsecaseLambda: Function
   public readonly stopExecutionLambda: Function
-  public readonly generateS3UrlLambda: Function
   public readonly startWizardLambda: Function
   public readonly addWizardStepLambda: Function
-  public readonly acceptWizardStepLambda: Function
   public readonly restartWizardLambda: Function
   public readonly terminateWizardLambda: Function
+  public readonly notificationTopicArn: string
   private readonly regionalBucketArns: string[] = []
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioWorkerStackCreateProps) {
@@ -97,6 +101,68 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         .map((region: string) => this.createCrossRegionBucket(region)),
     ];
 
+    // Notification infrastructure
+    const notificationQueue = new Queue(this, 'notification_queue', {
+      queueName: this.cdkName('notifications'),
+      visibilityTimeout: Duration.minutes(5),
+      removalPolicy: RemovalPolicy.DESTROY
+    });
+
+    const notificationTopic = new Topic(this, 'notification_topic', {
+      topicName: this.cdkName('notifications'),
+      displayName: 'Usecase Execution Notifications'
+    });
+    
+    // Export the topic ARN for use in lambda stack
+    this.notificationTopicArn = notificationTopic.topicArn;
+
+    const sendNotificationLambda = this.createPythonLambda({
+      path: 'send_notification',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl,
+        SNS_TOPIC_ARN: notificationTopic.topicArn,
+        FRONTEND_URL: '' // Will be set later after frontend stack is created
+      }
+    });
+
+    sendNotificationLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    notificationQueue.grantConsumeMessages(sendNotificationLambda);
+    notificationTopic.grantPublish(sendNotificationLambda);
+
+    sendNotificationLambda.addEventSource(new SqsEventSource(notificationQueue, {
+      batchSize: 1
+    }));
+
+    this.log('notificationQueue', notificationQueue.queueName)
+    this.log('notificationTopic', notificationTopic.topicName)
+
+    // EventBridge rule for execution status changes
+    const eventBus = EventBus.fromEventBusName(this, 'default_event_bus', 'default');
+
+    const updateUsecaseLastExecutionLambda = this.createPythonLambda({
+      path: 'update_usecase_last_execution',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    updateUsecaseLastExecutionLambda.role?.addManagedPolicy(props.tableReadPolicy);
+
+    const executionStatusRule = new Rule(this, 'execution_status_changed_rule', {
+      ruleName: this.cdkName('execution-status-changed'),
+      description: 'Triggers when execution status changes',
+      eventBus: eventBus,
+      eventPattern: {
+        source: ['nova-act-qa-studio.execution'],
+        detailType: ['nova-act-qa-studio.execution.status.changed']
+      }
+    });
+
+    executionStatusRule.addTarget(new LambdaFunction(updateUsecaseLastExecutionLambda));
+
+    this.log('executionStatusRule', executionStatusRule.ruleName);
+
     // TODO: Remove this as the local queue feature is not needed anymore
     this.executionQueue = new Queue(this, 'queue', {
       queueName: this.cdkName('workhorse'),
@@ -105,29 +171,28 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     });
 
     // Wizard mode queue (deprecated - will be replaced by EventBridge)
-    const wizardQueue = new Queue(this, 'wizard_queue', {
+    this.wizardQueue = new Queue(this, 'wizard_queue', {
       queueName: this.cdkName('wizard-commands'),
       visibilityTimeout: Duration.seconds(30),
       removalPolicy: RemovalPolicy.DESTROY
     });
 
     // EventBridge Event Bus for wizard commands
-    const wizardEventBus = new EventBus(this, 'wizard_event_bus', {
+    this.wizardEventBus = new EventBus(this, 'wizard_event_bus', {
       eventBusName: this.cdkName('wizard-events')
     });
 
     // VPC Configuration: Use existing VPC or create new one
-    let vpc: IVpc;
     let shouldCreateVpcEndpoints: boolean;
 
     if (vpcId) {
       // Use existing VPC - automatically discovers subnets
-      vpc = Vpc.fromLookup(this, 'existing-vpc', {
+      this.vpc = Vpc.fromLookup(this, 'existing-vpc', {
         vpcId: vpcId
       });
 
       // Validate that the VPC has private subnets with NAT Gateway routes for internet access
-      if (vpc.privateSubnets.length === 0) {
+      if (this.vpc.privateSubnets.length === 0) {
         throw new Error(`Existing VPC ${vpcId} must have at least one private subnet with NAT Gateway for ECS tasks and AgentCore browsers`);
       }
 
@@ -135,7 +200,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       shouldCreateVpcEndpoints = createVpcEndpoints ?? false;
     } else {
       // Create new VPC with default configuration
-      vpc = new Vpc(this, 'vpc', {
+      this.vpc = new Vpc(this, 'vpc', {
         vpcName: this.cdkName('vpc'),
         maxAzs: 2,
         natGateways: 2,
@@ -147,26 +212,29 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     // Create VPC endpoints if needed
     if (shouldCreateVpcEndpoints) {
-      vpc.addGatewayEndpoint('S3Endpoint', {
+      this.vpc.addGatewayEndpoint('S3Endpoint', {
         service: GatewayVpcEndpointAwsService.S3
       });
 
-      vpc.addInterfaceEndpoint('EcrDockerEndpoint', {
+      this.vpc.addInterfaceEndpoint('EcrDockerEndpoint', {
         service: InterfaceVpcEndpointAwsService.ECR_DOCKER
       });
 
-      vpc.addInterfaceEndpoint('EcrEndpoint', {
+      this.vpc.addInterfaceEndpoint('EcrEndpoint', {
         service: InterfaceVpcEndpointAwsService.ECR
       });
 
-      vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
+      this.vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
         service: InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS
       });
 
-      vpc.addGatewayEndpoint('DynamoDbEndpoint', {
+      this.vpc.addGatewayEndpoint('DynamoDbEndpoint', {
         service: GatewayVpcEndpointAwsService.DYNAMODB
       });
     }
+
+    // Store subnet ID for Lambda access
+    this.subnetId = this.vpc.privateSubnets[0].subnetId;
 
     // Security Group for ECS tasks: Use existing or create new
     if (workerSecurityGroupId) {
@@ -179,7 +247,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     } else {
       // Create new security group in the VPC (works for both new and existing VPC)
       this.workerSecurityGroup = new SecurityGroup(this, 'EcsTaskSecurityGroup', {
-        vpc,
+        vpc: this.vpc,
         description: 'Security group for ECS tasks',
         allowAllOutbound: true
       });
@@ -187,7 +255,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     // ECS Cluster
     this.cluster = new Cluster(this, 'cluster', {
-      vpc,
+      vpc: this.vpc,
       clusterName: this.cdkName('cluster'),
     });
 
@@ -218,7 +286,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       QUEUE_URL: this.executionQueue.queueUrl,
       S3_BUCKET: this.artefactsBucket.bucketName,
       NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
-      NOTIFICATION_QUEUE_URL: props.notificationQueue.queueUrl,
+      NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl,
       AWS_REGION: Aws.REGION,
       // Nova Act GA Service configuration
       USE_NOVA_ACT_GA: config.useNovaActGa.toString(),
@@ -231,8 +299,8 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       ...baseEnvironment,
       // VPC configuration for AgentCore browsers
       AGENT_CORE_VPC: 'true',
-      AC_VPC_ID: vpc.vpcId,
-      AC_SUBNET_ID: vpc.privateSubnets[0].subnetId,
+      AC_VPC_ID: this.vpc.vpcId,
+      AC_SUBNET_ID: this.vpc.privateSubnets[0].subnetId,
       AC_SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
     } : baseEnvironment;
 
@@ -249,10 +317,21 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // Grant permissions to task roles (must be after container is added)
     // TODO: Remove queue
     this.executionQueue.grantConsumeMessages(this.taskDefinition.taskRole);
-    wizardQueue.grantConsumeMessages(this.taskDefinition.taskRole);
+    this.wizardQueue.grantConsumeMessages(this.taskDefinition.taskRole);
     props.table.grantFullAccess(this.taskDefinition.taskRole);
     this.artefactsBucket.grantReadWrite(this.taskDefinition.taskRole);
-    props.notificationQueue.grantSendMessages(this.taskDefinition.taskRole);
+    notificationQueue.grantSendMessages(this.taskDefinition.taskRole);
+
+    // Grant EventBridge PutEvents permission for execution status events
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_eventbridge_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['events:PutEvents'],
+          resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/default`]
+        })
+      ]
+    }));
 
     registry.grantPull(this.taskDefinition.executionRole!);
     registry.grantPull(this.taskDefinition.taskRole!);
@@ -272,6 +351,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
               'nova-act:CreateWorkflowRun',
               'nova-act:GetWorkflowRun',
               'nova-act:ListWorkflowRuns',
+              'nova-act:UpdateWorkflowRun',
               'nova-act:CreateSession',
               'nova-act:GetSession',
               'nova-act:ListSessions',
@@ -281,7 +361,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
               'nova-act:InvokeActStep',
               'nova-act:UpdateAct',
             ],
-            resources: ['*'],
+            resources: [`arn:aws:nova-act:us-east-1:${Aws.ACCOUNT_ID}:*`],
             conditions: {
               StringEquals: {
                 'aws:RequestedRegion': 'us-east-1'
@@ -319,17 +399,16 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }));
     }
 
-    // Add ECR permissions to execution role
+    // Add Secrets Manager permissions to execution role
     this.taskDefinition.executionRole!.attachInlinePolicy(new Policy(this, 'ecr_access_policy', {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
           actions: [
             'secretsmanager:GetSecretValue',
-            'ssm:GetParameters',
           ],
           resources: [
-            "*",
+            `arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`,
           ]
         }),
       ]
@@ -343,7 +422,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             'secretsmanager:GetSecretValue',
             'secretsmanager:ListSecrets',
           ],
-          resources: [`*`]
+          resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
         })
       ]
     }));
@@ -356,7 +435,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             'secretsmanager:GetSecretValue',
             'secretsmanager:ListSecrets',
           ],
-          resources: [`*`]
+          resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
         })
       ]
     }));
@@ -377,9 +456,12 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             "bedrock-agentcore:UpdateBrowserStream",
             "bedrock-agentcore:ConnectBrowserAutomationStream",
             "bedrock-agentcore:ConnectBrowserLiveViewStream",
-            "*",
           ],
-          resources: [`*`]
+          resources: [
+            `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser/*`,
+            `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser-custom/*`,
+            `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser-session/*`
+          ]
         })
       ]
     }));
@@ -399,7 +481,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       dest: new DockerImageName(`${Aws.ACCOUNT_ID}.dkr.ecr.${Aws.REGION}.amazonaws.com/${registry.repositoryName}:${props.version}`),
     });
 
-    const agentCoreExecutionRole = new Role(this, 'agent_core_execution_role', {
+    this.agentCoreExecutionRole = new Role(this, 'agent_core_execution_role', {
       roleName: this.cdkName('agent_core_execution_role'),
       assumedBy: new ServicePrincipal('bedrock-agentcore.amazonaws.com'),
     })
@@ -411,7 +493,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       s3Resources.push(`${bucketArn}/*`);
     });
 
-    agentCoreExecutionRole.attachInlinePolicy(new Policy(this, 'agent_core_execution_role_s3', {
+    this.agentCoreExecutionRole.attachInlinePolicy(new Policy(this, 'agent_core_execution_role_s3', {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -425,20 +507,20 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       ]
     }))
 
-    const schedulerRole = new Role(this, 'event_bridge_scheduler_role', {
+    // Allow task role to pass the AgentCore execution role to the browser service
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_pass_agentcore_role', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['iam:PassRole'],
+          resources: [this.agentCoreExecutionRole.roleArn]
+        })
+      ]
+    }));
+
+    this.schedulerRole = new Role(this, 'event_bridge_scheduler_role', {
       roleName: this.cdkName('scheduler-role'),
       assumedBy: new ServicePrincipal('scheduler.amazonaws.com'),
-      inlinePolicies: {
-        LambdaInvokePolicy: new PolicyDocument({
-          statements: [
-            new PolicyStatement({
-              effect: Effect.ALLOW,
-              actions: ['lambda:InvokeFunction'],
-              resources: ['*']
-            })
-          ]
-        })
-      }
     });
 
     // Get the log group name and stream prefix from the task definition container
@@ -452,13 +534,13 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         QUEUE_URL: this.executionQueue.queueUrl,
         ECS_CLUSTER: this.cluster.clusterArn,
         ECS_TASK_DEFINITION: this.taskDefinition.taskDefinitionArn,
-        SUBNET_ID: vpc.privateSubnets[0].subnetId,
+        SUBNET_ID: this.vpc.privateSubnets[0].subnetId,
         SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
         TABLE_NAME: props.table.tableName,
         S3_BUCKET: this.artefactsBucket.bucketName,
         S3_BUCKET_PREFIX: `${this.account}-${this.baseName}-artefacts`,
         DEFAULT_REGION: defaultRegion,
-        BEDROCK_EXECUTION_ROLE: agentCoreExecutionRole.roleArn,
+        BEDROCK_EXECUTION_ROLE: this.agentCoreExecutionRole.roleArn,
         NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
         SECRETS_PREFIX: props.baseName,
         LOG_GROUP_NAME: logGroupName,
@@ -467,6 +549,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     });
 
     props.table.grantFullAccess(this.executeUsecaseLambda)
+
+    // Grant scheduler role permission to invoke executeUsecaseLambda
+    this.executeUsecaseLambda.grantInvoke(this.schedulerRole);
 
     // Stop Execution Lambda - stops running ECS tasks
     this.stopExecutionLambda = this.createPythonLambda({
@@ -486,7 +571,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         'ecs:StopTask',
         'ecs:DescribeTasks'
       ],
-      resources: ['*'] // StopTask requires wildcard for task resources
+      resources: [
+        `arn:aws:ecs:${Aws.REGION}:${Aws.ACCOUNT_ID}:task/${this.cluster.clusterName}/*`
+      ]
     }));
 
     this.createScheduleLambda = this.createPythonLambda({
@@ -494,34 +581,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       environment: {
         SCHEDULER_GROUP_NAME: this.schedulerGroup.name!,
         EXECUTE_USECASE_LAMBDA_ARN: this.executeUsecaseLambda.functionArn,
-        SCHEDULER_TARGET_ROLE_ARN: schedulerRole.roleArn
+        SCHEDULER_TARGET_ROLE_ARN: this.schedulerRole.roleArn
       }
     });
-
-    this.getScheduleLambda = this.createPythonLambda({
-      path: 'get_schedule',
-      environment: {
-        SCHEDULER_GROUP_NAME: this.schedulerGroup.name!
-      }
-    });
-
-    this.deleteScheduleLambda = this.createPythonLambda({
-      path: 'delete_schedule',
-      environment: {
-        SCHEDULER_GROUP_NAME: this.schedulerGroup.name!
-      }
-    });
-
-    this.generateS3UrlLambda = this.createPythonLambda({
-      path: 'generate_s3_url',
-      environment: {
-        BUCKET_NAME: this.artefactsBucket.bucketName,
-        TABLE_NAME: props.table.tableName
-      }
-    });
-
-    this.generateS3UrlLambda.role?.addManagedPolicy(props.tableReadPolicy)
-    this.artefactsBucket.grantRead(this.generateS3UrlLambda)
 
     // Wizard mode Lambda functions
     this.startWizardLambda = this.createPythonLambda({
@@ -530,11 +592,11 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         TABLE_NAME: props.table.tableName,
         ECS_CLUSTER: this.cluster.clusterArn,
         ECS_TASK_DEFINITION: this.taskDefinition.taskDefinitionArn,
-        SUBNET_ID: vpc.privateSubnets[0].subnetId,
+        SUBNET_ID: this.vpc.privateSubnets[0].subnetId,
         SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
-        WIZARD_QUEUE_URL: wizardQueue.queueUrl,
+        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
         S3_BUCKET: this.artefactsBucket.bucketName,
-        BEDROCK_EXECUTION_ROLE: agentCoreExecutionRole.roleArn,
+        BEDROCK_EXECUTION_ROLE: this.agentCoreExecutionRole.roleArn,
         NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
       }
     });
@@ -543,23 +605,16 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       path: 'add_wizard_step',
       environment: {
         TABLE_NAME: props.table.tableName,
-        WIZARD_QUEUE_URL: wizardQueue.queueUrl,
-        WIZARD_EVENT_BUS_NAME: wizardEventBus.eventBusName,
-      }
-    });
-
-    this.acceptWizardStepLambda = this.createPythonLambda({
-      path: 'accept_wizard_step',
-      environment: {
-        TABLE_NAME: props.table.tableName,
+        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
+        WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
       }
     });
 
     this.restartWizardLambda = this.createPythonLambda({
       path: 'restart_wizard',
       environment: {
-        WIZARD_QUEUE_URL: wizardQueue.queueUrl,
-        WIZARD_EVENT_BUS_NAME: wizardEventBus.eventBusName,
+        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
+        WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
       }
     });
 
@@ -567,8 +622,8 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       path: 'terminate_wizard_session',
       environment: {
         TABLE_NAME: props.table.tableName,
-        WIZARD_QUEUE_URL: wizardQueue.queueUrl,
-        WIZARD_EVENT_BUS_NAME: wizardEventBus.eventBusName,
+        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
+        WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
       }
     });
 
@@ -582,7 +637,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     // EventBridge rule to process wizard commands
     new Rule(this, 'wizard_command_rule', {
-      eventBus: wizardEventBus,
+      eventBus: this.wizardEventBus,
       eventPattern: {
         source: ['wizard.commands'],
         detailType: ['WizardCommand'],
@@ -593,19 +648,18 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // Grant permissions for wizard Lambdas
     props.table.grantFullAccess(this.startWizardLambda);
     props.table.grantFullAccess(this.addWizardStepLambda);
-    props.table.grantFullAccess(this.acceptWizardStepLambda);
     props.table.grantFullAccess(this.terminateWizardLambda);
     props.table.grantFullAccess(processWizardCommandLambda);
 
-    wizardQueue.grantSendMessages(this.startWizardLambda);
-    wizardQueue.grantSendMessages(this.addWizardStepLambda);
-    wizardQueue.grantSendMessages(this.restartWizardLambda);
-    wizardQueue.grantSendMessages(this.terminateWizardLambda);
+    this.wizardQueue.grantSendMessages(this.startWizardLambda);
+    this.wizardQueue.grantSendMessages(this.addWizardStepLambda);
+    this.wizardQueue.grantSendMessages(this.restartWizardLambda);
+    this.wizardQueue.grantSendMessages(this.terminateWizardLambda);
 
     // Grant EventBridge permissions
-    wizardEventBus.grantPutEventsTo(this.addWizardStepLambda);
-    wizardEventBus.grantPutEventsTo(this.restartWizardLambda);
-    wizardEventBus.grantPutEventsTo(this.terminateWizardLambda);
+    this.wizardEventBus.grantPutEventsTo(this.addWizardStepLambda);
+    this.wizardEventBus.grantPutEventsTo(this.restartWizardLambda);
+    this.wizardEventBus.grantPutEventsTo(this.terminateWizardLambda);
 
     this.startWizardLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
@@ -625,26 +679,16 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         'scheduler:DeleteSchedule',
         'scheduler:GetSchedule'
       ],
-      resources: ['*']
-    }));
-
-    this.getScheduleLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['scheduler:GetSchedule'],
-      resources: ['*']
-    }));
-
-    this.deleteScheduleLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['scheduler:DeleteSchedule'],
-      resources: ['*']
+      resources: [
+        `arn:aws:scheduler:${Aws.REGION}:${Aws.ACCOUNT_ID}:schedule/${this.schedulerGroup.name}/*`
+      ]
     }));
 
     // Grant permission to pass the scheduler role to EventBridge
     this.createScheduleLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['iam:PassRole'],
-      resources: [schedulerRole.roleArn]
+      resources: [this.schedulerRole.roleArn]
     }));
 
     // TODO: remove
@@ -838,9 +882,13 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
           actions: [
             's3:PutReplicationConfiguration',
             's3:GetReplicationConfiguration',
-            'iam:PassRole',
           ],
-          resources: [bucketArn, replicationRole.roleArn],
+          resources: [bucketArn],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['iam:PassRole'],
+          resources: [replicationRole.roleArn],
         }),
       ]),
     });

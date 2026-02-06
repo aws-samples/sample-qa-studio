@@ -4,6 +4,23 @@ from models import ExecutionStep
 
 logger = logging.getLogger(__name__)
 
+click_base_prompt = """
+The `agentClick` statement supports a `clickType` argument to specify the type of click to perform.
+
+Syntax:
+agentClick(bbox: string, clickType: string): Clicks the specified box with the given click type.
+
+Available clickType options:
+- 'left': Single left click (default)
+- 'left-double': Double left click
+- 'right': Right click
+
+Example:
+agentClick(bbox, 'left-double') performs a double-click on the bbox.
+
+Prompt: 
+"""
+
 def execute_navigation_step(nova: NovaAct, step: ExecutionStep):
   logger.info(f"Executing navigation step {step.sort}: {step.instruction}")
   result = None
@@ -11,7 +28,12 @@ def execute_navigation_step(nova: NovaAct, step: ExecutionStep):
   logs = ""
   
   try:
-    result = nova.act(f"{step.instruction}")
+    # Build the instruction with optional advanced click types prompt
+    instruction = step.instruction
+    if hasattr(step, 'enable_advanced_click_types') and step.enable_advanced_click_types:
+      instruction = f"{click_base_prompt}\n\n{step.instruction}"
+    
+    result = nova.act(instruction)
           
   except Exception as e:
     logger.error(f"Error executing navigation step {step.sort}: {str(e)}")

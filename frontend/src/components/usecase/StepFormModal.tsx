@@ -12,6 +12,7 @@ import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
 import Spinner from "@cloudscape-design/components/spinner";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
+import Checkbox from "@cloudscape-design/components/checkbox";
 import { api } from '../../utils/api';
 
 interface StepFormModalProps {
@@ -98,6 +99,7 @@ export default function StepFormModal({
   const [templateStep, setTemplateStep] = useState<any>(null);
   const [loadingTemplateStep, setLoadingTemplateStep] = useState(false);
   const [templateDifferences, setTemplateDifferences] = useState<Array<{field: string, current: any, template: any}>>([]);
+  const [enableAdvancedClickTypes, setEnableAdvancedClickTypes] = useState(false);
 
   // Get available runtime variables from existing retrieve_value steps
   const getAvailableRuntimeVariables = () => {
@@ -123,6 +125,7 @@ export default function StepFormModal({
       setCaptureVariable(step.capture_variable || '');
       setValueType(step.value_type || 'string');
       setAssertionVariable(step.assertion_variable || '');
+      setEnableAdvancedClickTypes(step.enable_advanced_click_types || false);
       // Initialize boolean input mode based on existing value
       if (step.validation_value && (step.validation_value === 'true' || step.validation_value === 'false')) {
         setBooleanInputMode(step.validation_value);
@@ -143,6 +146,7 @@ export default function StepFormModal({
       setValueType('string');
       setAssertionVariable('');
       setBooleanInputMode('true');
+      setEnableAdvancedClickTypes(false);
     }
   }, [step]);
 
@@ -313,6 +317,11 @@ export default function StepFormModal({
         step_type: stepType
       };
 
+      // Add advanced click types flag for navigation steps
+      if (stepType === 'navigation') {
+        stepData.enable_advanced_click_types = enableAdvancedClickTypes;
+      }
+
       if (stepType === 'secret') {
         stepData.secret_key = selectedSecret;
       } else if (stepType === 'validation') {
@@ -447,6 +456,15 @@ export default function StepFormModal({
               rows={3}
             />
           </FormField>
+        )}
+
+        {stepType === 'navigation' && (
+          <Checkbox
+            checked={enableAdvancedClickTypes}
+            onChange={({ detail }) => setEnableAdvancedClickTypes(detail.checked)}
+          >
+            Enable advanced click types (double-click, right-click)
+          </Checkbox>
         )}
 
         {stepType === 'secret' && (

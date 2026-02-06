@@ -193,7 +193,7 @@ def handler(event, context):
             
             # Copy optional fields if present
             for field in ['secret_key', 'validation_type', 'validation_operator', 
-                         'validation_value', 'capture_variable', 'assertion_variable', 'value_type']:
+                         'validation_value', 'capture_variable', 'assertion_variable', 'value_type', 'enable_advanced_click_types']:
                 if field in step:
                     execution_step[field] = step[field]
             
