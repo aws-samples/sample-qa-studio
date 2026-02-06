@@ -8,7 +8,7 @@ click_base_prompt = """
 The `agentClick` statement supports a `clickType` argument to specify the type of click to perform.
 
 Syntax:
-agentClick(bbox: string, options?: { clickType: string }): Clicks the specified box with the given click type.
+agentClick(bbox: string, clickType: string): Clicks the specified box with the given click type.
 
 Available clickType options:
 - 'left': Single left click (default)
@@ -16,8 +16,7 @@ Available clickType options:
 - 'right': Right click
 
 Example:
-agentClick(bbox, {'clickType': 'left-double'}) performs a double-click on the bbox.
-NOTE: There MUST BE NO QUOTES AROUND THE CLICK TYPE OPTIONS!
+agentClick(bbox, 'left-double') performs a double-click on the bbox.
 
 Prompt: 
 """

@@ -63,7 +63,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Return subscription status
         return create_response(201, {
-            'isSubscribed': True,
+            'is_subscribed': True,
             'email': user_email
         })
         

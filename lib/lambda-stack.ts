@@ -709,7 +709,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
 
     // Notification Lambda Permissions (API-facing only)
     this.getUsecaseSubscriptionLambda.role?.addManagedPolicy(props.tableReadPolicy)
-    this.subscribeUsecaseLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.subscribeUsecaseLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.unsubscribeUsecaseLambda.role?.addManagedPolicy(props.tableFullAccessPolicy)
 
     // SNS permissions for notification Lambdas

@@ -55,7 +55,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         is_subscribed = len(response.get('Items', [])) > 0
         
         return create_response(200, {
-            'isSubscribed': is_subscribed,
+            'is_subscribed': is_subscribed,
             'email': user_email
         })
         
