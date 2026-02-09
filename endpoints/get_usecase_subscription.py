@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name
+from utils import create_response, get_table_name, require_user_token
 
 # Configure logging
 logger = logging.getLogger()
@@ -21,22 +21,20 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with subscription status
     """
     try:
+        # Validate user token (M2M tokens not allowed)
+        user_identity, error_response = require_user_token(event)
+        if error_response:
+            return error_response
+        
+        # Get user email from identity (fallback to username if no email)
+        user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
+        
         # Get usecase ID from path
         path_params = event.get('pathParameters', {})
         usecase_id = path_params.get('id')
         
         if not usecase_id:
             return create_response(400, {'error': 'Missing usecase ID'})
-        
-        # Extract user email from JWT token claims
-        request_context = event.get('requestContext', {})
-        authorizer = request_context.get('authorizer', {})
-        claims = authorizer.get('claims', {})
-        user_email = claims.get('email', '')
-        
-        if not user_email:
-            logger.error("No email found in JWT claims")
-            return create_response(401, {'error': 'Unauthorized'})
         
         # Initialize DynamoDB
         dynamodb = boto3.resource('dynamodb')

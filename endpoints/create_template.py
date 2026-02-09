@@ -3,21 +3,11 @@ import logging
 from typing import Any, Dict
 import boto3
 from uuid import uuid4
-from utils import get_table_name, create_response, get_current_timestamp
+from utils import get_table_name, create_response, get_current_timestamp, require_user_token
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-
-def get_user_email(event: Dict[str, Any]) -> str:
-    """Extract user email from Cognito claims."""
-    try:
-        claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})
-        return claims.get('email', 'unknown')
-    except Exception as e:
-        logger.warning(f"Error extracting email from claims: {str(e)}")
-        return 'unknown'
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -32,6 +22,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with created template
     """
     try:
+        # Validate user token (M2M tokens not allowed)
+        user_identity, error_response = require_user_token(event)
+        if error_response:
+            return error_response
+        
+        # Get user email from identity
+        email = user_identity.get('email') or user_identity.get('identity', 'unknown')
+        
         # Parse request body
         body = json.loads(event.get('body', '{}'))
         
@@ -42,9 +40,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         if not name:
             return create_response(400, {'error': 'Missing required field: name'})
-        
-        # Extract user email from Cognito claims
-        email = get_user_email(event)
         
         # Generate UUID and timestamp
         template_id = str(uuid4())

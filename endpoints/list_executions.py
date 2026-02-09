@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import get_table_name, create_response
+from utils import get_table_name, create_response, allow_m2m_token
 
 # Configure logging
 logger = logging.getLogger()
@@ -12,6 +12,7 @@ logger.setLevel(logging.INFO)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to list executions for a specific use case from DynamoDB.
+    Accessible by both user tokens and M2M tokens.
     
     Args:
         event: API Gateway proxy request event
@@ -21,6 +22,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with list of executions
     """
     try:
+        # Validate authentication (allow both user and M2M tokens)
+        user_identity, error_response = allow_m2m_token(event)
+        if error_response:
+            return error_response
+        
         # Get use case ID from path parameters
         usecase_id = event.get('pathParameters', {}).get('id')
         if not usecase_id:

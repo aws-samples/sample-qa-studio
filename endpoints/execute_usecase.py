@@ -3,7 +3,7 @@ import os
 import uuid
 import boto3
 from urllib.parse import quote
-from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7
+from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7, allow_m2m_token
 
 dynamodb = boto3.client('dynamodb')
 sqs = boto3.client('sqs')
@@ -90,6 +90,7 @@ def handler(event, context):
     """
     Execute a usecase by creating an execution record and starting an ECS task.
     Supports OnDemand (queue), Scheduled, and OnDemandHeadless (direct ECS) trigger types.
+    Accessible by both user tokens and M2M tokens.
     
     Path Parameters:
     - id: Usecase ID to execute
@@ -100,8 +101,16 @@ def handler(event, context):
     Returns:
     - 200: Execution started successfully
     - 400: Missing usecase ID
+    - 401: Unauthorized
     - 500: Error starting execution
     """
+    # Validate authentication (allow both user and M2M tokens)
+    user_identity, error_response = allow_m2m_token(event)
+    if error_response:
+        return error_response
+    
+    print(f"Execution requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    
     usecase_id = event.get('pathParameters', {}).get('id')
     if not usecase_id:
         return create_response(400, {'error': 'Missing usecase ID'})

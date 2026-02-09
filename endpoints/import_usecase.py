@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_secret_prefix, get_current_timestamp
+from utils import create_response, get_table_name, get_secret_prefix, get_current_timestamp, require_user_token
 
 # Configure logging
 logger = logging.getLogger()
@@ -23,6 +23,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with import result
     """
     try:
+        # Validate user token first (M2M tokens not allowed)
+        user_identity, error_response = require_user_token(event)
+        if error_response:
+            return error_response
+        
+        # Extract user info for created_by tracking
+        user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
+        user_sub = user_identity.get('sub', '')
+        
         # Parse request body
         try:
             body = json.loads(event.get('body', '{}'))
@@ -36,16 +45,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'success': False,
                 'message': 'Unsupported export version'
             })
-        
-        # Extract user claims for created_by tracking
-        request_context = event.get('requestContext', {})
-        authorizer = request_context.get('authorizer', {})
-        claims = authorizer.get('claims', {})
-        user_email = claims.get('email', '')
-        user_sub = claims.get('sub', '')
-        
-        if not user_email:
-            return create_response(401, {'error': 'Unauthorized'})
         
         # Initialize AWS clients
         dynamodb = boto3.resource('dynamodb')

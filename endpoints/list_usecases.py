@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import get_table_name, create_response
+from utils import get_table_name, create_response, require_user_token
 
 # Configure logging
 logger = logging.getLogger()
@@ -23,6 +23,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     logger.info(f"Headers: {event.get('headers', {})}")
     
     try:
+        # Validate user token (M2M tokens not allowed)
+        user_identity, error_response = require_user_token(event)
+        if error_response:
+            return error_response
+        
         # Initialize DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())

@@ -1,6 +1,6 @@
 import { Construct } from 'constructs';
 import { CfnOutput } from 'aws-cdk-lib';
-import { UserPool, UserPoolClient, OAuthScope, CfnUserPoolUser } from 'aws-cdk-lib/aws-cognito';
+import { UserPool, UserPoolClient, OAuthScope, CfnUserPoolUser, UserPoolResourceServer, UserPoolDomain } from 'aws-cdk-lib/aws-cognito';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
 interface NovaActQAStudioAuthStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
@@ -22,6 +22,8 @@ interface NovaActQAStudioAuthStackCreateProps extends NovaActQAStudioBaseStackCr
 export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
   public readonly userPool: UserPool
   public readonly userPoolClient: UserPoolClient
+  public readonly resourceServer: UserPoolResourceServer
+  public readonly userPoolDomain: UserPoolDomain
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioAuthStackCreateProps) {
     super(scope, id, props);
@@ -37,6 +39,27 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
         requireDigits: true,
         requireSymbols: true,
       },
+    });
+
+    // Create resource server for M2M authentication
+    this.resourceServer = new UserPoolResourceServer(this, 'resource_server', {
+      userPool: this.userPool,
+      identifier: 'api',
+      userPoolResourceServerName: this.cdkName('api-resource-server'),
+      scopes: [
+        {
+          scopeName: 'execute',
+          scopeDescription: 'Execute use cases via M2M authentication'
+        }
+      ]
+    });
+
+    // Create Cognito domain for OAuth endpoints (required for M2M authentication)
+    this.userPoolDomain = new UserPoolDomain(this, 'user_pool_domain', {
+      userPool: this.userPool,
+      cognitoDomain: {
+        domainPrefix: this.cdkName('auth').toLowerCase().replace(/_/g, '-')
+      }
     });
 
     this.userPoolClient = new UserPoolClient(this, 'user_pool_client', {
@@ -81,6 +104,7 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
 
     this.log('userPoolId', this.userPool.userPoolId)
     this.log('userPoolClientId', this.userPoolClient.userPoolClientId)
+    this.log('cognitoDomain', this.userPoolDomain.domainName)
     this.log('adminEmail', props.adminEmail)
 
     // Export values for post-deployment config generation
@@ -94,6 +118,12 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
       value: this.userPoolClient.userPoolClientId,
       description: 'Cognito User Pool Client ID',
       exportName: `${props.baseName}-user-pool-client-id`
+    });
+
+    new CfnOutput(this, 'CognitoDomainOutput', {
+      value: `https://${this.userPoolDomain.domainName}.auth.${this.region}.amazoncognito.com`,
+      description: 'Cognito Domain URL for OAuth (free, managed by AWS)',
+      exportName: `${props.baseName}-cognito-domain`
     });
   }
 }

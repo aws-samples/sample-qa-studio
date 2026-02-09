@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict
 import boto3
-from utils import get_table_name, create_response
+from utils import get_table_name, create_response, require_user_token
 
 # Configure logging
 logger = logging.getLogger()
@@ -20,6 +20,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with use case data
     """
     try:
+        # Validate user token (M2M tokens not allowed)
+        user_identity, error_response = require_user_token(event)
+        if error_response:
+            return error_response
+        
         # Get use case ID from path parameters
         usecase_id = event.get('pathParameters', {}).get('id')
         if not usecase_id:

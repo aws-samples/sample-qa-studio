@@ -325,3 +325,44 @@ export const userApi = {
   create: (userData: CreateUserRequest): Promise<CreateUserResponse> => api.post('users', userData),
   delete: (username: string): Promise<void> => api.delete(`users/${encodeURIComponent(username)}`),
 };
+
+// OAuth Client API
+export interface OAuthClient {
+  client_id: string;
+  client_name: string;
+  created_date: string;
+  last_modified_date?: string;
+  created_by?: string;
+  refresh_token_validity?: number;
+  access_token_validity?: number;
+  id_token_validity?: number;
+  token_validity_units?: {
+    AccessToken?: string;
+    IdToken?: string;
+    RefreshToken?: string;
+  };
+  explicit_auth_flows?: string[];
+  allowed_oauth_flows?: string[];
+  allowed_oauth_scopes?: string[];
+  enabled: boolean;
+}
+
+export interface CreateOAuthClientRequest {
+  name: string;
+}
+
+export interface CreateOAuthClientResponse {
+  client_id: string;
+  client_name: string;
+  client_secret: string;
+  created_date: string;
+  refresh_token_validity?: number;
+  access_token_validity?: number;
+  id_token_validity?: number;
+}
+
+export const oauthClientApi = {
+  list: (): Promise<{ clients: OAuthClient[]; count: number }> => api.get('oauth-clients'),
+  create: (clientData: CreateOAuthClientRequest): Promise<CreateOAuthClientResponse> => api.post('oauth-clients', clientData),
+  delete: (clientId: string): Promise<void> => api.delete(`oauth-clients/${encodeURIComponent(clientId)}`),
+};

@@ -83,7 +83,8 @@ class DynamoDBClient:
                         validation_value=item.get('validation_value', ''),
                         capture_variable=item.get('capture_variable', ''),
                         value_type=item.get('value_type', ''),
-                        assertion_variable=item.get('assertion_variable', '')
+                        assertion_variable=item.get('assertion_variable', ''),
+                        enable_advanced_click_types=item.get('enable_advanced_click_types', False)
                     )
                     steps.append(step)
                 except Exception as e:
@@ -485,7 +486,8 @@ class DynamoDBClient:
                 validation_value=item.get('validation_value', ''),
                 capture_variable=item.get('capture_variable', ''),
                 value_type=item.get('value_type', ''),
-                assertion_variable=item.get('assertion_variable', '')
+                assertion_variable=item.get('assertion_variable', ''),
+                enable_advanced_click_types=item.get('enable_advanced_click_types', False)
             )
         except ClientError as e:
             logger.error(f"Error getting execution step {step_id}: {e}")
@@ -522,7 +524,8 @@ class DynamoDBClient:
                     validation_value=item.get('validation_value', ''),
                     capture_variable=item.get('capture_variable', ''),
                     value_type=item.get('value_type', ''),
-                    assertion_variable=item.get('assertion_variable', '')
+                    assertion_variable=item.get('assertion_variable', ''),
+                    enable_advanced_click_types=item.get('enable_advanced_click_types', False)
                 )
                 steps.append(step)
             

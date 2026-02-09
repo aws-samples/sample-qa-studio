@@ -1,7 +1,7 @@
 import { Duration, RemovalPolicy, Aws } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
-import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { Bucket, HttpMethods } from 'aws-cdk-lib/aws-s3';
 import { PolicyStatement, Policy, Effect, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { CfnScheduleGroup } from 'aws-cdk-lib/aws-scheduler';
@@ -91,6 +91,23 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       versioned: true, // Required for cross-region replication
+      cors: [
+        {
+          allowedMethods: [
+            HttpMethods.GET,
+            HttpMethods.HEAD
+          ],
+          allowedOrigins: ['*'],
+          allowedHeaders: ['*'],
+          exposedHeaders: [
+            'ETag',
+            'Content-Type',
+            'Content-Length',
+            'Content-Disposition'
+          ],
+          maxAge: 3000
+        }
+      ]
     });
 
     // Create cross-region buckets for enabled regions and collect all bucket ARNs

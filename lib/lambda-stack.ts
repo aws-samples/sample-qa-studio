@@ -107,6 +107,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly addUserLambda: Function
   public readonly removeUserLambda: Function
 
+  // OAuth Client Management Lambdas
+  public readonly createOAuthClientLambda: Function
+  public readonly listOAuthClientsLambda: Function
+  public readonly deleteOAuthClientLambda: Function
+
   // Worker-related Lambdas (moved from worker stack)
   public readonly generateS3UrlLambda: Function
   public readonly acceptWizardStepLambda: Function
@@ -481,6 +486,63 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       ],
       resources: [props.userPool.userPoolArn]
     }));
+
+    // OAuth Client Management Lambdas
+    this.createOAuthClientLambda = this.createPythonLambda({
+      path: 'create_oauth_client',
+      environment: {
+        USER_POOL_ID: props.userPool.userPoolId,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.listOAuthClientsLambda = this.createPythonLambda({
+      path: 'list_oauth_clients',
+      environment: {
+        USER_POOL_ID: props.userPool.userPoolId,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.deleteOAuthClientLambda = this.createPythonLambda({
+      path: 'delete_oauth_client',
+      environment: {
+        USER_POOL_ID: props.userPool.userPoolId,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    // Grant Cognito permissions for OAuth client management
+    this.createOAuthClientLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'cognito-idp:CreateUserPoolClient'
+      ],
+      resources: [props.userPool.userPoolArn]
+    }));
+
+    this.listOAuthClientsLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'cognito-idp:ListUserPoolClients',
+        'cognito-idp:DescribeUserPoolClient'
+      ],
+      resources: [props.userPool.userPoolArn]
+    }));
+
+    this.deleteOAuthClientLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'cognito-idp:DeleteUserPoolClient'
+      ],
+      resources: [props.userPool.userPoolArn]
+    }));
+
+    // Grant DynamoDB permissions for OAuth client metadata
+    this.createOAuthClientLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    this.listOAuthClientsLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    // Delete needs read (to check created_by), write, and delete permissions
+    this.deleteOAuthClientLambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
 
     // ========== Worker-related Lambdas ==========
 

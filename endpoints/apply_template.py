@@ -4,7 +4,7 @@ from typing import Any, Dict
 from uuid import uuid4
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name, get_current_timestamp
+from utils import create_response, get_table_name, get_current_timestamp, require_user_token
 
 # Configure logging
 logger = logging.getLogger()
@@ -49,15 +49,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         description = body.get('description', '')
         starting_url = body.get('starting_url', '')
         
-        # Extract user claims for created_by tracking
-        request_context = event.get('requestContext', {})
-        authorizer = request_context.get('authorizer', {})
-        claims = authorizer.get('claims', {})
-        user_email = claims.get('email', '')
-        user_sub = claims.get('sub', '')
+        # Validate user token (M2M tokens not allowed)
+        user_identity, error_response = require_user_token(event)
+        if error_response:
+            return error_response
         
-        if not user_email:
-            return create_response(401, {'error': 'Unauthorized'})
+        # Extract user info for created_by tracking
+        user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
+        user_sub = user_identity.get('sub', '')
         
         # Initialize AWS clients
         dynamodb = boto3.resource('dynamodb')

@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict
 from uuid import uuid4
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp
+from utils import create_response, get_table_name, get_current_timestamp, require_user_token
 
 # Configure logging
 logger = logging.getLogger()
@@ -29,15 +29,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except json.JSONDecodeError:
             return create_response(400, {'error': 'Invalid JSON in request body'})
         
-        # Extract user claims for created_by tracking
-        request_context = event.get('requestContext', {})
-        authorizer = request_context.get('authorizer', {})
-        claims = authorizer.get('claims', {})
-        user_email = claims.get('email', '')
-        user_sub = claims.get('sub', '')
+        # Validate user token (M2M tokens not allowed for creating use cases)
+        user_identity, error_response = require_user_token(event)
+        if error_response:
+            return error_response
         
-        if not user_email:
-            return create_response(401, {'error': 'Unauthorized'})
+        user_email = user_identity.get('email', '')
+        user_sub = user_identity.get('sub', '')
         
         logger.info(f"Creating usecase for user: {user_email}")
         

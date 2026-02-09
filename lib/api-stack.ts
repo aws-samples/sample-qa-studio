@@ -1,6 +1,7 @@
 import { Construct } from 'constructs';
-import { CfnOutput } from 'aws-cdk-lib';
-import { RestApi, CognitoUserPoolsAuthorizer, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, Deployment } from 'aws-cdk-lib/aws-apigateway';
+import { CfnOutput, Duration as cdk_Duration } from 'aws-cdk-lib';
+import * as cdk from 'aws-cdk-lib';
+import { RestApi, TokenAuthorizer, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, Deployment, IdentitySource } from 'aws-cdk-lib/aws-apigateway';
 import { UserPool } from 'aws-cdk-lib/aws-cognito';
 import { Function } from 'aws-cdk-lib/aws-lambda';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
@@ -40,14 +41,15 @@ interface NovaActQAStudioApiStackCreateProps extends NovaActQAStudioBaseStackCre
 
 export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
   public readonly api: RestApi
-  public readonly authorizer: CognitoUserPoolsAuthorizer
+  public readonly authorizer: TokenAuthorizer
+  public readonly authorizerLambda: Function
   private deployment: Deployment
   private routes: Method[] = []
 
   private addMethod(resource: Resource, method: HttpMethod, lambda: Function): Method {
     const resourceMethod = resource.addMethod(method, new LambdaIntegration(lambda), {
       authorizer: this.authorizer,
-      authorizationType: AuthorizationType.COGNITO
+      authorizationType: AuthorizationType.CUSTOM
     });
 
     this.routes.push(resourceMethod)
@@ -69,9 +71,19 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
       deploy: false  // We'll create our own deployment with custom stage name
     });
     
-    // Cognito Authorizer
-    this.authorizer = new CognitoUserPoolsAuthorizer(this, 'authorizer', {
-      cognitoUserPools: [props.userPool]
+    // Create Lambda Authorizer
+    this.authorizerLambda = this.createPythonLambda({
+      path: 'authorizer',
+      environment: {
+        USER_POOL_ID: props.userPool.userPoolId
+      }
+    });
+    
+    // Lambda Token Authorizer (supports both user and M2M tokens)
+    this.authorizer = new TokenAuthorizer(this, 'authorizer', {
+      handler: this.authorizerLambda,
+      identitySource: IdentitySource.header('Authorization'),
+      resultsCacheTtl: cdk.Duration.minutes(5)
     });
 
     const l = props.lambdaStack // Shorthand for cleaner code
@@ -254,6 +266,14 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
 
     const user = this.addResource(users, '{username}')
     this.addMethod(user, HttpMethod.DELETE, props.removeUserLambda)
+
+    // /oauth-clients - OAuth client management
+    const oauthClients = this.addResource(this.api.root, 'oauth-clients')
+    this.addMethod(oauthClients, HttpMethod.GET, l.listOAuthClientsLambda)
+    this.addMethod(oauthClients, HttpMethod.POST, l.createOAuthClientLambda)
+
+    const oauthClient = this.addResource(oauthClients, '{clientId}')
+    this.addMethod(oauthClient, HttpMethod.DELETE, l.deleteOAuthClientLambda)
 
     // /templates - Template management
     const templates = this.addResource(this.api.root, 'templates')

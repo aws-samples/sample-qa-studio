@@ -97,6 +97,169 @@ def get_current_timestamp() -> str:
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
+def extract_user_identity(event: dict) -> dict:
+    """
+    Extract user identity from API Gateway event.
+    Handles both user tokens (with email) and M2M tokens (client credentials).
+    Supports both Cognito authorizer and Lambda authorizer formats.
+    
+    By default, this function REJECTS M2M tokens with a 403 error.
+    Use allow_m2m_token() instead if you want to allow M2M tokens.
+    
+    Args:
+        event: API Gateway proxy request event
+        
+    Returns:
+        Dictionary with:
+        - identity: Email for user tokens, client_id for M2M tokens
+        - identity_type: 'user' or 'client'
+        - sub: Cognito sub claim
+        - client_id: Client ID for M2M tokens (optional)
+        - email: Email for user tokens (optional)
+        - scopes: List of OAuth scopes for M2M tokens (optional)
+    """
+    request_context = event.get('requestContext', {})
+    authorizer = request_context.get('authorizer', {})
+    
+    logging.info(f"=== EXTRACTING USER IDENTITY ===")
+    logging.info(f"Full authorizer object: {json.dumps(authorizer, default=str)}")
+    
+    # Check if using Lambda authorizer (context is directly in authorizer)
+    # or Cognito authorizer (context is in claims)
+    if 'claims' in authorizer:
+        # Cognito authorizer format
+        claims = authorizer.get('claims', {})
+        logging.info("Using Cognito authorizer format (claims)")
+    else:
+        # Lambda authorizer format - context is directly in authorizer
+        claims = authorizer
+        logging.info("Using Lambda authorizer format (direct context)")
+    
+    logging.info(f"Claims extracted: {json.dumps(claims, default=str)}")
+    
+    email = claims.get('email')
+    username = claims.get('username')
+    sub = claims.get('sub', '')
+    client_id = claims.get('clientId') or claims.get('client_id')
+    identity_type = claims.get('identityType') or claims.get('identity_type')
+    scope = claims.get('scope', '')
+    
+    logging.info(f"Parsed values - email: {email}, username: {username}, sub: {sub}, client_id: {client_id}, identity_type: {identity_type}, scope: {scope}")
+    
+    # Parse scopes (space-separated string)
+    scopes = scope.split() if scope else []
+    
+    # Use identity_type from authorizer if available
+    if identity_type == 'client':
+        result = {
+            'identity': client_id or sub,
+            'identity_type': 'client',
+            'sub': sub,
+            'client_id': client_id,
+            'scopes': scopes
+        }
+        logging.info(f"Identified as CLIENT: {result}")
+        return result
+    elif identity_type == 'user':
+        result = {
+            'identity': email or username or sub,
+            'identity_type': 'user',
+            'sub': sub,
+            'email': email,
+            'scopes': []
+        }
+        logging.info(f"Identified as USER: {result}")
+        return result
+    
+    # Fallback: determine from claims
+    # M2M token (client credentials flow)
+    if client_id and not email and not username:
+        result = {
+            'identity': client_id,
+            'identity_type': 'client',
+            'sub': sub,
+            'client_id': client_id,
+            'scopes': scopes
+        }
+        logging.info(f"Fallback identified as CLIENT: {result}")
+        return result
+    
+    # User token
+    if email or username:
+        result = {
+            'identity': email or username,
+            'identity_type': 'user',
+            'sub': sub,
+            'email': email,
+            'scopes': []
+        }
+        logging.info(f"Fallback identified as USER: {result}")
+        return result
+    
+    # Unknown token type
+    result = {
+        'identity': sub or 'unknown',
+        'identity_type': 'unknown',
+        'sub': sub,
+        'scopes': []
+    }
+    logging.warning(f"Could not identify token type - returning UNKNOWN: {result}")
+    return result
+
+
+def allow_m2m_token(event: dict) -> tuple[dict, dict | None]:
+    """
+    Validate authentication and allow both user tokens and M2M tokens.
+    Use this for execution-related endpoints that should be accessible via M2M.
+    
+    Args:
+        event: API Gateway proxy request event
+        
+    Returns:
+        Tuple of (user_identity, error_response)
+        If error_response is not None, return it immediately
+    """
+    user_identity = extract_user_identity(event)
+    
+    if user_identity['identity_type'] == 'unknown':
+        return user_identity, create_response(401, {'error': 'Unauthorized'})
+    
+    # Allow both 'user' and 'client' identity types
+    logging.info(f"Request authorized: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    return user_identity, None
+
+
+def require_user_token(event: dict) -> tuple[dict, dict | None]:
+    """
+    Validate that the request is from a user token, not an M2M token.
+    This is the DEFAULT validation - use this for all endpoints unless
+    you explicitly want to allow M2M tokens (use allow_m2m_token instead).
+    
+    M2M tokens are only allowed for execution-related endpoints.
+    
+    Args:
+        event: API Gateway proxy request event
+        
+    Returns:
+        Tuple of (user_identity, error_response)
+        If error_response is not None, return it immediately
+    """
+    user_identity = extract_user_identity(event)
+    
+    if user_identity['identity_type'] == 'client':
+        logging.warning(f"M2M token attempted to access user-only endpoint: {user_identity['client_id']}")
+        return user_identity, create_response(403, {
+            'error': 'Forbidden',
+            'message': 'M2M tokens can only access execution endpoints. Use a user token to access this endpoint.'
+        })
+    
+    if user_identity['identity_type'] == 'unknown':
+        return user_identity, create_response(401, {'error': 'Unauthorized'})
+    
+    logging.info(f"User authenticated: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    return user_identity, None
+
+
 def create_response(status_code: int, body: Any, cors: bool = True) -> dict:
     """
     Create a standardized API Gateway response.

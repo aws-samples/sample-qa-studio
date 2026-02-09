@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import boto3
 from utils import (create_response, get_current_timestamp, validate_title, 
                    validate_url, validate_user_journey, sanitize_and_fix_json,
-                   validate_generated_json)
+                   validate_generated_json, require_user_token)
 
 bedrock_runtime = boto3.client('bedrock-runtime')
 
@@ -319,17 +319,6 @@ def get_error_code(error_message):
     
     return 'VALIDATION_ERROR'
 
-def decode_claims(event):
-    """Extract user claims from API Gateway authorizer."""
-    try:
-        claims = event.get('requestContext', {}).get('authorizer', {}).get('claims', {})
-        return {
-            'sub': claims.get('sub', ''),
-            'email': claims.get('email', '')
-        }
-    except Exception as e:
-        print(f'Error decoding claims: {str(e)}')
-        return {'sub': '', 'email': ''}
 
 def handler(event, context):
     """
@@ -351,6 +340,16 @@ def handler(event, context):
     request_id = event.get('requestContext', {}).get('requestId', f'req-{int(time.time() * 1000)}')
     
     print(f'[INFO] [{request_id}] Received request')
+    
+    # Validate user token (M2M tokens not allowed)
+    user_identity, error_response = require_user_token(event)
+    if error_response:
+        return error_response
+    
+    # Extract user info
+    user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
+    
+    print(f'[INFO] [{request_id}] Processing generate usecase request for user {user_email}')
     
     # Parse request body
     try:
@@ -431,10 +430,6 @@ def handler(event, context):
             'code': 'VALIDATION_ERROR',
             'details': {'validationErrors': validation_errors}
         })
-    
-    # Extract user information
-    claims = decode_claims(event)
-    print(f'[INFO] [{request_id}] Processing generate usecase request for user {claims["email"]}')
     
     # Get Bedrock model ID
     model_id = os.environ.get('BEDROCK_MODEL_ID')

@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict
 from datetime import datetime
 import boto3
-from utils import create_response
+from utils import create_response, require_user_token
 
 # Configure logging
 logger = logging.getLogger()
@@ -22,6 +22,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with list of users
     """
     try:
+        # Validate user token (M2M tokens not allowed)
+        user_identity, error_response = require_user_token(event)
+        if error_response:
+            return error_response
+        
         # Get user pool ID from environment
         user_pool_id = os.environ.get('USER_POOL_ID')
         if not user_pool_id:

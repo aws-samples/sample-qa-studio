@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, get_table_name, DynamoDBEncoder
+from utils import create_response, get_table_name, DynamoDBEncoder, allow_m2m_token
 import json
 
 # Configure logging
@@ -12,6 +12,7 @@ logger.setLevel(logging.INFO)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to get execution details.
+    Accessible by both user tokens and M2M tokens.
     
     Args:
         event: API Gateway proxy request event
@@ -21,6 +22,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with execution details
     """
     try:
+        # Validate authentication (allow both user and M2M tokens)
+        user_identity, error_response = allow_m2m_token(event)
+        if error_response:
+            return error_response
+        
         # Get parameters from path
         path_params = event.get('pathParameters', {})
         execution_id = path_params.get('executionId')
