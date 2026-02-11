@@ -53,7 +53,7 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
 
     // CloudFront Function for SPA routing
     const spaRoutingFunction = new CloudFrontFunction(this, 'SPARoutingFunction', {
-      code: FunctionCode.fromFile({ filePath: path.join(__dirname, 'cloudfront-function.js') }),
+      code: FunctionCode.fromFile({ filePath: path.join(__dirname, 'cloudfront-functions', 'spa-routing.js') }),
       comment: 'Rewrites paths for SPA routing while preserving API paths',
     });
 

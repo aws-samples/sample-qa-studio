@@ -9,22 +9,44 @@ from utils import create_response, get_table_name, get_current_timestamp, requir
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Valid OAuth scopes that can be assigned to clients
-VALID_SCOPES = [
-    'api/usecases.read',
-    'api/usecases.write',
-    'api/templates.read',
-    'api/templates.write',
-    'api/executions.read',
-    'api/executions.write',
-    'api/usecases.execute',
-    'api/oauth-clients.read',
-    'api/oauth-clients.write',
-    'api/admin'
-]
-
 # Default scopes for OAuth clients (minimal permissions)
 DEFAULT_SCOPES = ['api/usecases.execute']
+
+
+def get_valid_scopes_from_cognito(user_pool_id: str, resource_server_identifier: str = 'api') -> list[str]:
+    """
+    Fetch valid OAuth scopes from Cognito resource server.
+    
+    Args:
+        user_pool_id: Cognito User Pool ID
+        resource_server_identifier: Resource server identifier (default: 'api')
+        
+    Returns:
+        List of valid scope strings (e.g., ['api/usecases.read', 'api/usecases.write'])
+    """
+    try:
+        cognito_client = boto3.client('cognito-idp')
+        response = cognito_client.describe_resource_server(
+            UserPoolId=user_pool_id,
+            Identifier=resource_server_identifier
+        )
+        
+        resource_server = response.get('ResourceServer', {})
+        scopes = resource_server.get('Scopes', [])
+        
+        # Format scopes as 'api/scope_name'
+        valid_scopes = [
+            f'{resource_server_identifier}/{scope["ScopeName"]}'
+            for scope in scopes
+        ]
+        
+        logger.info(f"Fetched {len(valid_scopes)} valid scopes from Cognito: {valid_scopes}")
+        return valid_scopes
+        
+    except Exception as e:
+        logger.error(f"Error fetching scopes from Cognito: {str(e)}")
+        # Return empty list on error - validation will fail gracefully
+        return []
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -62,6 +84,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not client_name:
             return create_response(400, {'error': 'Client name is required'})
         
+        # Get user pool ID from environment
+        user_pool_id = os.environ.get('USER_POOL_ID')
+        resource_server_identifier = os.environ.get('RESOURCE_SERVER_IDENTIFIER', 'api')
+        
+        if not user_pool_id:
+            logger.error("USER_POOL_ID environment variable not set")
+            return create_response(500, {'error': 'Internal server error'})
+        
+        # Fetch valid scopes from Cognito
+        valid_scopes = get_valid_scopes_from_cognito(user_pool_id, resource_server_identifier)
+        
+        if not valid_scopes:
+            logger.error("Failed to fetch valid scopes from Cognito")
+            return create_response(500, {'error': 'Failed to validate scopes'})
+        
         # Validate requested scopes
         if not isinstance(requested_scopes, list):
             return create_response(400, {'error': 'Scopes must be an array'})
@@ -69,11 +106,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not requested_scopes:
             return create_response(400, {'error': 'At least one scope must be specified'})
         
-        invalid_scopes = [s for s in requested_scopes if s not in VALID_SCOPES]
+        invalid_scopes = [s for s in requested_scopes if s not in valid_scopes]
         if invalid_scopes:
             return create_response(400, {
                 'error': f'Invalid scopes: {", ".join(invalid_scopes)}',
-                'valid_scopes': VALID_SCOPES
+                'valid_scopes': valid_scopes
             })
         
         # SECURITY CHECK: Prevent privilege escalation
@@ -90,12 +127,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
         
         logger.info(f"Creating OAuth client with scopes: {requested_scopes}")
-        
-        # Get user pool ID from environment
-        user_pool_id = os.environ.get('USER_POOL_ID')
-        if not user_pool_id:
-            logger.error("USER_POOL_ID environment variable not set")
-            return create_response(500, {'error': 'Internal server error'})
         
         # Initialize Cognito client
         cognito_client = boto3.client('cognito-idp')
@@ -149,7 +180,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'entity_type': 'oauth_client'
             }
             
-            logger.info(f"Storing OAuth client item: {oauth_client_item}")
             table.put_item(Item=oauth_client_item)
             logger.info(f"Stored OAuth client metadata in DynamoDB for client: {client_id}")
         except Exception as dynamodb_error:

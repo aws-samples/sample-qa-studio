@@ -7,6 +7,9 @@ logs/*
 # Exceptions - keep config files
 !jest.config.js
 
+# Compiled CloudFront functions (generated from cloudfront-functions/*.ts)
+lib/cloudfront-functions/
+
 node_modules
 
 # CDK asset staging directory

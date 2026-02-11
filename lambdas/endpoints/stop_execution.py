@@ -3,7 +3,7 @@ import os
 from typing import Any, Dict
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_current_timestamp, allow_m2m_token
+from utils import create_response, get_table_name, get_current_timestamp, require_scopes
 
 # Configure logging
 logger = logging.getLogger()
@@ -13,7 +13,7 @@ logger.setLevel(logging.INFO)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to stop a running execution by stopping its ECS task.
-    Accessible by both user tokens and M2M tokens.
+    Requires api/executions.write scope.
     
     Args:
         event: API Gateway proxy request event
@@ -23,10 +23,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with stop confirmation
     """
     try:
-        # Validate authentication (allow both user and M2M tokens)
-        user_identity, error_response = allow_m2m_token(event)
-        if error_response:
-            return error_response
+        # Validate authentication and required scopes
+        user_identity, error = require_scopes(event, ['api/executions.write'])
+        if error:
+            return error
         
         # Get parameters from path
         path_params = event.get('pathParameters', {})

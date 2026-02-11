@@ -4,7 +4,7 @@ from typing import Any, Dict
 from uuid import uuid4
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name, get_current_timestamp, require_user_token
+from utils import create_response, get_table_name, get_current_timestamp, require_scopes
 
 # Configure logging
 logger = logging.getLogger()
@@ -22,6 +22,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway proxy response with created usecase
     """
+    # Validate scopes - requires both template read and usecase write
+    user_identity, error = require_scopes(event, ['api/templates.read', 'api/usecases.write'])
+    if error:
+        return error
+    
     try:
         # Get template ID from path
         path_params = event.get('pathParameters', {})
@@ -48,11 +53,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         description = body.get('description', '')
         starting_url = body.get('starting_url', '')
-        
-        # Validate user token (M2M tokens not allowed)
-        user_identity, error_response = require_user_token(event)
-        if error_response:
-            return error_response
         
         # Extract user info for created_by tracking
         user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')

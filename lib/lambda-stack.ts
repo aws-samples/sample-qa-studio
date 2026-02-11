@@ -113,6 +113,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly createOAuthClientLambda: Function
   public readonly listOAuthClientsLambda: Function
   public readonly deleteOAuthClientLambda: Function
+  public readonly listScopesLambda: Function
 
   // Worker-related Lambdas (moved from worker stack)
   public readonly generateS3UrlLambda: Function
@@ -538,6 +539,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       path: 'create_oauth_client',
       environment: {
         USER_POOL_ID: props.userPool.userPoolId,
+        RESOURCE_SERVER_IDENTIFIER: 'api',
         TABLE_NAME: props.table.tableName
       }
     });
@@ -558,11 +560,20 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       }
     });
 
+    this.listScopesLambda = this.createPythonLambda({
+      path: 'list_scopes',
+      environment: {
+        USER_POOL_ID: props.userPool.userPoolId,
+        RESOURCE_SERVER_IDENTIFIER: 'api'
+      }
+    });
+
     // Grant Cognito permissions for OAuth client management
     this.createOAuthClientLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: [
-        'cognito-idp:CreateUserPoolClient'
+        'cognito-idp:CreateUserPoolClient',
+        'cognito-idp:DescribeResourceServer'
       ],
       resources: [props.userPool.userPoolArn]
     }));
@@ -580,6 +591,14 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       effect: Effect.ALLOW,
       actions: [
         'cognito-idp:DeleteUserPoolClient'
+      ],
+      resources: [props.userPool.userPoolArn]
+    }));
+
+    this.listScopesLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'cognito-idp:DescribeResourceServer'
       ],
       resources: [props.userPool.userPoolArn]
     }));

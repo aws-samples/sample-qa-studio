@@ -282,6 +282,13 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const oauthClient = this.addResource(oauthClients, '{clientId}')
     this.addMethod(oauthClient, HttpMethod.DELETE, l.deleteOAuthClientLambda)
 
+    // /scopes - List available OAuth scopes (public endpoint, no auth)
+    const scopes = this.addResource(this.api.root, 'scopes')
+    const scopesMethod = scopes.addMethod(HttpMethod.GET, new LambdaIntegration(l.listScopesLambda), {
+      authorizationType: AuthorizationType.NONE
+    });
+    this.routes.push(scopesMethod)
+
     // /templates - Template management
     const templates = this.addResource(this.api.root, 'templates')
     this.addMethod(templates, HttpMethod.GET, l.listTemplatesLambda)

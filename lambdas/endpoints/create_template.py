@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict
 import boto3
 from uuid import uuid4
-from utils import get_table_name, create_response, get_current_timestamp, require_user_token
+from utils import get_table_name, create_response, get_current_timestamp, require_scopes
 
 # Configure logging
 logger = logging.getLogger()
@@ -21,12 +21,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway proxy response with created template
     """
+    # Validate scopes - creating templates requires write permission
+    user_identity, error = require_scopes(event, ['api/templates.write'])
+    if error:
+        return error
+    
     try:
-        # Validate user token (M2M tokens not allowed)
-        user_identity, error_response = require_user_token(event)
-        if error_response:
-            return error_response
-        
         # Get user email from identity
         email = user_identity.get('email') or user_identity.get('identity', 'unknown')
         

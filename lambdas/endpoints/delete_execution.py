@@ -4,7 +4,7 @@ from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_bucket_name, allow_m2m_token
+from utils import create_response, get_table_name, get_bucket_name, require_scopes
 
 # Configure logging
 logger = logging.getLogger()
@@ -14,7 +14,6 @@ logger.setLevel(logging.INFO)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to delete an execution and its associated data.
-    Accessible by both user tokens and M2M tokens.
     
     Args:
         event: API Gateway proxy request event
@@ -23,12 +22,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway proxy response with deletion result
     """
+    # Validate scopes - deleting executions requires write permission
+    user_identity, error = require_scopes(event, ['api/executions.write'])
+    if error:
+        return error
+    
     try:
-        # Validate authentication (allow both user and M2M tokens)
-        user_identity, error_response = allow_m2m_token(event)
-        if error_response:
-            return error_response
-        
         # Get execution and usecase IDs from path
         path_params = event.get('pathParameters', {})
         execution_id = path_params.get('executionId')

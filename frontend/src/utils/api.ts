@@ -370,8 +370,36 @@ export interface CreateOAuthClientResponse {
   id_token_validity?: number;
 }
 
+export interface ScopeOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+export interface ListScopesResponse {
+  scopes: ScopeOption[];
+  resource_server_identifier: string;
+}
+
 export const oauthClientApi = {
   list: (): Promise<{ clients: OAuthClient[]; count: number }> => api.get('oauth-clients'),
   create: (clientData: CreateOAuthClientRequest): Promise<CreateOAuthClientResponse> => api.post('oauth-clients', clientData),
   delete: (clientId: string): Promise<void> => api.delete(`oauth-clients/${encodeURIComponent(clientId)}`),
+};
+
+export const scopesApi = {
+  list: (): Promise<ListScopesResponse> => {
+    // Public endpoint - no authentication required
+    return fetch(buildRestEndpoint('scopes'), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }).then(response => {
+      if (!response.ok) {
+        throw new Error('Failed to fetch scopes');
+      }
+      return response.json();
+    });
+  }
 };

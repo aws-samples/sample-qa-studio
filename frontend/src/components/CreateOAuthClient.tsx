@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -15,62 +15,8 @@ import {
   Multiselect,
   MultiselectProps
 } from '@cloudscape-design/components';
-import { oauthClientApi, CreateOAuthClientRequest } from '../utils/api';
+import { oauthClientApi, scopesApi, CreateOAuthClientRequest } from '../utils/api';
 import { ErrorState } from '../utils/errorManager';
-
-// Available OAuth scopes with descriptions
-const AVAILABLE_SCOPES: MultiselectProps.Option[] = [
-  {
-    label: 'api/usecases.read',
-    value: 'api/usecases.read',
-    description: 'Read use cases'
-  },
-  {
-    label: 'api/usecases.write',
-    value: 'api/usecases.write',
-    description: 'Create, update, delete use cases'
-  },
-  {
-    label: 'api/templates.read',
-    value: 'api/templates.read',
-    description: 'Read templates'
-  },
-  {
-    label: 'api/templates.write',
-    value: 'api/templates.write',
-    description: 'Create, update, delete templates'
-  },
-  {
-    label: 'api/executions.read',
-    value: 'api/executions.read',
-    description: 'View execution results'
-  },
-  {
-    label: 'api/executions.write',
-    value: 'api/executions.write',
-    description: 'Modify execution records'
-  },
-  {
-    label: 'api/usecases.execute',
-    value: 'api/usecases.execute',
-    description: 'Trigger use case executions'
-  },
-  {
-    label: 'api/oauth-clients.read',
-    value: 'api/oauth-clients.read',
-    description: 'Read OAuth clients'
-  },
-  {
-    label: 'api/oauth-clients.write',
-    value: 'api/oauth-clients.write',
-    description: 'Create, update, delete OAuth clients'
-  },
-  {
-    label: 'api/admin',
-    value: 'api/admin',
-    description: 'Full administrative access'
-  }
-];
 
 const CreateOAuthClient: React.FC = () => {
   const navigate = useNavigate();
@@ -79,6 +25,9 @@ const CreateOAuthClient: React.FC = () => {
     scopes: [] // No default scopes
   });
   const [selectedScopes, setSelectedScopes] = useState<MultiselectProps.Option[]>([]);
+  const [availableScopes, setAvailableScopes] = useState<MultiselectProps.Option[]>([]);
+  const [loadingScopes, setLoadingScopes] = useState(true);
+  const [scopesError, setScopesError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdClientId, setCreatedClientId] = useState("");
@@ -88,6 +37,25 @@ const CreateOAuthClient: React.FC = () => {
   const [createdIdTokenValidity, setCreatedIdTokenValidity] = useState(0);
   const [createdRefreshTokenValidity, setCreatedRefreshTokenValidity] = useState(0);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Fetch available scopes on component mount
+  useEffect(() => {
+    const fetchScopes = async () => {
+      try {
+        setLoadingScopes(true);
+        const response = await scopesApi.list();
+        setAvailableScopes(response.scopes);
+        setScopesError(null);
+      } catch (err) {
+        console.error('Failed to fetch scopes:', err);
+        setScopesError('Failed to load available scopes. Please refresh the page.');
+      } finally {
+        setLoadingScopes(false);
+      }
+    };
+
+    fetchScopes();
+  }, []);
 
   const createClient = async () => {
     setCreating(true);
@@ -111,7 +79,7 @@ const CreateOAuthClient: React.FC = () => {
   };
 
   const handleScopeChange = (detail: MultiselectProps.MultiselectChangeDetail) => {
-    setSelectedScopes(detail.selectedOptions);
+    setSelectedScopes([...detail.selectedOptions]);
     setClientData({
       ...clientData,
       scopes: detail.selectedOptions.map(opt => opt.value || '')
@@ -153,6 +121,12 @@ const CreateOAuthClient: React.FC = () => {
         </Alert>
       )}
 
+      {scopesError && (
+        <Alert type="error" dismissible onDismiss={() => setScopesError(null)}>
+          {scopesError}
+        </Alert>
+      )}
+
       <Container>
         <SpaceBetween direction="vertical" size="l">
           <FormField
@@ -178,10 +152,11 @@ const CreateOAuthClient: React.FC = () => {
             <Multiselect
               selectedOptions={selectedScopes}
               onChange={({ detail }) => handleScopeChange(detail)}
-              options={AVAILABLE_SCOPES}
-              placeholder="Select scopes"
-              disabled={creating}
+              options={availableScopes}
+              placeholder={loadingScopes ? "Loading scopes..." : "Select scopes"}
+              disabled={creating || loadingScopes}
               filteringType="auto"
+              statusType={loadingScopes ? "loading" : "finished"}
             />
           </FormField>
 

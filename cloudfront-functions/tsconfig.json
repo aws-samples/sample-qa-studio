@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES5",
+    "module": "none",
+    "lib": ["ES5"],
+    "outDir": "../lib/cloudfront-functions",
+    "rootDir": ".",
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "removeComments": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["*.ts"],
+  "exclude": ["node_modules"]
+}

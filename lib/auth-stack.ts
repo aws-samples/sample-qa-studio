@@ -65,53 +65,56 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
       LambdaArn: this.preTokenGenerationLambda.functionArn
     });
 
+    // Define OAuth scopes - single source of truth
+    const apiScopes = [
+      {
+        scopeName: 'usecases.read',
+        scopeDescription: 'Read use cases'
+      },
+      {
+        scopeName: 'usecases.write',
+        scopeDescription: 'Create, update, delete use cases'
+      },
+      {
+        scopeName: 'templates.read',
+        scopeDescription: 'Read templates'
+      },
+      {
+        scopeName: 'templates.write',
+        scopeDescription: 'Create, update, delete templates'
+      },
+      {
+        scopeName: 'executions.read',
+        scopeDescription: 'View execution results'
+      },
+      {
+        scopeName: 'executions.write',
+        scopeDescription: 'Modify execution records'
+      },
+      {
+        scopeName: 'usecases.execute',
+        scopeDescription: 'Trigger use case executions'
+      },
+      {
+        scopeName: 'oauth-clients.read',
+        scopeDescription: 'Read OAuth clients'
+      },
+      {
+        scopeName: 'oauth-clients.write',
+        scopeDescription: 'Create, update, delete OAuth clients'
+      },
+      {
+        scopeName: 'admin',
+        scopeDescription: 'Full administrative access'
+      }
+    ];
+
     // Create resource server for M2M authentication and scope-based authorization
     this.resourceServer = new UserPoolResourceServer(this, 'resource_server', {
       userPool: this.userPool,
       identifier: 'api',
       userPoolResourceServerName: this.cdkName('api-resource-server'),
-      scopes: [
-        {
-          scopeName: 'usecases.read',
-          scopeDescription: 'Read use cases'
-        },
-        {
-          scopeName: 'usecases.write',
-          scopeDescription: 'Create, update, delete use cases'
-        },
-        {
-          scopeName: 'templates.read',
-          scopeDescription: 'Read templates'
-        },
-        {
-          scopeName: 'templates.write',
-          scopeDescription: 'Create, update, delete templates'
-        },
-        {
-          scopeName: 'executions.read',
-          scopeDescription: 'View execution results'
-        },
-        {
-          scopeName: 'executions.write',
-          scopeDescription: 'Modify execution records'
-        },
-        {
-          scopeName: 'usecases.execute',
-          scopeDescription: 'Trigger use case executions'
-        },
-        {
-          scopeName: 'oauth-clients.read',
-          scopeDescription: 'Read OAuth clients'
-        },
-        {
-          scopeName: 'oauth-clients.write',
-          scopeDescription: 'Create, update, delete OAuth clients'
-        },
-        {
-          scopeName: 'admin',
-          scopeDescription: 'Full administrative access'
-        }
-      ]
+      scopes: apiScopes
     });
 
     // Create Cognito domain for OAuth endpoints (required for M2M authentication)
@@ -139,16 +142,10 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
           OAuthScope.OPENID,
           OAuthScope.EMAIL,
           OAuthScope.PROFILE,
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'usecases.read', scopeDescription: 'Read use cases' })),
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'usecases.write', scopeDescription: 'Create, update, delete use cases' })),
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'templates.read', scopeDescription: 'Read templates' })),
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'templates.write', scopeDescription: 'Create, update, delete templates' })),
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'executions.read', scopeDescription: 'View execution results' })),
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'executions.write', scopeDescription: 'Modify execution records' })),
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'usecases.execute', scopeDescription: 'Trigger use case executions' })),
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'oauth-clients.read', scopeDescription: 'Read OAuth clients' })),
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'oauth-clients.write', scopeDescription: 'Create, update, delete OAuth clients' })),
-          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'admin', scopeDescription: 'Full administrative access' }))
+          // Map API scopes to OAuth scopes
+          ...apiScopes.map(scope => 
+            OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope(scope))
+          )
         ]
       }
     });

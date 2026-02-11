@@ -30,6 +30,7 @@ interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStack
   table: Table
   novaActApiKeySecret: Secret
   tableReadPolicy: ManagedPolicy
+  tableWritePolicy: ManagedPolicy
   version: string
 }
 

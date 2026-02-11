@@ -5,7 +5,9 @@
     "cdk": "bin/cdk.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:cdk && npm run build:cloudfront",
+    "build:cdk": "tsc",
+    "build:cloudfront": "tsc -p cloudfront-functions/tsconfig.json",
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",

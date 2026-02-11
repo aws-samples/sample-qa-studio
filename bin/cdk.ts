@@ -48,6 +48,7 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   env: stackEnv,
   table: storageStack.table,
   tableReadPolicy: storageStack.tableReadPolicy,
+  tableWritePolicy: storageStack.tableWritePolicy,
   novaActApiKeySecret: storageStack.novaActApiKeySecret,
   version,
 })
