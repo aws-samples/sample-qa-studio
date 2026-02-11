@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict
 from uuid import uuid4
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp
+from utils import create_response, get_table_name, get_current_timestamp, require_scopes
 
 # Configure logging
 logger = logging.getLogger()
@@ -22,6 +22,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway proxy response with step creation result
     """
+    # Validate scopes - adding wizard steps modifies usecases
+    user_identity, error = require_scopes(event, ['api/usecases.write'])
+    if error:
+        return error
+    
     try:
         # Get session ID from path
         path_params = event.get('pathParameters', {})

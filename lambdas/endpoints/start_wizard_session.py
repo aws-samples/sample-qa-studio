@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7
+from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7, require_scopes
 
 dynamodb = boto3.client('dynamodb')
 ecs = boto3.client('ecs')
@@ -22,8 +22,14 @@ def handler(event, context):
     Returns:
     - 201: Wizard session created successfully
     - 400: Missing required fields
+    - 403: Insufficient scopes
     - 500: Error creating session
     """
+    # Validate scopes - wizard creates usecases
+    user_identity, error = require_scopes(event, ['api/usecases.write'])
+    if error:
+        return error
+    
     try:
         body = json.loads(event.get('body', '{}'))
     except json.JSONDecodeError:

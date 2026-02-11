@@ -1,7 +1,7 @@
 import json
 import os
 import boto3
-from utils import create_response
+from utils import create_response, require_scopes
 
 sqs = boto3.client('sqs')
 eventbridge = boto3.client('events')
@@ -17,8 +17,14 @@ def handler(event, context):
     Returns:
     - 200: Restart command sent successfully
     - 400: Missing sessionId
+    - 403: Insufficient scopes
     - 500: Error sending command
     """
+    # Validate scopes - restarting wizard modifies usecases
+    user_identity, error = require_scopes(event, ['api/usecases.write'])
+    if error:
+        return error
+    
     session_id = event.get('pathParameters', {}).get('sessionId')
     
     if not session_id:

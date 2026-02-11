@@ -1,7 +1,7 @@
 import json
 import os
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp
+from utils import create_response, get_table_name, get_current_timestamp, require_scopes
 
 dynamodb = boto3.client('dynamodb')
 sqs = boto3.client('sqs')
@@ -18,8 +18,14 @@ def handler(event, context):
     Returns:
     - 200: Session terminated successfully
     - 400: Missing required parameters
+    - 403: Insufficient scopes
     - 500: Error terminating session
     """
+    # Validate scopes - terminating wizard modifies usecases
+    user_identity, error = require_scopes(event, ['api/usecases.write'])
+    if error:
+        return error
+    
     path_params = event.get('pathParameters', {})
     session_id = path_params.get('sessionId')
     usecase_id = path_params.get('usecaseId')
