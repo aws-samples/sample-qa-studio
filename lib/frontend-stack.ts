@@ -12,11 +12,15 @@ import {
   PriceClass,
   OriginProtocolPolicy,
   ResponseHeadersPolicy,
+  Function as CloudFrontFunction,
+  FunctionCode,
+  FunctionEventType,
 } from 'aws-cdk-lib/aws-cloudfront';
 import { S3BucketOrigin, HttpOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
+import * as path from 'path';
 
 interface NovaActQAStudioFrontendStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   apiId: string,
@@ -47,6 +51,12 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
       autoDeleteObjects: true,
     });
 
+    // CloudFront Function for SPA routing
+    const spaRoutingFunction = new CloudFrontFunction(this, 'SPARoutingFunction', {
+      code: FunctionCode.fromFile({ filePath: path.join(__dirname, 'cloudfront-function.js') }),
+      comment: 'Rewrites paths for SPA routing while preserving API paths',
+    });
+
     const cachePolicy = new CachePolicy(this, 'CachePolicy', {
       cachePolicyName: this.cdkName('cache-policy'),
       defaultTtl: Duration.seconds(0),
@@ -63,7 +73,11 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
     this.distribution = new Distribution(this, 'distribution', {
       defaultBehavior: {
         origin: S3BucketOrigin.withOriginAccessControl(this.frontendBucket),
-        viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS
+        viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        functionAssociations: [{
+          function: spaRoutingFunction,
+          eventType: FunctionEventType.VIEWER_REQUEST,
+        }],
       },
       additionalBehaviors: {
         [`${props.apiEndpoint}/*`]: {
@@ -79,13 +93,8 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
       },
       priceClass: PriceClass.PRICE_CLASS_100,
       defaultRootObject: 'index.html',
-      errorResponses: [
-        {
-          httpStatus: 403,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html'
-        }
-      ]
+      // No error responses needed - CloudFront Function handles SPA routing at request time
+      // This allows API errors (403, 404, etc.) to pass through correctly
     });
 
     this.log('CloudFrontDistributionDomain', `https://${this.distribution.distributionDomainName}`)

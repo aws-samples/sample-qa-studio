@@ -40,11 +40,12 @@ import requests
 class OAuthClient:
     """OAuth M2M client for testing API access."""
     
-    def __init__(self, client_id: str, client_secret: str, cognito_domain: str, api_url: str):
+    def __init__(self, client_id: str, client_secret: str, cognito_domain: str, api_url: str, scopes: str = 'api/usecases.execute'):
         self.client_id = client_id
         self.client_secret = client_secret
         self.cognito_domain = cognito_domain.rstrip('/')
         self.api_url = api_url.rstrip('/')
+        self.scopes = scopes
         self.access_token: Optional[str] = None
         self.token_expiry: Optional[float] = None
     
@@ -70,7 +71,7 @@ class OAuthClient:
             },
             data={
                 "grant_type": "client_credentials",
-                "scope": "api/execute"
+                "scope": self.scopes
             }
         )
         
@@ -181,6 +182,8 @@ def main():
     parser.add_argument('--method', default='GET', choices=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], 
                        help='HTTP method (default: GET)')
     parser.add_argument('--json', type=str, help='JSON data for POST/PUT requests (as string)')
+    parser.add_argument('--scopes', type=str, default='api/usecases.execute', 
+                       help='Space-separated scopes to request (default: api/usecases.execute)')
     
     args = parser.parse_args()
     
@@ -202,7 +205,8 @@ def main():
         client_id=args.client_id,
         client_secret=args.client_secret,
         cognito_domain=args.cognito_domain,
-        api_url=args.api_url
+        api_url=args.api_url,
+        scopes=args.scopes
     )
     
     # Make the API request

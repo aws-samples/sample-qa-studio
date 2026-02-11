@@ -1,6 +1,8 @@
 import { Construct } from 'constructs';
 import { CfnOutput } from 'aws-cdk-lib';
-import { UserPool, UserPoolClient, OAuthScope, CfnUserPoolUser, UserPoolResourceServer, UserPoolDomain } from 'aws-cdk-lib/aws-cognito';
+import { UserPool, UserPoolClient, OAuthScope, CfnUserPoolUser, UserPoolResourceServer, UserPoolDomain, ResourceServerScope, CfnUserPoolGroup, CfnUserPoolUserToGroupAttachment, CfnUserPool } from 'aws-cdk-lib/aws-cognito';
+import { Function } from 'aws-cdk-lib/aws-lambda';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
 interface NovaActQAStudioAuthStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
@@ -24,9 +26,17 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
   public readonly userPoolClient: UserPoolClient
   public readonly resourceServer: UserPoolResourceServer
   public readonly userPoolDomain: UserPoolDomain
+  public readonly preTokenGenerationLambda: Function
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioAuthStackCreateProps) {
     super(scope, id, props);
+
+    // Create pre-token generation Lambda for scope injection
+    this.preTokenGenerationLambda = this.createPythonLambda({
+      path: 'pre_token_generation',
+      codeDirectory: 'lambdas/auth',
+      environment: {}
+    });
 
     this.userPool = new UserPool(this, 'user_pool', {
       userPoolName: this.cdkName('user-pool'),
@@ -38,18 +48,68 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
         requireUppercase: true,
         requireDigits: true,
         requireSymbols: true,
-      },
+      }
     });
 
-    // Create resource server for M2M authentication
+    // Grant Cognito permission to invoke the Lambda BEFORE configuring the trigger
+    this.preTokenGenerationLambda.addPermission('CognitoInvoke', {
+      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
+      sourceArn: this.userPool.userPoolArn
+    });
+
+    // Configure pre-token generation Lambda trigger (V2) using L1 construct
+    // V2 is required for claimsOverrideDetails support
+    const cfnUserPool = this.userPool.node.defaultChild as CfnUserPool;
+    cfnUserPool.addPropertyOverride('LambdaConfig.PreTokenGenerationConfig', {
+      LambdaVersion: 'V2_0',
+      LambdaArn: this.preTokenGenerationLambda.functionArn
+    });
+
+    // Create resource server for M2M authentication and scope-based authorization
     this.resourceServer = new UserPoolResourceServer(this, 'resource_server', {
       userPool: this.userPool,
       identifier: 'api',
       userPoolResourceServerName: this.cdkName('api-resource-server'),
       scopes: [
         {
-          scopeName: 'execute',
-          scopeDescription: 'Execute use cases via M2M authentication'
+          scopeName: 'usecases.read',
+          scopeDescription: 'Read use cases'
+        },
+        {
+          scopeName: 'usecases.write',
+          scopeDescription: 'Create, update, delete use cases'
+        },
+        {
+          scopeName: 'templates.read',
+          scopeDescription: 'Read templates'
+        },
+        {
+          scopeName: 'templates.write',
+          scopeDescription: 'Create, update, delete templates'
+        },
+        {
+          scopeName: 'executions.read',
+          scopeDescription: 'View execution results'
+        },
+        {
+          scopeName: 'executions.write',
+          scopeDescription: 'Modify execution records'
+        },
+        {
+          scopeName: 'usecases.execute',
+          scopeDescription: 'Trigger use case executions'
+        },
+        {
+          scopeName: 'oauth-clients.read',
+          scopeDescription: 'Read OAuth clients'
+        },
+        {
+          scopeName: 'oauth-clients.write',
+          scopeDescription: 'Create, update, delete OAuth clients'
+        },
+        {
+          scopeName: 'admin',
+          scopeDescription: 'Full administrative access'
         }
       ]
     });
@@ -78,13 +138,23 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
         scopes: [
           OAuthScope.OPENID,
           OAuthScope.EMAIL,
-          OAuthScope.PROFILE
+          OAuthScope.PROFILE,
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'usecases.read', scopeDescription: 'Read use cases' })),
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'usecases.write', scopeDescription: 'Create, update, delete use cases' })),
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'templates.read', scopeDescription: 'Read templates' })),
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'templates.write', scopeDescription: 'Create, update, delete templates' })),
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'executions.read', scopeDescription: 'View execution results' })),
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'executions.write', scopeDescription: 'Modify execution records' })),
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'usecases.execute', scopeDescription: 'Trigger use case executions' })),
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'oauth-clients.read', scopeDescription: 'Read OAuth clients' })),
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'oauth-clients.write', scopeDescription: 'Create, update, delete OAuth clients' })),
+          OAuthScope.resourceServer(this.resourceServer, new ResourceServerScope({ scopeName: 'admin', scopeDescription: 'Full administrative access' }))
         ]
       }
     });
 
     // Create admin user
-    new CfnUserPoolUser(this, 'admin_user', {
+    const adminUser = new CfnUserPoolUser(this, 'admin_user', {
       userPoolId: this.userPool.userPoolId,
       username: props.adminEmail,
       userAttributes: [
@@ -101,6 +171,30 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
       forceAliasCreation: false,
       // messageAction: 'SUPPRESS' to skip welcome email, or omit to send one
     });
+
+    // Create Cognito user groups for scope-based authorization
+    const usersGroup = new CfnUserPoolGroup(this, 'users_group', {
+      userPoolId: this.userPool.userPoolId,
+      groupName: 'users',
+      description: 'Default user permissions'
+    });
+
+    const adminsGroup = new CfnUserPoolGroup(this, 'admins_group', {
+      userPoolId: this.userPool.userPoolId,
+      groupName: 'admins',
+      description: 'Administrative permissions'
+    });
+
+    // Assign admin user to admins group
+    const adminUserGroupAttachment = new CfnUserPoolUserToGroupAttachment(this, 'admin_user_group', {
+      userPoolId: this.userPool.userPoolId,
+      username: props.adminEmail,
+      groupName: 'admins'
+    });
+
+    // Ensure groups are created before user is added to them
+    adminUserGroupAttachment.addDependency(adminsGroup);
+    adminUserGroupAttachment.addDependency(adminUser);
 
     this.log('userPoolId', this.userPool.userPoolId)
     this.log('userPoolClientId', this.userPoolClient.userPoolClientId)

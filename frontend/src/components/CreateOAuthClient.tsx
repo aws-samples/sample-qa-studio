@@ -11,20 +11,79 @@ import {
   BreadcrumbGroup,
   Modal,
   Box,
-  CopyToClipboard
+  CopyToClipboard,
+  Multiselect,
+  MultiselectProps
 } from '@cloudscape-design/components';
-import { oauthClientApi, CreateOAuthClientRequest, CreateOAuthClientResponse } from '../utils/api';
+import { oauthClientApi, CreateOAuthClientRequest } from '../utils/api';
 import { ErrorState } from '../utils/errorManager';
+
+// Available OAuth scopes with descriptions
+const AVAILABLE_SCOPES: MultiselectProps.Option[] = [
+  {
+    label: 'api/usecases.read',
+    value: 'api/usecases.read',
+    description: 'Read use cases'
+  },
+  {
+    label: 'api/usecases.write',
+    value: 'api/usecases.write',
+    description: 'Create, update, delete use cases'
+  },
+  {
+    label: 'api/templates.read',
+    value: 'api/templates.read',
+    description: 'Read templates'
+  },
+  {
+    label: 'api/templates.write',
+    value: 'api/templates.write',
+    description: 'Create, update, delete templates'
+  },
+  {
+    label: 'api/executions.read',
+    value: 'api/executions.read',
+    description: 'View execution results'
+  },
+  {
+    label: 'api/executions.write',
+    value: 'api/executions.write',
+    description: 'Modify execution records'
+  },
+  {
+    label: 'api/usecases.execute',
+    value: 'api/usecases.execute',
+    description: 'Trigger use case executions'
+  },
+  {
+    label: 'api/oauth-clients.read',
+    value: 'api/oauth-clients.read',
+    description: 'Read OAuth clients'
+  },
+  {
+    label: 'api/oauth-clients.write',
+    value: 'api/oauth-clients.write',
+    description: 'Create, update, delete OAuth clients'
+  },
+  {
+    label: 'api/admin',
+    value: 'api/admin',
+    description: 'Full administrative access'
+  }
+];
 
 const CreateOAuthClient: React.FC = () => {
   const navigate = useNavigate();
   const [clientData, setClientData] = useState<CreateOAuthClientRequest>({
-    name: ''
+    name: '',
+    scopes: [] // No default scopes
   });
+  const [selectedScopes, setSelectedScopes] = useState<MultiselectProps.Option[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdClientId, setCreatedClientId] = useState("");
   const [createdClientSecret, setCreatedClientSecret] = useState("");
+  const [createdScopes, setCreatedScopes] = useState<string[]>([]);
   const [createdAccessTokenValidity, setCreatedAccessTokenValidity] = useState(0);
   const [createdIdTokenValidity, setCreatedIdTokenValidity] = useState(0);
   const [createdRefreshTokenValidity, setCreatedRefreshTokenValidity] = useState(0);
@@ -36,11 +95,9 @@ const CreateOAuthClient: React.FC = () => {
     
     try {
       const response = await oauthClientApi.create(clientData);
-      console.log('OAuth client created:', response);
-      console.log('Client ID:', response.client_id);
-      console.log('Client Secret:', response.client_secret);
       setCreatedClientId(response.client_id)
       setCreatedClientSecret(response.client_secret)
+      setCreatedScopes(response.scopes || [])
       setCreatedAccessTokenValidity(response?.access_token_validity || 0)
       setCreatedIdTokenValidity(response?.id_token_validity || 0)
       setCreatedRefreshTokenValidity(response?.refresh_token_validity || 0)
@@ -53,13 +110,21 @@ const CreateOAuthClient: React.FC = () => {
     }
   };
 
-  const handleCloseSuccessModal = () => {
-    setShowSuccessModal(false);
-    navigate('/oauth-clients');
+  const handleScopeChange = (detail: MultiselectProps.MultiselectChangeDetail) => {
+    setSelectedScopes(detail.selectedOptions);
+    setClientData({
+      ...clientData,
+      scopes: detail.selectedOptions.map(opt => opt.value || '')
+    });
   };
 
   const isFormValid = () => {
-    return clientData.name.trim().length > 0;
+    return clientData.name.trim().length > 0 && (clientData.scopes?.length || 0) > 0;
+  };
+
+  const handleCloseSuccessModal = () => {
+    setShowSuccessModal(false);
+    navigate('/oauth-clients');
   };
 
   return (
@@ -105,9 +170,20 @@ const CreateOAuthClient: React.FC = () => {
             />
           </FormField>
 
-          <Alert type="info">
-            After creation, you will receive a Client ID and Client Secret. Make sure to save the Client Secret securely as it will only be shown once.
-          </Alert>
+          <FormField
+            label="Scopes"
+            description="Select the permissions this OAuth client will have."
+            constraintText="At least one scope is required"
+          >
+            <Multiselect
+              selectedOptions={selectedScopes}
+              onChange={({ detail }) => handleScopeChange(detail)}
+              options={AVAILABLE_SCOPES}
+              placeholder="Select scopes"
+              disabled={creating}
+              filteringType="auto"
+            />
+          </FormField>
 
           <SpaceBetween direction="horizontal" size="xs">
             <Button
@@ -166,6 +242,14 @@ const CreateOAuthClient: React.FC = () => {
               copyErrorText="Failed to copy"
               variant="inline"
             />
+          </FormField>
+
+          <FormField label="Scopes">
+            <Box variant="p">
+              {createdScopes.map((scope, index) => (
+                <Box key={index} variant="code">{scope}</Box>
+              ))}
+            </Box>
           </FormField>
 
           <Box variant="p">

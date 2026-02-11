@@ -78,6 +78,8 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   addUserLambda: lambdaStack.addUserLambda,
   removeUserLambda: lambdaStack.removeUserLambda,
   listUsersLambda: lambdaStack.listUsersLambda,
+  getUserLambda: lambdaStack.getUserLambda,
+  updateUserGroupsLambda: lambdaStack.updateUserGroupsLambda,
   subscribeUsecaseLambda: lambdaStack.subscribeUsecaseLambda,
   unsubscribeUsecaseLambda: lambdaStack.unsubscribeUsecaseLambda,
   getUsecaseSubscriptionLambda: lambdaStack.getUsecaseSubscriptionLambda,

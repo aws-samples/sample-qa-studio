@@ -48,7 +48,7 @@ export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger
 
   const handleDownload = async (fileName: string) => {
     try {
-      // Get the auth token
+      // Get the auth token - use ID token with custom scope claim
       const session = await fetchAuthSession();
       const token = session.tokens?.idToken?.toString();
 

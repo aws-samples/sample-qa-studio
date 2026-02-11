@@ -31,6 +31,9 @@ export interface ExecutionModel {
 export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   try {
     const session = await fetchAuthSession();
+    
+    // Use ID token for user authentication with custom scope claim
+    // The pre-token generation Lambda adds scopes to the ID token based on user groups
     const token = session.tokens?.idToken?.toString();
 
     if (!token) {
@@ -246,6 +249,7 @@ export const wizardApi = {
 export const exportImportApi = {
   exportUsecase: async (usecaseId: string) => {
     const session = await fetchAuthSession();
+    // Use ID token with custom scope claim
     const token = session.tokens?.idToken?.toString();
 
     const response = await fetch(buildRestEndpoint(`usecase/${usecaseId}/export`), {
@@ -308,16 +312,19 @@ export interface User {
   enabled: boolean;
   created_at: string;
   attributes: { [key: string]: string };
+  groups?: string[];
 }
 
 export interface CreateUserRequest {
   email: string;
+  groups: string[];
 }
 
 export interface CreateUserResponse {
   username: string;
   email: string;
   status: string;
+  groups: string[];
 }
 
 export const userApi = {
@@ -349,12 +356,14 @@ export interface OAuthClient {
 
 export interface CreateOAuthClientRequest {
   name: string;
+  scopes?: string[];
 }
 
 export interface CreateOAuthClientResponse {
   client_id: string;
   client_name: string;
   client_secret: string;
+  scopes: string[];
   created_date: string;
   refresh_token_validity?: number;
   access_token_validity?: number;

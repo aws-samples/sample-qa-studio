@@ -164,7 +164,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
+    // Grant both read and write permissions to update use case records
     updateUsecaseLastExecutionLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    updateUsecaseLastExecutionLambda.role?.addManagedPolicy(props.tableWritePolicy);
 
     const executionStatusRule = new Rule(this, 'execution_status_changed_rule', {
       ruleName: this.cdkName('execution-status-changed'),
@@ -735,6 +737,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // Task State Change Handler Lambda - monitors ECS task failures
     const taskStateChangeLambda = this.createPythonLambda({
       path: 'handle_task_state_change',
+      codeDirectory: 'lambdas/events',
       environment: {
         TABLE_NAME: props.table.tableName
       }

@@ -106,6 +106,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly listUsersLambda: Function
   public readonly addUserLambda: Function
   public readonly removeUserLambda: Function
+  public readonly getUserLambda: Function
+  public readonly updateUserGroupsLambda: Function
 
   // OAuth Client Management Lambdas
   public readonly createOAuthClientLambda: Function
@@ -474,7 +476,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
         'cognito-idp:AdminCreateUser',
         'cognito-idp:AdminSetUserPassword',
         'cognito-idp:AdminUpdateUserAttributes',
-        'cognito-idp:AdminGetUser'
+        'cognito-idp:AdminGetUser',
+        'cognito-idp:AdminAddUserToGroup'
       ],
       resources: [props.userPool.userPoolArn]
     }));
@@ -483,6 +486,49 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       effect: Effect.ALLOW,
       actions: [
         'cognito-idp:AdminDeleteUser'
+      ],
+      resources: [props.userPool.userPoolArn]
+    }));
+
+    this.getUserLambda = this.createPythonLambda({
+      path: 'get_user',
+      environment: {
+        USER_POOL_ID: props.userPool.userPoolId
+      }
+    });
+
+    this.getUserLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'cognito-idp:AdminGetUser',
+        'cognito-idp:AdminListGroupsForUser'
+      ],
+      resources: [props.userPool.userPoolArn]
+    }));
+
+    this.updateUserGroupsLambda = this.createPythonLambda({
+      path: 'update_user_groups',
+      environment: {
+        USER_POOL_ID: props.userPool.userPoolId
+      }
+    });
+
+    this.updateUserGroupsLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'cognito-idp:AdminGetUser',
+        'cognito-idp:AdminListGroupsForUser',
+        'cognito-idp:AdminAddUserToGroup',
+        'cognito-idp:AdminRemoveUserFromGroup'
+      ],
+      resources: [props.userPool.userPoolArn]
+    }));
+
+    // Update listUsersLambda to include group listing permission
+    this.listUsersLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'cognito-idp:AdminListGroupsForUser'
       ],
       resources: [props.userPool.userPoolArn]
     }));

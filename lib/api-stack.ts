@@ -23,6 +23,8 @@ interface NovaActQAStudioApiStackCreateProps extends NovaActQAStudioBaseStackCre
   addUserLambda: Function
   listUsersLambda: Function
   removeUserLambda: Function
+  getUserLambda: Function
+  updateUserGroupsLambda: Function
   createScheduleLambda: Function
   deleteScheduleLambda: Function
   getScheduleLambda: Function
@@ -74,6 +76,7 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     // Create Lambda Authorizer
     this.authorizerLambda = this.createPythonLambda({
       path: 'authorizer',
+      codeDirectory: 'lambdas/auth',
       environment: {
         USER_POOL_ID: props.userPool.userPoolId
       }
@@ -265,7 +268,11 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     this.addMethod(users, HttpMethod.POST, props.addUserLambda)
 
     const user = this.addResource(users, '{username}')
+    this.addMethod(user, HttpMethod.GET, props.getUserLambda)
     this.addMethod(user, HttpMethod.DELETE, props.removeUserLambda)
+
+    const userGroups = this.addResource(user, 'groups')
+    this.addMethod(userGroups, HttpMethod.PUT, props.updateUserGroupsLambda)
 
     // /oauth-clients - OAuth client management
     const oauthClients = this.addResource(this.api.root, 'oauth-clients')

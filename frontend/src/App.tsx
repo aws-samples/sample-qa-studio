@@ -54,6 +54,64 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeHref, setActiveHref] = useState(location.pathname);
+  const [userScopes, setUserScopes] = useState<string[]>([]);
+
+  // Extract scopes from user token
+  useEffect(() => {
+    const extractScopes = async () => {
+      try {
+        const { fetchAuthSession } = await import('aws-amplify/auth');
+        const session = await fetchAuthSession();
+        
+        if (session.tokens?.idToken) {
+          const idTokenString = session.tokens.idToken.toString();
+          const payload = JSON.parse(atob(idTokenString.split('.')[1]));
+          const scope = payload.scope || '';
+          const scopes = scope.split(' ').filter((s: string) => s.length > 0);
+          setUserScopes(scopes);
+        }
+      } catch (error) {
+        console.error('Failed to extract scopes:', error);
+        setUserScopes([]);
+      }
+    };
+    
+    extractScopes();
+  }, []);
+
+  // Check if user has required scope (with admin inheritance)
+  const hasScope = (requiredScope: string): boolean => {
+    return userScopes.includes('api/admin') || userScopes.includes(requiredScope);
+  };
+
+  // Build navigation items based on user scopes
+  const navigationItems = React.useMemo(() => {
+    const items: any[] = [
+      { type: "link", text: "Use cases", href: "/" },
+      { type: "link", text: "Templates", href: "/templates" },
+    ];
+
+    // Add admin section if user has admin or oauth-clients scopes
+    const hasAdminAccess = hasScope('api/admin');
+    const hasOAuthAccess = hasScope('api/oauth-clients.read') || hasScope('api/oauth-clients.write');
+
+    if (hasAdminAccess || hasOAuthAccess) {
+      items.push({ type: "divider" });
+      
+      if (hasAdminAccess) {
+        items.push({ type: "link", text: "Users", href: "/users" });
+      }
+      
+      if (hasOAuthAccess || hasAdminAccess) {
+        items.push({ type: "link", text: "OAuth Clients", href: "/oauth-clients" });
+      }
+    }
+
+    items.push({ type: "divider" });
+    items.push({ type: "link", text: baseName, href: "#" });
+
+    return items;
+  }, [userScopes]);
 
   // Preload components when the app becomes idle
   React.useEffect(() => {
@@ -106,15 +164,7 @@ function AppContent() {
       navigation={
         <SideNavigation
           activeHref={activeHref}
-          items={[
-            { type: "link", text: "Use cases", href: "/" },
-            { type: "link", text: "Templates", href: "/templates" },
-            { type: "divider" },
-            { type: "link", text: "Users", href: "/users" },
-            { type: "link", text: "OAuth Clients", href: "/oauth-clients" },
-            { type: "divider" },
-            { type: "link", text: baseName, href: "#" },
-          ]}
+          items={navigationItems}
           onFollow={(event) => {
             if (!event.detail.external) {
               event.preventDefault();
