@@ -30,7 +30,7 @@ export default defineConfig({
     '__APP_CONFIG__': {
       baseName: JSON.stringify(config.baseName),
       defaultRegion: JSON.stringify(config.defaultRegion),
-      enabledRegions: JSON.stringify(config.enabledRegions),
+      enabledRegions: config.enabledRegions, // Don't stringify arrays - Vite handles this
       bedrockModelId: JSON.stringify(config.bedrockModelId),
       apiEndpoint: JSON.stringify(config.apiEndpoint),
     }
