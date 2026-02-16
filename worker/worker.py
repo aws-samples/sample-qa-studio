@@ -207,7 +207,10 @@ def main_batch():
         all_success = False
         # Ensure execution status is updated on Nova Act failures
         try:
-            db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=get_time())
+            completed_at = get_time()
+            db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=completed_at)
+            # Update suite execution counters if part of a suite
+            db_client.update_suite_execution_counters(execution_id, usecase_id, "failed")
         except Exception as db_error:
             logger.error(f"Failed to update execution status after Nova Act error: {str(db_error)}")
         
@@ -228,9 +231,13 @@ def main_batch():
     # Update execution status to completed
     if not all_success:
         db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=get_time())
+        # Update suite execution counters if part of a suite
+        db_client.update_suite_execution_counters(execution_id, usecase_id, "failed")
         return False
 
     db_client.update_execution_status(usecase_id, execution_id, "success", completed_at=get_time())
+    # Update suite execution counters if part of a suite
+    db_client.update_suite_execution_counters(execution_id, usecase_id, "success")
     
     logger.info(f"Execution {execution_id} completed successfully")
     return True

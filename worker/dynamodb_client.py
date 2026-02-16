@@ -47,7 +47,9 @@ class DynamoDBClient:
                 executing_at=item.get('executing_at'),
                 trigger_type=item.get('trigger_type'),
                 session_id=item.get('session_id'),
-                region=item.get('executing_region', 'us-east-1')  # Read from executing_region field
+                region=item.get('executing_region', 'us-east-1'),  # Read from executing_region field
+                suite_execution_id=item.get('suite_execution_id'),  # Read suite_execution_id if present
+                suite_id=item.get('suite_id')  # Read suite_id if present
             )
             
         except ClientError as e:
@@ -571,4 +573,420 @@ class DynamoDBClient:
             
         except ClientError as e:
             logger.error(f"Error deleting wizard command: {e}")
+            return False
+
+    def update_suite_execution_counters(self, execution_id: str, usecase_id: str, status: str) -> bool:
+        """
+        Update suite execution counters when a use case execution completes.
+        Simplified version that just updates counters and checks completion.
+        
+        Args:
+            execution_id: The use case execution ID
+            usecase_id: The use case ID
+            status: Final status ('success' or 'failed')
+            
+        Returns:
+            True if update succeeded or not part of suite, False on error
+        """
+        try:
+            # Get the execution to check for suite_execution_id and suite_id
+            execution = self.get_execution(usecase_id, execution_id)
+            if not execution:
+                logger.warning(f"Execution {execution_id} not found, cannot update suite counters")
+                return False
+            
+            # Check if this execution is part of a suite
+            suite_execution_id = getattr(execution, 'suite_execution_id', None)
+            suite_id = getattr(execution, 'suite_id', None)
+            
+            if not suite_execution_id or not suite_id:
+                logger.info(f"Execution {execution_id} is not part of a suite execution")
+                return True  # Not an error, just not part of a suite
+            
+            logger.info(f"Updating suite execution counters: suite_id={suite_id}, suite_execution_id={suite_execution_id}, status={status}")
+            
+            # Update counters atomically using direct key access (no scan needed!)
+            if status == 'success':
+                update_expr = 'ADD completed_usecases :inc, successful_usecases :inc SET running_usecases = running_usecases - :inc'
+            elif status in ['failed', 'error', 'stopped']:
+                # Treat 'stopped' status as 'failed' for suite execution counter purposes
+                update_expr = 'ADD completed_usecases :inc, failed_usecases :inc SET running_usecases = running_usecases - :inc'
+            else:
+                logger.warning(f"Unknown status '{status}' for counter update")
+                return False
+            
+            self.table.update_item(
+                Key={
+                    'pk': f'SUITE_EXECUTION#{suite_id}',
+                    'sk': f'EXECUTION#{suite_execution_id}'
+                },
+                UpdateExpression=update_expr,
+                ExpressionAttributeValues={
+                    ':inc': 1
+                }
+            )
+            
+            logger.info(f"Updated suite execution counters for {suite_execution_id}")
+            
+            # Check if suite is complete
+            updated_response = self.table.get_item(
+                Key={
+                    'pk': f'SUITE_EXECUTION#{suite_id}',
+                    'sk': f'EXECUTION#{suite_execution_id}'
+                }
+            )
+            
+            if 'Item' in updated_response:
+                suite_exec = updated_response['Item']
+                total = int(suite_exec.get('total_usecases', 0))
+                completed = int(suite_exec.get('completed_usecases', 0))
+                successful = int(suite_exec.get('successful_usecases', 0))
+                failed = int(suite_exec.get('failed_usecases', 0))
+                
+                logger.info(f"Suite counters: {completed}/{total} completed, {successful} successful, {failed} failed")
+                
+                # If all complete, update status
+                if completed >= total:
+                    if failed == 0:
+                        final_status = 'completed'
+                    elif successful == 0:
+                        final_status = 'failed'
+                    else:
+                        final_status = 'partial'
+                    
+                    from utils import get_time
+                    completed_at = get_time()
+                    
+                    # Calculate duration
+                    started_at_str = suite_exec.get('started_at', '')
+                    duration_seconds = 0
+                    if started_at_str:
+                        try:
+                            from datetime import datetime
+                            started_at = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
+                            completed_at_dt = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+                            duration_seconds = int((completed_at_dt - started_at).total_seconds())
+                        except Exception as e:
+                            logger.warning(f"Could not calculate duration: {e}")
+                    
+                    # Update suite execution status
+                    update_expr = 'SET #status = :status, completed_at = :completed_at'
+                    expr_attr_values = {
+                        ':status': final_status,
+                        ':completed_at': completed_at
+                    }
+                    
+                    if duration_seconds > 0:
+                        update_expr += ', duration_seconds = :duration'
+                        expr_attr_values[':duration'] = duration_seconds
+                    
+                    self.table.update_item(
+                        Key={
+                            'pk': f'SUITE_EXECUTION#{suite_id}',
+                            'sk': f'EXECUTION#{suite_execution_id}'
+                        },
+                        UpdateExpression=update_expr,
+                        ExpressionAttributeNames={'#status': 'status'},
+                        ExpressionAttributeValues=expr_attr_values
+                    )
+                    
+                    logger.info(f"Suite execution {suite_execution_id} completed with status: {final_status}")
+                    
+                    # Update the test suite summary with last execution info
+                    self._update_test_suite_summary(suite_id, final_status, successful, failed, total)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating suite execution counters: {e}", exc_info=True)
+            return False
+    
+    def _update_test_suite_summary(self, suite_id: str, last_status: str, successful: int, failed: int, total: int) -> bool:
+        """Update the test suite record with last execution summary"""
+        try:
+            from utils import get_time
+            
+            logger.info(f"Updating test suite {suite_id} summary: status={last_status}, {successful}/{total} successful")
+            
+            self.table.update_item(
+                Key={
+                    'pk': 'TEST_SUITES',
+                    'sk': f'SUITE#{suite_id}'
+                },
+                UpdateExpression='SET last_execution_status = :status, last_successful_count = :successful, last_failed_count = :failed, last_execution_time = :time',
+                ExpressionAttributeValues={
+                    ':status': last_status,
+                    ':successful': successful,
+                    ':failed': failed,
+                    ':time': get_time()
+                }
+            )
+            
+            logger.info(f"Updated test suite {suite_id} summary")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating test suite summary: {e}")
+            return False
+
+    def update_suite_execution_tracking(self, execution_id: str, usecase_id: str, status: str, completed_at: str) -> bool:
+        """
+        Update suite execution tracking when a use case execution completes.
+        
+        This function:
+        1. Checks if the execution is part of a suite (has suite_execution_id)
+        2. Updates the suite execution result status
+        3. Updates suite execution counters atomically
+        4. Checks if the suite execution is complete
+        
+        Args:
+            execution_id: The use case execution ID
+            usecase_id: The use case ID
+            status: Final status ('success' or 'failed')
+            completed_at: Completion timestamp
+            
+        Returns:
+            True if update succeeded or not part of suite, False on error
+        """
+        try:
+            logger.info(f"[SUITE_TRACKING] Starting suite tracking update: execution_id={execution_id}, usecase_id={usecase_id}, status={status}")
+            
+            # Get the execution to check for suite_execution_id
+            execution = self.get_execution(usecase_id, execution_id)
+            if not execution:
+                logger.warning(f"[SUITE_TRACKING] Execution {execution_id} not found for usecase {usecase_id}, cannot update suite tracking")
+                return False
+            
+            logger.info(f"[SUITE_TRACKING] Retrieved execution: pk={execution.pk}, sk={execution.sk}, suite_execution_id={getattr(execution, 'suite_execution_id', 'NOT_SET')}")
+            
+            # Check if this execution is part of a suite
+            suite_execution_id = getattr(execution, 'suite_execution_id', None)
+            if not suite_execution_id:
+                logger.info(f"[SUITE_TRACKING] Execution {execution_id} is not part of a suite execution (suite_execution_id is None or empty)")
+                return True  # Not an error, just not part of a suite
+            
+            logger.info(f"[SUITE_TRACKING] Updating suite execution tracking: suite_execution_id={suite_execution_id}, "
+                       f"usecase_id={usecase_id}, status={status}")
+            
+            # Find the suite execution result record
+            suite_result = self._get_suite_execution_result(suite_execution_id, usecase_id)
+            if not suite_result:
+                logger.warning(f"[SUITE_TRACKING] Suite execution result not found for suite={suite_execution_id}, usecase={usecase_id}")
+                return False
+            
+            logger.info(f"[SUITE_TRACKING] Found suite execution result: {suite_result}")
+            
+            # Update suite execution result status
+            update_success = self._update_suite_execution_result(suite_execution_id, usecase_id, status, completed_at, execution_id)
+            logger.info(f"[SUITE_TRACKING] Update suite execution result: success={update_success}")
+            
+            # Get suite_id from the suite execution result
+            suite_id = suite_result.get('suite_id')
+            if not suite_id:
+                # Try to get it from the suite execution record
+                logger.info(f"[SUITE_TRACKING] suite_id not in result, trying to get from suite execution record")
+                suite_execution = self._get_suite_execution(suite_execution_id)
+                if suite_execution:
+                    suite_id = suite_execution.get('suite_id')
+                    logger.info(f"[SUITE_TRACKING] Found suite_id from suite execution: {suite_id}")
+            
+            if not suite_id:
+                logger.warning(f"[SUITE_TRACKING] Could not determine suite_id for suite_execution_id={suite_execution_id}")
+                return False
+            
+            # Update suite execution counters
+            counter_success = self._update_suite_execution_counters(suite_id, suite_execution_id, status)
+            logger.info(f"[SUITE_TRACKING] Update suite execution counters: success={counter_success}")
+            
+            # Check if suite execution is complete
+            completion_success = self._check_suite_completion(suite_id, suite_execution_id)
+            logger.info(f"[SUITE_TRACKING] Check suite completion: success={completion_success}")
+            
+            logger.info(f"[SUITE_TRACKING] Successfully completed suite execution tracking")
+            return True
+            
+        except Exception as e:
+            logger.error(f"[SUITE_TRACKING] Error updating suite execution tracking: {e}", exc_info=True)
+            return False
+    
+    def _get_suite_execution_result(self, suite_execution_id: str, usecase_id: str) -> Optional[dict]:
+        """Get suite execution result record"""
+        try:
+            logger.info(f"[SUITE_TRACKING] Getting suite execution result: pk=SUITE_EXEC#{suite_execution_id}, sk=RESULT#{usecase_id}")
+            response = self.table.get_item(
+                Key={
+                    'pk': f'SUITE_EXEC#{suite_execution_id}',
+                    'sk': f'RESULT#{usecase_id}'
+                }
+            )
+            result = response.get('Item')
+            if result:
+                logger.info(f"[SUITE_TRACKING] Found suite execution result: {result}")
+            else:
+                logger.warning(f"[SUITE_TRACKING] Suite execution result not found")
+            return result
+        except ClientError as e:
+            logger.error(f"[SUITE_TRACKING] Error getting suite execution result: {e}")
+            return None
+    
+    def _get_suite_execution(self, suite_execution_id: str) -> Optional[dict]:
+        """Get suite execution record by scanning for the execution ID"""
+        try:
+            # Scan to find the suite execution by its id field
+            response = self.table.scan(
+                FilterExpression='id = :exec_id AND begins_with(pk, :pk_prefix)',
+                ExpressionAttributeValues={
+                    ':exec_id': suite_execution_id,
+                    ':pk_prefix': 'SUITE_EXECUTION#'
+                },
+                Limit=1
+            )
+            items = response.get('Items', [])
+            return items[0] if items else None
+        except ClientError as e:
+            logger.error(f"Error getting suite execution: {e}")
+            return None
+    
+    def _update_suite_execution_result(self, suite_execution_id: str, usecase_id: str, 
+                                       status: str, completed_at: str, usecase_execution_id: str = None) -> bool:
+        """Update the status of a specific suite execution result"""
+        try:
+            update_expr = 'SET #status = :status, completed_at = :completed_at'
+            expr_attr_names = {'#status': 'status'}
+            expr_attr_values = {
+                ':status': status,
+                ':completed_at': completed_at
+            }
+            
+            # Add usecase_execution_id if provided
+            if usecase_execution_id:
+                update_expr += ', usecase_execution_id = :usecase_execution_id'
+                expr_attr_values[':usecase_execution_id'] = usecase_execution_id
+            
+            self.table.update_item(
+                Key={
+                    'pk': f'SUITE_EXEC#{suite_execution_id}',
+                    'sk': f'RESULT#{usecase_id}'
+                },
+                UpdateExpression=update_expr,
+                ExpressionAttributeNames=expr_attr_names,
+                ExpressionAttributeValues=expr_attr_values
+            )
+            logger.info(f"Updated suite execution result: suite={suite_execution_id}, usecase={usecase_id}, status={status}")
+            return True
+        except ClientError as e:
+            logger.error(f"Error updating suite execution result: {e}")
+            return False
+    
+    def _update_suite_execution_counters(self, suite_id: str, suite_execution_id: str, status: str) -> bool:
+        """Update suite execution counters atomically"""
+        try:
+            if status == 'success':
+                update_expr = 'ADD completed_usecases :inc, successful_usecases :inc, running_usecases :dec'
+            elif status in ['failed', 'error', 'stopped']:
+                # Treat 'stopped' status as 'failed' for suite execution counter purposes
+                update_expr = 'ADD completed_usecases :inc, failed_usecases :inc, running_usecases :dec'
+            else:
+                logger.warning(f"Unknown status '{status}' for counter update")
+                return False
+            
+            self.table.update_item(
+                Key={
+                    'pk': f'SUITE_EXECUTION#{suite_id}',
+                    'sk': f'EXECUTION#{suite_execution_id}'
+                },
+                UpdateExpression=update_expr,
+                ExpressionAttributeValues={
+                    ':inc': 1,
+                    ':dec': -1
+                }
+            )
+            logger.info(f"Updated suite execution counters: suite={suite_id}, execution={suite_execution_id}, status={status}")
+            return True
+        except ClientError as e:
+            logger.error(f"Error updating suite execution counters: {e}")
+            return False
+    
+    def _check_suite_completion(self, suite_id: str, suite_execution_id: str) -> bool:
+        """Check if all use cases in a suite execution are complete and update suite status"""
+        try:
+            # Get current suite execution state
+            response = self.table.get_item(
+                Key={
+                    'pk': f'SUITE_EXECUTION#{suite_id}',
+                    'sk': f'EXECUTION#{suite_execution_id}'
+                }
+            )
+            
+            if 'Item' not in response:
+                logger.warning(f"Suite execution {suite_execution_id} not found")
+                return False
+            
+            suite_execution = response['Item']
+            
+            # Extract counters
+            total_usecases = int(suite_execution.get('total_usecases', 0))
+            completed_usecases = int(suite_execution.get('completed_usecases', 0))
+            successful_usecases = int(suite_execution.get('successful_usecases', 0))
+            failed_usecases = int(suite_execution.get('failed_usecases', 0))
+            
+            logger.info(f"Suite execution counters: total={total_usecases}, completed={completed_usecases}, "
+                       f"successful={successful_usecases}, failed={failed_usecases}")
+            
+            # Check if all use cases are complete
+            if completed_usecases < total_usecases:
+                logger.info(f"Suite execution not yet complete: {completed_usecases}/{total_usecases}")
+                return False
+            
+            # Determine final status
+            if failed_usecases == 0:
+                final_status = 'completed'
+            elif successful_usecases == 0:
+                final_status = 'failed'
+            else:
+                final_status = 'partial'
+            
+            from utils import get_time
+            completed_at = get_time()
+            
+            logger.info(f"Suite execution complete with status: {final_status}")
+            
+            # Calculate duration
+            started_at_str = suite_execution.get('started_at', '')
+            duration_seconds = 0
+            if started_at_str:
+                try:
+                    from datetime import datetime
+                    started_at = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
+                    completed_at_dt = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+                    duration_seconds = int((completed_at_dt - started_at).total_seconds())
+                except Exception as e:
+                    logger.warning(f"Could not calculate duration: {e}")
+            
+            # Update suite execution status
+            update_expr = 'SET #status = :status, completed_at = :completed_at'
+            expr_attr_values = {
+                ':status': final_status,
+                ':completed_at': completed_at
+            }
+            
+            if duration_seconds > 0:
+                update_expr += ', duration_seconds = :duration'
+                expr_attr_values[':duration'] = duration_seconds
+            
+            self.table.update_item(
+                Key={
+                    'pk': f'SUITE_EXECUTION#{suite_id}',
+                    'sk': f'EXECUTION#{suite_execution_id}'
+                },
+                UpdateExpression=update_expr,
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues=expr_attr_values
+            )
+            
+            logger.info(f"Updated suite execution {suite_execution_id} to status: {final_status}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error checking suite completion: {e}")
             return False

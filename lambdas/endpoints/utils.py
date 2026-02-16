@@ -312,6 +312,57 @@ def require_scopes(event: dict, required_scopes: list[str]) -> tuple[dict, dict 
     return user_identity, None
 
 
+def validate_scope_access(user_scopes: list[str], required_scope: str, permission_type: str) -> None:
+    """
+    Validate user has required permission on scope.
+    
+    Supports scope patterns for test suites and use cases:
+    - suite:* grants access to all suites
+    - usecase:* grants access to all use cases
+    - suite:{name}:* grants all permissions on specific suite
+    - suite:{name}:{permission} grants specific permission
+    
+    Permission hierarchy:
+    - write permission implies read and execute permissions
+    
+    Args:
+        user_scopes: List of scopes from JWT token (e.g., ['suite:smoke-tests:read'])
+        required_scope: Scope to check (e.g., 'suite:smoke-tests')
+        permission_type: 'read', 'write', or 'execute'
+    
+    Raises:
+        PermissionError: If user lacks required permission
+        
+    Example:
+        validate_scope_access(['suite:smoke-tests:write'], 'suite:smoke-tests', 'read')  # OK
+        validate_scope_access(['suite:smoke-tests:read'], 'suite:smoke-tests', 'write')  # Raises
+    """
+    if not user_scopes:
+        raise PermissionError(f'User lacks {permission_type} permission on {required_scope}')
+    
+    # Check for wildcard access to the scope (e.g., 'suite:smoke-tests:*')
+    wildcard_scope = f'{required_scope}:*'
+    if wildcard_scope in user_scopes:
+        logging.info(f"Wildcard scope {wildcard_scope} grants {permission_type} access")
+        return
+    
+    # Check for specific permission (e.g., 'suite:smoke-tests:read')
+    required_permission = f'{required_scope}:{permission_type}'
+    if required_permission in user_scopes:
+        logging.info(f"Specific permission {required_permission} grants access")
+        return
+    
+    # Check if user has write permission (implies read and execute)
+    if permission_type in ['read', 'execute']:
+        write_permission = f'{required_scope}:write'
+        if write_permission in user_scopes:
+            logging.info(f"Write permission {write_permission} implies {permission_type} access")
+            return
+    
+    # No matching permission found
+    raise PermissionError(f'User lacks {permission_type} permission on {required_scope}')
+
+
 def create_response(status_code: int, body: Any, cors: bool = True) -> dict:
     """
     Create a standardized API Gateway response.

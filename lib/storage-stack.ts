@@ -1,6 +1,6 @@
 import { RemovalPolicy, CustomResource, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { Table, AttributeType } from 'aws-cdk-lib/aws-dynamodb';
+import { Table, AttributeType, ProjectionType } from 'aws-cdk-lib/aws-dynamodb';
 import { BackupPlan, BackupVault, BackupPlanRule, BackupResource } from 'aws-cdk-lib/aws-backup';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
@@ -47,6 +47,20 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
         type: AttributeType.STRING
       },
       removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // Add GSI for querying use case executions by suite execution ID
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'suite-execution-index',
+      partitionKey: {
+        name: 'suite_execution_id',
+        type: AttributeType.STRING
+      },
+      sortKey: {
+        name: 'sk',
+        type: AttributeType.STRING
+      },
+      projectionType: ProjectionType.ALL,
     });
 
     const backupVault = new BackupVault(this, "dynamodb_backup_vault", {

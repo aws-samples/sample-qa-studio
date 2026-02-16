@@ -96,6 +96,14 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
         scopeDescription: 'Trigger use case executions'
       },
       {
+        scopeName: 'suite.read',
+        scopeDescription: 'Read test suites and suite executions'
+      },
+      {
+        scopeName: 'suite.write',
+        scopeDescription: 'Create, update, delete, and execute test suites'
+      },
+      {
         scopeName: 'oauth-clients.read',
         scopeDescription: 'Read OAuth clients'
       },
