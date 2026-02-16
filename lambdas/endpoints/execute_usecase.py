@@ -115,9 +115,12 @@ def handler(event, context):
     if not usecase_id:
         return create_response(400, {'error': 'Missing usecase ID'})
     
-    trigger_type = event.get('queryStringParameters', {}).get('trigger-type', 'OnDemand')
+    query_params = event.get('queryStringParameters') or {}
+    trigger_type = query_params.get('trigger-type', 'OnDemand')
+    suite_execution_id = query_params.get('suite-execution-id')  # Optional: for suite executions
+    suite_id = query_params.get('suite-id')  # Optional: for suite executions
     
-    print(f'usecaseID: {usecase_id}, triggertype: {trigger_type}')
+    print(f'usecaseID: {usecase_id}, triggertype: {trigger_type}, suite_execution_id: {suite_execution_id}, suite_id: {suite_id}')
     
     table_name = get_table_name()
     created_at = get_current_timestamp()
@@ -148,18 +151,29 @@ def handler(event, context):
         execution_id = generate_uuid7()
         
         # Create execution record
+        execution_item = {
+            'pk': {'S': f'USECASE_EXECUTION#{usecase_id}'},
+            'sk': {'S': f'EXECUTION#{execution_id}'},
+            'starting_url': {'S': starting_url},
+            'status': {'S': 'pending'},
+            'created_at': {'S': created_at},
+            'trigger_type': {'S': trigger_type},
+            'executing_region': {'S': region},
+            'model_id': {'S': model_id}
+        }
+        
+        # Add suite_execution_id and suite_id if this is part of a suite execution
+        if suite_execution_id:
+            execution_item['suite_execution_id'] = {'S': suite_execution_id}
+            print(f'Execution is part of suite execution: {suite_execution_id}')
+        
+        if suite_id:
+            execution_item['suite_id'] = {'S': suite_id}
+            print(f'Execution is part of suite: {suite_id}')
+        
         dynamodb.put_item(
             TableName=table_name,
-            Item={
-                'pk': {'S': f'USECASE_EXECUTION#{usecase_id}'},
-                'sk': {'S': f'EXECUTION#{execution_id}'},
-                'starting_url': {'S': starting_url},
-                'status': {'S': 'pending'},
-                'created_at': {'S': created_at},
-                'trigger_type': {'S': trigger_type},
-                'executing_region': {'S': region},
-                'model_id': {'S': model_id}
-            }
+            Item=execution_item
         )
         print(f'Created execution {execution_id}')
         

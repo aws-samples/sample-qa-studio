@@ -738,7 +738,6 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // Task State Change Handler Lambda - monitors ECS task failures
     const taskStateChangeLambda = this.createPythonLambda({
       path: 'handle_task_state_change',
-      codeDirectory: 'lambdas/events',
       environment: {
         TABLE_NAME: props.table.tableName
       }

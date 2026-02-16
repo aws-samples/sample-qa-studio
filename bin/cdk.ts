@@ -66,6 +66,8 @@ const lambdaStack = new NovaActQAStudioLambdaStack(app, 'lambdas', {
   tableFullAccessPolicy: storageStack.tableFullAccessPolicy,
   bedrockModelId,
   notificationTopicArn: workerStack.notificationTopicArn,
+  executeUsecaseLambda: workerStack.executeUsecaseLambda,
+  ecsClusterArn: workerStack.cluster.clusterArn,
   env: stackEnv,
 })
 

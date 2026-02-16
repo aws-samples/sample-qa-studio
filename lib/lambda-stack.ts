@@ -18,6 +18,8 @@ interface NovaActQAStudioLambdaStackCreateProps extends NovaActQAStudioBaseStack
   tableFullAccessPolicy: ManagedPolicy
   bedrockModelId: string
   notificationTopicArn: string
+  executeUsecaseLambda: Function
+  ecsClusterArn: string
 }
 
 /**
@@ -114,6 +116,21 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly listOAuthClientsLambda: Function
   public readonly deleteOAuthClientLambda: Function
   public readonly listScopesLambda: Function
+
+  // Test Suite Management Lambdas
+  public readonly createTestSuiteLambda: Function
+  public readonly listTestSuitesLambda: Function
+  public readonly getTestSuiteLambda: Function
+  public readonly updateTestSuiteLambda: Function
+  public readonly deleteTestSuiteLambda: Function
+  public readonly addUsecasesToSuiteLambda: Function
+  public readonly listSuiteUsecasesLambda: Function
+  public readonly removeUsecaseFromSuiteLambda: Function
+  public readonly executeTestSuiteLambda: Function
+  public readonly listSuiteExecutionsLambda: Function
+  public readonly getSuiteExecutionLambda: Function
+  public readonly stopSuiteExecutionLambda: Function
+  public readonly updateSuiteScheduleLambda: Function
 
   // Worker-related Lambdas (moved from worker stack)
   public readonly generateS3UrlLambda: Function
@@ -609,6 +626,103 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     // Delete needs read (to check created_by), write, and delete permissions
     this.deleteOAuthClientLambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
 
+    // ========== Test Suite Management Lambdas ==========
+
+    this.createTestSuiteLambda = this.createPythonLambda({
+      path: 'create_test_suite',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.listTestSuitesLambda = this.createPythonLambda({
+      path: 'list_test_suites',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.getTestSuiteLambda = this.createPythonLambda({
+      path: 'get_test_suite',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.updateTestSuiteLambda = this.createPythonLambda({
+      path: 'update_test_suite',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.deleteTestSuiteLambda = this.createPythonLambda({
+      path: 'delete_test_suite',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.addUsecasesToSuiteLambda = this.createPythonLambda({
+      path: 'add_usecases_to_suite',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.listSuiteUsecasesLambda = this.createPythonLambda({
+      path: 'list_suite_usecases',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.removeUsecaseFromSuiteLambda = this.createPythonLambda({
+      path: 'remove_usecase_from_suite',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.executeTestSuiteLambda = this.createPythonLambda({
+      path: 'execute_test_suite',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        EXECUTE_USECASE_LAMBDA_ARN: props.executeUsecaseLambda.functionArn
+      }
+    });
+
+    this.listSuiteExecutionsLambda = this.createPythonLambda({
+      path: 'list_suite_executions',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.getSuiteExecutionLambda = this.createPythonLambda({
+      path: 'get_suite_execution',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    this.stopSuiteExecutionLambda = this.createPythonLambda({
+      path: 'stop_suite_execution',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        ECS_CLUSTER: props.ecsClusterArn
+      }
+    });
+
+    this.updateSuiteScheduleLambda = this.createPythonLambda({
+      path: 'update_suite_schedule',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BASE_NAME: props.baseName,
+        EXECUTE_SUITE_LAMBDA_ARN: this.executeTestSuiteLambda.functionArn
+      }
+    });
+
     // ========== Worker-related Lambdas ==========
 
     this.generateS3UrlLambda = this.createPythonLambda({
@@ -683,7 +797,13 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.getTemplateLambda,
       this.listTemplateStepsLambda,
       this.getTemplateVariablesLambda,
-      this.checkTemplateUpdatesLambda
+      this.checkTemplateUpdatesLambda,
+      this.listTestSuitesLambda,
+      this.getTestSuiteLambda,
+      this.listSuiteUsecasesLambda,
+      this.listSuiteExecutionsLambda,
+      this.getSuiteExecutionLambda,
+      this.executeTestSuiteLambda
     ]
     readLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableReadPolicy))
 
@@ -703,7 +823,12 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.createTemplateStepLambda,
       this.updateTemplateStepLambda,
       this.reorderTemplateStepsLambda,
-      this.createTemplateVariablesLambda
+      this.createTemplateVariablesLambda,
+      this.createTestSuiteLambda,
+      this.removeUsecaseFromSuiteLambda,
+      this.updateSuiteScheduleLambda,
+      this.executeTestSuiteLambda,
+      this.stopSuiteExecutionLambda
     ]
     writeLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableWritePolicy))
 
@@ -714,7 +839,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.deleteStepLambda,
       this.deleteTemplateLambda,
       this.deleteTemplateStepLambda,
-      this.cloneUsecaseLambda
+      this.cloneUsecaseLambda,
+      this.deleteTestSuiteLambda
     ]
     fullAccessLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableFullAccessPolicy))
 
@@ -722,9 +848,14 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.importTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.importTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.applyTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.removeUsecaseFromSuiteLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.applyTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    this.addUsecasesToSuiteLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.addUsecasesToSuiteLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    this.updateTestSuiteLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.updateTestSuiteLambda.role?.addManagedPolicy(props.tableWritePolicy)
 
     // S3 Bucket Permissions
     props.artefactsBucket.grantRead(this.listRecordingBatchesLambda)
@@ -879,5 +1010,50 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       ],
       resources: ['*']
     }))
+
+    // ========== Test Suite Execution Permissions ==========
+
+    // Grant execute_suite Lambda permission to invoke execute_usecase Lambda
+    props.executeUsecaseLambda.grantInvoke(this.executeTestSuiteLambda);
+
+    // Grant stop_suite_execution Lambda permission to stop ECS tasks
+    this.stopSuiteExecutionLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['ecs:StopTask'],
+      resources: ['*'],
+      conditions: {
+        'ArnEquals': {
+          'ecs:cluster': props.ecsClusterArn
+        }
+      }
+    }));
+
+    // Grant update_suite_schedule Lambda permission to manage EventBridge rules
+    this.updateSuiteScheduleLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'events:PutRule',
+        'events:PutTargets',
+        'events:EnableRule',
+        'events:DisableRule'
+      ],
+      resources: [
+        `arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:rule/${props.baseName}-suite-*`
+      ]
+    }));
+
+    // Grant update_suite_schedule Lambda permission to add Lambda targets to EventBridge rules
+    this.updateSuiteScheduleLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['lambda:AddPermission', 'lambda:RemovePermission'],
+      resources: [this.executeTestSuiteLambda.functionArn]
+    }));
+
+    // Grant EventBridge permission to invoke execute_suite Lambda
+    // This allows EventBridge rules with the naming pattern {baseName}-suite-{suite_id} to trigger the Lambda
+    this.executeTestSuiteLambda.addPermission('EventBridgeInvoke', {
+      principal: new cdk.aws_iam.ServicePrincipal('events.amazonaws.com'),
+      sourceArn: `arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:rule/${props.baseName}-suite-*`
+    });
   }
 }

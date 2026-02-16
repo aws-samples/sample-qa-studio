@@ -323,6 +323,42 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const applyTemplate = this.addResource(template, 'apply')
     this.addMethod(applyTemplate, HttpMethod.POST, l.applyTemplateLambda)
 
+    // /test-suites - Test suite management
+    const testSuites = this.addResource(this.api.root, 'test-suites')
+    this.addMethod(testSuites, HttpMethod.GET, l.listTestSuitesLambda)
+    this.addMethod(testSuites, HttpMethod.POST, l.createTestSuiteLambda)
+
+    // /test-suites/{suite_id} - Get, update, delete test suite
+    const testSuite = this.addResource(testSuites, '{suite_id}')
+    this.addMethod(testSuite, HttpMethod.GET, l.getTestSuiteLambda)
+    this.addMethod(testSuite, HttpMethod.PUT, l.updateTestSuiteLambda)
+    this.addMethod(testSuite, HttpMethod.DELETE, l.deleteTestSuiteLambda)
+
+    // /test-suites/{suite_id}/usecases - Add and list use cases in suite
+    const suiteUsecases = this.addResource(testSuite, 'usecases')
+    this.addMethod(suiteUsecases, HttpMethod.GET, l.listSuiteUsecasesLambda)
+    this.addMethod(suiteUsecases, HttpMethod.POST, l.addUsecasesToSuiteLambda)
+
+    // /test-suites/{suite_id}/usecases/{usecase_id} - Remove use case from suite
+    const suiteUsecase = this.addResource(suiteUsecases, '{usecase_id}')
+    this.addMethod(suiteUsecase, HttpMethod.DELETE, l.removeUsecaseFromSuiteLambda)
+
+    // /test-suites/{suite_id}/execute - Execute test suite
+    const executeSuite = this.addResource(testSuite, 'execute')
+    this.addMethod(executeSuite, HttpMethod.POST, l.executeTestSuiteLambda)
+
+    // /test-suites/{suite_id}/executions - List suite executions
+    const suiteExecutions = this.addResource(testSuite, 'executions')
+    this.addMethod(suiteExecutions, HttpMethod.GET, l.listSuiteExecutionsLambda)
+
+    // /test-suites/{suite_id}/executions/{execution_id} - Get suite execution
+    const suiteExecution = this.addResource(suiteExecutions, '{execution_id}')
+    this.addMethod(suiteExecution, HttpMethod.GET, l.getSuiteExecutionLambda)
+
+    // /test-suites/{suite_id}/schedule - Configure suite schedule
+    const suiteSchedule = this.addResource(testSuite, 'schedule')
+    this.addMethod(suiteSchedule, HttpMethod.PUT, l.updateSuiteScheduleLambda)
+
     // Create API Gateway deployment
     this.deployment = new Deployment(this, 'ApiDeployment', {
       api: this.api,

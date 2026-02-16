@@ -36,6 +36,13 @@ const OAuthClients = React.lazy(() => import('./components/OAuthClients'));
 const CreateOAuthClient = React.lazy(() => import('./components/CreateOAuthClient'));
 const TemplateLibrary = React.lazy(() => import('./components/templates/TemplateLibrary'));
 const TemplateDetail = React.lazy(() => import('./components/templates/TemplateDetail'));
+const TestSuites = React.lazy(() => import('./components/TestSuites'));
+const CreateTestSuite = React.lazy(() => import('./components/CreateTestSuite'));
+const UpdateTestSuite = React.lazy(() => import('./components/UpdateTestSuite'));
+const TestSuiteDetail = React.lazy(() => import('./components/TestSuiteDetail'));
+const AddUsecasesToSuite = React.lazy(() => import('./components/AddUsecasesToSuite'));
+const ConfigureSchedule = React.lazy(() => import('./components/ConfigureSchedule'));
+const SuiteExecutionDetail = React.lazy(() => import('./components/SuiteExecutionDetail'));
 
 Amplify.configure(amplifyconfig);
 
@@ -88,6 +95,7 @@ function AppContent() {
   const navigationItems = React.useMemo(() => {
     const items: any[] = [
       { type: "link", text: "Use cases", href: "/" },
+      { type: "link", text: "Test Suites", href: "/test-suites" },
       { type: "link", text: "Templates", href: "/templates" },
     ];
 
@@ -133,6 +141,12 @@ function AppContent() {
         import('./components/CreateOAuthClient');
         import('./components/templates/TemplateLibrary');
         import('./components/templates/TemplateDetail');
+        import('./components/TestSuites');
+        import('./components/CreateTestSuite');
+        import('./components/UpdateTestSuite');
+        import('./components/TestSuiteDetail');
+        import('./components/AddUsecasesToSuite');
+        import('./components/ConfigureSchedule');
       });
     } else {
       setTimeout(() => {
@@ -151,6 +165,12 @@ function AppContent() {
         import('./components/CreateOAuthClient');
         import('./components/templates/TemplateLibrary');
         import('./components/templates/TemplateDetail');
+        import('./components/TestSuites');
+        import('./components/CreateTestSuite');
+        import('./components/UpdateTestSuite');
+        import('./components/TestSuiteDetail');
+        import('./components/AddUsecasesToSuite');
+        import('./components/ConfigureSchedule');
       }, 2000);
     }
   }, []);
@@ -206,6 +226,13 @@ function AppContent() {
             <Route path="/users/create" element={<CreateUser />} />
             <Route path="/oauth-clients" element={<OAuthClients />} />
             <Route path="/oauth-clients/create" element={<CreateOAuthClient />} />
+            <Route path="/test-suites" element={<TestSuites />} />
+            <Route path="/test-suites/create" element={<CreateTestSuite />} />
+            <Route path="/test-suites/:id" element={<TestSuiteDetail />} />
+            <Route path="/test-suites/:id/edit" element={<UpdateTestSuite />} />
+            <Route path="/test-suites/:id/add-usecases" element={<AddUsecasesToSuite />} />
+            <Route path="/test-suites/:id/schedule" element={<ConfigureSchedule />} />
+            <Route path="/test-suites/:suiteId/executions/:executionId" element={<SuiteExecutionDetail />} />
             <Route path="/usecase/:id" element={<UsecaseDetail />} />
             <Route path="/usecase/:usecaseId/execution/:executionId" element={<ExecutionDetail />} />
           </Routes>

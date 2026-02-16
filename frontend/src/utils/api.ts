@@ -403,3 +403,145 @@ export const scopesApi = {
     });
   }
 };
+
+// Test Suite API
+export interface TestSuite {
+  id: string;
+  name: string;
+  description: string;
+  scope: string;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  total_usecases: number;
+  last_execution_id?: string;
+  last_execution_status?: 'completed' | 'partial' | 'failed';
+  last_execution_time?: string;
+  last_successful_count?: number;
+  schedule_expression?: string;
+  schedule_enabled: boolean;
+  schedule_timezone?: string;
+}
+
+export interface SuiteExecution {
+  id: string;
+  suite_id: string;
+  suite_name: string;
+  suite_scope: string;
+  status: 'pending' | 'running' | 'completed' | 'partial' | 'failed';
+  started_at: string;
+  completed_at?: string;
+  duration_seconds?: number;
+  triggered_by: string;
+  trigger_type: 'manual' | 'scheduled';
+  total_usecases: number;
+  completed_usecases: number;
+  successful_usecases: number;
+  failed_usecases: number;
+  running_usecases: number;
+  results?: SuiteExecutionResult[];
+}
+
+export interface SuiteExecutionResult {
+  usecase_id: string;
+  usecase_name: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  usecase_execution_id: string;
+  started_at?: string;
+  completed_at?: string;
+  duration_seconds?: number;
+  error_message?: string;
+  recording_url?: string;
+}
+
+export interface CreateTestSuiteRequest {
+  name: string;
+  description: string;
+  scope?: string;  // Optional - will be auto-generated from name if not provided
+  tags: string[];
+}
+
+export interface UpdateTestSuiteRequest {
+  name?: string;
+  description?: string;
+  tags?: string[];
+}
+
+export interface AddUsecasesRequest {
+  usecase_ids: string[];
+}
+
+export interface AddUsecasesResponse {
+  added: number;
+  total_usecases: number;
+}
+
+export interface ScheduleConfig {
+  schedule_expression: string;
+  schedule_enabled: boolean;
+  schedule_timezone?: string;
+}
+
+export interface ExecuteSuiteRequest {
+  trigger_type?: 'manual' | 'scheduled';
+}
+
+export interface ExecuteSuiteResponse {
+  suite_execution_id: string;
+  status: string;
+  total_usecases: number;
+  started_at: string;
+}
+
+export const testSuites = {
+  // Suite Management
+  create: (data: CreateTestSuiteRequest): Promise<TestSuite> => 
+    api.post('test-suites', data),
+  
+  list: (params?: { tag?: string; scope?: string }): Promise<{ suites: TestSuite[] }> => {
+    const queryParams = new URLSearchParams();
+    if (params?.tag) queryParams.append('tag', params.tag);
+    if (params?.scope) queryParams.append('scope', params.scope);
+    const query = queryParams.toString();
+    return api.get(`test-suites${query ? `?${query}` : ''}`);
+  },
+  
+  get: (suiteId: string): Promise<TestSuite> => 
+    api.get(`test-suites/${suiteId}`),
+  
+  update: (suiteId: string, data: UpdateTestSuiteRequest): Promise<TestSuite> => 
+    api.put(`test-suites/${suiteId}`, data),
+  
+  delete: (suiteId: string): Promise<void> => 
+    api.delete(`test-suites/${suiteId}`),
+  
+  // Use Case Management
+  addUsecases: (suiteId: string, data: AddUsecasesRequest): Promise<AddUsecasesResponse> => 
+    api.post(`test-suites/${suiteId}/usecases`, data),
+  
+  listUsecases: (suiteId: string): Promise<{ usecases: any[] }> => 
+    api.get(`test-suites/${suiteId}/usecases`),
+  
+  removeUsecase: (suiteId: string, usecaseId: string): Promise<void> => 
+    api.delete(`test-suites/${suiteId}/usecases/${usecaseId}`),
+  
+  // Schedule Management
+  updateSchedule: (suiteId: string, config: ScheduleConfig): Promise<TestSuite> => 
+    api.put(`test-suites/${suiteId}/schedule`, config),
+  
+  // Execution Management
+  execute: (suiteId: string, data?: ExecuteSuiteRequest): Promise<ExecuteSuiteResponse> => 
+    api.post(`test-suites/${suiteId}/execute`, data || { trigger_type: 'manual' }),
+  
+  listExecutions: (suiteId: string, params?: { limit?: number; status?: string }): Promise<{ executions: SuiteExecution[] }> => {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    const query = queryParams.toString();
+    return api.get(`test-suites/${suiteId}/executions${query ? `?${query}` : ''}`);
+  },
+  
+  getExecution: (suiteId: string, executionId: string): Promise<SuiteExecution> => 
+    api.get(`test-suites/${suiteId}/executions/${executionId}`),
+};

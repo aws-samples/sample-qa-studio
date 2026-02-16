@@ -18,6 +18,8 @@ class Execution:
     trigger_type: Optional[str]
     session_id: Optional[str]
     region: str
+    suite_execution_id: Optional[str] = None
+    suite_id: Optional[str] = None
 
 @dataclass
 class ExecutionStep:
