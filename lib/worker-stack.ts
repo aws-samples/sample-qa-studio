@@ -1,7 +1,7 @@
 import { Duration, RemovalPolicy, Aws } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
-import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { Bucket, HttpMethods } from 'aws-cdk-lib/aws-s3';
 import { PolicyStatement, Policy, Effect, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { CfnScheduleGroup } from 'aws-cdk-lib/aws-scheduler';
@@ -30,6 +30,7 @@ interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStack
   table: Table
   novaActApiKeySecret: Secret
   tableReadPolicy: ManagedPolicy
+  tableWritePolicy: ManagedPolicy
   version: string
 }
 
@@ -91,6 +92,23 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       versioned: true, // Required for cross-region replication
+      cors: [
+        {
+          allowedMethods: [
+            HttpMethods.GET,
+            HttpMethods.HEAD
+          ],
+          allowedOrigins: ['*'],
+          allowedHeaders: ['*'],
+          exposedHeaders: [
+            'ETag',
+            'Content-Type',
+            'Content-Length',
+            'Content-Disposition'
+          ],
+          maxAge: 3000
+        }
+      ]
     });
 
     // Create cross-region buckets for enabled regions and collect all bucket ARNs
@@ -147,7 +165,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
+    // Grant both read and write permissions to update use case records
     updateUsecaseLastExecutionLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    updateUsecaseLastExecutionLambda.role?.addManagedPolicy(props.tableWritePolicy);
 
     const executionStatusRule = new Rule(this, 'execution_status_changed_rule', {
       ruleName: this.cdkName('execution-status-changed'),
@@ -718,6 +738,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // Task State Change Handler Lambda - monitors ECS task failures
     const taskStateChangeLambda = this.createPythonLambda({
       path: 'handle_task_state_change',
+      codeDirectory: 'lambdas/events',
       environment: {
         TABLE_NAME: props.table.tableName
       }

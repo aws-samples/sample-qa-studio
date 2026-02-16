@@ -16,7 +16,7 @@ Available clickType options:
 - 'right': Right click
 
 Example:
-agentClick(bbox, 'left-double') performs a double-click on the bbox.
+agentClick("bbox", "left-double") performs a double-click on the bbox.
 
 Prompt: 
 """

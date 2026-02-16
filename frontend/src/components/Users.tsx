@@ -129,6 +129,27 @@ const Users: React.FC = () => {
               sortingField: 'email'
             },
             {
+              id: 'groups',
+              header: 'Groups',
+              cell: (user: User) => {
+                if (!user.groups || user.groups.length === 0) {
+                  return <Box color="text-status-inactive">No groups</Box>;
+                }
+                return (
+                  <SpaceBetween direction="horizontal" size="xxs">
+                    {user.groups.map((group) => (
+                      <Box
+                        key={group}
+                        padding={{ horizontal: 'xs', vertical: 'xxs' }}
+                      >
+                        {group}
+                      </Box>
+                    ))}
+                  </SpaceBetween>
+                );
+              }
+            },
+            {
               id: 'status',
               header: 'Status',
               cell: (user: User) => getStatusIndicator(user.status, user.enabled)

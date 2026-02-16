@@ -48,6 +48,7 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   env: stackEnv,
   table: storageStack.table,
   tableReadPolicy: storageStack.tableReadPolicy,
+  tableWritePolicy: storageStack.tableWritePolicy,
   novaActApiKeySecret: storageStack.novaActApiKeySecret,
   version,
 })
@@ -78,6 +79,8 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   addUserLambda: lambdaStack.addUserLambda,
   removeUserLambda: lambdaStack.removeUserLambda,
   listUsersLambda: lambdaStack.listUsersLambda,
+  getUserLambda: lambdaStack.getUserLambda,
+  updateUserGroupsLambda: lambdaStack.updateUserGroupsLambda,
   subscribeUsecaseLambda: lambdaStack.subscribeUsecaseLambda,
   unsubscribeUsecaseLambda: lambdaStack.unsubscribeUsecaseLambda,
   getUsecaseSubscriptionLambda: lambdaStack.getUsecaseSubscriptionLambda,

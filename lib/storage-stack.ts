@@ -64,6 +64,7 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
       path: 'cleanup_backup_vault',
       timeout: Duration.minutes(15),
       memorySize: 256,
+      codeDirectory: 'lambdas/utilities',
     });
 
     // Grant permissions to the Lambda function
@@ -74,7 +75,7 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
         'backup:DeleteRecoveryPoint',
         'backup:DescribeRecoveryPoint',
       ],
-      resources: [backupVault.backupVaultArn, `${backupVault.backupVaultArn}/*`],
+      resources: ['*'], // Use wildcard since we need to access recovery points
     }));
 
     // Create custom resource provider
@@ -83,7 +84,6 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
     });
 
     // Create custom resource that triggers cleanup on stack deletion
-    // The cleanup resource depends on the vault (needs its name)
     const cleanupResource = new CustomResource(this, 'BackupVaultCleanup', {
       serviceToken: cleanupProvider.serviceToken,
       properties: {
@@ -92,7 +92,7 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
     });
 
     // Make cleanup resource depend on the vault and plan
-    // This ensures the vault exists when cleanup runs
+    // This ensures the vault exists when cleanup runs during deletion
     cleanupResource.node.addDependency(backupVault);
     cleanupResource.node.addDependency(plan);
 

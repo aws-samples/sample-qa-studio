@@ -31,6 +31,9 @@ export interface ExecutionModel {
 export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   try {
     const session = await fetchAuthSession();
+    
+    // Use ID token for user authentication with custom scope claim
+    // The pre-token generation Lambda adds scopes to the ID token based on user groups
     const token = session.tokens?.idToken?.toString();
 
     if (!token) {
@@ -246,6 +249,7 @@ export const wizardApi = {
 export const exportImportApi = {
   exportUsecase: async (usecaseId: string) => {
     const session = await fetchAuthSession();
+    // Use ID token with custom scope claim
     const token = session.tokens?.idToken?.toString();
 
     const response = await fetch(buildRestEndpoint(`usecase/${usecaseId}/export`), {
@@ -308,20 +312,94 @@ export interface User {
   enabled: boolean;
   created_at: string;
   attributes: { [key: string]: string };
+  groups?: string[];
 }
 
 export interface CreateUserRequest {
   email: string;
+  groups: string[];
 }
 
 export interface CreateUserResponse {
   username: string;
   email: string;
   status: string;
+  groups: string[];
 }
 
 export const userApi = {
   list: (): Promise<{ users: User[] }> => api.get('users'),
   create: (userData: CreateUserRequest): Promise<CreateUserResponse> => api.post('users', userData),
   delete: (username: string): Promise<void> => api.delete(`users/${encodeURIComponent(username)}`),
+};
+
+// OAuth Client API
+export interface OAuthClient {
+  client_id: string;
+  client_name: string;
+  created_date: string;
+  last_modified_date?: string;
+  created_by?: string;
+  refresh_token_validity?: number;
+  access_token_validity?: number;
+  id_token_validity?: number;
+  token_validity_units?: {
+    AccessToken?: string;
+    IdToken?: string;
+    RefreshToken?: string;
+  };
+  explicit_auth_flows?: string[];
+  allowed_oauth_flows?: string[];
+  allowed_oauth_scopes?: string[];
+  enabled: boolean;
+}
+
+export interface CreateOAuthClientRequest {
+  name: string;
+  scopes?: string[];
+}
+
+export interface CreateOAuthClientResponse {
+  client_id: string;
+  client_name: string;
+  client_secret: string;
+  scopes: string[];
+  created_date: string;
+  refresh_token_validity?: number;
+  access_token_validity?: number;
+  id_token_validity?: number;
+}
+
+export interface ScopeOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+export interface ListScopesResponse {
+  scopes: ScopeOption[];
+  resource_server_identifier: string;
+}
+
+export const oauthClientApi = {
+  list: (): Promise<{ clients: OAuthClient[]; count: number }> => api.get('oauth-clients'),
+  create: (clientData: CreateOAuthClientRequest): Promise<CreateOAuthClientResponse> => api.post('oauth-clients', clientData),
+  delete: (clientId: string): Promise<void> => api.delete(`oauth-clients/${encodeURIComponent(clientId)}`),
+};
+
+export const scopesApi = {
+  list: (): Promise<ListScopesResponse> => {
+    // Public endpoint - no authentication required
+    return fetch(buildRestEndpoint('scopes'), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }).then(response => {
+      if (!response.ok) {
+        throw new Error('Failed to fetch scopes');
+      }
+      return response.json();
+    });
+  }
 };

@@ -8,7 +8,9 @@ import {
   FormField,
   Input,
   Alert,
-  BreadcrumbGroup
+  BreadcrumbGroup,
+  Multiselect,
+  MultiselectProps
 } from '@cloudscape-design/components';
 import { userApi, CreateUserRequest } from '../utils/api';
 import { ErrorState } from '../utils/errorManager';
@@ -16,10 +18,27 @@ import { ErrorState } from '../utils/errorManager';
 const CreateUser: React.FC = () => {
   const navigate = useNavigate();
   const [createUserData, setCreateUserData] = useState<CreateUserRequest>({
-    email: ''
+    email: '',
+    groups: []
   });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Available groups
+  const groupOptions: MultiselectProps.Option[] = [
+    {
+      label: 'Users',
+      value: 'users',
+      description: 'Standard user permissions (read/write use cases, templates, executions)'
+    },
+    {
+      label: 'Admins',
+      value: 'admins',
+      description: 'Full administrative access (all permissions + user management + OAuth clients)'
+    }
+  ];
+
+  const [selectedGroups, setSelectedGroups] = useState<MultiselectProps.Option[]>([]);
 
   const createUser = async () => {
     setCreating(true);
@@ -79,9 +98,44 @@ const CreateUser: React.FC = () => {
             />
           </FormField>
 
+          <FormField
+            label="User Groups"
+            description="Select which groups this user should belong to. Groups determine the user's permissions."
+            errorText={selectedGroups.length === 0 ? 'At least one group must be selected' : undefined}
+          >
+            <Multiselect
+              selectedOptions={selectedGroups}
+              onChange={({ detail }) => {
+                setSelectedGroups(detail.selectedOptions);
+                setCreateUserData({
+                  ...createUserData,
+                  groups: detail.selectedOptions.map(opt => opt.value || '')
+                });
+              }}
+              options={groupOptions}
+              placeholder="Select groups (required)"
+              disabled={creating}
+              filteringType="auto"
+              invalid={selectedGroups.length === 0}
+            />
+          </FormField>
+
           <Alert type="info">
-            A secure temporary password will be automatically generated and sent to the user via welcome email.
-            The user will be required to change this password on first login.
+            <SpaceBetween direction="vertical" size="xs">
+              <div>
+                <strong>Group Permissions:</strong>
+              </div>
+              <div>
+                • <strong>Users:</strong> Can read/write use cases, templates, and executions
+              </div>
+              <div>
+                • <strong>Admins:</strong> Full access including user management and OAuth client management
+              </div>
+              <div style={{ marginTop: '8px' }}>
+                A secure temporary password will be automatically generated and sent to the user via welcome email.
+                The user will be required to change this password on first login.
+              </div>
+            </SpaceBetween>
           </Alert>
 
           <SpaceBetween direction="horizontal" size="xs">
@@ -89,7 +143,7 @@ const CreateUser: React.FC = () => {
               variant="primary"
               onClick={createUser}
               loading={creating}
-              disabled={!createUserData.email || creating}
+              disabled={!createUserData.email || selectedGroups.length === 0 || creating}
             >
               Create
             </Button>
