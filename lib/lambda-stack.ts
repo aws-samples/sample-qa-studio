@@ -135,6 +135,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   // Worker-related Lambdas (moved from worker stack)
   public readonly generateS3UrlLambda: Function
   public readonly acceptWizardStepLambda: Function
+  public readonly rejectWizardStepLambda: Function
   public readonly getScheduleLambda: Function
   public readonly deleteScheduleLambda: Function
 
@@ -744,6 +745,15 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     });
 
     props.table.grantFullAccess(this.acceptWizardStepLambda);
+
+    this.rejectWizardStepLambda = this.createPythonLambda({
+      path: 'reject_wizard_step',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+      }
+    });
+
+    props.table.grantFullAccess(this.rejectWizardStepLambda);
 
     this.getScheduleLambda = this.createPythonLambda({
       path: 'get_schedule',
