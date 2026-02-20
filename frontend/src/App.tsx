@@ -12,7 +12,6 @@ import TopNavigation from "@cloudscape-design/components/top-navigation";
 import Spinner from "@cloudscape-design/components/spinner";
 import Box from "@cloudscape-design/components/box";
 import ErrorBoundary from './components/ErrorBoundary';
-import logo from './assets/logo.svg'
 
 // Configuration loaded from lib/config.ts at build time via Vite
 const { baseName } = __APP_CONFIG__;
@@ -254,11 +253,7 @@ function App() {
           <TopNavigation
             identity={{
               href: "/",
-              title: "NovaAct QA Studio",
-              logo: { 
-                src: logo,
-                alt: "NovaAct QA Studio"
-              }
+              title: "QA Studio",
             }}
             utilities={[
               {

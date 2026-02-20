@@ -1,6 +1,6 @@
 {
   "adminEmail": "your-email@example.com",
-  "baseName": "nova-act-qa-studio",
+  "baseName": "qa-studio",
   "apiEndpoint": "api",
   "apiDeploymentStage": "api",
   "enabledRegions": [
@@ -14,5 +14,6 @@
   "vpcId": null,
   "workerSecurityGroupId": null,
   "createVpcEndpoints": false,
-  "agentCoreVPC": false
+  "agentCoreVPC": false,
+  "apiGatewayUrl": ""
 }
