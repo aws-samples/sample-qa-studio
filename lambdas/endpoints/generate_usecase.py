@@ -110,7 +110,7 @@ def create_prompt(title, starting_url, user_journey, region):
     prompt = f'''You are an expert test automation engineer. Convert the following user journey description into a structured JSON format for automated web testing.
 
 User Journey Details:
-- Title: (Wizzard) {title}
+- Title: (Wizard) {title}
 - Starting URL: {starting_url}
 - Journey Description: {user_journey}
 
@@ -120,7 +120,7 @@ Generate a JSON object that matches this EXACT schema. This JSON will be importe
   "exportVersion": "1.0",
   "exportedAt": "{current_time}",
   "usecase": {{
-    "name": "(Wizzard) {escaped_title}",
+    "name": "(Wizard) {escaped_title}",
     "description": "Generated from user journey: {escaped_journey}",
     "starting_url": "{starting_url}",
     "active": true,
@@ -151,25 +151,33 @@ CRITICAL REQUIREMENTS:
 1. Generate comprehensive steps covering the entire user journey
 2. Include navigation steps for page interactions (clicking, typing, etc.)
 3. Include validation steps for expected outcomes and assertions, only values can be asserted. the types are string, bool and number.
-4. Add validation steps for expected outcomes and assertions
-5. Use ONLY these step types: "navigation", "validation", "secret"
-6. Validation operators for string are exact, exact_case_insensitive, contains and contains_case_insensitive
-7. Validation operators for bool are exact
-8. Validation operators for number are equals, less_then, greater_then, greater_or_equal_then and less_or_equal_then
-9. Validation step instruction must start with "return the value for ...". like: "return the number of products on the page".
-10. Each step MUST have ALL fields present, use empty strings ("") for unused fields
-11. Sort steps sequentially starting from 1 (no gaps or duplicates)
-12. All strings must be properly escaped for JSON
-13. Return ONLY the JSON object, no markdown, no explanations, no additional text
-14. Ensure the JSON is valid and can be parsed
-15. You do not need a step to move to the start page.
-16. Secret steps must always focus an input field only.
-17. Instructions must be written as instructions. Like "click the search button" or "Return the amount of items in the basket"
+4. Use retrieve_value steps to capture values from the page into runtime variables for later use.
+5. Use assertion steps to compare previously captured runtime variables against expected values without interacting with the browser.
+6. Use ONLY these step types: "navigation", "validation", "secret", "retrieve_value", "assertion", "url", "download"
+7. Validation and assertion operators for string are exact, exact_case_insensitive, contains, contains_case_insensitive and not_equal
+8. Validation and assertion operators for bool are exact
+9. Validation and assertion operators for number are equals, less_then, greater_then, greater_or_equal_then and less_or_equal_then
+10. Validation step instruction must start with "return the value for ...". like: "return the number of products on the page".
+11. Retrieve value step instruction must describe what value to extract from the page. Set capture_variable to the variable name and value_type to "string", "number", or "bool".
+12. Assertion steps do NOT interact with the browser. Set assertion_variable to the name of a previously captured runtime variable, and set validation_type, validation_operator, and validation_value for the comparison.
+13. URL step instruction must be a valid URL to navigate to directly.
+14. Each step MUST have ALL fields present, use empty strings ("") for unused fields
+15. Sort steps sequentially starting from 1 (no gaps or duplicates)
+16. All strings must be properly escaped for JSON
+17. Return ONLY the JSON object, no markdown, no explanations, no additional text
+18. Ensure the JSON is valid and can be parsed
+19. You do not need a step to move to the start page.
+20. Secret steps must always focus an input field only.
+21. Instructions must be written as instructions. Like "click the search button" or "Return the amount of items in the basket"
 
 Step Type Guidelines:
 - "navigation": For clicking buttons, filling forms, navigating pages
-- "validation": For checking page content, verifying elements exist
+- "validation": For checking page content, verifying elements exist. Reads a value from the live page and compares it.
 - "secret": For using stored credentials (set secret_key field)
+- "retrieve_value": For extracting a value from the page and storing it as a runtime variable (set capture_variable and value_type fields)
+- "assertion": For comparing a previously captured runtime variable against an expected value without browser interaction (set assertion_variable, validation_type, validation_operator, validation_value fields)
+- "url": For navigating directly to a specific URL (instruction is the URL)
+- "download": For downloading a file from the page
 
 Generate the complete, valid JSON now:'''
     
