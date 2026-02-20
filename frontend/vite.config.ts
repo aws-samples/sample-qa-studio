@@ -8,6 +8,8 @@ import { loadConfig } from '../lib/config';
 const config = loadConfig();
 const rootPackageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8'));
 
+// Use apiGatewayUrl from configuration.json for local dev proxy
+const apiTarget = config.apiGatewayUrl;
 
 export default defineConfig({
   resolve: {
@@ -21,7 +23,15 @@ export default defineConfig({
     outDir: 'build'
   },
   server: {
-    port: 3000
+    port: 3000,
+    // Proxy for local dev
+    proxy: apiTarget ? {
+      '/api': {
+        target: apiTarget,
+        changeOrigin: true,
+        secure: true,
+      }
+    } : undefined,
   },
   test: {
     globals: true,
