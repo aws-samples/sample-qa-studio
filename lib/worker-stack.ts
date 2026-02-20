@@ -35,7 +35,7 @@ interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStack
 }
 
 /**
- * NovaActQAStudioWorkerStack - Manages worker infrastructure for NovaAct QA Studio
+ * NovaActQAStudioWorkerStack - Manages worker infrastructure for QA Studio
  * 
  * Key Components:
  * - SQS Queue for work processing

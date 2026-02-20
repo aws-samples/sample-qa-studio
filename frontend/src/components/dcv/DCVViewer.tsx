@@ -31,7 +31,7 @@ export const RemoteBrowser = (props: RemoteBrowserProps) => {
         setViewer(viewer);
         await viewer.connect();
       } catch (error) {
-        console.error(`Failed to initialze the NavanLiveViewer ${JSON.stringify(error)}`);
+        console.error(`Failed to initialze the Live Viewer ${JSON.stringify(error)}`);
       }
     })();
   }, [liveStreamUrl]);

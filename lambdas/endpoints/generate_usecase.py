@@ -176,56 +176,46 @@ Generate the complete, valid JSON now:'''
     return prompt
 
 def invoke_bedrock(title, starting_url, user_journey, region, model_id):
-    """Make a single call to Bedrock."""
+    """Make a single call to Bedrock using the Converse API."""
     start_time = time.time()
-    
+
     # Create the prompt
     prompt = create_prompt(title, starting_url, user_journey, region)
     print(f'Invoking Bedrock model {model_id} with prompt length: {len(prompt)}')
-    
-    # Prepare the request body for Claude
-    request_body = {
-        'anthropic_version': 'bedrock-2023-05-31',
-        'max_tokens': 4096,
-        'temperature': 0.1,
-        'top_p': 0.9,
-        'messages': [{
-            'role': 'user',
-            'content': prompt
-        }]
-    }
-    
+
     try:
-        # Call Bedrock
-        response = bedrock_runtime.invoke_model(
+        response = bedrock_runtime.converse(
             modelId=model_id,
-            contentType='application/json',
-            accept='application/json',
-            body=json.dumps(request_body)
+            messages=[{
+                'role': 'user',
+                'content': [{'text': prompt}]
+            }],
+            inferenceConfig={
+                'maxTokens': 4096,
+                'temperature': 0.1,
+                'topP': 0.9,
+            }
         )
-        
+
         duration = time.time() - start_time
         print(f'Bedrock model invocation completed in {duration:.2f}s')
-        
-        # Parse the response
-        response_body = json.loads(response['body'].read())
-        
+
         # Extract the generated content
-        content = response_body.get('content', [])
+        content = response['output']['message']['content']
         if not content:
             raise Exception('Invalid response format from Bedrock: no content')
-        
+
         generated_text = content[0].get('text', '')
         if not generated_text:
             raise Exception('Invalid response format from Bedrock: no text')
-        
+
         # Clean up the generated text to extract JSON
         generated_json = extract_json(generated_text)
-        
+
         print(f'Successfully generated JSON from Bedrock (length: {len(generated_json)} chars)')
-        
+
         return generated_json
-        
+
     except Exception as e:
         duration = time.time() - start_time
         print(f'Bedrock model invocation failed after {duration:.2f}s: {str(e)}')

@@ -215,7 +215,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       timeout: cdk.Duration.seconds(60),
       environment: {
         TABLE_NAME: props.table.tableName,
-        BEDROCK_MODEL_ID: props.bedrockModelId || 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+        BEDROCK_MODEL_ID: props.bedrockModelId || 'us.amazon.nova-2-lite-v1:0'
       }
     })
 
@@ -1117,13 +1117,14 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [secretsArnPattern]
     }))
 
-    // Bedrock Permissions
-    const bedrockArn = `arn:aws:bedrock:${Aws.REGION}::foundation-model/*`;
-    
+    // Bedrock Permissions (wildcard region for cross-region inference profiles)
     this.generateUsecaseLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-      resources: [bedrockArn]
+      resources: [
+        `arn:aws:bedrock:*::foundation-model/*`,
+        `arn:aws:bedrock:*:${Aws.ACCOUNT_ID}:inference-profile/*`,
+      ]
     }))
 
     // Notification Lambda Permissions (API-facing only)
