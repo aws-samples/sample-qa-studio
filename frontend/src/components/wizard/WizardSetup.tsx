@@ -42,15 +42,15 @@ export default function WizardSetup() {
       });
 
       // Validate response has required fields
-      if (!response?.session_id || !response?.usecase_id) {
-        throw new Error('Invalid response from server: missing session_id or usecase_id');
+      if (!response?.sessionId || !response?.usecaseId) {
+        throw new Error('Invalid response from server: missing sessionId or usecaseId');
       }
 
       // Navigate to wizard with session info
-      navigate(`/wizard/${response.session_id}`, {
+      navigate(`/wizard/${response.sessionId}`, {
         state: {
-          sessionId: response.session_id,
-          usecaseId: response.usecase_id
+          sessionId: response.sessionId,
+          usecaseId: response.usecaseId
         }
       });
     } catch (err: any) {
