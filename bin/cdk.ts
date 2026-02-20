@@ -95,6 +95,7 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   startWizardLambda: workerStack.startWizardLambda,
   addWizardStepLambda: workerStack.addWizardStepLambda,
   acceptWizardStepLambda: lambdaStack.acceptWizardStepLambda,
+  rejectWizardStepLambda: lambdaStack.rejectWizardStepLambda,
   restartWizardLambda: workerStack.restartWizardLambda,
   terminateWizardLambda: workerStack.terminateWizardLambda,
   env: stackEnv,
