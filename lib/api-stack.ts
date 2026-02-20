@@ -37,6 +37,7 @@ interface NovaActQAStudioApiStackCreateProps extends NovaActQAStudioBaseStackCre
   startWizardLambda: Function
   addWizardStepLambda: Function
   acceptWizardStepLambda: Function
+  rejectWizardStepLambda: Function
   restartWizardLambda: Function
   terminateWizardLambda: Function
 }
@@ -254,6 +255,11 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const wizardAcceptStep = this.addResource(wizardAccept, '{stepId}')
     const wizardAcceptStepUsecase = this.addResource(wizardAcceptStep, '{usecaseId}')
     this.addMethod(wizardAcceptStepUsecase, HttpMethod.POST, props.acceptWizardStepLambda)
+
+    const wizardReject = this.addResource(wizardSession, 'reject')
+    const wizardRejectStep = this.addResource(wizardReject, '{stepId}')
+    const wizardRejectStepUsecase = this.addResource(wizardRejectStep, '{usecaseId}')
+    this.addMethod(wizardRejectStepUsecase, HttpMethod.POST, props.rejectWizardStepLambda)
 
     const wizardRestart = this.addResource(wizardSession, 'restart')
     this.addMethod(wizardRestart, HttpMethod.POST, props.restartWizardLambda)
