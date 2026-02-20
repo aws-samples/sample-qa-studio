@@ -16,19 +16,21 @@ export interface NovaActQAStudioConfig {
   useNovaActGa: boolean;
   agentCoreVPC: boolean;
   dockerImageVersion?: string;
+  /** Full API Gateway URL for local development proxy (e.g. https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com) */
+  apiGatewayUrl?: string;
 }
 
 const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
   apiEndpoint: 'api',
   apiDeploymentStage: 'api',
-  enabledRegions: ['us-east-1'],
+  enabledRegions: ['us-east-1', 'us-west-2', 'ap-southeast-2', 'eu-central-1'],
   defaultRegion: 'us-east-1',
   bedrockModelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
   dcvRelease: 'https://d1uj6qtbmh3dt5.cloudfront.net/webclientsdk/nice-dcv-web-client-sdk-1.10.1-1011.zip',
   vpcId: null,
   workerSecurityGroupId: null,
   createVpcEndpoints: false,
-  useNovaActGa: false,
+  useNovaActGa: true,
   agentCoreVPC: false,
 };
 
