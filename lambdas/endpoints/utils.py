@@ -578,14 +578,14 @@ def validate_generated_json(json_str):
     elif not data['steps']:
         errors.append('at least one step is required')
     else:
-        valid_step_types = ['navigation', 'validation', 'secret']
+        valid_step_types = ['navigation', 'validation', 'secret', 'retrieve_value', 'assertion', 'url', 'download']
         for i, step in enumerate(data['steps']):
             if 'sort' not in step or step['sort'] <= 0:
                 errors.append(f'steps[{i}].sort must be a positive integer')
             if not step.get('instruction'):
                 errors.append(f'steps[{i}].instruction is required')
             if step.get('step_type') not in valid_step_types:
-                errors.append(f'steps[{i}].step_type must be one of: navigation, validation, secret')
+                errors.append(f'steps[{i}].step_type must be one of: {", ".join(valid_step_types)}')
     
     is_valid = len(errors) == 0
     return is_valid, errors, data if is_valid else None
