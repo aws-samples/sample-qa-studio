@@ -14,7 +14,6 @@ import Box from "@cloudscape-design/components/box";
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Configuration loaded from lib/config.ts at build time via Vite
-const { baseName } = __APP_CONFIG__;
 
 // Lazy load components for code splitting
 const HomeScreen = React.lazy(() => import('./components/HomeScreen'));
@@ -42,6 +41,7 @@ const TestSuiteDetail = React.lazy(() => import('./components/TestSuiteDetail'))
 const AddUsecasesToSuite = React.lazy(() => import('./components/AddUsecasesToSuite'));
 const ConfigureSchedule = React.lazy(() => import('./components/ConfigureSchedule'));
 const SuiteExecutionDetail = React.lazy(() => import('./components/SuiteExecutionDetail'));
+const About = React.lazy(() => import('./components/About'));
 
 Amplify.configure(amplifyconfig);
 
@@ -115,7 +115,7 @@ function AppContent() {
     }
 
     items.push({ type: "divider" });
-    items.push({ type: "link", text: baseName, href: "#" });
+    items.push({ type: "link", text: "About", href: "/about" });
 
     return items;
   }, [userScopes]);
@@ -234,6 +234,7 @@ function AppContent() {
             <Route path="/test-suites/:suiteId/executions/:executionId" element={<SuiteExecutionDetail />} />
             <Route path="/usecase/:id" element={<UsecaseDetail />} />
             <Route path="/usecase/:usecaseId/execution/:executionId" element={<ExecutionDetail />} />
+            <Route path="/about" element={<About />} />
           </Routes>
         </Suspense>
       }

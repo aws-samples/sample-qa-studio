@@ -1,10 +1,13 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import * as path from 'path';
+import * as fs from 'fs';
 import { loadConfig } from '../lib/config';
 
 // Load configuration from lib/config.ts
 const config = loadConfig();
+const rootPackageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8'));
+
 
 export default defineConfig({
   resolve: {
@@ -27,12 +30,13 @@ export default defineConfig({
   },
   define: {
     // Expose config values as compile-time constants
-    '__APP_CONFIG__': {
-      baseName: JSON.stringify(config.baseName),
-      defaultRegion: JSON.stringify(config.defaultRegion),
-      enabledRegions: config.enabledRegions, // Don't stringify arrays - Vite handles this
-      bedrockModelId: JSON.stringify(config.bedrockModelId),
-      apiEndpoint: JSON.stringify(config.apiEndpoint),
-    }
+    '__APP_CONFIG__': JSON.stringify({
+      baseName: config.baseName,
+      defaultRegion: config.defaultRegion,
+      enabledRegions: config.enabledRegions,
+      bedrockModelId: config.bedrockModelId,
+      apiEndpoint: config.apiEndpoint,
+      version: rootPackageJson.version,
+    })
   }
 })
