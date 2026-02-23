@@ -161,6 +161,11 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     this.addMethod(secrets, HttpMethod.DELETE, l.deleteUsecaseSecretsLambda)
     this.addMethod(secrets, HttpMethod.PATCH, l.updateUsecaseSecretsLambda)
 
+    // /usecase/{id}/secrets/{secret_key}/value - Get secret value
+    const secretKey = this.addResource(secrets, '{secret_key}')
+    const secretValue = this.addResource(secretKey, 'value')
+    this.addMethod(secretValue, HttpMethod.GET, l.getUsecaseSecretValueLambda)
+
     // /usecase/{id}/export - Export usecase
     const exportEndpoint = this.addResource(usecaseId, 'export')
     this.addMethod(exportEndpoint, HttpMethod.GET, l.exportUsecaseLambda)

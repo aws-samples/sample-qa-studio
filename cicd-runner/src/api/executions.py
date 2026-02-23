@@ -218,4 +218,24 @@ class ExecutionAPI:
             {"status": "running", "nova_session_id": session_id},
         )
 
+    def get_secret_value(self, usecase_id: str, secret_key: str) -> Optional[str]:
+        """
+        Fetch the decrypted value of a usecase secret via API.
+
+        Args:
+            usecase_id: Usecase UUID
+            secret_key: Secret key name
+
+        Returns:
+            The secret value string, or None if not found.
+        """
+        try:
+            response = self.client.get(
+                f"/usecase/{usecase_id}/secrets/{secret_key}/value"
+            )
+            return response.get("value")
+        except Exception:
+            return None
+
+
 

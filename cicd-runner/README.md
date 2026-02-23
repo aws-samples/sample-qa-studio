@@ -1,12 +1,16 @@
 # Nova Act QA Studio - CI/CD Runner
 
-Python CLI application for executing Nova Act QA Studio test suites in CI/CD pipelines. The runner authenticates with OAuth client credentials, fetches test suite definitions, creates execution records, and prepares for automated test execution.
+Python CLI application for executing Nova Act QA Studio test suites in CI/CD pipelines. The runner authenticates with OAuth client credentials, fetches test suite definitions, creates execution records, and runs automated browser-based tests using Nova Act.
 
 ## Features
 
-- OAuth 2.0 client credentials authentication with token caching
+- OAuth 2.0 client credentials authentication with in-memory token caching
 - Automatic token refresh on expiration
-- Test suite execution via Platform API
+- Test suite execution via Platform API with parallel use case execution
+- Nova Act browser automation with headless Chromium
+- Artifact collection and upload (screenshots, logs)
+- Suite-level log capture
+- Execution summary table output
 - CLI argument parsing with variable overrides
 - Comprehensive error handling and logging
 - Secure credential management via environment variables
@@ -195,21 +199,14 @@ cicd-runner \
 | `--model-id` | No | Override Nova Act model ID | - |
 | `--verbose` | No | Enable verbose logging (DEBUG level) | False |
 | `--timeout` | No | Global timeout in seconds | 3600 |
+| `--keep-artifacts` | No | Keep local artifact files after upload (for debugging) | False |
 | `--help` | No | Show help message and exit | - |
 
 ## Exit Codes
 
-- `0`: Success - test suite execution created successfully
-- `2`: Failure - authentication, API, or configuration error
-
-## Token Caching
-
-The runner caches OAuth tokens to `.token_cache.json` in the current directory to avoid unnecessary authentication requests. The cache file:
-
-- Contains the access token and expiration time
-- Is automatically refreshed when the token expires
-- Should be added to `.gitignore` (already included)
-- Can be safely deleted to force re-authentication
+- `0`: All tests passed
+- `1`: One or more tests failed
+- `2`: Runner error (authentication, API, or configuration failure)
 
 ## Troubleshooting
 
@@ -224,10 +221,10 @@ The runner caches OAuth tokens to `.token_cache.json` in the current directory t
 
 ### Configuration Errors
 
-**Error**: `ConfigurationError: Missing required environment variables`
+**Error**: `ConfigurationError: Missing required environment variable: OAUTH_CLIENT_ID`
 
 **Solution**:
-- Verify all required environment variables are set
+- Verify all required environment variables are set (`OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OAUTH_TOKEN_ENDPOINT`, `API_ENDPOINT`)
 - Check for typos in variable names
 - Ensure `.env` file is in the current directory (if using)
 
@@ -255,6 +252,177 @@ The runner caches OAuth tokens to `.token_cache.json` in the current directory t
 - Verify the `OAUTH_TOKEN_ENDPOINT` URL is correct
 - Check firewall rules allow HTTPS connections
 
+## Docker
+
+The CI/CD runner is available as a Docker container that bundles all dependencies including the Nova Act SDK and headless Chromium browser.
+
+### Building the Image
+
+```bash
+cd cicd-runner
+docker build -t cicd-runner .
+```
+
+The build uses a multi-stage Dockerfile (`python:3.12-slim` base) to keep the final image lean. The builder stage compiles Python dependencies, and the runtime stage adds only Playwright Chromium and the packaged CLI.
+
+### Running the Container
+
+Pass required environment variables and CLI arguments directly:
+
+```bash
+docker run --rm \
+  -e OAUTH_CLIENT_ID="your-client-id" \
+  -e OAUTH_CLIENT_SECRET="your-client-secret" \
+  -e OAUTH_TOKEN_ENDPOINT="https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/token" \
+  -e API_ENDPOINT="https://your-api-id.execute-api.us-east-1.amazonaws.com/api" \
+  cicd-runner --suite-id 01234567-89ab-cdef-0123-456789abcdef
+```
+
+With variable overrides and verbose logging:
+
+```bash
+docker run --rm \
+  -e OAUTH_CLIENT_ID="your-client-id" \
+  -e OAUTH_CLIENT_SECRET="your-client-secret" \
+  -e OAUTH_TOKEN_ENDPOINT="https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/token" \
+  -e API_ENDPOINT="https://your-api-id.execute-api.us-east-1.amazonaws.com/api" \
+  cicd-runner \
+    --suite-id 01234567-89ab-cdef-0123-456789abcdef \
+    --var username=testuser \
+    --var environment=staging \
+    --verbose
+```
+
+### Environment Variables
+
+#### Required
+
+| Variable | Description |
+|----------|-------------|
+| `OAUTH_CLIENT_ID` | OAuth client ID from Cognito |
+| `OAUTH_CLIENT_SECRET` | OAuth client secret from Cognito |
+| `OAUTH_TOKEN_ENDPOINT` | Cognito token endpoint URL (must be HTTPS) |
+| `API_ENDPOINT` | Platform API base URL (must be HTTPS) |
+
+If any required variable is missing, the container exits with code 2 and logs which variable is absent.
+
+#### Optional
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AWS_ACCESS_KEY_ID` | AWS access key for Nova Act SDK Bedrock access | From IAM role |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key for Nova Act SDK Bedrock access | From IAM role |
+| `AWS_SESSION_TOKEN` | AWS session token (for temporary credentials) | — |
+| `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
+
+AWS credentials can be provided via environment variables or inherited from an IAM role attached to the CI/CD runner (e.g., GitHub Actions OIDC, ECS task role).
+
+### Resource Requirements
+
+| Resource | Recommended | Notes |
+|----------|-------------|-------|
+| Memory | 2 GB | Chromium headless requires ~1 GB; additional headroom for the Python runtime and test execution |
+| CPU | 2 cores | Concurrent browser automation benefits from multiple cores |
+
+The container runs as a non-root user (`runner`, uid 1000) and writes logs to `/app/logs` inside the container.
+
+### CI/CD Integration
+
+#### GitHub Actions
+
+```yaml
+name: Run QA Suite
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite_id:
+        description: "Test suite ID to execute"
+        required: true
+
+jobs:
+  qa-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run CI/CD Runner
+        run: |
+          docker run --rm \
+            -e OAUTH_CLIENT_ID="${{ secrets.OAUTH_CLIENT_ID }}" \
+            -e OAUTH_CLIENT_SECRET="${{ secrets.OAUTH_CLIENT_SECRET }}" \
+            -e OAUTH_TOKEN_ENDPOINT="${{ secrets.OAUTH_TOKEN_ENDPOINT }}" \
+            -e API_ENDPOINT="${{ secrets.API_ENDPOINT }}" \
+            -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+            -e AWS_SESSION_TOKEN="${{ secrets.AWS_SESSION_TOKEN }}" \
+            your-registry/cicd-runner:latest \
+              --suite-id "${{ github.event.inputs.suite_id }}"
+```
+
+#### GitLab CI
+
+```yaml
+# .gitlab-ci.yml
+qa-run:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    SUITE_ID: "01234567-89ab-cdef-0123-456789abcdef"
+  script:
+    - docker run --rm
+        -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID"
+        -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET"
+        -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT"
+        -e API_ENDPOINT="$API_ENDPOINT"
+        -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+        -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+        your-registry/cicd-runner:latest
+          --suite-id "$SUITE_ID"
+```
+
+Store `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `OAUTH_TOKEN_ENDPOINT`, `API_ENDPOINT`, and AWS credentials as [CI/CD variables](https://docs.gitlab.com/ee/ci/variables/) with the **Masked** flag enabled.
+
+#### Jenkins
+
+```groovy
+// Jenkinsfile
+pipeline {
+    agent any
+    parameters {
+        string(name: 'SUITE_ID', description: 'Test suite ID to execute')
+    }
+    stages {
+        stage('Run QA Suite') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'oauth-client-id',     variable: 'OAUTH_CLIENT_ID'),
+                    string(credentialsId: 'oauth-client-secret', variable: 'OAUTH_CLIENT_SECRET'),
+                    string(credentialsId: 'oauth-token-endpoint', variable: 'OAUTH_TOKEN_ENDPOINT'),
+                    string(credentialsId: 'api-endpoint',        variable: 'API_ENDPOINT'),
+                    string(credentialsId: 'aws-access-key-id',   variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
+                    sh """
+                        docker run --rm \
+                          -e OAUTH_CLIENT_ID="\$OAUTH_CLIENT_ID" \
+                          -e OAUTH_CLIENT_SECRET="\$OAUTH_CLIENT_SECRET" \
+                          -e OAUTH_TOKEN_ENDPOINT="\$OAUTH_TOKEN_ENDPOINT" \
+                          -e API_ENDPOINT="\$API_ENDPOINT" \
+                          -e AWS_ACCESS_KEY_ID="\$AWS_ACCESS_KEY_ID" \
+                          -e AWS_SECRET_ACCESS_KEY="\$AWS_SECRET_ACCESS_KEY" \
+                          your-registry/cicd-runner:latest \
+                            --suite-id "\${params.SUITE_ID}"
+                    """
+                }
+            }
+        }
+    }
+}
+```
+
+Store all secrets in Jenkins **Credentials** as "Secret text" entries. The `withCredentials` block injects them as environment variables scoped to the build step.
+
 ## Development
 
 ### Running Tests
@@ -278,12 +446,16 @@ pytest -k property
 ```
 cicd-runner/
 ├── src/
+│   ├── api/           # API client (suites, executions)
 │   ├── auth/          # OAuth authentication
-│   ├── api/           # API client
 │   ├── cli/           # CLI argument parsing
-│   ├── config/        # Configuration management
-│   └── utils/         # Utilities and errors
+│   ├── config/        # Configuration management (pydantic Settings)
+│   ├── execution/     # Test execution engine, artifact upload, log capture
+│   ├── output/        # Execution summary formatting
+│   └── utils/         # Errors, logging, log filters
 ├── tests/             # Unit and property tests
+├── Dockerfile         # Multi-stage Docker build
+├── .dockerignore      # Docker build exclusions
 ├── requirements.txt   # Runtime dependencies
 ├── requirements-dev.txt  # Development dependencies
 ├── setup.py          # Package setup
@@ -292,7 +464,7 @@ cicd-runner/
 
 ## Security
 
-- Never commit `.token_cache.json` or `.env` files to version control
+- Never commit `.env` files to version control
 - Store OAuth credentials securely (use secrets management in CI/CD)
 - Rotate OAuth client secrets regularly
 - Use least-privilege scopes for OAuth clients

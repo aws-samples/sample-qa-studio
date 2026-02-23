@@ -308,7 +308,11 @@ class ExecutionEngine:
                 nova.page.set_extra_http_headers(parsed_headers)
                 nova.go_to_url(starting_url)
 
-            executor = StepExecutor(nova, downloads_dir=downloads_dir)
+            executor = StepExecutor(
+                nova,
+                downloads_dir=downloads_dir,
+                secrets_resolver=self.execution_api.get_secret_value,
+            )
             runtime_variables: Dict[str, str] = {}
 
             for step in steps:

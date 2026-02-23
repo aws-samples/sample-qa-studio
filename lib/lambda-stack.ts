@@ -77,6 +77,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   // Secrets Lambdas
   public readonly createUsecaseSecretsLambda: Function
   public readonly getUsecaseSecretsLambda: Function
+  public readonly getUsecaseSecretValueLambda: Function
   public readonly deleteUsecaseSecretsLambda: Function
   public readonly updateUsecaseSecretsLambda: Function
 
@@ -379,6 +380,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
 
     this.getUsecaseSecretsLambda = this.createPythonLambda({
       path: 'get_usecase_secrets',
+      environment: { SECRET_PREFIX: props.baseName }
+    })
+
+    this.getUsecaseSecretValueLambda = this.createPythonLambda({
+      path: 'get_usecase_secret_value',
       environment: { SECRET_PREFIX: props.baseName }
     })
 
@@ -1036,6 +1042,12 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:DescribeSecret'],
+      resources: [secretsArnPattern]
+    }))
+
+    this.getUsecaseSecretValueLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['secretsmanager:GetSecretValue'],
       resources: [secretsArnPattern]
     }))
 
