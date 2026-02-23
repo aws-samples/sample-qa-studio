@@ -57,6 +57,14 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly listExecutionStepsLambda: Function
   public readonly getExecutionVariablesLambda: Function
   public readonly getLiveViewLambda: Function
+  public readonly updateExecutionStatusLambda: Function
+  public readonly updateExecutionStepStatusLambda: Function
+  public readonly generateExecutionArtifactUrlLambda: Function
+  public readonly generateStepArtifactUrlLambda: Function
+  public readonly confirmArtifactUploadLambda: Function
+  public readonly listExecutionArtifactsLambda: Function
+  public readonly generateSuiteArtifactUrlLambda: Function
+  public readonly listSuiteArtifactsLambda: Function
 
   // Variables, Hooks, Headers Lambdas
   public readonly createUsecaseVariablesLambda: Function
@@ -77,6 +85,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly getRecordingBatchLambda: Function
   public readonly listDownloadsLambda: Function
   public readonly downloadFileLambda: Function
+  public readonly getVideoPlaybackLambda: Function
 
   // Template Lambdas
   public readonly createTemplateLambda: Function
@@ -115,6 +124,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly createOAuthClientLambda: Function
   public readonly listOAuthClientsLambda: Function
   public readonly deleteOAuthClientLambda: Function
+  public readonly rotateClientSecretLambda: Function
   public readonly listScopesLambda: Function
 
   // Test Suite Management Lambdas
@@ -130,6 +140,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly listSuiteExecutionsLambda: Function
   public readonly getSuiteExecutionLambda: Function
   public readonly stopSuiteExecutionLambda: Function
+  public readonly updateSuiteExecutionStatusLambda: Function
   public readonly updateSuiteScheduleLambda: Function
 
   // Worker-related Lambdas (moved from worker stack)
@@ -272,6 +283,63 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       environment: { TABLE_NAME: props.table.tableName }
     })
 
+    this.updateExecutionStatusLambda = this.createPythonLambda({
+      path: 'update_execution_status',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.updateExecutionStepStatusLambda = this.createPythonLambda({
+      path: 'update_execution_step_status',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.generateExecutionArtifactUrlLambda = this.createPythonLambda({
+      path: 'generate_execution_artifact_url',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
+    this.generateStepArtifactUrlLambda = this.createPythonLambda({
+      path: 'generate_step_artifact_url',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
+    this.confirmArtifactUploadLambda = this.createPythonLambda({
+      path: 'confirm_artifact_upload',
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    })
+
+    this.listExecutionArtifactsLambda = this.createPythonLambda({
+      path: 'list_execution_artifacts',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
+    this.generateSuiteArtifactUrlLambda = this.createPythonLambda({
+      path: 'generate_suite_artifact_url',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
+    this.listSuiteArtifactsLambda = this.createPythonLambda({
+      path: 'list_suite_artifacts',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
     // Variables, Hooks, Headers Lambdas
     this.createUsecaseVariablesLambda = this.createPythonLambda({
       path: 'create_usecase_variables',
@@ -345,6 +413,14 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.downloadFileLambda = this.createPythonLambda({
       path: 'download_file',
       environment: { BUCKET_NAME: props.artefactsBucket.bucketName }
+    })
+
+    this.getVideoPlaybackLambda = this.createPythonLambda({
+      path: 'get_video_playback',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
     })
 
     // Template Lambdas
@@ -577,6 +653,14 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       }
     });
 
+    this.rotateClientSecretLambda = this.createPythonLambda({
+      path: 'rotate_client_secret',
+      environment: {
+        USER_POOL_ID: props.userPool.userPoolId,
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
     this.listScopesLambda = this.createPythonLambda({
       path: 'list_scopes',
       environment: {
@@ -612,6 +696,16 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [props.userPool.userPoolArn]
     }));
 
+    this.rotateClientSecretLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'cognito-idp:DescribeUserPoolClient',
+        'cognito-idp:DeleteUserPoolClient',
+        'cognito-idp:CreateUserPoolClient'
+      ],
+      resources: [props.userPool.userPoolArn]
+    }));
+
     this.listScopesLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: [
@@ -625,6 +719,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.listOAuthClientsLambda.role?.addManagedPolicy(props.tableReadPolicy);
     // Delete needs read (to check created_by), write, and delete permissions
     this.deleteOAuthClientLambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
+    // Rotate needs read (to check created_by), write (to update metadata), and delete (to remove old metadata)
+    this.rotateClientSecretLambda.role?.addManagedPolicy(props.tableFullAccessPolicy);
 
     // ========== Test Suite Management Lambdas ==========
 
@@ -686,9 +782,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
 
     this.executeTestSuiteLambda = this.createPythonLambda({
       path: 'execute_test_suite',
+      timeout: cdk.Duration.seconds(300), // 5 minutes for large suites
+      memorySize: 512,
       environment: {
         TABLE_NAME: props.table.tableName,
-        EXECUTE_USECASE_LAMBDA_ARN: props.executeUsecaseLambda.functionArn
+        DEFAULT_REGION: this.region
       }
     });
 
@@ -711,6 +809,13 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       environment: {
         TABLE_NAME: props.table.tableName,
         ECS_CLUSTER: props.ecsClusterArn
+      }
+    });
+
+    this.updateSuiteExecutionStatusLambda = this.createPythonLambda({
+      path: 'update_suite_execution_status',
+      environment: {
+        TABLE_NAME: props.table.tableName
       }
     });
 
@@ -803,7 +908,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.listSuiteUsecasesLambda,
       this.listSuiteExecutionsLambda,
       this.getSuiteExecutionLambda,
-      this.executeTestSuiteLambda
+      this.executeTestSuiteLambda,
+      this.getVideoPlaybackLambda,
+      this.generateSuiteArtifactUrlLambda,
+      this.listSuiteArtifactsLambda,
+      this.listExecutionArtifactsLambda
     ]
     readLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableReadPolicy))
 
@@ -828,7 +937,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.removeUsecaseFromSuiteLambda,
       this.updateSuiteScheduleLambda,
       this.executeTestSuiteLambda,
-      this.stopSuiteExecutionLambda
+      this.stopSuiteExecutionLambda,
+      this.updateSuiteExecutionStatusLambda
     ]
     writeLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableWritePolicy))
 
@@ -856,14 +966,32 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.addUsecasesToSuiteLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.updateTestSuiteLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.updateTestSuiteLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    this.updateSuiteExecutionStatusLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.updateSuiteExecutionStatusLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    this.updateExecutionStatusLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.updateExecutionStatusLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    this.updateExecutionStepStatusLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.updateExecutionStepStatusLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    this.generateExecutionArtifactUrlLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.generateExecutionArtifactUrlLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    this.generateStepArtifactUrlLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.generateStepArtifactUrlLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    this.confirmArtifactUploadLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.confirmArtifactUploadLambda.role?.addManagedPolicy(props.tableWritePolicy)
 
     // S3 Bucket Permissions
     props.artefactsBucket.grantRead(this.listRecordingBatchesLambda)
     props.artefactsBucket.grantRead(this.getRecordingBatchLambda)
+    props.artefactsBucket.grantPut(this.generateExecutionArtifactUrlLambda)
+    props.artefactsBucket.grantPut(this.generateStepArtifactUrlLambda)
     props.artefactsBucket.grantRead(this.listDownloadsLambda)
     props.artefactsBucket.grantRead(this.downloadFileLambda)
+    props.artefactsBucket.grantRead(this.getVideoPlaybackLambda)
     props.artefactsBucket.grantDelete(this.deleteExecutionLambda)
     props.artefactsBucket.grantRead(this.deleteExecutionLambda)
+    props.artefactsBucket.grantPut(this.generateSuiteArtifactUrlLambda)
+    props.artefactsBucket.grantRead(this.listSuiteArtifactsLambda)
+    props.artefactsBucket.grantRead(this.listExecutionArtifactsLambda)
 
     // Nova Act Permissions
     const novaActArn = `arn:aws:nova-act:${Aws.REGION}:${Aws.ACCOUNT_ID}:*`;
@@ -941,6 +1069,27 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       effect: Effect.ALLOW,
       actions: ['secretsmanager:DescribeSecret'],
       resources: [secretsArnPattern]
+    }))
+
+    // EventBridge permissions for execute_test_suite Lambda
+    this.executeTestSuiteLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/default`]
+    }))
+
+    // EventBridge permissions for update_execution_status Lambda
+    this.updateExecutionStatusLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/default`]
+    }))
+
+    // CloudWatch metrics permissions for execute_test_suite Lambda
+    this.executeTestSuiteLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*']
     }))
 
     // CreateSecret requires * for resource

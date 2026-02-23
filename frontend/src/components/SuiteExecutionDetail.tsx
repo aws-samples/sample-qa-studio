@@ -3,21 +3,20 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Button from "@cloudscape-design/components/button";
-import Modal from "@cloudscape-design/components/modal";
 import Box from "@cloudscape-design/components/box";
 import AppLayout from "@cloudscape-design/components/app-layout";
 import Container from "@cloudscape-design/components/container";
 import Grid from "@cloudscape-design/components/grid";
-import ProgressBar from "@cloudscape-design/components/progress-bar";
 import Table from "@cloudscape-design/components/table";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Link from "@cloudscape-design/components/link";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import PieChart from "@cloudscape-design/components/pie-chart";
-import { testSuites } from '../utils/api';
+import { testSuites, SuiteArtifact } from '../utils/api';
 import { SuiteExecution } from '../utils/api';
 import Breadcrumb from './common/Breadcrumb';
+import LogViewer from './common/LogViewer';
 
 function formatDuration(seconds?: number): string {
   if (!seconds) return '-';
@@ -67,6 +66,8 @@ export default function SuiteExecutionDetail() {
   const navigate = useNavigate();
   const [execution, setExecution] = useState<SuiteExecution | null>(null);
   const [loading, setLoading] = useState(true);
+  const [logDownloadUrl, setLogDownloadUrl] = useState<string | null>(null);
+  const [artifactsLoading, setArtifactsLoading] = useState(true);
 
   const fetchExecution = async () => {
     if (!suiteId || !executionId) return;
@@ -103,6 +104,31 @@ export default function SuiteExecutionDetail() {
       }
     };
   }, [execution?.status, suiteId, executionId]);
+
+  // Fetch suite artifacts for log viewing
+  useEffect(() => {
+    const fetchArtifacts = async () => {
+      if (!suiteId || !executionId) return;
+      try {
+        setArtifactsLoading(true);
+        const data = await testSuites.listArtifacts(suiteId, executionId);
+        const logArtifact = (data.artifacts || []).find(
+          (a: SuiteArtifact) => a.type === 'logs'
+        );
+        setLogDownloadUrl(logArtifact?.download_url ?? null);
+      } catch (error) {
+        console.error('Failed to fetch suite artifacts:', error);
+        setLogDownloadUrl(null);
+      } finally {
+        setArtifactsLoading(false);
+      }
+    };
+
+    // Only fetch artifacts when execution is no longer running
+    if (execution && execution.status !== 'running' && execution.status !== 'pending') {
+      fetchArtifacts();
+    }
+  }, [suiteId, executionId, execution?.status]);
 
   const handleRerunSuite = async () => {
     if (!suiteId) return;
@@ -328,6 +354,15 @@ export default function SuiteExecutionDetail() {
               </Header>
             }
           />
+
+          {/* Suite Logs */}
+          {(artifactsLoading || logDownloadUrl) && (
+            <Container
+              header={<Header variant="h2">Suite Logs</Header>}
+            >
+              <LogViewer downloadUrl={logDownloadUrl} loading={artifactsLoading} />
+            </Container>
+          )}
         </SpaceBetween>
       }
     />

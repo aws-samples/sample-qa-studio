@@ -9,6 +9,9 @@ import {
   CacheCookieBehavior,
   AllowedMethods,
   OriginRequestPolicy,
+  OriginRequestHeaderBehavior,
+  OriginRequestQueryStringBehavior,
+  OriginRequestCookieBehavior,
   PriceClass,
   OriginProtocolPolicy,
   ResponseHeadersPolicy,
@@ -89,7 +92,7 @@ function handler(event) {
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
       cookieBehavior: CacheCookieBehavior.all(),
-      headerBehavior: CacheHeaderBehavior.allowList('Origin', 'Access-Control-Request-Headers', 'Access-Control-Request-Method', 'Authorization'),
+      headerBehavior: CacheHeaderBehavior.allowList('Origin', 'Access-Control-Request-Headers', 'Access-Control-Request-Method'),
       queryStringBehavior: CacheQueryStringBehavior.all()
     })
 

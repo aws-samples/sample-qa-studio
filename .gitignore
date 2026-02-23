@@ -73,3 +73,9 @@ cdk.context.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+.coverage
+.hypothesis
+.token_cache.json
+.env
+cicd_runner.egg-info

@@ -19,6 +19,25 @@ export interface RecordingBatchList {
   metadata: RecordingMetadata;
 }
 
+export interface RrwebPlaybackResponse {
+  playback_type: "rrweb";
+  execution_id: string;
+  trigger_type: string;
+  batches: string[];
+  metadata: RecordingMetadata;
+}
+
+export interface VideoFilePlaybackResponse {
+  playback_type: "video";
+  execution_id: string;
+  trigger_type: string;
+  download_url: string;
+  content_type: string;
+  expires_in: number;
+}
+
+export type VideoPlaybackResponse = RrwebPlaybackResponse | VideoFilePlaybackResponse;
+
 export interface RecordingBatch {
   events: RecordingEvent[];
   totalCount: number;
@@ -58,3 +77,17 @@ export const getRecordingBatch = async (
     throw error;
   }
 };
+
+export const getVideoPlayback = async (
+  usecaseId: string,
+  executionId: string
+): Promise<VideoPlaybackResponse> => {
+  try {
+    const response = await api.get(`usecase/${usecaseId}/executions/${executionId}/video`);
+    return response as VideoPlaybackResponse;
+  } catch (error) {
+    console.error('Failed to get video playback:', error);
+    throw error;
+  }
+};
+

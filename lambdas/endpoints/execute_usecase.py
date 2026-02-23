@@ -89,18 +89,24 @@ def update_execution_status_with_error(usecase_id, execution_id, status, error_m
 def handler(event, context):
     """
     Execute a usecase by creating an execution record and starting an ECS task.
-    Supports OnDemand (queue), Scheduled, and OnDemandHeadless (direct ECS) trigger types.
+    Supports OnDemand (queue), Scheduled, OnDemandHeadless (direct ECS), and ci_runner trigger types.
     Accessible by both user tokens and M2M tokens.
     
     Path Parameters:
     - id: Usecase ID to execute
     
     Query Parameters:
-    - trigger-type: OnDemand (default), Scheduled, or OnDemandHeadless
+    - trigger-type: OnDemand (default), Scheduled, OnDemandHeadless, or ci_runner
+    
+    Trigger Types:
+    - OnDemand: Queues execution to SQS for worker processing
+    - Scheduled: Directly spawns ECS task (used by EventBridge Scheduler)
+    - OnDemandHeadless: Directly spawns ECS task (used by UI for immediate execution)
+    - ci_runner: Creates execution record only, no ECS task (used by CI/CD runner)
     
     Returns:
     - 200: Execution started successfully
-    - 400: Missing usecase ID
+    - 400: Missing usecase ID or invalid trigger type
     - 401: Unauthorized
     - 500: Error starting execution
     """
@@ -119,6 +125,13 @@ def handler(event, context):
     trigger_type = query_params.get('trigger-type', 'OnDemand')
     suite_execution_id = query_params.get('suite-execution-id')  # Optional: for suite executions
     suite_id = query_params.get('suite-id')  # Optional: for suite executions
+    
+    # Validate trigger type
+    valid_trigger_types = ['OnDemand', 'Scheduled', 'OnDemandHeadless', 'ci_runner']
+    if trigger_type not in valid_trigger_types:
+        return create_response(400, {
+            'error': f'Invalid trigger type: {trigger_type}. Valid values: {", ".join(valid_trigger_types)}'
+        })
     
     print(f'usecaseID: {usecase_id}, triggertype: {trigger_type}, suite_execution_id: {suite_execution_id}, suite_id: {suite_id}')
     
@@ -417,7 +430,17 @@ def handler(event, context):
                 update_execution_status_with_error(usecase_id, execution_id, 'failed', error_msg)
                 return create_response(500, {'error': error_msg})
         
+        elif trigger_type == 'ci_runner':
+            # CI/CD runner execution: create execution record only, no ECS task
+            print(f'CI/CD runner execution created: {execution_id}')
+            return create_response(200, {
+                'status': 'execution created',
+                'usecaseId': usecase_id,
+                'executionId': execution_id
+            })
+        
         else:
+            # Should never reach here due to validation above, but keep for safety
             return create_response(400, {'error': f'Invalid trigger type: {trigger_type}'})
     
     except Exception as e:

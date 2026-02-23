@@ -2,7 +2,7 @@
 import pytest
 import json
 from unittest.mock import Mock, patch, MagicMock
-from execute_test_suite import handler
+from execute_test_suite import handler, resolve_triggered_by
 
 
 @pytest.fixture
@@ -485,6 +485,62 @@ class TestExecuteTestSuite:
         assert payload['requestContext']['authorizer']['email'] == 'test@example.com'
         assert payload['requestContext']['authorizer']['sub'] == 'user-123'
         assert 'api/suite.write' in payload['requestContext']['authorizer']['scope']
+
+
+
+class TestResolveTriggeredBy:
+    """Tests for resolve_triggered_by - resolves client_id to client_name for M2M tokens"""
+
+    @patch('execute_test_suite.dynamodb')
+    def test_user_identity_returns_email(self, mock_dynamodb):
+        """User tokens return email directly without DynamoDB lookup"""
+        identity = {'identity': 'user@example.com', 'identity_type': 'user'}
+        result = resolve_triggered_by(identity, 'test-table')
+        assert result == 'user@example.com'
+        mock_dynamodb.get_item.assert_not_called()
+
+    @patch('execute_test_suite.dynamodb')
+    def test_client_identity_resolves_to_name(self, mock_dynamodb):
+        """M2M tokens look up client_name from OAUTH_CLIENTS record"""
+        mock_dynamodb.get_item.return_value = {
+            'Item': {'client_name': {'S': 'my-ci-runner'}}
+        }
+        identity = {'identity': 'abc123clientid', 'identity_type': 'client'}
+        result = resolve_triggered_by(identity, 'test-table')
+
+        assert result == 'my-ci-runner'
+        mock_dynamodb.get_item.assert_called_once_with(
+            TableName='test-table',
+            Key={'pk': {'S': 'OAUTH_CLIENTS'}, 'sk': {'S': 'abc123clientid'}},
+            ProjectionExpression='client_name'
+        )
+
+    @patch('execute_test_suite.dynamodb')
+    def test_client_identity_falls_back_to_id_when_not_found(self, mock_dynamodb):
+        """Falls back to client_id when no OAUTH_CLIENTS record exists"""
+        mock_dynamodb.get_item.return_value = {}
+        identity = {'identity': 'abc123clientid', 'identity_type': 'client'}
+        result = resolve_triggered_by(identity, 'test-table')
+        assert result == 'abc123clientid'
+
+    @patch('execute_test_suite.dynamodb')
+    def test_client_identity_falls_back_to_id_on_dynamo_error(self, mock_dynamodb):
+        """Falls back to client_id when DynamoDB lookup fails"""
+        mock_dynamodb.get_item.side_effect = Exception('DynamoDB timeout')
+        identity = {'identity': 'abc123clientid', 'identity_type': 'client'}
+        result = resolve_triggered_by(identity, 'test-table')
+        assert result == 'abc123clientid'
+
+    @patch('execute_test_suite.dynamodb')
+    def test_client_identity_falls_back_when_name_missing(self, mock_dynamodb):
+        """Falls back to client_id when record exists but client_name attribute is missing"""
+        mock_dynamodb.get_item.return_value = {
+            'Item': {'pk': {'S': 'OAUTH_CLIENTS'}, 'sk': {'S': 'abc123clientid'}}
+        }
+        identity = {'identity': 'abc123clientid', 'identity_type': 'client'}
+        result = resolve_triggered_by(identity, 'test-table')
+        assert result == 'abc123clientid'
+
 
 
 if __name__ == '__main__':

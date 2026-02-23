@@ -370,6 +370,12 @@ export interface CreateOAuthClientResponse {
   id_token_validity?: number;
 }
 
+export interface RotateSecretResponse {
+  client_id: string;
+  client_secret: string;
+  rotated_at: string;
+}
+
 export interface ScopeOption {
   value: string;
   label: string;
@@ -385,6 +391,7 @@ export const oauthClientApi = {
   list: (): Promise<{ clients: OAuthClient[]; count: number }> => api.get('oauth-clients'),
   create: (clientData: CreateOAuthClientRequest): Promise<CreateOAuthClientResponse> => api.post('oauth-clients', clientData),
   delete: (clientId: string): Promise<void> => api.delete(`oauth-clients/${encodeURIComponent(clientId)}`),
+  rotateSecret: (clientId: string): Promise<RotateSecretResponse> => api.post(`oauth-clients/${encodeURIComponent(clientId)}/rotate-secret`, {}),
 };
 
 export const scopesApi = {
@@ -434,7 +441,7 @@ export interface SuiteExecution {
   completed_at?: string;
   duration_seconds?: number;
   triggered_by: string;
-  trigger_type: 'manual' | 'scheduled';
+  trigger_type: 'manual' | 'scheduled' | 'ci_runner';
   total_usecases: number;
   completed_usecases: number;
   successful_usecases: number;
@@ -494,6 +501,15 @@ export interface ExecuteSuiteResponse {
   started_at: string;
 }
 
+export interface SuiteArtifact {
+  filename: string;
+  type: string;
+  content_type: string;
+  download_url: string;
+  size: number;
+  last_modified: string;
+}
+
 export const testSuites = {
   // Suite Management
   create: (data: CreateTestSuiteRequest): Promise<TestSuite> => 
@@ -539,9 +555,21 @@ export const testSuites = {
     if (params?.limit) queryParams.append('limit', params.limit.toString());
     if (params?.status) queryParams.append('status', params.status);
     const query = queryParams.toString();
-    return api.get(`test-suites/${suiteId}/executions${query ? `?${query}` : ''}`);
+    return api.get(`test-suites/${suiteId}/executions${query ? `?${query}` : ''}`).then((data: any) => ({
+      ...data,
+      executions: (data.executions || []).map((e: any) => ({
+        ...e,
+        id: e.suite_execution_id || e.id,
+      })),
+    }));
   },
   
   getExecution: (suiteId: string, executionId: string): Promise<SuiteExecution> => 
-    api.get(`test-suites/${suiteId}/executions/${executionId}`),
+    api.get(`test-suites/${suiteId}/executions/${executionId}`).then((data: any) => ({
+      ...data,
+      id: data.suite_execution_id || data.id,
+    })),
+
+  listArtifacts: (suiteId: string, executionId: string): Promise<{ artifacts: SuiteArtifact[] }> =>
+    api.get(`test-suites/${suiteId}/executions/${executionId}/artifacts`),
 };

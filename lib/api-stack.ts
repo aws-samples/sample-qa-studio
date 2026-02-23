@@ -192,6 +192,10 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     this.addMethod(execution, HttpMethod.DELETE, l.deleteExecutionLambda)
     this.addMethod(execution, HttpMethod.GET, l.getExecutionLambda)
 
+    // /usecase/{id}/executions/{executionId}/status - Update execution status
+    const executionStatus = this.addResource(execution, 'status')
+    this.addMethod(executionStatus, HttpMethod.PATCH, l.updateExecutionStatusLambda)
+
     // /usecase/{id}/executions/{executionId}/stop - Stop execution
     const stopExecution = this.addResource(execution, 'stop')
     this.addMethod(stopExecution, HttpMethod.POST, props.stopExecutionLambda)
@@ -203,6 +207,10 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     // /usecase/{id}/executions/{executionId}/steps/{stepId} - Get execution step
     const executionStep = this.addResource(executionSteps, '{stepId}')
     this.addMethod(executionStep, HttpMethod.GET, l.getExecutionStepLambda)
+
+    // /usecase/{id}/executions/{executionId}/steps/{stepId}/status - Update execution step status
+    const executionStepStatus = this.addResource(executionStep, 'status')
+    this.addMethod(executionStepStatus, HttpMethod.PATCH, l.updateExecutionStepStatusLambda)
 
     // /usecase/{id}/executions/{executionId}/variables - Get execution variables
     const executionVariables = this.addResource(execution, 'variables')
@@ -228,6 +236,23 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const executionEvent = this.addResource(execution, 'event')
     const executionEventBatch = this.addResource(executionEvent, '{batchId}')
     this.addMethod(executionEventBatch, HttpMethod.GET, l.getRecordingBatchLambda)
+
+    // /usecase/{id}/executions/{executionId}/video - Get video playback data
+    const executionVideo = this.addResource(execution, 'video')
+    this.addMethod(executionVideo, HttpMethod.GET, l.getVideoPlaybackLambda)
+
+    // /usecase/{id}/executions/{executionId}/artifacts - Generate presigned URL for execution artifacts
+    const executionArtifacts = this.addResource(execution, 'artifacts')
+    this.addMethod(executionArtifacts, HttpMethod.POST, l.generateExecutionArtifactUrlLambda)
+    this.addMethod(executionArtifacts, HttpMethod.GET, l.listExecutionArtifactsLambda)
+
+    // /usecase/{id}/executions/{executionId}/artifacts/{artifactId} - Confirm artifact upload
+    const executionArtifact = this.addResource(executionArtifacts, '{artifactId}')
+    this.addMethod(executionArtifact, HttpMethod.PATCH, l.confirmArtifactUploadLambda)
+
+    // /usecase/{id}/executions/{executionId}/steps/{stepId}/artifacts - Generate presigned URL for step artifacts
+    const stepArtifacts = this.addResource(executionStep, 'artifacts')
+    this.addMethod(stepArtifacts, HttpMethod.POST, l.generateStepArtifactUrlLambda)
 
     // /import - Import usecase
     const importEndpoint = this.addResource(this.api.root, 'import')
@@ -281,6 +306,10 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
 
     const oauthClient = this.addResource(oauthClients, '{clientId}')
     this.addMethod(oauthClient, HttpMethod.DELETE, l.deleteOAuthClientLambda)
+
+    // /oauth-clients/{clientId}/rotate-secret - Rotate OAuth client secret
+    const rotateSecret = this.addResource(oauthClient, 'rotate-secret')
+    this.addMethod(rotateSecret, HttpMethod.POST, l.rotateClientSecretLambda)
 
     // /scopes - List available OAuth scopes (public endpoint, no auth)
     const scopes = this.addResource(this.api.root, 'scopes')
@@ -354,6 +383,15 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     // /test-suites/{suite_id}/executions/{execution_id} - Get suite execution
     const suiteExecution = this.addResource(suiteExecutions, '{execution_id}')
     this.addMethod(suiteExecution, HttpMethod.GET, l.getSuiteExecutionLambda)
+
+    // /test-suites/{suite_id}/executions/{execution_id}/status - Update suite execution status
+    const suiteExecutionStatus = this.addResource(suiteExecution, 'status')
+    this.addMethod(suiteExecutionStatus, HttpMethod.PATCH, l.updateSuiteExecutionStatusLambda)
+
+    // /test-suites/{suite_id}/executions/{execution_id}/artifacts - Suite execution artifacts
+    const suiteExecutionArtifacts = this.addResource(suiteExecution, 'artifacts')
+    this.addMethod(suiteExecutionArtifacts, HttpMethod.POST, l.generateSuiteArtifactUrlLambda)
+    this.addMethod(suiteExecutionArtifacts, HttpMethod.GET, l.listSuiteArtifactsLambda)
 
     // /test-suites/{suite_id}/schedule - Configure suite schedule
     const suiteSchedule = this.addResource(testSuite, 'schedule')

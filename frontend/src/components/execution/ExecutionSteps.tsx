@@ -105,22 +105,22 @@ export default function ExecutionSteps({
             id: 'logs',
             header: 'Validation',
             cell: item => {
-              if ((item.stepType == 'validation' || item.stepType == 'assertion') && item.actualValue) {
+              if ((item.step_type == 'validation' || item.step_type == 'assertion') && item.actual_value) {
                 return (
                   <ValidationResult
-                    validationType={item.validationType}
-                    validationOperator={item.validationOperator}
-                    validationValue={item.validationValue}
-                    actualValue={item.actualValue}
+                    validationType={item.validation_type}
+                    validationOperator={item.validation_operator}
+                    validationValue={item.validation_value}
+                    actualValue={item.actual_value}
                     status={item.status || 'pending'}
                   />
                 );
               }
 
-              if (item.stepType === 'download' && item.actualValue) {
+              if (item.step_type === 'download' && item.actual_value) {
                 return (
                   <div style={{ fontSize: '12px', color: '#5f6b7a' }}>
-                    Downloaded: {item.actualValue}
+                    Downloaded: {item.actual_value}
                   </div>
                 );
               }
