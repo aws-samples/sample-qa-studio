@@ -1,6 +1,10 @@
 # CLI Reference
 
+<<<<<<< HEAD
 This guide provides detailed information about the Nova Act QA Studio CI/CD Runner command-line interface, including all available options, usage patterns, exit codes, and output format.
+=======
+This guide provides detailed information about the QA Studio CI/CD Runner command-line interface, including all available options, usage patterns, exit codes, and output format.
+>>>>>>> 781b54a (finish mergin main)
 
 ## Basic Usage
 
@@ -64,9 +68,13 @@ cicd-runner \
   --base-url https://staging.example.com \
   --var username=testuser \
   --var password=testpass \
+<<<<<<< HEAD
   --var api_key=test_key_123 \
   --region us-west-2 \
   --model-id anthropic.claude-3-5-sonnet-20240620-v1:0 \
+=======
+  --model-id nova-act-v1.0 \
+>>>>>>> 781b54a (finish mergin main)
   --timeout 7200 \
   --verbose
 ```
@@ -77,7 +85,11 @@ cicd-runner \
 
 #### `--suite-id <uuid>`
 
+<<<<<<< HEAD
 **Description**: The UUID of the test suite to execute. This is the unique identifier for the test suite in the Nova Act QA Studio platform.
+=======
+**Description**: The UUID of the test suite to execute. This is the unique identifier for the test suite in the QA Studio platform.
+>>>>>>> 781b54a (finish mergin main)
 
 **Required**: Yes
 
@@ -137,6 +149,7 @@ cicd-runner \
 - Values can contain spaces if quoted in the shell: `--var "full_name=John Doe"`
 - Variable names are case-sensitive
 
+<<<<<<< HEAD
 #### `--region <aws-region>`
 
 **Description**: Override the AWS region for browser execution. This determines which AWS region the Nova Act browser instances will run in.
@@ -164,16 +177,33 @@ cicd-runner \
 **Required**: No
 
 **Format**: Bedrock model ID (e.g., `anthropic.claude-3-5-sonnet-20240620-v1:0`)
+=======
+#### `--model-id <model-id>`
+
+**Description**: Override the Nova Act model ID used for AI-powered browser automation.
+
+**Required**: No
+
+**Format**: Nova Act model ID (e.g., `nova-act-v1.0`)
+>>>>>>> 781b54a (finish mergin main)
 
 **Example**:
 ```bash
 cicd-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
+<<<<<<< HEAD
   --model-id anthropic.claude-3-5-sonnet-20240620-v1:0
 ```
 
 **Notes**:
 - Must be a valid Bedrock model ID available in your AWS account
+=======
+  --model-id nova-act-v1.0
+```
+
+**Notes**:
+- Must be a valid Nova Act model ID
+>>>>>>> 781b54a (finish mergin main)
 - Different models may have different capabilities and performance characteristics
 - Overrides the model specified in the test suite
 
@@ -304,6 +334,7 @@ Log messages are written to stderr and include:
 
 ### 2. Summary Table (stdout)
 
+<<<<<<< HEAD
 After execution completes, a formatted ASCII table is printed to stdout with the execution summary:
 
 ```
@@ -343,6 +374,35 @@ After execution completes, a formatted ASCII table is printed to stdout with the
 - **Passed**: Number of test cases that passed
 - **Failed**: Number of test cases that failed
 - **Success**: Success rate as a percentage
+=======
+After execution completes, a plain text summary is printed to stdout:
+
+```
+QA Studio - CI/CD Runner
+
+Suite: Smoke Tests
+Suite Execution ID: 98765432-10ab-cdef-0123-456789abcdef
+Started: 2024-01-15 10:30:45
+Completed: 2024-01-15 10:35:12
+Duration: 4m 27s
+
+✓ Login Flow (45s)
+✓ Search Functionality (32s)
+✗ Checkout Process (1m 15s)
+✓ User Profile Update (28s)
+
+Total: 4  |  Passed: 3  |  Failed: 1  |  Success: 75%
+```
+
+**Summary Fields**:
+
+- **Suite**: Name of the test suite
+- **Suite Execution ID**: Unique identifier for this execution (can be used to retrieve artifacts)
+- **Started/Completed**: Timestamps in UTC
+- **Duration**: Total execution time
+- **✓ / ✗**: Pass/fail status per use case with individual duration
+- **Total/Passed/Failed/Success**: Aggregate counts and success rate
+>>>>>>> 781b54a (finish mergin main)
 
 ### Parsing Output
 
@@ -397,6 +457,7 @@ cicd-runner \
   --var password=staging_pass
 ```
 
+<<<<<<< HEAD
 ### Level 4: Regional Testing
 
 Test from different geographic regions:
@@ -411,6 +472,9 @@ cicd-runner \
 ```
 
 ### Level 5: Advanced Configuration
+=======
+### Level 4: Advanced Configuration
+>>>>>>> 781b54a (finish mergin main)
 
 Full control with all options:
 
@@ -420,9 +484,13 @@ cicd-runner \
   --base-url https://staging.example.com \
   --var username=staging_user \
   --var password=staging_pass \
+<<<<<<< HEAD
   --var api_key=test_key_123 \
   --region eu-west-1 \
   --model-id anthropic.claude-3-5-sonnet-20240620-v1:0 \
+=======
+  --model-id nova-act-v1.0 \
+>>>>>>> 781b54a (finish mergin main)
   --timeout 7200 \
   --verbose
 ```
