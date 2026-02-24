@@ -308,15 +308,12 @@ class ExecutionEngine:
                 nova.page.set_extra_http_headers(parsed_headers)
                 nova.go_to_url(starting_url)
 
-<<<<<<< HEAD
             executor = StepExecutor(
                 nova,
                 downloads_dir=downloads_dir,
                 secrets_resolver=self.execution_api.get_secret_value,
             )
-=======
             executor = StepExecutor(nova, downloads_dir=downloads_dir)
->>>>>>> 781b54a (finish mergin main)
             runtime_variables: Dict[str, str] = {}
 
             for step in steps:

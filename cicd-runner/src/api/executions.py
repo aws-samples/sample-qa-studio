@@ -218,7 +218,6 @@ class ExecutionAPI:
             {"status": "running", "nova_session_id": session_id},
         )
 
-<<<<<<< HEAD
     def get_secret_value(self, usecase_id: str, secret_key: str) -> Optional[str]:
         """
         Fetch the decrypted value of a usecase secret via API.
@@ -237,8 +236,4 @@ class ExecutionAPI:
             return response.get("value")
         except Exception:
             return None
-
-
-=======
->>>>>>> 781b54a (finish mergin main)
 

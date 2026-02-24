@@ -1,12 +1,6 @@
-<<<<<<< HEAD
-# Nova Act QA Studio - CI/CD Runner
-
-Python CLI application for executing Nova Act QA Studio test suites in CI/CD pipelines. The runner authenticates with OAuth client credentials, fetches test suite definitions, creates execution records, and runs automated browser-based tests using Nova Act.
-=======
 # QA Studio - CI/CD Runner
 
-Python CLI application for executing QA Studio test suites in CI/CD pipelines. The runner authenticates with OAuth client credentials, fetches test suite definitions, creates execution records, and runs automated browser-based tests using Nova Act.
->>>>>>> 781b54a (finish mergin main)
+Python CLI application for executing Nova Act QA Studio test suites in CI/CD pipelines. The runner authenticates with OAuth client credentials, fetches test suite definitions, creates execution records, and runs automated browser-based tests using Nova Act.
 
 ## Features
 
@@ -104,15 +98,9 @@ The runner will automatically load environment variables from `.env` if present.
 
 ## OAuth Client Setup
 
-<<<<<<< HEAD
-Before using the runner, you need to create an OAuth client in the Nova Act QA Studio platform:
-
-1. **Login to Nova Act QA Studio** web interface
-=======
 Before using the runner, you need to create an OAuth client in the QA Studio platform:
 
 1. **Login to QA Studio** web interface
->>>>>>> 781b54a (finish mergin main)
 2. **Navigate to Settings** → OAuth Clients
 3. **Create New Client**:
    - Name: "CI/CD Runner"
@@ -155,25 +143,14 @@ cicd-runner \
   --base-url https://staging.example.com
 ```
 
-<<<<<<< HEAD
-### With Region and Model Overrides
-
-Override AWS region and Bedrock model:
-=======
 ### With Model Override
 
 Override Bedrock model:
->>>>>>> 781b54a (finish mergin main)
 
 ```bash
 cicd-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
-<<<<<<< HEAD
-  --region us-west-2 \
-  --model-id anthropic.claude-3-5-sonnet-20240620-v1:0
-=======
   --model-id nova-act-v1.0
->>>>>>> 781b54a (finish mergin main)
 ```
 
 ### With Verbose Logging
@@ -204,12 +181,7 @@ cicd-runner \
   --base-url https://staging.example.com \
   --var username=testuser \
   --var password=testpass \
-<<<<<<< HEAD
-  --region us-west-2 \
-  --model-id anthropic.claude-3-5-sonnet-20240620-v1:0 \
-=======
   --model-id nova-act-v1.0 \
->>>>>>> 781b54a (finish mergin main)
   --timeout 7200 \
   --verbose
 ```
@@ -221,10 +193,6 @@ cicd-runner \
 | `--suite-id` | Yes | Test suite UUID to execute | - |
 | `--base-url` | No | Override base URL for all use cases | - |
 | `--var` | No | Override variable (key=value, repeatable) | - |
-<<<<<<< HEAD
-| `--region` | No | Override AWS region for browser | - |
-=======
->>>>>>> 781b54a (finish mergin main)
 | `--model-id` | No | Override Nova Act model ID | - |
 | `--verbose` | No | Enable verbose logging (DEBUG level) | False |
 | `--timeout` | No | Global timeout in seconds | 3600 |
@@ -281,7 +249,6 @@ cicd-runner \
 - Verify the `OAUTH_TOKEN_ENDPOINT` URL is correct
 - Check firewall rules allow HTTPS connections
 
-<<<<<<< HEAD
 ## Docker
 
 The CI/CD runner is available as a Docker container that bundles all dependencies including the Nova Act SDK and headless Chromium browser.
@@ -453,8 +420,6 @@ pipeline {
 
 Store all secrets in Jenkins **Credentials** as "Secret text" entries. The `withCredentials` block injects them as environment variables scoped to the build step.
 
-=======
->>>>>>> 781b54a (finish mergin main)
 ## Development
 
 ### Running Tests
