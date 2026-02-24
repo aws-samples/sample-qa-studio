@@ -35,11 +35,7 @@ class SummaryFormatter:
         duration = (end_time - start_time).total_seconds()
 
         lines = []
-<<<<<<< HEAD
-        lines.append("Nova Act QA Studio - CI/CD Runner")
-=======
         lines.append("QA Studio - CI/CD Runner")
->>>>>>> 781b54a (finish mergin main)
         lines.append("")
         lines.append(f"Suite: {suite_name}")
         lines.append(f"Suite Execution ID: {suite_execution_id}")

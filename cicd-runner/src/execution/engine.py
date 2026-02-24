@@ -313,7 +313,6 @@ class ExecutionEngine:
                 downloads_dir=downloads_dir,
                 secrets_resolver=self.execution_api.get_secret_value,
             )
-            executor = StepExecutor(nova, downloads_dir=downloads_dir)
             runtime_variables: Dict[str, str] = {}
 
             for step in steps:
