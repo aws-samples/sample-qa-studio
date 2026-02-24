@@ -41,9 +41,6 @@ lambdas/endpoints/dependencies/
 lambdas/auth/dependencies/
 lambdas/events/dependencies/
 
-.kiro
-Makefile
-
 frontend/.env
 frontend/src/amplifyconfiguration.json
 
