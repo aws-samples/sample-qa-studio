@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Spinner, Alert, ProgressBar } from '@cloudscape-design/components';
-import { listRecordingBatches, getRecordingBatch, RecordingEvent, RecordingMetadata } from '../utils/recordingUtils';
+import { listRecordingBatches, getRecordingBatch, getVideoPlayback, RecordingEvent, RecordingMetadata } from '../utils/recordingUtils';
 
 interface RecordingPlayerProps {
   usecaseId: string;
@@ -20,17 +20,56 @@ export const RecordingPlayer: React.FC<RecordingPlayerProps> = ({
   const [backgroundLoading, setBackgroundLoading] = useState(false);
   const [backgroundProgress, setBackgroundProgress] = useState(0);
   const [readyToInitPlayer, setReadyToInitPlayer] = useState(false);
+  const [playbackType, setPlaybackType] = useState<'video' | 'rrweb' | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const playerRef = useRef<any>(null);
   const allEventsRef = useRef<RecordingEvent[]>([]);
   const rrwebPlayerRef = useRef<any>(null);
 
+  // Step 0: Determine playback type on mount
   useEffect(() => {
+    let mounted = true;
+
+    const detectPlaybackType = async () => {
+      try {
+        setLoading(true);
+        setLoadingStatus('Detecting playback type...');
+        setLoadingProgress(0);
+
+        const response = await getVideoPlayback(usecaseId, executionId);
+
+        if (!mounted) return;
+
+        if (response.playback_type === 'video') {
+          setPlaybackType('video');
+          setVideoUrl(response.download_url);
+          setLoading(false);
+        } else {
+          setPlaybackType('rrweb');
+          // rrweb loading will be triggered by the next useEffect
+        }
+      } catch (err) {
+        if (!mounted) return;
+        console.error('Error detecting playback type:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load recording');
+        setLoading(false);
+      }
+    };
+
+    detectPlaybackType();
+
+    return () => {
+      mounted = false;
+    };
+  }, [usecaseId, executionId]);
+
+  // Step 1: Load rrweb recording (only when playbackType is "rrweb")
+  useEffect(() => {
+    if (playbackType !== 'rrweb') return;
     let mounted = true;
 
     const loadRecording = async () => {
       try {
-        setLoading(true);
-        setError(null);
         setLoadingStatus('Listing recording batches...');
         setLoadingProgress(0);
 
@@ -157,7 +196,7 @@ export const RecordingPlayer: React.FC<RecordingPlayerProps> = ({
         }
       }
     };
-  }, [usecaseId, executionId]);
+  }, [usecaseId, executionId, playbackType]);
 
   // Separate effect to initialize player after container is rendered
   useEffect(() => {
@@ -402,6 +441,35 @@ export const RecordingPlayer: React.FC<RecordingPlayerProps> = ({
     );
   }
 
+  // Video player branch
+  if (playbackType === 'video' && videoUrl) {
+    return (
+      <Box>
+        <div
+          style={{
+            width: '100%',
+            minHeight: '600px',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <video
+            controls
+            src={videoUrl}
+            style={{
+              maxWidth: '100%',
+              height: 'auto',
+            }}
+          >
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </Box>
+    );
+  }
+
+  // rrweb player branch
   return (
     <Box>
       <div

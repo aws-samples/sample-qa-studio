@@ -68,7 +68,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"Error querying use case variables: {str(e)}")
         
-        # Query execution variables (runtime variables)
+        # Query execution variables (merged variables and runtime variables)
+        execution_variables = {}
         try:
             execution_response = table.get_item(
                 Key={
@@ -79,6 +80,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             if 'Item' in execution_response:
                 runtime_variables = execution_response['Item'].get('runtime_variables', [])
+                # Also read merged variables stored by execute_test_suite
+                # These contain usecase vars + CLI overrides already merged
+                merged_vars = execution_response['Item'].get('variables', {})
+                if isinstance(merged_vars, dict) and merged_vars:
+                    execution_variables = merged_vars
         except Exception as e:
             logger.warning(f"Error querying execution variables: {str(e)}")
         
@@ -86,7 +92,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         return create_response(200, {
             'variables': variables,
-            'runtime_variables': runtime_variables
+            'runtime_variables': runtime_variables,
+            'execution_variables': execution_variables
         })
         
     except Exception as e:

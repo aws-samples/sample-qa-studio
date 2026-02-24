@@ -1,0 +1,22 @@
+# Virtual environments
+venv/
+
+# Python bytecode cache
+__pycache__/
+
+# Test artifacts
+.pytest_cache/
+.hypothesis/
+htmlcov/
+.coverage
+tests/
+
+# Environment files
+.env
+.env.example
+
+# Build metadata
+*.egg-info/
+
+# Version control
+.git/

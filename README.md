@@ -1,4 +1,4 @@
-# QA Studio with Amazon Nova Act
+# QA Studio
 
 A reference solution for automated web application testing with Amazon Nova Act. Provides a web interface to define test steps in natural language, run them with Nova Act browser automation, and review results with video recordings, screenshots, and logs.
 
@@ -46,6 +46,7 @@ Serverless architecture on AWS:
 ├── scripts/          # Release and utility scripts
 ├── testcases/        # Sample test case definitions
 └── worker/           # Nova Act test execution engine
+└── cicd_runner/      # CI/CD runner capabilities
 ```
 
 ## Getting Started

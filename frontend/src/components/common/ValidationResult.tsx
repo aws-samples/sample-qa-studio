@@ -12,7 +12,10 @@ interface ValidationResultProps {
 function getOperatorDisplay(operator: string): string {
   const operatorMap: { [key: string]: string } = {
     'exact': 'Equals',
+    'exact_case_insensitive': 'Equals (case insensitive)',
     'contains': 'Contains',
+    'contains_case_insensitive': 'Contains (case insensitive)',
+    'not_equal': 'Not Equal',
     'equals': 'Equals',
     'greater_then': 'Greater Than',
     'less_then': 'Less Than',
@@ -36,7 +39,10 @@ function getValidationTypeDisplay(type: string): string {
 function getComparisonSymbol(operator: string): string {
   const symbolMap: { [key: string]: string } = {
     'exact': '=',
+    'exact_case_insensitive': '≈',
     'contains': '∋',
+    'contains_case_insensitive': '∋',
+    'not_equal': '≠',
     'equals': '=',
     'greater_then': '>',
     'less_then': '<',

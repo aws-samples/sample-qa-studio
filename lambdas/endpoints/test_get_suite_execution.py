@@ -632,6 +632,40 @@ class TestGetSuiteExecution:
         body = json.loads(response['body'])
         assert body['error'] == 'Internal server error'
 
+    @patch('get_suite_execution.boto3')
+    def test_suite_execution_record_filtered_from_results(self, mock_boto3, mock_event, mock_table, mock_execution):
+        """Test that only actual use case execution records appear in results.
+        
+        The suite execution record no longer has suite_execution_id as an attribute,
+        so it won't appear in the GSI. This test verifies the handler correctly
+        processes only USECASE_EXECUTION# and SUITE_EXEC# records from the GSI.
+        """
+        mock_boto3.resource.return_value.Table.return_value = mock_table
+        mock_table.get_item.return_value = {'Item': mock_execution}
+
+        # GSI returns only the real use case execution (suite execution record
+        # no longer has suite_execution_id attribute, so it's not in the GSI)
+        mock_table.query.return_value = {
+            'Items': [
+                {
+                    'pk': 'USECASE_EXECUTION#usecase-1',
+                    'sk': 'EXECUTION#uc-exec-1',
+                    'suite_execution_id': 'exec-456',
+                    'usecase_name': 'Login Test',
+                    'status': 'pending',
+                    'created_at': '2024-01-01T10:00:00Z',
+                },
+            ]
+        }
+
+        response = handler(mock_event, None)
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert len(body['results']) == 1
+        assert body['results'][0]['usecase_id'] == 'usecase-1'
+        assert body['results'][0]['usecase_name'] == 'Login Test'
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

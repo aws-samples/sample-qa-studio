@@ -256,13 +256,13 @@ def update_suite_execution_tracking(
 ) -> None:
     """
     Update suite execution tracking when a use case execution completes.
-    
+
     This function:
-    1. Checks if execution is part of a suite (has suite_execution_id)
+    1. Checks if execution is part of a suite (has suite_execution_id and suite_id)
     2. Updates suite execution counters atomically
     3. Checks if the suite execution is complete and updates status
     4. Updates test suite summary when complete
-    
+
     Args:
         client: Boto3 DynamoDB client
         table_name: DynamoDB table name
@@ -273,9 +273,9 @@ def update_suite_execution_tracking(
         error_message: Optional error message if failed
     """
     logger.info(f"Updating suite execution tracking for usecase_execution_id: {usecase_execution_id}")
-    
+
     try:
-        # Get the execution to check for suite_execution_id
+        # Get the execution to check for suite_execution_id and suite_id
         exec_response = client.get_item(
             TableName=table_name,
             Key={
@@ -283,58 +283,43 @@ def update_suite_execution_tracking(
                 'sk': {'S': f'EXECUTION#{usecase_execution_id}'}
             }
         )
-        
+
         if 'Item' not in exec_response:
             logger.warning(f"Execution {usecase_execution_id} not found")
             return
-        
+
         execution = exec_response['Item']
-        
+
         # Check if this execution has a suite_execution_id
         suite_execution_id_attr = execution.get('suite_execution_id', {})
         suite_execution_id = suite_execution_id_attr.get('S') if suite_execution_id_attr else None
-        
+
         if not suite_execution_id:
             logger.info(f"Execution {usecase_execution_id} is not part of a suite execution")
             return
-        
-        logger.info(f"Found suite_execution_id: {suite_execution_id}")
-        
-        # Find the suite execution record to get suite_id
-        suite_exec_response = client.scan(
-            TableName=table_name,
-            FilterExpression='id = :exec_id AND begins_with(pk, :pk_prefix)',
-            ExpressionAttributeValues={
-                ':exec_id': {'S': suite_execution_id},
-                ':pk_prefix': {'S': 'SUITE_EXECUTION#'}
-            },
-            Limit=1
-        )
-        
-        suite_exec_items = suite_exec_response.get('Items', [])
-        if not suite_exec_items:
-            logger.warning(f"Suite execution {suite_execution_id} not found")
-            return
-        
-        suite_id = suite_exec_items[0].get('suite_id', {}).get('S', '')
+
+        # Read suite_id directly from the execution record (set during create_execution_record_for_usecase)
+        suite_id_attr = execution.get('suite_id', {})
+        suite_id = suite_id_attr.get('S') if suite_id_attr else None
+
         if not suite_id:
-            logger.warning(f"Missing suite_id in suite execution {suite_execution_id}")
+            logger.warning(f"Missing suite_id on execution {usecase_execution_id}")
             return
-        
+
         logger.info(f"Processing suite execution: suite_id={suite_id}, suite_execution_id={suite_execution_id}")
-        
+
         # Update suite execution counters
         update_suite_execution_counters(
             client, table_name, suite_id, suite_execution_id, status
         )
-        
+
         # Check if suite execution is complete and update test suite summary
         check_suite_completion(
             client, table_name, suite_id, suite_execution_id
         )
-        
+
         logger.info(f"Completed suite execution tracking updates")
-        
+
     except Exception as e:
         logger.error(f"Error in suite execution tracking: {str(e)}", exc_info=True)
         # Don't raise - we don't want to fail the main handler
@@ -343,77 +328,73 @@ def update_suite_execution_tracking(
 def query_suite_execution_results(
     client: Any,
     table_name: str,
-    usecase_execution_id: str
+    usecase_execution_id: str,
+    usecase_id: str = None,
+    suite_execution_id: str = None
 ) -> List[Dict[str, Any]]:
     """
-    Find all suite execution results that contain a specific use case execution.
-    
-    This function:
-    1. Gets the execution record to find suite_execution_id
-    2. If suite_execution_id exists, finds the suite execution result
-    
+    Find the suite execution result for a specific use case execution.
+
+    Uses direct get_item with known keys instead of scanning.
+
     Args:
         client: Boto3 DynamoDB client
         table_name: DynamoDB table name
         usecase_execution_id: The use case execution ID to search for
-        
+        usecase_id: The use case ID (if already known, avoids extra lookup)
+        suite_execution_id: The suite execution ID (if already known)
+
     Returns:
         List of suite execution result items
     """
     logger.info(f"Querying suite execution results for usecase_execution_id: {usecase_execution_id}")
-    
+
     try:
-        # Scan for the execution to get suite_execution_id and usecase_id
-        exec_response = client.scan(
-            TableName=table_name,
-            FilterExpression='begins_with(sk, :sk_prefix)',
-            ExpressionAttributeValues={
-                ':sk_prefix': {'S': f'EXECUTION#{usecase_execution_id}'}
-            },
-            Limit=1
-        )
-        
-        exec_items = exec_response.get('Items', [])
-        if not exec_items:
-            logger.info(f"Execution {usecase_execution_id} not found")
-            return []
-        
-        execution = exec_items[0]
-        
-        # Check if this execution has a suite_execution_id
-        suite_execution_id = execution.get('suite_execution_id', {}).get('S')
+        # If we don't have usecase_id or suite_execution_id, look up the execution record
+        if not usecase_id or not suite_execution_id:
+            # We need at least usecase_id to look up the execution — if not provided, we can't proceed
+            if not usecase_id:
+                logger.warning(f"usecase_id not provided, cannot look up execution {usecase_execution_id}")
+                return []
+
+            exec_response = client.get_item(
+                TableName=table_name,
+                Key={
+                    'pk': {'S': f'USECASE_EXECUTION#{usecase_id}'},
+                    'sk': {'S': f'EXECUTION#{usecase_execution_id}'}
+                }
+            )
+
+            if 'Item' not in exec_response:
+                logger.info(f"Execution {usecase_execution_id} not found")
+                return []
+
+            execution = exec_response['Item']
+            suite_execution_id = execution.get('suite_execution_id', {}).get('S')
+
         if not suite_execution_id:
             logger.info(f"Execution {usecase_execution_id} is not part of a suite execution")
             return []
-        
-        # Extract usecase_id from pk (format: USECASE_EXECUTION#{usecase_id})
-        pk = execution.get('pk', {}).get('S', '')
-        if not pk.startswith('USECASE_EXECUTION#'):
-            logger.warning(f"Unexpected pk format: {pk}")
-            return []
-        
-        usecase_id = pk.replace('USECASE_EXECUTION#', '')
+
         logger.info(f"Found suite_execution_id: {suite_execution_id}, usecase_id: {usecase_id}")
-        
-        # Find the suite execution result for this suite_execution_id and usecase_id
-        suite_results_response = client.scan(
+
+        # Direct get_item using known keys
+        result_response = client.get_item(
             TableName=table_name,
-            FilterExpression='suite_execution_id = :suite_exec_id AND usecase_id = :usecase_id AND begins_with(pk, :pk_prefix)',
-            ExpressionAttributeValues={
-                ':suite_exec_id': {'S': suite_execution_id},
-                ':usecase_id': {'S': usecase_id},
-                ':pk_prefix': {'S': 'SUITE_EXEC#'}
+            Key={
+                'pk': {'S': get_suite_exec_result_pk(suite_execution_id)},
+                'sk': {'S': get_result_sk(usecase_id)}
             }
         )
-        
-        suite_results = suite_results_response.get('Items', [])
-        logger.info(f"Found {len(suite_results)} suite execution results")
-        
-        return suite_results
-        
+
+        if 'Item' in result_response:
+            return [result_response['Item']]
+
+        logger.info(f"No suite execution result found for suite={suite_execution_id}, usecase={usecase_id}")
+        return []
+
     except Exception as e:
         logger.error(f"Error querying suite execution results: {str(e)}")
-        # Don't raise - we want to continue processing even if suite updates fail
         return []
 
 
@@ -648,7 +629,7 @@ def check_suite_completion(
         logger.info(f"Updated suite execution {suite_execution_id} to status: {final_status}")
         
         # Update test suite summary with last execution info
-        update_test_suite_summary(client, table_name, suite_id, final_status, successful_usecases, failed_usecases, total_usecases)
+        update_test_suite_summary(client, table_name, suite_id, suite_execution_id, final_status, successful_usecases, failed_usecases, total_usecases)
         
         return True
         
@@ -661,6 +642,7 @@ def update_test_suite_summary(
     client: Any,
     table_name: str,
     suite_id: str,
+    suite_execution_id: str,
     last_status: str,
     successful: int,
     failed: int,
@@ -668,23 +650,24 @@ def update_test_suite_summary(
 ) -> bool:
     """
     Update the test suite record with last execution summary.
-    
+
     Args:
         client: Boto3 DynamoDB client
         table_name: DynamoDB table name
         suite_id: The test suite ID
+        suite_execution_id: The suite execution ID (set as last_execution_id)
         last_status: Last execution status
         successful: Number of successful use cases
         failed: Number of failed use cases
         total: Total number of use cases
-        
+
     Returns:
         True if update succeeded, False otherwise
     """
     from utils import get_current_timestamp
-    
+
     logger.info(f"Updating test suite {suite_id} summary: status={last_status}, {successful}/{total} successful")
-    
+
     try:
         client.update_item(
             TableName=table_name,
@@ -692,18 +675,19 @@ def update_test_suite_summary(
                 'pk': {'S': 'TEST_SUITES'},
                 'sk': {'S': f'SUITE#{suite_id}'}
             },
-            UpdateExpression='SET last_execution_status = :status, last_successful_count = :successful, last_failed_count = :failed, last_execution_time = :time',
+            UpdateExpression='SET last_execution_status = :status, last_successful_count = :successful, last_failed_count = :failed, last_execution_time = :time, last_execution_id = :exec_id',
             ExpressionAttributeValues={
                 ':status': {'S': last_status},
                 ':successful': {'N': str(successful)},
                 ':failed': {'N': str(failed)},
-                ':time': {'S': get_current_timestamp()}
+                ':time': {'S': get_current_timestamp()},
+                ':exec_id': {'S': suite_execution_id}
             }
         )
-        
+
         logger.info(f"Updated test suite {suite_id} summary")
         return True
-        
+
     except Exception as e:
         logger.error(f"Error updating test suite summary: {str(e)}")
         return False

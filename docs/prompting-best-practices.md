@@ -23,8 +23,8 @@ Here's what a typical login test looks like, mixing all three step types:
 |------|------|-------------|
 | 1 | Navigation | Click the "Sign In" button |
 | 2 | Navigation | Enter "testuser" in the username field |
-| 3 | Secret | Enter the password in the password field |
-| 4 | Navigation | Click "Submit" |
+| 3 | Secret | Focus the password field |
+| 4 | Navigation | Click "Login" |
 | 5 | Validation | Verify that the welcome banner displays the text "Hello, Test User" |
 | 6 | Validation | Verify that the navigation menu shows Dashboard, Settings, and Profile links |
 | 7 | Retrieve Value | Return the number of unread notifications shown in the header |

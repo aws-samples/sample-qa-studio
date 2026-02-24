@@ -13,7 +13,8 @@ import {
   StatusIndicator,
   Link,
   Badge,
-  KeyValuePairs
+  KeyValuePairs,
+  CopyToClipboard
 } from '@cloudscape-design/components';
 import { testSuites, TestSuite, SuiteExecution } from '../utils/api';
 import { ErrorState } from '../utils/errorManager';
@@ -57,12 +58,9 @@ const TestSuiteDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  if (!id) {
-    return <Box>Suite ID not found</Box>;
-  }
-
   // Fetch suite details
   const fetchSuite = async () => {
+    if (!id) return;
     try {
       setLoadingSuite(true);
       const data = await testSuites.get(id);
@@ -77,6 +75,7 @@ const TestSuiteDetail: React.FC = () => {
 
   // Fetch use cases
   const fetchUsecases = async () => {
+    if (!id) return;
     try {
       setLoadingUsecases(true);
       const data = await testSuites.listUsecases(id);
@@ -91,6 +90,7 @@ const TestSuiteDetail: React.FC = () => {
 
   // Fetch recent executions
   const fetchExecutions = async () => {
+    if (!id) return;
     try {
       setLoadingExecutions(true);
       const data = await testSuites.listExecutions(id, { limit: 10 });
@@ -105,6 +105,7 @@ const TestSuiteDetail: React.FC = () => {
 
   // Execute suite
   const handleExecute = async () => {
+    if (!id) return;
     try {
       setExecuting(true);
       await testSuites.execute(id);
@@ -121,6 +122,7 @@ const TestSuiteDetail: React.FC = () => {
 
   // Delete suite
   const handleDelete = async () => {
+    if (!id) return;
     try {
       setDeleting(true);
       await testSuites.delete(id);
@@ -140,7 +142,7 @@ const TestSuiteDetail: React.FC = () => {
 
     try {
       setRemovingUsecase(true);
-      await testSuites.removeUsecase(id, usecaseToRemove.usecase_id);
+      await testSuites.removeUsecase(id!, usecaseToRemove.usecase_id);
       setSuccess(`Removed "${usecaseToRemove.usecase_name}" from suite`);
       setUsecaseToRemove(null);
       setShowRemoveUsecaseModal(false);
@@ -188,6 +190,7 @@ const TestSuiteDetail: React.FC = () => {
 
   // Initial data fetch
   useEffect(() => {
+    if (!id) return;
     fetchSuite();
     fetchUsecases();
     fetchExecutions();
@@ -203,6 +206,10 @@ const TestSuiteDetail: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [error, success]);
+
+  if (!id) {
+    return <Box>Suite ID not found</Box>;
+  }
 
   return (
     <SpaceBetween direction="vertical" size="l">
@@ -306,6 +313,18 @@ const TestSuiteDetail: React.FC = () => {
           <KeyValuePairs
             columns={3}
             items={[
+              {
+                label: "Suite ID",
+                value: (
+                  <CopyToClipboard
+                    copyButtonAriaLabel="Copy Suite ID"
+                    copyErrorText="Failed to copy"
+                    copySuccessText="Suite ID copied"
+                    textToCopy={id}
+                    variant="inline"
+                  />
+                ),
+              },
               {
                 label: "Name",
                 value: suite.name,

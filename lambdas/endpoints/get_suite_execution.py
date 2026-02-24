@@ -116,9 +116,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             usecase_id = pk.replace('USECASE_EXECUTION#', '') if pk.startswith('USECASE_EXECUTION#') else ''
             usecase_execution_id = sk.replace('EXECUTION#', '') if sk.startswith('EXECUTION#') else ''
             
-            # Fetch use case name
-            usecase_name = ''
-            if usecase_id:
+            # Use denormalized usecase_name from execution record (stored during creation)
+            # Fall back to lookup only if not present (legacy records)
+            usecase_name = result.get('usecase_name', '')
+            if not usecase_name and usecase_id:
                 try:
                     usecase_response = table.get_item(
                         Key={

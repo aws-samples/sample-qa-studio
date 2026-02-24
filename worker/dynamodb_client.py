@@ -732,117 +732,93 @@ class DynamoDBClient:
     def update_suite_execution_tracking(self, execution_id: str, usecase_id: str, status: str, completed_at: str) -> bool:
         """
         Update suite execution tracking when a use case execution completes.
-        
+
         This function:
-        1. Checks if the execution is part of a suite (has suite_execution_id)
+        1. Checks if the execution is part of a suite (has suite_execution_id and suite_id)
         2. Updates the suite execution result status
         3. Updates suite execution counters atomically
         4. Checks if the suite execution is complete
-        
+
         Args:
             execution_id: The use case execution ID
             usecase_id: The use case ID
             status: Final status ('success' or 'failed')
             completed_at: Completion timestamp
-            
+
         Returns:
             True if update succeeded or not part of suite, False on error
         """
         try:
             logger.info(f"[SUITE_TRACKING] Starting suite tracking update: execution_id={execution_id}, usecase_id={usecase_id}, status={status}")
-            
-            # Get the execution to check for suite_execution_id
+
+            # Get the execution to check for suite_execution_id and suite_id
             execution = self.get_execution(usecase_id, execution_id)
             if not execution:
                 logger.warning(f"[SUITE_TRACKING] Execution {execution_id} not found for usecase {usecase_id}, cannot update suite tracking")
                 return False
-            
+
             logger.info(f"[SUITE_TRACKING] Retrieved execution: pk={execution.pk}, sk={execution.sk}, suite_execution_id={getattr(execution, 'suite_execution_id', 'NOT_SET')}")
-            
+
             # Check if this execution is part of a suite
             suite_execution_id = getattr(execution, 'suite_execution_id', None)
             if not suite_execution_id:
                 logger.info(f"[SUITE_TRACKING] Execution {execution_id} is not part of a suite execution (suite_execution_id is None or empty)")
                 return True  # Not an error, just not part of a suite
-            
+
+            # Read suite_id directly from the execution record (set during create_execution_record_for_usecase)
+            suite_id = getattr(execution, 'suite_id', None)
+            if not suite_id:
+                logger.warning(f"[SUITE_TRACKING] Missing suite_id on execution {execution_id}")
+                return False
+
             logger.info(f"[SUITE_TRACKING] Updating suite execution tracking: suite_execution_id={suite_execution_id}, "
-                       f"usecase_id={usecase_id}, status={status}")
-            
+                       f"suite_id={suite_id}, usecase_id={usecase_id}, status={status}")
+
             # Find the suite execution result record
             suite_result = self._get_suite_execution_result(suite_execution_id, usecase_id)
             if not suite_result:
                 logger.warning(f"[SUITE_TRACKING] Suite execution result not found for suite={suite_execution_id}, usecase={usecase_id}")
                 return False
-            
+
             logger.info(f"[SUITE_TRACKING] Found suite execution result: {suite_result}")
-            
+
             # Update suite execution result status
             update_success = self._update_suite_execution_result(suite_execution_id, usecase_id, status, completed_at, execution_id)
             logger.info(f"[SUITE_TRACKING] Update suite execution result: success={update_success}")
-            
-            # Get suite_id from the suite execution result
-            suite_id = suite_result.get('suite_id')
-            if not suite_id:
-                # Try to get it from the suite execution record
-                logger.info(f"[SUITE_TRACKING] suite_id not in result, trying to get from suite execution record")
-                suite_execution = self._get_suite_execution(suite_execution_id)
-                if suite_execution:
-                    suite_id = suite_execution.get('suite_id')
-                    logger.info(f"[SUITE_TRACKING] Found suite_id from suite execution: {suite_id}")
-            
-            if not suite_id:
-                logger.warning(f"[SUITE_TRACKING] Could not determine suite_id for suite_execution_id={suite_execution_id}")
-                return False
-            
+
             # Update suite execution counters
             counter_success = self._update_suite_execution_counters(suite_id, suite_execution_id, status)
             logger.info(f"[SUITE_TRACKING] Update suite execution counters: success={counter_success}")
-            
+
             # Check if suite execution is complete
             completion_success = self._check_suite_completion(suite_id, suite_execution_id)
             logger.info(f"[SUITE_TRACKING] Check suite completion: success={completion_success}")
-            
+
             logger.info(f"[SUITE_TRACKING] Successfully completed suite execution tracking")
             return True
-            
+
         except Exception as e:
             logger.error(f"[SUITE_TRACKING] Error updating suite execution tracking: {e}", exc_info=True)
             return False
     
-    def _get_suite_execution_result(self, suite_execution_id: str, usecase_id: str) -> Optional[dict]:
-        """Get suite execution result record"""
+    def _get_suite_execution(self, suite_execution_id: str, suite_id: str) -> Optional[dict]:
+        """Get suite execution record using direct key lookup.
+
+        Args:
+            suite_execution_id: The suite execution ID
+            suite_id: The suite ID (used to construct the PK)
+
+        Returns:
+            Suite execution item dict or None
+        """
         try:
-            logger.info(f"[SUITE_TRACKING] Getting suite execution result: pk=SUITE_EXEC#{suite_execution_id}, sk=RESULT#{usecase_id}")
             response = self.table.get_item(
                 Key={
-                    'pk': f'SUITE_EXEC#{suite_execution_id}',
-                    'sk': f'RESULT#{usecase_id}'
+                    'pk': f'SUITE_EXECUTION#{suite_id}',
+                    'sk': f'EXECUTION#{suite_execution_id}'
                 }
             )
-            result = response.get('Item')
-            if result:
-                logger.info(f"[SUITE_TRACKING] Found suite execution result: {result}")
-            else:
-                logger.warning(f"[SUITE_TRACKING] Suite execution result not found")
-            return result
-        except ClientError as e:
-            logger.error(f"[SUITE_TRACKING] Error getting suite execution result: {e}")
-            return None
-    
-    def _get_suite_execution(self, suite_execution_id: str) -> Optional[dict]:
-        """Get suite execution record by scanning for the execution ID"""
-        try:
-            # Scan to find the suite execution by its id field
-            response = self.table.scan(
-                FilterExpression='id = :exec_id AND begins_with(pk, :pk_prefix)',
-                ExpressionAttributeValues={
-                    ':exec_id': suite_execution_id,
-                    ':pk_prefix': 'SUITE_EXECUTION#'
-                },
-                Limit=1
-            )
-            items = response.get('Items', [])
-            return items[0] if items else None
+            return response.get('Item')
         except ClientError as e:
             logger.error(f"Error getting suite execution: {e}")
             return None

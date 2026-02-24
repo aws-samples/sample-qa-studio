@@ -7,6 +7,7 @@ import Modal from "@cloudscape-design/components/modal";
 import Box from "@cloudscape-design/components/box";
 import AppLayout from "@cloudscape-design/components/app-layout";
 import Grid from "@cloudscape-design/components/grid";
+import Container from "@cloudscape-design/components/container";
 import { api } from '../utils/api';
 import ExecutionTimeline from './common/ExecutionTimeline';
 import Breadcrumb from './common/Breadcrumb';
@@ -14,6 +15,7 @@ import { ExecutionInformation, ExecutionSteps, ExecutionVariables } from './exec
 import LiveViewPanel from './execution/LiveViewPanel';
 import { RecordingPlayer } from './RecordingPlayer';
 import DownloadedFiles from './execution/DownloadedFiles';
+import LogViewer from './common/LogViewer';
 
 // Helper function to get the current executing step or the last completed step
 function getCurrentStep(steps: any[]) {
@@ -70,6 +72,8 @@ export default function ExecutionDetailRefactored() {
   const [stopError, setStopError] = useState<string | null>(null);
   const [hasVariables, setHasVariables] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [logDownloadUrl, setLogDownloadUrl] = useState<string | null>(null);
+  const [logArtifactsLoading, setLogArtifactsLoading] = useState(true);
 
   const fetchData = async () => {
     setRefreshTrigger(prev => prev + 1);
@@ -125,6 +129,32 @@ export default function ExecutionDetailRefactored() {
       }
     };
   }, [execution?.status, usecaseId, executionId]);
+
+  // Fetch usecase execution log artifact
+  useEffect(() => {
+    const fetchLogArtifact = async () => {
+      if (!usecaseId || !executionId) return;
+      try {
+        setLogArtifactsLoading(true);
+        const data = await api.get(`usecase/${usecaseId}/executions/${executionId}/artifacts`);
+        const logArtifact = (data.artifacts || []).find(
+          (a: any) => a.type === 'logs'
+        );
+        setLogDownloadUrl(logArtifact?.download_url ?? null);
+      } catch (error) {
+        // Endpoint may not exist yet — gracefully degrade
+        console.error('Failed to fetch execution artifacts:', error);
+        setLogDownloadUrl(null);
+      } finally {
+        setLogArtifactsLoading(false);
+      }
+    };
+
+    // Only fetch when execution is terminal
+    if (execution && execution.status !== 'executing' && execution.status !== 'pending') {
+      fetchLogArtifact();
+    }
+  }, [usecaseId, executionId, execution?.status]);
 
   const handleViewContent = (content: { url: string, title: string, fileType: string }) => {
     setModalContent(content);
@@ -244,6 +274,15 @@ export default function ExecutionDetailRefactored() {
             refreshTrigger={refreshTrigger}
             executionRegion={execution?.region}
           />
+
+          {/* Execution Logs */}
+          {(logArtifactsLoading || logDownloadUrl) && (
+            <Container
+              header={<Header variant="h2">Execution Logs</Header>}
+            >
+              <LogViewer downloadUrl={logDownloadUrl} loading={logArtifactsLoading} />
+            </Container>
+          )}
 
           {/* Modal for viewing files */}
           <Modal

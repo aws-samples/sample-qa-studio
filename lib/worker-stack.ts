@@ -96,7 +96,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         {
           allowedMethods: [
             HttpMethods.GET,
-            HttpMethods.HEAD
+            HttpMethods.HEAD,
+            HttpMethods.PUT,
+            HttpMethods.POST
           ],
           allowedOrigins: ['*'],
           allowedHeaders: ['*'],

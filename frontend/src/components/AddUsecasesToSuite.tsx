@@ -86,12 +86,9 @@ const AddUsecasesToSuite: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  if (!id) {
-    return <Box>Suite ID not found</Box>;
-  }
-
   // Fetch suite details
   const fetchSuite = async () => {
+    if (!id) return;
     try {
       setLoadingSuite(true);
       const data = await testSuites.get(id);
@@ -120,6 +117,7 @@ const AddUsecasesToSuite: React.FC = () => {
 
   // Fetch use cases already in suite
   const fetchUsecasesInSuite = async () => {
+    if (!id) return;
     try {
       const data = await testSuites.listUsecases(id);
       setUsecasesInSuite(data.usecases || []);
@@ -139,7 +137,7 @@ const AddUsecasesToSuite: React.FC = () => {
     try {
       setAdding(true);
       const usecaseIds = selectedItems.map(item => item.id);
-      const result = await testSuites.addUsecases(id, { usecase_ids: usecaseIds });
+      const result = await testSuites.addUsecases(id!, { usecase_ids: usecaseIds });
       
       setSuccess(`Successfully added ${result.added} use case(s) to the suite`);
       
@@ -177,6 +175,7 @@ const AddUsecasesToSuite: React.FC = () => {
 
   // Initial data fetch
   useEffect(() => {
+    if (!id) return;
     fetchSuite();
     fetchAllUsecases();
     fetchUsecasesInSuite();
@@ -192,6 +191,10 @@ const AddUsecasesToSuite: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [error, success]);
+
+  if (!id) {
+    return <Box>Suite ID not found</Box>;
+  }
 
   const filteredUsecases = getFilteredUsecases();
 

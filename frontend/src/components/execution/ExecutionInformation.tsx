@@ -4,6 +4,7 @@ import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import Button from "@cloudscape-design/components/button";
+import Link from "@cloudscape-design/components/link";
 
 interface ExecutionInformationProps {
   execution: any;
@@ -84,7 +85,7 @@ export default function ExecutionInformation({
           },
           {
             label: "Recording",
-            value: execution.nova_session_id ? (
+            value: ['success', 'failed', 'error', 'stopped'].includes(execution.status) ? (
               <Button
                 variant="inline-link"
                 iconName="play"
@@ -93,7 +94,15 @@ export default function ExecutionInformation({
                 View
               </Button>
             ) : 'Not Available',
-          }
+          },
+          ...(execution.suite_id && execution.suite_execution_id ? [{
+            label: "Suite Execution",
+            value: (
+              <Link href={`/test-suites/${execution.suite_id}/executions/${execution.suite_execution_id}`}>
+                View Suite Execution
+              </Link>
+            ),
+          }] : []),
         ]}
       />
     </Container>

@@ -95,7 +95,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Query all executions for this suite
         executions_response = table.query(
             KeyConditionExpression=Key('pk').eq(get_suite_execution_pk(suite_id)) & Key('sk').begins_with('EXECUTION#'),
-            ScanIndexForward=True  # Sort by sk descending (most recent first)
+            ScanIndexForward=False  # Sort by sk descending (most recent first)
         )
         
         executions = executions_response.get('Items', [])
