@@ -1,0 +1,124 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration tests
+  - **Property 1: Fault Condition** - Suite Counters and Summary Never Updated in CI/CD Runner Path
+  - **CRITICAL**: These tests MUST FAIL on unfixed code — failure confirms the bug exists
+  - **DO NOT attempt to fix the tests or the code when they fail**
+  - **NOTE**: These tests encode the expected behavior — they will validate the fix when they pass after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the three root causes
+  - **Scoped PBT Approach**: Scope properties to the concrete failing cases for each root cause
+  - **Test file**: `lambdas/endpoints/test_suite_execution_summary_bugfix.py`
+  - **Test 1 — Counter update missing** (Root Cause 1):
+    - Mock DynamoDB `get_item` to return an execution record with `suite_execution_id` and `suite_id` attributes
+    - Call `update_execution_status` handler with `{"status": "success"}` for that execution
+    - Assert DynamoDB `update_item` is called on the suite execution record (`PK=SUITE_EXECUTION#{suite_id}`, `SK=EXECUTION#{suite_execution_id}`) with `ADD completed_usecases :inc, successful_usecases :inc` and `ADD running_usecases :dec`
+    - Repeat with `{"status": "failed"}` and assert `failed_usecases` incremented instead
+    - On UNFIXED code: `update_item` is called only once (execution record), never on suite execution record — test FAILS
+  - **Test 2 — Summary propagation missing** (Root Cause 2):
+    - Mock DynamoDB `get_item` to return a suite execution record with `suite_id`, `successful_usecases`, `failed_usecases` counters
+    - Call `update_suite_execution_status` handler with `{"status": "completed"}`
+    - Assert DynamoDB `update_item` is called on test suite summary record (`PK=TEST_SUITES`, `SK=SUITE#{suite_id}`) with `last_execution_status`, `last_execution_time`, `last_execution_id`, `last_successful_count`, `last_failed_count`
+    - On UNFIXED code: `update_item` is called only once (suite execution record), never on test suite summary — test FAILS
+  - **Test 3 — `last_execution_id` missing** (Root Cause 3):
+    - Call `update_test_suite_summary` from `handle_task_state_change.py` with known parameters
+    - Assert the DynamoDB `update_item` UpdateExpression includes `last_execution_id`
+    - On UNFIXED code: UpdateExpression does not contain `last_execution_id` — test FAILS
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: All three tests FAIL (this is correct — it proves the bugs exist)
+  - Document counterexamples found for each root cause
+  - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Non-Suite and Non-Terminal Behavior Unchanged
+  - **IMPORTANT**: Follow observation-first methodology
+  - **Test file**: `lambdas/endpoints/test_suite_execution_summary_preservation.py`
+  - **Observe on UNFIXED code first**:
+    - Observe: `update_execution_status` with `{"status": "success"}` for an execution WITHOUT `suite_execution_id` calls `update_item` exactly once (execution record only) and publishes EventBridge event
+    - Observe: `update_execution_status` with `{"status": "running"}` for an execution WITH `suite_execution_id` calls `update_item` exactly once (no counter update for non-terminal)
+    - Observe: `update_suite_execution_status` with `{"status": "running"}` calls `update_item` exactly once (suite execution record only, no summary propagation)
+    - Observe: `update_suite_execution_status` for non-existent suite execution returns 404
+    - Observe: Response shapes for both endpoints contain expected keys
+  - **Property test 1 — Non-suite execution preservation**: For any execution status update where the execution record has NO `suite_execution_id`, DynamoDB `update_item` is called exactly once (on execution record). Use property-based generation of status values (`pending`, `running`, `success`, `failed`) and optional `error_message`. Verify no suite counter update is attempted.
+  - **Property test 2 — Non-terminal suite status preservation**: For `update_suite_execution_status` with `status=running`, verify `update_item` is called exactly once (suite execution record only). No test suite summary record update.
+  - **Property test 3 — Response shape preservation**: For both endpoints with valid inputs, verify response body contains expected keys (`execution_id`/`suite_execution_id`, `status`, `updated_at`) and status code is 200.
+  - **Property test 4 — EventBridge event preservation**: For `update_execution_status`, verify EventBridge `put_events` is called with same detail shape (`usecase_id`, `execution_id`, `status`, `timestamp`) regardless of suite membership.
+  - **Property test 5 — 404 handling preservation**: For `update_suite_execution_status` with non-existent suite execution, verify 404 response unchanged.
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: All tests PASS (this confirms baseline behavior to preserve)
+  - _Requirements: 3.1, 3.2, 3.3, 3.4_
+
+- [x] 3. Fix for suite execution summary update — three root causes
+
+  - [x] 3.1 Add suite counter updates to `update_execution_status.py`
+    - After the existing `get_item` call, extract `suite_execution_id` and `suite_id` from the returned execution record item
+    - After the existing `update_item` on the execution record, if `status` is terminal (`success` or `failed`) AND `suite_execution_id` is present:
+      - Build atomic counter update using `ADD` expressions on the suite execution record (`PK=SUITE_EXECUTION#{suite_id}`, `SK=EXECUTION#{suite_execution_id}`)
+      - `success` → `ADD completed_usecases :inc, successful_usecases :inc, running_usecases :dec`
+      - `failed` → `ADD completed_usecases :inc, failed_usecases :inc, running_usecases :dec`
+    - Import `get_suite_execution_pk` and `get_execution_sk` from `test_suite_schema`
+    - Wrap suite counter update in try/except — log errors but don't fail the main request (same pattern as EventBridge publishing)
+    - Write unit tests in `lambdas/endpoints/test_update_execution_status.py`:
+      - Test terminal status with `suite_execution_id` triggers counter update
+      - Test `success` increments `completed_usecases` and `successful_usecases`, decrements `running_usecases`
+      - Test `failed` increments `completed_usecases` and `failed_usecases`, decrements `running_usecases`
+      - Test non-terminal status with `suite_execution_id` does NOT trigger counter update
+      - Test execution without `suite_execution_id` does NOT trigger counter update
+      - Test suite counter update failure does not fail the main request
+    - _Bug_Condition: isBugCondition(input) where input.endpoint == "update_execution_status" AND status IN ['success', 'failed'] AND suite_execution_id IS NOT NULL_
+    - _Expected_Behavior: Atomic counter update on suite execution record for terminal usecase statuses_
+    - _Preservation: Non-suite executions and non-terminal statuses unchanged; EventBridge events unchanged; response shape unchanged_
+    - _Requirements: 2.2, 3.1_
+
+  - [x] 3.2 Add test suite summary propagation to `update_suite_execution_status.py`
+    - When `status` is terminal (`completed`, `partial`, `failed`), after the existing `get_item` call, extract `suite_id`, `successful_usecases`, and `failed_usecases` from the suite execution record item (already fetched)
+    - After updating the suite execution record, perform `update_item` on the test suite summary record (`PK=TEST_SUITES`, `SK=SUITE#{suite_id}`) setting:
+      - `last_execution_status` = suite execution status
+      - `last_execution_time` = current timestamp
+      - `last_execution_id` = suite execution ID
+      - `last_successful_count` = successful_usecases from suite execution record
+      - `last_failed_count` = failed_usecases from suite execution record
+    - Wrap summary update in try/except — log errors but don't fail the main request
+    - Write unit tests in `lambdas/endpoints/test_update_suite_execution_status.py`:
+      - Test terminal status triggers test suite summary update with all five fields
+      - Test `completed`, `partial`, `failed` each propagate correctly
+      - Test non-terminal status (`running`) does NOT trigger summary update
+      - Test summary update failure does not fail the main request
+      - Test 404 for non-existent suite execution unchanged
+    - _Bug_Condition: isBugCondition(input) where input.endpoint == "update_suite_execution_status" AND status IN ['completed', 'partial', 'failed']_
+    - _Expected_Behavior: Test suite summary record updated with last_execution_status, last_execution_time, last_execution_id, last_successful_count, last_failed_count_
+    - _Preservation: Non-terminal suite status updates unchanged; 404 handling unchanged; response shape unchanged_
+    - _Requirements: 2.1, 2.3, 3.2, 3.3_
+
+  - [x] 3.3 Add `last_execution_id` to `update_test_suite_summary` in `handle_task_state_change.py`
+    - Add `suite_execution_id` parameter to `update_test_suite_summary` function signature
+    - Add `last_execution_id = :exec_id` to the UpdateExpression
+    - Add `:exec_id` to ExpressionAttributeValues with the suite execution ID value
+    - Update `check_suite_completion` to pass `suite_execution_id` to `update_test_suite_summary` (already available in scope)
+    - Write unit tests in `lambdas/endpoints/test_handle_task_state_change.py`:
+      - Test `update_test_suite_summary` includes `last_execution_id` in UpdateExpression
+      - Test `check_suite_completion` passes `suite_execution_id` to `update_test_suite_summary`
+    - _Bug_Condition: isBugCondition(input) where input.endpoint == "handle_task_state_change" AND suite completes_
+    - _Expected_Behavior: last_execution_id included in test suite summary update_
+    - _Preservation: All other fields in update_test_suite_summary unchanged; check_suite_completion logic unchanged_
+    - _Requirements: 2.3_
+
+  - [x] 3.4 Verify bug condition exploration tests now pass
+    - **Property 1: Expected Behavior** - Suite Counters and Summary Updated Correctly
+    - **IMPORTANT**: Re-run the SAME tests from task 1 — do NOT write new tests
+    - The tests from task 1 encode the expected behavior for all three root causes
+    - When these tests pass, it confirms the expected behavior is satisfied
+    - Run: `cd lambdas/endpoints && python -m pytest test_suite_execution_summary_bugfix.py -v`
+    - **EXPECTED OUTCOME**: All three tests PASS (confirms bugs are fixed)
+    - _Requirements: 2.1, 2.2, 2.3_
+
+  - [x] 3.5 Verify preservation tests still pass
+    - **Property 2: Preservation** - Non-Suite and Non-Terminal Behavior Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 — do NOT write new tests
+    - Run: `cd lambdas/endpoints && python -m pytest test_suite_execution_summary_preservation.py -v`
+    - **EXPECTED OUTCOME**: All tests PASS (confirms no regressions)
+    - Confirm: non-suite executions unchanged, non-terminal suite updates unchanged, response shapes unchanged, EventBridge events unchanged
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Run full Lambda endpoint test suite: `cd lambdas/endpoints && python -m pytest -v`
+  - Run handle_task_state_change tests: `cd lambdas/endpoints && python -m pytest test_handle_task_state_change.py -v`
+  - Ensure all tests pass, ask the user if questions arise

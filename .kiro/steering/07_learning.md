@@ -1,0 +1,24 @@
+---
+inclusion: always
+---
+
+This is about learning:
+
+* If you had any learnings write them into this document under the learnings headline.
+* Only add key learnings and stay concise in the learning description.
+* When you're unsure wheater to add or not ask me.
+* You can decide by yourself if you want to add any learnings.
+* Learnings need to be concise and precise
+
+----
+
+## learnings
+
+* Use Grid component with gridDefinition for responsive layouts instead of ColumnLayout. Pattern: `gridDefinition={[{ colspan: { default: 12, m: 9 } }, { colspan: { default: 12, m: 3 } }]}` creates a 9:3 column split on medium+ screens and full-width stacking on mobile.
+* Execution status values: use `"success"` / `"failed"` (not `"completed"`). Applies to both usecase-level and step-level statuses.
+* Never place early returns (e.g. `if (!id) return <Box>...`) between `useState` and `useEffect` hooks — violates React Rules of Hooks. Move the guard after all hooks.
+* When running sync code inside `asyncio.to_thread`, you cannot use `asyncio.run()` or `loop.run_until_complete()` — Nova Act/Playwright runs its own event loop on the thread, blocking both approaches. Use `concurrent.futures.ThreadPoolExecutor` to dispatch async calls to a disposable thread with its own `asyncio.new_event_loop()`.
+* When a DynamoDB GSI indexes on an attribute (e.g. `suite_execution_id`), ALL records with that attribute are returned — including metadata records that happen to share the attribute. Always filter GSI results by `pk` prefix to exclude unintended record types.
+* DynamoDB `update_item` with non-existent keys silently creates a new record (upsert). Always verify PK/SK in update calls match the keys used in the original `put_item`.
+* DynamoDB items returned by the API use snake_case field names (e.g. `step_type`, `actual_value`). Frontend components must use snake_case — not camelCase — when accessing these fields.
+* API Gateway path parameter names must match the CDK resource definition exactly. CDK uses `{suite_id}` / `{execution_id}` (snake_case), so lambdas must read `event['pathParameters']['suite_id']` — not `suiteId` (camelCase).
