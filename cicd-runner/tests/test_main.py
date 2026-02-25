@@ -164,3 +164,129 @@ class TestRunRunnerSuiteLogCapture:
         mocks = self._patch_and_run(suite_log_stop_return=None)
 
         mocks["artifact_uploader"].upload_suite_artifacts.assert_not_awaited()
+
+
+from src.main import run_usecase_local
+
+
+def _make_engine_result(status="success"):
+    """Create a mock engine result dict for execute_usecase_local."""
+    return {
+        "status": status,
+        "duration": 45.0,
+        "steps": [
+            {"step_id": "s1", "instruction": "Navigate to page", "status": "success", "duration": 2.0},
+            {"step_id": "s2", "instruction": "Click button", "status": status, "duration": 3.0},
+        ],
+        "artifacts": {
+            "video": "/tmp/qa-studio-artifacts/uc-123/recording.webm",
+            "logs": "/tmp/qa-studio-artifacts/uc-123/execution.log",
+        },
+    }
+
+
+class TestRunUsecaseLocalOutputFormat:
+    """Tests for --output flag integration in run_usecase_local()."""
+
+    def _patch_and_run(self, output_format="json", engine_result=None, capsys=None):
+        """Run run_usecase_local() with all dependencies mocked.
+
+        Returns a dict with captured stdout and exit code.
+        """
+        if engine_result is None:
+            engine_result = _make_engine_result()
+
+        result = {}
+
+        with patch("src.main.Settings") as mock_settings_cls, \
+             patch("src.main.validate_aws_session"), \
+             patch("src.main.OAuthClient"), \
+             patch("src.main.APIClient"), \
+             patch("src.main.UseCaseAPI") as mock_uc_api_cls, \
+             patch("src.main.ExecutionAPI"), \
+             patch("src.main.ExecutionEngine") as mock_engine_cls, \
+             patch("src.main.shutil"), \
+             patch("src.main.Path"):
+
+            # Settings
+            mock_settings_cls.from_env.return_value = _make_settings()
+
+            # UseCaseAPI
+            uc_api = mock_uc_api_cls.return_value
+            uc_api.get_usecase.return_value = {"name": "Login Flow Test"}
+            uc_api.get_steps.return_value = [{"step_id": "s1"}, {"step_id": "s2"}]
+            uc_api.get_variables.return_value = {}
+            uc_api.get_secrets.return_value = {}
+
+            # ExecutionEngine
+            engine = mock_engine_cls.return_value
+            engine.execute_usecase_local = AsyncMock(return_value=engine_result)
+
+            with pytest.raises(SystemExit) as exc_info:
+                run_usecase_local(
+                    usecase_id="uc-123",
+                    base_url=None,
+                    variables={},
+                    region=None,
+                    model_id=None,
+                    timeout=300,
+                    output_format=output_format,
+                )
+
+            result["exit_code"] = exc_info.value.code
+
+        return result
+
+    def test_json_output_is_default(self, capsys):
+        """Verify JSON output when output_format is 'json' (default)."""
+        self._patch_and_run(output_format="json")
+        captured = capsys.readouterr()
+        # JSON output should contain camelCase keys (by_alias=True)
+        assert '"usecaseId"' in captured.out
+        assert '"usecaseName"' in captured.out
+        assert "QA Studio" not in captured.out
+
+    def test_summary_output(self, capsys):
+        """Verify human-readable summary when output_format is 'summary'."""
+        self._patch_and_run(output_format="summary")
+        captured = capsys.readouterr()
+        assert "QA Studio - Local Execution" in captured.out
+        assert "Use Case: Login Flow Test" in captured.out
+        assert "Steps:" in captured.out
+        # Should NOT contain raw JSON
+        assert '"usecaseId"' not in captured.out
+
+    def test_json_output_exit_code_success(self):
+        """Verify exit code 0 for successful execution with json output."""
+        result = self._patch_and_run(output_format="json", engine_result=_make_engine_result("success"))
+        assert result["exit_code"] == 0
+
+    def test_summary_output_exit_code_success(self):
+        """Verify exit code 0 for successful execution with summary output."""
+        result = self._patch_and_run(output_format="summary", engine_result=_make_engine_result("success"))
+        assert result["exit_code"] == 0
+
+    def test_json_output_exit_code_failure(self):
+        """Verify exit code 1 for failed execution with json output."""
+        result = self._patch_and_run(output_format="json", engine_result=_make_engine_result("failed"))
+        assert result["exit_code"] == 1
+
+    def test_summary_output_exit_code_failure(self):
+        """Verify exit code 1 for failed execution with summary output."""
+        result = self._patch_and_run(output_format="summary", engine_result=_make_engine_result("failed"))
+        assert result["exit_code"] == 1
+
+    def test_summary_shows_step_details(self, capsys):
+        """Verify summary includes individual step results."""
+        self._patch_and_run(output_format="summary")
+        captured = capsys.readouterr()
+        assert "Navigate to page" in captured.out
+        assert "Click button" in captured.out
+
+    def test_summary_shows_artifacts(self, capsys):
+        """Verify summary includes artifact paths."""
+        self._patch_and_run(output_format="summary")
+        captured = capsys.readouterr()
+        assert "Artifacts:" in captured.out
+        assert "recording.webm" in captured.out
+        assert "execution.log" in captured.out

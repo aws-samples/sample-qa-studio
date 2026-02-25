@@ -9,10 +9,12 @@ import asyncio
 import logging
 import os
 import re
+import shutil
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from nova_act import NovaAct, Workflow
 
@@ -168,6 +170,99 @@ class ExecutionEngine:
                 artifact_capture.cleanup()
 
     # ------------------------------------------------------------------
+    # Local-only execution
+    # ------------------------------------------------------------------
+
+    async def execute_usecase_local(
+        self,
+        usecase_definition: dict,
+        usecase_id: str,
+        artifact_dir: Path,
+        region: Optional[str] = None,
+        model_id: Optional[str] = None,
+    ) -> dict:
+        """Execute a use case locally without API side effects.
+
+        Fetches no execution records, uploads no artifacts to S3, sends
+        no status updates. Stores screenshots and video in artifact_dir.
+
+        Args:
+            usecase_definition: Composed dict with keys: name, starting_url,
+                executing_region, model_id, steps, variables, secrets.
+            usecase_id: Use case UUID.
+            artifact_dir: Local directory for artifacts.
+            region: Optional AWS region override.
+            model_id: Optional model ID override.
+
+        Returns:
+            Dict with keys: status, duration, steps (list), artifacts (dict).
+        """
+        logger.info(f"[local] Starting local execution for use case: {usecase_id}")
+
+        # Apply region/model overrides (CLI takes precedence)
+        if region:
+            usecase_definition["executing_region"] = region
+        if model_id:
+            usecase_definition["model_id"] = model_id
+
+        # Set up a log file at artifact_dir/execution.log
+        log_file = artifact_dir / "execution.log"
+        file_handler = logging.FileHandler(str(log_file))
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+        logging.getLogger().addHandler(file_handler)
+
+        try:
+            result = await asyncio.to_thread(
+                self._execute_usecase_local_sync,
+                usecase_definition,
+                usecase_id,
+                artifact_dir,
+            )
+        finally:
+            file_handler.close()
+            logging.getLogger().removeHandler(file_handler)
+
+        return result
+
+    def _execute_usecase_local_sync(
+        self,
+        usecase_definition: dict,
+        usecase_id: str,
+        artifact_dir: Path,
+    ) -> dict:
+        """Synchronous entry point for local-only Nova Act execution.
+
+        Runs inside asyncio.to_thread. Delegates to _execute_with_nova_act
+        with local_only=True.
+        """
+        try:
+            return self._execute_with_nova_act(
+                execution_details=usecase_definition,
+                usecase_id=usecase_id,
+                execution_id="",  # Not used in local-only mode
+                artifact_capture=None,  # Not used in local-only mode
+                artifact_uploader=None,  # Not used in local-only mode
+                local_only=True,
+                artifact_dir=artifact_dir,
+            )
+        except Exception as e:
+            sanitized = sanitize_error_message(str(e))
+            logger.error(f"Local Nova Act execution failed: {sanitized}")
+            return {
+                "status": "failed",
+                "duration": 0,
+                "steps": [],
+                "artifacts": {
+                    "video": None,
+                    "logs": str(artifact_dir / "execution.log"),
+                },
+                "error": f"Nova Act execution failed: {sanitized}",
+            }
+
+    # ------------------------------------------------------------------
     # Synchronous execution (runs inside asyncio.to_thread)
     # ------------------------------------------------------------------
 
@@ -224,6 +319,8 @@ class ExecutionEngine:
         execution_id: str,
         artifact_capture: "ArtifactCapture",
         artifact_uploader: "ArtifactUploader",
+        local_only: bool = False,
+        artifact_dir: Optional[Path] = None,
     ) -> Dict[str, Any]:
         """Execute test steps using real Nova Act GA Service with a local browser."""
 
@@ -233,8 +330,11 @@ class ExecutionEngine:
         headers = execution_details.get("headers", {})
 
         # Create logs directory for this execution
-        execution_dir = Path.home() / ".ci_runner" / self.suite_execution_id / execution_id
-        logs_dir = str(execution_dir / "nova_act_logs")
+        if local_only and artifact_dir:
+            logs_dir = str(artifact_dir / "nova_act_logs")
+        else:
+            execution_dir = Path.home() / ".ci_runner" / self.suite_execution_id / execution_id
+            logs_dir = str(execution_dir / "nova_act_logs")
         os.makedirs(logs_dir, exist_ok=True)
 
         # Build NovaAct kwargs — local browser
@@ -247,7 +347,7 @@ class ExecutionEngine:
         }
 
         # GA Service mode — create workflow
-        region = os.getenv("AWS_REGION", "us-east-1")
+        region = execution_details.get("executing_region") or os.getenv("AWS_REGION", "us-east-1")
         wf_manager = WorkflowManager()
         workflow_name = wf_manager.ensure_workflow(usecase_id)
         model_id = execution_details.get("model_id") or "nova-act-v1.0"
@@ -262,6 +362,8 @@ class ExecutionEngine:
                 nova_kwargs, steps, variables, headers,
                 starting_url, usecase_id, execution_id,
                 artifact_capture, artifact_uploader, logs_dir,
+                local_only=local_only,
+                artifact_dir=artifact_dir,
             )
 
     def _run_steps_with_nova(
@@ -276,28 +378,38 @@ class ExecutionEngine:
         artifact_capture: "ArtifactCapture",
         artifact_uploader: "ArtifactUploader",
         logs_dir: str,
+        local_only: bool = False,
+        artifact_dir: Optional[Path] = None,
     ) -> Dict[str, Any]:
         """Open NovaAct context and execute steps sequentially."""
-        downloads_dir = Path.home() / ".ci_runner" / self.suite_execution_id / execution_id / "downloads"
+        if local_only and artifact_dir:
+            downloads_dir = artifact_dir / "downloads"
+        else:
+            downloads_dir = Path.home() / ".ci_runner" / self.suite_execution_id / execution_id / "downloads"
         downloads_dir.mkdir(parents=True, exist_ok=True)
 
+        step_results: List[Dict[str, Any]] = []
+        overall_start = time.time()
+        has_failure = False
+
         with NovaAct(**nova_kwargs) as nova:
-            # Capture Nova Act session ID (non-fatal)
-            try:
-                session_id = nova.get_session_id()
-                if session_id:
-                    self._run_async(
-                        self.execution_api.update_session_id(
-                            usecase_id=usecase_id,
-                            execution_id=execution_id,
-                            session_id=session_id,
+            # Capture Nova Act session ID (non-fatal) — skip in local-only mode
+            if not local_only:
+                try:
+                    session_id = nova.get_session_id()
+                    if session_id:
+                        self._run_async(
+                            self.execution_api.update_session_id(
+                                usecase_id=usecase_id,
+                                execution_id=execution_id,
+                                session_id=session_id,
+                            )
                         )
-                    )
-                    logger.info(f"Captured Nova Act session ID: {session_id}")
-                else:
-                    logger.warning("nova.get_session_id() returned None")
-            except Exception as e:
-                logger.warning(f"Failed to capture Nova Act session ID: {sanitize_error_message(str(e))}")
+                        logger.info(f"Captured Nova Act session ID: {session_id}")
+                    else:
+                        logger.warning("nova.get_session_id() returned None")
+                except Exception as e:
+                    logger.warning(f"Failed to capture Nova Act session ID: {sanitize_error_message(str(e))}")
 
             # Set custom HTTP headers if present
             if headers:
@@ -330,45 +442,67 @@ class ExecutionEngine:
 
                 logger.info(f"Executing step {sort_order}: {instruction}")
 
+                step_start = time.time()
                 step_result: StepResult = executor.execute(
                     resolved_step, variables, runtime_variables,
                 )
+                step_duration = time.time() - step_start
 
-                # Report step status to API (non-fatal if it fails)
                 step_status = "success" if step_result.success else "failed"
-                try:
-                    self._run_async(
-                        self.execution_api.update_step_status(
-                            usecase_id=usecase_id,
-                            execution_id=execution_id,
-                            step_id=execution_step_id,
-                            status=step_status,
-                            error_message=sanitize_error_message(step_result.logs) if step_result.logs else None,
-                            actual_value=step_result.actual_value or None,
-                            act_id=step_result.act_id or None,
-                            logs=sanitize_error_message(step_result.logs) if step_result.logs else None,
-                        )
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to update step status: {sanitize_error_message(str(e))}")
 
-                # Capture and upload step screenshot (non-fatal if it fails)
-                try:
-                    screenshot_path = artifact_capture.capture_step_screenshot(
-                        nova.page, execution_step_id, sort_order,
-                    )
-                    if screenshot_path:
-                        step_artifacts = artifact_capture.get_step_artifacts(execution_step_id)
+                if local_only:
+                    # Local-only: save screenshot directly to artifact_dir
+                    screenshot_path_str: Optional[str] = None
+                    if artifact_dir:
+                        try:
+                            screenshot_file = artifact_dir / f"step-{sort_order}-screenshot.png"
+                            nova.page.screenshot(path=str(screenshot_file))
+                            screenshot_path_str = str(screenshot_file)
+                        except Exception as e:
+                            logger.warning(f"Failed to capture screenshot for step {sort_order}: {sanitize_error_message(str(e))}")
+
+                    step_results.append({
+                        "step_id": step.get("step_id", execution_step_id),
+                        "instruction": instruction,
+                        "status": step_status,
+                        "duration": round(step_duration, 2),
+                        "screenshot": screenshot_path_str,
+                    })
+                else:
+                    # Remote mode: report step status to API (non-fatal if it fails)
+                    try:
                         self._run_async(
-                            artifact_uploader.upload_step_artifacts(
+                            self.execution_api.update_step_status(
                                 usecase_id=usecase_id,
                                 execution_id=execution_id,
                                 step_id=execution_step_id,
-                                artifacts=step_artifacts,
+                                status=step_status,
+                                error_message=sanitize_error_message(step_result.logs) if step_result.logs else None,
+                                actual_value=step_result.actual_value or None,
+                                act_id=step_result.act_id or None,
+                                logs=sanitize_error_message(step_result.logs) if step_result.logs else None,
                             )
                         )
-                except Exception as e:
-                    logger.warning(f"Failed to capture/upload step screenshot: {sanitize_error_message(str(e))}")
+                    except Exception as e:
+                        logger.warning(f"Failed to update step status: {sanitize_error_message(str(e))}")
+
+                    # Capture and upload step screenshot (non-fatal if it fails)
+                    try:
+                        screenshot_path = artifact_capture.capture_step_screenshot(
+                            nova.page, execution_step_id, sort_order,
+                        )
+                        if screenshot_path:
+                            step_artifacts = artifact_capture.get_step_artifacts(execution_step_id)
+                            self._run_async(
+                                artifact_uploader.upload_step_artifacts(
+                                    usecase_id=usecase_id,
+                                    execution_id=execution_id,
+                                    step_id=execution_step_id,
+                                    artifacts=step_artifacts,
+                                )
+                            )
+                    except Exception as e:
+                        logger.warning(f"Failed to capture/upload step screenshot: {sanitize_error_message(str(e))}")
 
                 # Capture runtime variables from retrieve_value steps
                 if (
@@ -380,19 +514,56 @@ class ExecutionEngine:
                     runtime_variables[step["capture_variable"]] = step_result.actual_value
                     logger.info(f"Captured runtime variable: {step['capture_variable']} = {step_result.actual_value}")
 
-                # Stop on first failure
+                # Handle step failure
                 if not step_result.success:
                     sanitized_logs = sanitize_error_message(step_result.logs)
                     logger.error(f"Step {sort_order} failed: {sanitized_logs}")
-                    result = {
-                        "success": False,
-                        "error": f"Step {sort_order} failed: {sanitized_logs}",
-                    }
-                    break
-            else:
-                result = {"success": True}
+                    has_failure = True
 
-        # NovaAct context has closed — collect and upload HTML trace logs
+                    if local_only:
+                        # Local-only: continue executing remaining steps
+                        continue
+                    else:
+                        # Remote mode: stop on first failure (existing behavior)
+                        result = {
+                            "success": False,
+                            "error": f"Step {sort_order} failed: {sanitized_logs}",
+                        }
+                        break
+            else:
+                if not local_only:
+                    result = {"success": True}
+
+        overall_duration = time.time() - overall_start
+
+        if local_only:
+            # Collect video recording from Nova Act logs directory
+            video_path: Optional[str] = None
+            if artifact_dir:
+                logs_path = Path(logs_dir)
+                for video_file in logs_path.rglob("*.webm"):
+                    dest = artifact_dir / "recording.webm"
+                    try:
+                        shutil.copy2(str(video_file), str(dest))
+                        video_path = str(dest)
+                    except Exception as e:
+                        logger.warning(f"Failed to copy video recording: {sanitize_error_message(str(e))}")
+                    break  # Take the first .webm found
+
+            # Log file path
+            logs_file = str(artifact_dir / "execution.log") if artifact_dir else None
+
+            return {
+                "status": "failed" if has_failure else "success",
+                "duration": round(overall_duration, 2),
+                "steps": step_results,
+                "artifacts": {
+                    "video": video_path,
+                    "logs": logs_file,
+                },
+            }
+
+        # NovaAct context has closed — collect and upload HTML trace logs (remote mode only)
         self._upload_trace_logs(logs_dir, usecase_id, execution_id, artifact_uploader)
 
         return result

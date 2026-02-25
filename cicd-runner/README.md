@@ -1,13 +1,17 @@
 # QA Studio - CI/CD Runner
 
-Python CLI application for executing Nova Act QA Studio test suites in CI/CD pipelines. The runner authenticates with OAuth client credentials, fetches test suite definitions, creates execution records, and runs automated browser-based tests using Nova Act.
+Python CLI application for executing Nova Act QA Studio test suites and individual use cases in CI/CD pipelines or locally. The runner authenticates with OAuth client credentials, fetches test suite or use case definitions, creates execution records, and runs automated browser-based tests using Nova Act. It supports full suite execution, single use case execution, and a local-only mode for quick iteration without creating execution records or uploading artifacts.
 
 ## Features
 
 - OAuth 2.0 client credentials authentication with in-memory token caching
 - Automatic token refresh on expiration
 - Test suite execution via Platform API with parallel use case execution
+- Single use case execution with execution records and artifact upload
+- Local-only execution mode — no execution records, no S3 uploads, artifacts stored locally
+- JSON and human-readable summary output formats for local execution
 - Nova Act browser automation with headless Chromium
+- Configurable AWS region for Nova Act browser execution
 - Artifact collection and upload (screenshots, logs)
 - Suite-level log capture
 - Execution summary table output
@@ -111,15 +115,43 @@ Before using the runner, you need to create an OAuth client in the QA Studio pla
    - Copy the Client Secret (shown only once)
 5. **Set environment variables** with the credentials
 
+> **Note**: Local-only execution (`--local-only`) only requires the `api/usecases.read` scope.
+
 ## Usage
 
-### Basic Usage
+### Execution Modes
+
+The runner supports three execution modes:
+
+1. **Suite execution**: Executes a full test suite, creates execution records, uploads artifacts
+2. **Single use case execution**: Executes a single use case, creates execution records, uploads artifacts
+3. **Local-only execution**: Executes a single use case locally — no execution records, no S3 uploads, artifacts stored in `/tmp/qa-studio-artifacts/<usecase-id>/`
+
+### Suite Execution
 
 Execute a test suite by ID:
 
 ```bash
 cicd-runner --suite-id 01234567-89ab-cdef-0123-456789abcdef
 ```
+
+### Single Use Case Execution
+
+Execute a single use case by ID (creates execution records and uploads artifacts):
+
+```bash
+cicd-runner --usecase-id 01234567-89ab-cdef-0123-456789abcdef
+```
+
+### Local-Only Execution
+
+Execute a single use case locally without creating execution records or uploading artifacts:
+
+```bash
+cicd-runner --usecase-id 01234567-89ab-cdef-0123-456789abcdef --local-only
+```
+
+Artifacts are stored in `/tmp/qa-studio-artifacts/<usecase-id>/`.
 
 ### With Variable Overrides
 
@@ -153,6 +185,28 @@ cicd-runner \
   --model-id nova-act-v1.0
 ```
 
+### With Region Override
+
+Override the AWS region for Nova Act browser execution:
+
+```bash
+cicd-runner \
+  --suite-id 01234567-89ab-cdef-0123-456789abcdef \
+  --region us-east-1
+```
+
+### With Output Format (Local-Only)
+
+Choose between JSON (default) and human-readable summary output in local-only mode:
+
+```bash
+# JSON output (default)
+cicd-runner --usecase-id 01234567-89ab-cdef-0123-456789abcdef --local-only --output json
+
+# Human-readable summary
+cicd-runner --usecase-id 01234567-89ab-cdef-0123-456789abcdef --local-only --output summary
+```
+
 ### With Verbose Logging
 
 Enable detailed debug logging:
@@ -182,7 +236,22 @@ cicd-runner \
   --var username=testuser \
   --var password=testpass \
   --model-id nova-act-v1.0 \
+  --region us-east-1 \
   --timeout 7200 \
+  --verbose
+```
+
+### Local-Only Complete Example
+
+```bash
+cicd-runner \
+  --usecase-id 01234567-89ab-cdef-0123-456789abcdef \
+  --local-only \
+  --base-url https://staging.example.com \
+  --var username=testuser \
+  --var password=testpass \
+  --region us-east-1 \
+  --output summary \
   --verbose
 ```
 
@@ -190,7 +259,11 @@ cicd-runner \
 
 | Option | Required | Description | Default |
 |--------|----------|-------------|---------|
-| `--suite-id` | Yes | Test suite UUID to execute | - |
+| `--suite-id` | No* | Test suite UUID to execute | - |
+| `--usecase-id` | No* | Single use case UUID to execute | - |
+| `--local-only` | No | Local execution only, no execution records or S3 uploads (requires `--usecase-id`) | False |
+| `--output` | No | Output format: `json` or `summary` (only applies to `--local-only` mode) | `json` |
+| `--region` | No | Override AWS region for Nova Act browser execution | - |
 | `--base-url` | No | Override base URL for all use cases | - |
 | `--var` | No | Override variable (key=value, repeatable) | - |
 | `--model-id` | No | Override Nova Act model ID | - |
@@ -198,6 +271,63 @@ cicd-runner \
 | `--timeout` | No | Global timeout in seconds | 3600 |
 | `--keep-artifacts` | No | Keep local artifact files after upload (for debugging) | False |
 | `--help` | No | Show help message and exit | - |
+
+\* Either `--suite-id` or `--usecase-id` is required. They are mutually exclusive.
+
+## Local Execution Output
+
+When using `--local-only`, the runner outputs execution results to stdout. The format is controlled by the `--output` flag.
+
+### JSON Output (default)
+
+Machine-readable JSON output, suitable for piping into other tools:
+
+```json
+{
+  "status": "success",
+  "usecaseId": "abc-123",
+  "usecaseName": "Login Flow Test",
+  "duration": 45.2,
+  "steps": [
+    {
+      "stepId": "step-1",
+      "instruction": "Navigate to login page",
+      "status": "success",
+      "duration": 2.1,
+      "screenshot": "/tmp/qa-studio-artifacts/abc-123/step-1-screenshot.png"
+    }
+  ],
+  "artifacts": {
+    "video": "/tmp/qa-studio-artifacts/abc-123/recording.webm",
+    "logs": "/tmp/qa-studio-artifacts/abc-123/execution.log"
+  }
+}
+```
+
+### Summary Output (`--output summary`)
+
+Human-readable summary, suitable for terminal viewing:
+
+```
+QA Studio - Local Execution
+
+Use Case: Login Flow Test
+Use Case ID: abc-123
+Duration: 45s
+Status: ✓ PASSED
+
+Steps:
+  ✓ 1. Navigate to login page (2s)
+  ✓ 2. Enter credentials (3s)
+  ✓ 3. Click login button (2s)
+  ✓ 4. Verify dashboard loads (5s)
+
+Total: 4  |  Passed: 4  |  Failed: 0
+
+Artifacts:
+  Video: /tmp/qa-studio-artifacts/abc-123/recording.webm
+  Logs:  /tmp/qa-studio-artifacts/abc-123/execution.log
+```
 
 ## Exit Codes
 
