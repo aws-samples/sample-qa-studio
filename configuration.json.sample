@@ -15,5 +15,7 @@
   "workerSecurityGroupId": null,
   "createVpcEndpoints": false,
   "agentCoreVPC": false,
-  "apiGatewayUrl": ""
+  "apiGatewayUrl": "",
+  "enableExtensionAuthentication": true,
+  "cliCallbackUrl": "http://localhost:19847/callback"
 }

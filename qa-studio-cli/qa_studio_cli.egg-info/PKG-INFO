@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: qa-studio-cli
+Version: 0.1.0
+Summary: QA Studio CLI — authenticate and manage QA Studio from the terminal
+Author: QA Studio Team
+Requires-Python: >=3.11
+Requires-Dist: click>=8.1.7
+Requires-Dist: requests>=2.31.0
+Requires-Dist: pydantic>=2.5.0
+Dynamic: author
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

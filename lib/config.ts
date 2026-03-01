@@ -18,6 +18,10 @@ export interface NovaActQAStudioConfig {
   dockerImageVersion?: string;
   /** Full API Gateway URL for local development proxy (e.g. https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com) */
   apiGatewayUrl?: string;
+  /** Enable extension-based authentication (Kiro extension OAuth callback) */
+  enableExtensionAuthentication?: boolean;
+  /** Callback URL for CLI OAuth flow (e.g. http://localhost:19847/callback) */
+  cliCallbackUrl?: string;
 }
 
 const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {

@@ -7,6 +7,8 @@ import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from '.
 
 interface NovaActQAStudioAuthStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   adminEmail: string
+  /** OAuth callback URLs for CLI and IDE extensions */
+  callbackUrls?: string[]
 }
 
 /**
@@ -146,6 +148,9 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
           authorizationCodeGrant: true,
           implicitCodeGrant: true
         },
+        callbackUrls: props.callbackUrls && props.callbackUrls.length > 0
+          ? props.callbackUrls
+          : undefined,
         scopes: [
           OAuthScope.OPENID,
           OAuthScope.EMAIL,

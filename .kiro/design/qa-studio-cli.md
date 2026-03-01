@@ -429,7 +429,7 @@ Kiro: [No qa-studio-tests skill found]
 - App Client Type: Public
 - OAuth Flows: Authorization code grant
 - Scopes: openid, profile, email
-- Callback URL: `http://localhost:8080/callback` (CLI local server)
+- Callback URL: `http://localhost:19847/callback` (CLI local server)
 
 **Token Storage:**
 - Location: `~/.qa-studio/token.json`
@@ -878,7 +878,7 @@ v1.0.0 - Production Release (Week 6)
 - App Client Type: Public
 - OAuth Flows: Authorization code grant
 - Scopes: openid, profile, email
-- Callback URL: `http://localhost:8080/callback` (CLI local server)
+- Callback URL: `http://localhost:19847/callback` (CLI local server)
 
 ### File Structure
 ```

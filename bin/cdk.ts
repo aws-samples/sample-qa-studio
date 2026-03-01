@@ -34,10 +34,15 @@ const storageStack = new NovaActQAStudioStorageStack(app, 'storage', {
   env: stackEnv,
 })
 
+const oauthCallbackUrls = [
+  ...(config.cliCallbackUrl ? [config.cliCallbackUrl] : []),
+];
+
 const authStack = new NovaActQAStudioAuthStack(app, 'auth', {
   stackName: `${baseName}-auth`,
   baseName,
   adminEmail,
+  ...(oauthCallbackUrls.length > 0 && { callbackUrls: oauthCallbackUrls }),
   env: stackEnv,
 })
 

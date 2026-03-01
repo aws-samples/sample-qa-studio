@@ -44,10 +44,10 @@ qa-studio-cli/
 
 **Flow:**
 1. User runs `qa-studio login`
-2. CLI starts local HTTP server on `http://localhost:8080`
+2. CLI starts local HTTP server on `http://localhost:19847`
 3. CLI opens browser to Cognito hosted UI with callback URL
 4. User authenticates with QA Studio credentials
-5. Cognito redirects to `http://localhost:8080/callback?code=...`
+5. Cognito redirects to `http://localhost:19847/callback?code=...`
 6. CLI exchanges authorization code for tokens
 7. CLI stores tokens and shuts down local server
 
@@ -55,7 +55,7 @@ qa-studio-cli/
 - App Client Type: Public
 - OAuth Flows: Authorization code grant
 - Scopes: openid, profile, email
-- Callback URL: `http://localhost:8080/callback`
+- Callback URL: `http://localhost:19847/callback`
 
 **Required Functions:**
 ```python
