@@ -1,4 +1,4 @@
-# QA Studio - CI/CD Runner
+# QA Studio CI Runner
 
 Python CLI application for executing Nova Act QA Studio test suites in CI/CD pipelines. The runner authenticates with OAuth client credentials, fetches test suite definitions, creates execution records, and runs automated browser-based tests using Nova Act.
 
@@ -27,7 +27,7 @@ Python CLI application for executing Nova Act QA Studio test suites in CI/CD pip
 If you have multiple Python versions installed (e.g. via pyenv), make sure the venv is created with a compatible version:
 
 ```bash
-cd cicd-runner
+cd qa-studio-ci-runner
 
 # Option A: If pyenv is configured and 3.12 is your local version
 pyenv local 3.12.0
@@ -50,14 +50,14 @@ pip install -r requirements.txt
 ### From Source (editable install)
 
 ```bash
-cd cicd-runner
+cd qa-studio-ci-runner
 pip install -e .
 ```
 
 ### From Package
 
 ```bash
-pip install cicd-runner
+pip install qa-studio-ci-runner
 ```
 
 ## Configuration
@@ -103,7 +103,7 @@ Before using the runner, you need to create an OAuth client in the QA Studio pla
 1. **Login to QA Studio** web interface
 2. **Navigate to Settings** → OAuth Clients
 3. **Create New Client**:
-   - Name: "CI/CD Runner"
+   - Name: "QA Studio CI Runner"
    - Grant Type: Client Credentials
    - Scopes: `api/suite.read`, `api/suite.write`, `api/usecases.read`, `api/usecases.execute`, `api/executions.read`, `api/executions.write`
 4. **Save credentials**:
@@ -118,7 +118,7 @@ Before using the runner, you need to create an OAuth client in the QA Studio pla
 Execute a test suite by ID:
 
 ```bash
-cicd-runner --suite-id 01234567-89ab-cdef-0123-456789abcdef
+qa-studio-ci-runner --suite-id 01234567-89ab-cdef-0123-456789abcdef
 ```
 
 ### With Variable Overrides
@@ -126,7 +126,7 @@ cicd-runner --suite-id 01234567-89ab-cdef-0123-456789abcdef
 Override test suite variables:
 
 ```bash
-cicd-runner \
+qa-studio-ci-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
   --var username=testuser \
   --var password=testpass \
@@ -138,7 +138,7 @@ cicd-runner \
 Override the base URL for all use cases:
 
 ```bash
-cicd-runner \
+qa-studio-ci-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
   --base-url https://staging.example.com
 ```
@@ -148,7 +148,7 @@ cicd-runner \
 Override Bedrock model:
 
 ```bash
-cicd-runner \
+qa-studio-ci-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
   --model-id nova-act-v1.0
 ```
@@ -158,7 +158,7 @@ cicd-runner \
 Enable detailed debug logging:
 
 ```bash
-cicd-runner \
+qa-studio-ci-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
   --verbose
 ```
@@ -168,7 +168,7 @@ cicd-runner \
 Set global timeout in seconds (default: 3600):
 
 ```bash
-cicd-runner \
+qa-studio-ci-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
   --timeout 7200
 ```
@@ -176,7 +176,7 @@ cicd-runner \
 ### Complete Example
 
 ```bash
-cicd-runner \
+qa-studio-ci-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
   --base-url https://staging.example.com \
   --var username=testuser \
@@ -256,8 +256,8 @@ The CI/CD runner is available as a Docker container that bundles all dependencie
 ### Building the Image
 
 ```bash
-cd cicd-runner
-docker build -t cicd-runner .
+cd qa-studio-ci-runner
+docker build -t qa-studio-ci-runner .
 ```
 
 The build uses a multi-stage Dockerfile (`python:3.12-slim` base) to keep the final image lean. The builder stage compiles Python dependencies, and the runtime stage adds only Playwright Chromium and the packaged CLI.
@@ -272,7 +272,7 @@ docker run --rm \
   -e OAUTH_CLIENT_SECRET="your-client-secret" \
   -e OAUTH_TOKEN_ENDPOINT="https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/token" \
   -e API_ENDPOINT="https://your-api-id.execute-api.us-east-1.amazonaws.com/api" \
-  cicd-runner --suite-id 01234567-89ab-cdef-0123-456789abcdef
+  qa-studio-ci-runner --suite-id 01234567-89ab-cdef-0123-456789abcdef
 ```
 
 With variable overrides and verbose logging:
@@ -283,7 +283,7 @@ docker run --rm \
   -e OAUTH_CLIENT_SECRET="your-client-secret" \
   -e OAUTH_TOKEN_ENDPOINT="https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/token" \
   -e API_ENDPOINT="https://your-api-id.execute-api.us-east-1.amazonaws.com/api" \
-  cicd-runner \
+  qa-studio-ci-runner \
     --suite-id 01234567-89ab-cdef-0123-456789abcdef \
     --var username=testuser \
     --var environment=staging \
@@ -351,7 +351,7 @@ jobs:
             -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
             -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
             -e AWS_SESSION_TOKEN="${{ secrets.AWS_SESSION_TOKEN }}" \
-            your-registry/cicd-runner:latest \
+            your-registry/qa-studio-ci-runner:latest \
               --suite-id "${{ github.event.inputs.suite_id }}"
 ```
 
@@ -374,7 +374,7 @@ qa-run:
         -e API_ENDPOINT="$API_ENDPOINT"
         -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
         -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
-        your-registry/cicd-runner:latest
+        your-registry/qa-studio-ci-runner:latest
           --suite-id "$SUITE_ID"
 ```
 
@@ -408,7 +408,7 @@ pipeline {
                           -e API_ENDPOINT="\$API_ENDPOINT" \
                           -e AWS_ACCESS_KEY_ID="\$AWS_ACCESS_KEY_ID" \
                           -e AWS_SECRET_ACCESS_KEY="\$AWS_SECRET_ACCESS_KEY" \
-                          your-registry/cicd-runner:latest \
+                          your-registry/qa-studio-ci-runner:latest \
                             --suite-id "\${params.SUITE_ID}"
                     """
                 }
@@ -441,7 +441,7 @@ pytest -k property
 ### Project Structure
 
 ```
-cicd-runner/
+qa-studio-ci-runner/
 ├── src/
 │   ├── api/           # API client (suites, executions)
 │   ├── auth/          # OAuth authentication

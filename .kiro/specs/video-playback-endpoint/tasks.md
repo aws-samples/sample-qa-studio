@@ -2,7 +2,7 @@
 
 ## Overview
 
-Implement a single GET endpoint (`/api/usecase/{id}/executions/{executionId}/video`) that returns video playback data for a given execution. The endpoint reads the execution record's `trigger_type` to determine the recording type and returns either rrweb batch metadata (worker path) or a presigned S3 download URL (cicd-runner path). The implementation follows existing endpoint patterns (`generate_execution_artifact_url.py`, `list_recording_batches.py`) and reuses shared utilities from `utils.py`.
+Implement a single GET endpoint (`/api/usecase/{id}/executions/{executionId}/video`) that returns video playback data for a given execution. The endpoint reads the execution record's `trigger_type` to determine the recording type and returns either rrweb batch metadata (worker path) or a presigned S3 download URL (qa-studio-ci-runner path). The implementation follows existing endpoint patterns (`generate_execution_artifact_url.py`, `list_recording_batches.py`) and reuses shared utilities from `utils.py`.
 
 ## Tasks
 

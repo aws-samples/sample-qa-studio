@@ -11,7 +11,7 @@ This feature adds suite-level log capture with upload to suite execution artifac
 
 ## Glossary
 
-- **Runner**: The CI/CD runner application (`cicd-runner/`) that executes test suites
+- **Runner**: The CI/CD runner application (`qa-studio-ci-runner/`) that executes test suites
 - **Suite_Log_Capture**: The module responsible for capturing all logs during a complete suite execution run
 - **Usecase_Log_Capture**: The per-usecase log capture within `ArtifactCapture` that writes logs for a single usecase execution
 - **Suite_Execution**: A single run of a test suite, identified by `suite_execution_id`, containing one or more usecase executions

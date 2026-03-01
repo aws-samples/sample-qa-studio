@@ -78,12 +78,12 @@ Platform-specific integration guides with complete examples:
 
 **Without Docker**:
 1. Create an OAuth client in the Nova Act QA Studio web interface
-2. Clone the repository and navigate to `cicd-runner/`
+2. Clone the repository and navigate to `qa-studio-ci-runner/`
 3. Create a virtual environment: `python3 -m venv venv`
 4. Activate it: `source venv/bin/activate`
 5. Install: `pip install -e .`
 6. Configure environment variables in `.env` file
-7. Run: `cicd-runner --suite-id YOUR_SUITE_ID`
+7. Run: `qa-studio-ci-runner --suite-id YOUR_SUITE_ID`
 
 See the [Installation Guide](installation.md) for detailed instructions for both methods.
 

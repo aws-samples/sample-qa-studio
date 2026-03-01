@@ -75,4 +75,4 @@ yarn-error.log*
 .hypothesis
 .token_cache.json
 .env
-cicd_runner.egg-info
+qa_studio_ci_runner.egg-info

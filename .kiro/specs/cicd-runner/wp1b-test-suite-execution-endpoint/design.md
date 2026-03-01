@@ -1560,7 +1560,7 @@ execution_ids = data['execution_ids']
 
 - [WP1b Requirements Document](./requirements.md)
 - [WP1a Design Document](../wp1a-execution-record-trigger-type/design.md)
-- [CI/CD Runner Design Document](../../../.kiro/design/cicd-runner.md)
+- [CI/CD Runner Design Document](../../../.kiro/design/qa-studio-ci-runner.md)
 - [Test Suite Schema Documentation](../../../lambdas/endpoints/test_suite_schema.py)
 - [Existing execute_usecase Lambda](../../../lambdas/endpoints/execute_usecase.py)
 - [DynamoDB Steering Rules](../../../.kiro/steering/01_dynamodb.md)

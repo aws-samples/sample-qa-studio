@@ -901,7 +901,7 @@ docker run --rm \
   -e OAUTH_TOKEN_ENDPOINT="${OAUTH_TOKEN_ENDPOINT}" \
   -e API_ENDPOINT="${API_ENDPOINT}" \
   nova-act-cicd-runner:latest \
-  -c "python -m cicd_runner --suite-id suite-123 --verbose"
+  -c "python -m qa_studio_ci_runner --suite-id suite-123 --verbose"
 ```
 
 ### Interactive Shell
@@ -943,7 +943,7 @@ git clone https://github.com/org/repo.git
 cd repo
 
 # Build image
-docker build -t nova-act-cicd-runner:local -f cicd-runner/Dockerfile .
+docker build -t nova-act-cicd-runner:local -f qa-studio-ci-runner/Dockerfile .
 
 # Run locally built image
 docker run --rm \

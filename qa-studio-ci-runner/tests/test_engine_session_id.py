@@ -1,4 +1,4 @@
-"""Bug condition exploration tests for Nova session ID capture in cicd-runner path.
+"""Bug condition exploration tests for Nova session ID capture in qa-studio-ci-runner path.
 
 **Validates: Requirements 1.1, 1.2, 2.1, 2.2**
 
@@ -7,7 +7,7 @@ _run_steps_with_nova should call nova.get_session_id() and persist the result vi
 the ExecutionAPI. On UNFIXED code, these tests MUST FAIL — failure confirms the bug
 exists.
 
-Property 1 (Fault Condition): Nova Session ID Never Captured in CICD Runner Path
+Property 1 (Fault Condition): Nova Session ID Never Captured in QA Studio CI Runner Path
 - _run_steps_with_nova opens a NovaAct context but never calls nova.get_session_id()
 - ExecutionAPI has no update_session_id method to persist the session ID
 """
@@ -83,7 +83,7 @@ def _build_step_executor_mock(success: bool = True) -> MagicMock:
 
 
 class TestNovaSessionIdCapture:
-    """Property 1: Fault Condition — Nova Session ID Never Captured in CICD Runner Path.
+    """Property 1: Fault Condition — Nova Session ID Never Captured in QA Studio CI Runner Path.
 
     **Validates: Requirements 1.1, 1.2, 2.1, 2.2**
 
@@ -196,7 +196,7 @@ class TestExecutionAPIHasSessionIdMethod:
         api = ExecutionAPI(client=mock_client)
         assert hasattr(api, "update_session_id"), (
             "ExecutionAPI is missing update_session_id method — "
-            "session ID cannot be persisted from the cicd-runner path"
+            "session ID cannot be persisted from the qa-studio-ci-runner path"
         )
 
 

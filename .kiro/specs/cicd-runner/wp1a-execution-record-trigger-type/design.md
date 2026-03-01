@@ -507,7 +507,7 @@ if trigger_type not in valid_trigger_types:
 
 ## References
 
-- [CI/CD Runner Design Document](../../design/cicd-runner.md)
+- [CI/CD Runner Design Document](../../design/qa-studio-ci-runner.md)
 - [WP1a Requirements](./requirements.md)
 - [Existing execute_usecase Lambda](../../../lambdas/endpoints/execute_usecase.py)
 - [DynamoDB Steering Rules](../../../.kiro/steering/01_dynamodb.md)

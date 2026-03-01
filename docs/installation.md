@@ -173,7 +173,7 @@ git clone https://github.com/aws-samples/sample-nova-act-qa-studio.git
 cd sample-nova-act-qa-studio
 
 # Build container
-docker build -t nova-act-cicd-runner:latest -f cicd-runner/Dockerfile cicd-runner/
+docker build -t nova-act-cicd-runner:latest -f qa-studio-ci-runner/Dockerfile qa-studio-ci-runner/
 
 # Verify build
 docker images nova-act-cicd-runner
@@ -271,10 +271,10 @@ If you prefer to run the CLI directly without Docker (for local development or e
 ```bash
 # Clone the repository
 git clone https://github.com/aws-samples/sample-nova-act-qa-studio.git
-cd sample-nova-act-qa-studio/cicd-runner
+cd sample-nova-act-qa-studio/qa-studio-ci-runner
 ```
 
-Or download and extract the `cicd-runner` directory from the repository.
+Or download and extract the `qa-studio-ci-runner` directory from the repository.
 
 #### 2. Create a Virtual Environment (Recommended)
 
@@ -304,7 +304,7 @@ pip install -r requirements.txt
 
 #### 4. Configure Environment Variables
 
-Create a `.env` file in the `cicd-runner` directory:
+Create a `.env` file in the `qa-studio-ci-runner` directory:
 
 ```bash
 cat > .env << 'EOF'
@@ -334,7 +334,7 @@ Test the installation by running a simple command:
 
 ```bash
 # If installed with pip install -e .
-cicd-runner --suite-id YOUR_TEST_SUITE_ID --verbose
+qa-studio-ci-runner --suite-id YOUR_TEST_SUITE_ID --verbose
 
 # Or run directly with Python
 python -m src.main --suite-id YOUR_TEST_SUITE_ID --verbose
@@ -348,21 +348,21 @@ Once installed, you can use the runner directly:
 
 ```bash
 # Basic usage
-cicd-runner --suite-id 01234567-89ab-cdef-0123-456789abcdef
+qa-studio-ci-runner --suite-id 01234567-89ab-cdef-0123-456789abcdef
 
 # With variable overrides
-cicd-runner \
+qa-studio-ci-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
   --var username=testuser \
   --var password=testpass
 
 # With base URL override
-cicd-runner \
+qa-studio-ci-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
   --base-url https://staging.example.com
 
 # With verbose logging
-cicd-runner \
+qa-studio-ci-runner \
   --suite-id 01234567-89ab-cdef-0123-456789abcdef \
   --verbose
 ```
@@ -401,11 +401,11 @@ ModuleNotFoundError: No module named 'requests'
 
 **Command Not Found**:
 ```
-cicd-runner: command not found
+qa-studio-ci-runner: command not found
 ```
 - Ensure virtual environment is activated
 - Use direct Python invocation: `python -m src.main`
-- Verify installation: `pip list | grep cicd-runner`
+- Verify installation: `pip list | grep qa-studio-ci-runner`
 
 **Permission Errors**:
 ```

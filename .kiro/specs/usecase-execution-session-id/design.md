@@ -2,7 +2,7 @@
 
 ## Overview
 
-The cicd-runner's `ExecutionEngine._run_steps_with_nova` opens a NovaAct context but never calls `nova.get_session_id()` to capture the Nova Act session ID, and `ExecutionAPI` has no method to persist it. This causes the `nova_session_id` field to be missing from execution records in DynamoDB, which breaks the S3 URL generation endpoint (`generate_s3_url.py`) — it cannot construct the S3 key prefix for trace HTML files without the session ID.
+The qa-studio-ci-runner's `ExecutionEngine._run_steps_with_nova` opens a NovaAct context but never calls `nova.get_session_id()` to capture the Nova Act session ID, and `ExecutionAPI` has no method to persist it. This causes the `nova_session_id` field to be missing from execution records in DynamoDB, which breaks the S3 URL generation endpoint (`generate_s3_url.py`) — it cannot construct the S3 key prefix for trace HTML files without the session ID.
 
 The fix is two-fold:
 1. Extend the existing PATCH `/api/usecases/{id}/executions/{executionId}/status` endpoint to accept an optional `nova_session_id` field.
@@ -12,18 +12,18 @@ This mirrors the worker path (`wizard_worker.py`) which calls `nova.get_session_
 
 ## Glossary
 
-- **Bug_Condition (C)**: An execution runs through the cicd-runner path (`ExecutionEngine._run_steps_with_nova`) — the `nova_session_id` is never captured or persisted.
+- **Bug_Condition (C)**: An execution runs through the qa-studio-ci-runner path (`ExecutionEngine._run_steps_with_nova`) — the `nova_session_id` is never captured or persisted.
 - **Property (P)**: After the NovaAct context opens, `nova.get_session_id()` is called and the result is persisted to the execution record via the API.
 - **Preservation**: The worker path's session ID capture, existing step execution, status updates, artifact uploads, and all non-session-ID behavior must remain unchanged.
-- **`_run_steps_with_nova`**: The method in `cicd-runner/src/execution/engine.py` that opens the NovaAct context and executes steps sequentially.
-- **`ExecutionAPI`**: The API client class in `cicd-runner/src/api/executions.py` that wraps HTTP calls to the backend.
+- **`_run_steps_with_nova`**: The method in `qa-studio-ci-runner/src/execution/engine.py` that opens the NovaAct context and executes steps sequentially.
+- **`ExecutionAPI`**: The API client class in `qa-studio-ci-runner/src/api/executions.py` that wraps HTTP calls to the backend.
 - **`nova_session_id`**: The DynamoDB attribute on the `EXECUTION#{id}` record that stores the Nova Act session identifier, used by `generate_s3_url.py` to construct S3 key prefixes for trace files.
 
 ## Bug Details
 
 ### Fault Condition
 
-The bug manifests when a usecase execution runs through the cicd-runner path. The `_run_steps_with_nova` method opens a `NovaAct` context but never calls `nova.get_session_id()`, and `ExecutionAPI` has no method to persist the session ID to the backend. The DynamoDB execution record's `nova_session_id` attribute remains empty.
+The bug manifests when a usecase execution runs through the qa-studio-ci-runner path. The `_run_steps_with_nova` method opens a `NovaAct` context but never calls `nova.get_session_id()`, and `ExecutionAPI` has no method to persist the session ID to the backend. The DynamoDB execution record's `nova_session_id` attribute remains empty.
 
 **Formal Specification:**
 ```
@@ -31,7 +31,7 @@ FUNCTION isBugCondition(input)
   INPUT: input of type ExecutionContext
   OUTPUT: boolean
 
-  RETURN input.executionPath == "cicd-runner"
+  RETURN input.executionPath == "qa-studio-ci-runner"
          AND input.novaActContextOpened == true
          AND input.executionRecord.nova_session_id IS EMPTY
 END FUNCTION
@@ -39,9 +39,9 @@ END FUNCTION
 
 ### Examples
 
-- Execution `019c76ba-728d-fa40-f224-eae7164fd2b4` ran via cicd-runner. The NovaAct context opened successfully, steps executed, but `nova_session_id` was never written. The S3 URL endpoint returned: `"No Nova Act session ID found for execution: 019c76ba-728d-fa40-f224-eae7164fd2b4"`.
+- Execution `019c76ba-728d-fa40-f224-eae7164fd2b4` ran via qa-studio-ci-runner. The NovaAct context opened successfully, steps executed, but `nova_session_id` was never written. The S3 URL endpoint returned: `"No Nova Act session ID found for execution: 019c76ba-728d-fa40-f224-eae7164fd2b4"`.
 - A worker-path execution for the same usecase correctly has `nova_session_id` populated and S3 URL generation works.
-- A cicd-runner execution that fails before opening the NovaAct context would not have a session ID either, but that is expected (no NovaAct session was created).
+- A qa-studio-ci-runner execution that fails before opening the NovaAct context would not have a session ID either, but that is expected (no NovaAct session was created).
 
 ## Expected Behavior
 
@@ -54,7 +54,7 @@ END FUNCTION
 - `nova.get_session_id()` failure or returning `None` must not interrupt step execution (non-fatal).
 
 **Scope:**
-All inputs that do NOT involve the cicd-runner's NovaAct session ID capture should be completely unaffected by this fix. This includes:
+All inputs that do NOT involve the qa-studio-ci-runner's NovaAct session ID capture should be completely unaffected by this fix. This includes:
 - Worker-path executions
 - Step execution logic
 - Artifact upload logic
@@ -67,7 +67,7 @@ Based on the bug description and code analysis, the root cause is straightforwar
 
 1. **Missing `nova.get_session_id()` call**: In `_run_steps_with_nova` (engine.py line ~290), after `with NovaAct(**nova_kwargs) as nova:`, there is no call to `nova.get_session_id()`. The worker path has this call at line 247 and 472 of `wizard_worker.py`.
 
-2. **Missing API method**: `ExecutionAPI` (executions.py) has `update_status` and `update_step_status` but no method to persist the session ID. The cicd-runner communicates with the backend exclusively via HTTP API (it has no direct DynamoDB access), so a new API method is needed.
+2. **Missing API method**: `ExecutionAPI` (executions.py) has `update_status` and `update_step_status` but no method to persist the session ID. The qa-studio-ci-runner communicates with the backend exclusively via HTTP API (it has no direct DynamoDB access), so a new API method is needed.
 
 3. **Backend endpoint doesn't accept `nova_session_id`**: The existing PATCH `update_execution_status.py` endpoint only handles `status` and `error_message` fields. It needs to also accept and persist `nova_session_id`.
 
@@ -75,7 +75,7 @@ Based on the bug description and code analysis, the root cause is straightforwar
 
 Property 1: Fault Condition - Session ID Captured and Persisted via CICD Runner
 
-_For any_ execution that runs through the cicd-runner path where the NovaAct context opens successfully and `nova.get_session_id()` returns a non-empty string, the fixed `_run_steps_with_nova` SHALL call `nova.get_session_id()` and persist the result to the execution record via the API, such that the DynamoDB record's `nova_session_id` attribute is populated.
+_For any_ execution that runs through the qa-studio-ci-runner path where the NovaAct context opens successfully and `nova.get_session_id()` returns a non-empty string, the fixed `_run_steps_with_nova` SHALL call `nova.get_session_id()` and persist the result to the execution record via the API, such that the DynamoDB record's `nova_session_id` attribute is populated.
 
 **Validates: Requirements 2.1, 2.2, 2.3**
 
@@ -98,12 +98,12 @@ Assuming our root cause analysis is correct:
 2. **Conditionally add to DynamoDB update expression**: If `nova_session_id` is provided and non-empty, add `SET nova_session_id = :nova_session_id` to the update expression.
 3. **No new endpoint needed**: Extending the existing PATCH endpoint keeps the API surface minimal and follows the established pattern. The `nova_session_id` is optional — existing callers are unaffected.
 
-**File**: `cicd-runner/src/api/executions.py`
+**File**: `qa-studio-ci-runner/src/api/executions.py`
 
 **Changes**:
 1. **Add `update_session_id` method**: New async method that calls PATCH `/usecase/{usecase_id}/executions/{execution_id}/status` with `{"status": "running", "nova_session_id": session_id}`. Alternatively, a dedicated thin method that only sends `nova_session_id` alongside the current status. Since the execution is already in `running` state at this point, re-sending `status: "running"` is safe and idempotent.
 
-**File**: `cicd-runner/src/execution/engine.py`
+**File**: `qa-studio-ci-runner/src/execution/engine.py`
 
 **Changes**:
 1. **Call `nova.get_session_id()` after NovaAct context opens**: Inside `_run_steps_with_nova`, immediately after `with NovaAct(**nova_kwargs) as nova:` and before step execution, call `nova.get_session_id()`.
@@ -186,5 +186,5 @@ END FOR
 
 ### Integration Tests
 
-- End-to-end: cicd-runner executes a usecase, session ID is captured, DynamoDB record has `nova_session_id`, and `generate_s3_url.py` returns a valid signed URL
+- End-to-end: qa-studio-ci-runner executes a usecase, session ID is captured, DynamoDB record has `nova_session_id`, and `generate_s3_url.py` returns a valid signed URL
 - End-to-end: worker path execution still captures session ID correctly

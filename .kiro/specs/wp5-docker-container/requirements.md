@@ -2,11 +2,11 @@
 
 ## Introduction
 
-Package the existing CI/CD test runner (Python CLI at `cicd-runner/`) as a Docker container so it can be executed in any CI/CD platform (GitHub Actions, GitLab CI, Jenkins, etc.). The container must include the Nova Act SDK, a headless Chromium browser, and all dependencies. It should be optimized for size (~500MB target), run as a non-root user, and accept configuration via environment variables and CLI arguments.
+Package the existing CI/CD test runner (Python CLI at `qa-studio-ci-runner/`) as a Docker container so it can be executed in any CI/CD platform (GitHub Actions, GitLab CI, Jenkins, etc.). The container must include the Nova Act SDK, a headless Chromium browser, and all dependencies. It should be optimized for size (~500MB target), run as a non-root user, and accept configuration via environment variables and CLI arguments.
 
 ## Glossary
 
-- **Runner**: The Python CLI application at `cicd-runner/` that executes Nova Act QA Studio test suites
+- **Runner**: The Python CLI application at `qa-studio-ci-runner/` that executes Nova Act QA Studio test suites
 - **Container**: The Docker image packaging the Runner with all runtime dependencies
 - **Dockerfile**: The build definition file that produces the Container image
 - **Nova_Act_SDK**: The `nova-act` Python package (v3.1.157.0) used to execute browser-based test steps
@@ -30,7 +30,7 @@ Package the existing CI/CD test runner (Python CLI at `cicd-runner/`) as a Docke
 4. THE builder stage SHALL install Python dependencies into a virtual environment using `pip install --no-cache-dir`
 5. THE builder stage SHALL set `NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true` to skip automatic Playwright browser download during pip install
 6. THE runtime stage SHALL copy only the virtual environment from the builder stage
-7. THE Dockerfile SHALL reside at `cicd-runner/Dockerfile`
+7. THE Dockerfile SHALL reside at `qa-studio-ci-runner/Dockerfile`
 
 ### Requirement 2: Playwright Chromium Browser Installation
 
@@ -58,11 +58,11 @@ Package the existing CI/CD test runner (Python CLI at `cicd-runner/`) as a Docke
 
 ### Requirement 4: Container Entrypoint
 
-**User Story:** As a DevOps engineer, I want the container to use the `cicd-runner` CLI as its entrypoint, so that I can pass CLI arguments directly when running the container.
+**User Story:** As a DevOps engineer, I want the container to use the `qa-studio-ci-runner` CLI as its entrypoint, so that I can pass CLI arguments directly when running the container.
 
 #### Acceptance Criteria
 
-1. THE Container SHALL use the `cicd-runner` CLI command as its ENTRYPOINT
+1. THE Container SHALL use the `qa-studio-ci-runner` CLI command as its ENTRYPOINT
 2. WHEN a CI_CD_Platform runs the Container with CLI arguments, THE Container SHALL pass those arguments to the Runner CLI
 3. WHEN a CI_CD_Platform runs the Container with `--help`, THE Container SHALL display the Runner CLI help text and exit with code 0
 4. WHEN a CI_CD_Platform runs the Container with `--suite-id <id>`, THE Runner SHALL execute the specified test suite
@@ -97,11 +97,11 @@ Package the existing CI/CD test runner (Python CLI at `cicd-runner/`) as a Docke
 
 #### Acceptance Criteria
 
-1. THE `cicd-runner/README.md` SHALL include a section documenting how to build the Docker image using `docker build`
-2. THE `cicd-runner/README.md` SHALL include a section documenting how to run the container with required environment variables and CLI arguments
-3. THE `cicd-runner/README.md` SHALL include example commands for GitHub Actions, GitLab CI, and Jenkins integration
-4. THE `cicd-runner/README.md` SHALL document all required and optional environment variables
-5. THE `cicd-runner/README.md` SHALL document minimum resource requirements for the container (memory, CPU)
+1. THE `qa-studio-ci-runner/README.md` SHALL include a section documenting how to build the Docker image using `docker build`
+2. THE `qa-studio-ci-runner/README.md` SHALL include a section documenting how to run the container with required environment variables and CLI arguments
+3. THE `qa-studio-ci-runner/README.md` SHALL include example commands for GitHub Actions, GitLab CI, and Jenkins integration
+4. THE `qa-studio-ci-runner/README.md` SHALL document all required and optional environment variables
+5. THE `qa-studio-ci-runner/README.md` SHALL document minimum resource requirements for the container (memory, CPU)
 
 ### Requirement 8: Dockerignore Configuration
 
@@ -109,7 +109,7 @@ Package the existing CI/CD test runner (Python CLI at `cicd-runner/`) as a Docke
 
 #### Acceptance Criteria
 
-1. THE `.dockerignore` file SHALL reside at `cicd-runner/.dockerignore`
+1. THE `.dockerignore` file SHALL reside at `qa-studio-ci-runner/.dockerignore`
 2. THE `.dockerignore` file SHALL exclude the `venv/` directory
 3. THE `.dockerignore` file SHALL exclude the `__pycache__/` directories
 4. THE `.dockerignore` file SHALL exclude the `.pytest_cache/` directory
@@ -127,6 +127,6 @@ Package the existing CI/CD test runner (Python CLI at `cicd-runner/`) as a Docke
 #### Acceptance Criteria
 
 1. WHEN the Container is built, THE Playwright_Chromium binary SHALL be executable by the Non_Root_User
-2. WHEN the Container is built, THE `cicd-runner` CLI command SHALL be available on the PATH
+2. WHEN the Container is built, THE `qa-studio-ci-runner` CLI command SHALL be available on the PATH
 3. WHEN the Container is run with `--help`, THE Runner SHALL respond with usage information and exit with code 0
 4. IF the Playwright_Chromium binary is missing or corrupt, THEN THE Runner SHALL exit with code 2 and log a descriptive error message

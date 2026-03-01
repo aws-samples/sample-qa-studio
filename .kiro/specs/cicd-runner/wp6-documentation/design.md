@@ -564,7 +564,7 @@ Integration tests verify documentation against the actual system:
 
 Documentation content comes from:
 
-1. **Existing README**: cicd-runner/README.md (already comprehensive)
+1. **Existing README**: qa-studio-ci-runner/README.md (already comprehensive)
 2. **Existing API docs**: docs/API.md (already detailed)
 3. **Code inspection**: Extract CLI options, environment variables from code
 4. **Requirements**: User stories define what to document
@@ -595,9 +595,9 @@ Documentation content comes from:
 
 ## Dependencies
 
-- Existing cicd-runner implementation (WP1-WP5)
+- Existing qa-studio-ci-runner implementation (WP1-WP5)
 - Existing API documentation (docs/API.md)
-- Existing README (cicd-runner/README.md)
+- Existing README (qa-studio-ci-runner/README.md)
 - OAuth client management endpoints (WP1d)
 - Artifact management endpoints (WP1c)
 - Test suite execution endpoint (WP1b)

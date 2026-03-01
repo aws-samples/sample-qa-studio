@@ -7,7 +7,7 @@ Implement suite-level log capture, per-usecase log isolation via thread filterin
 ## Tasks
 
 - [x] 1. Create log filters module
-  - [x] 1.1 Create `cicd-runner/src/utils/log_filters.py` with `ThreadLogFilter` and `NovaActLogFilter`
+  - [x] 1.1 Create `qa-studio-ci-runner/src/utils/log_filters.py` with `ThreadLogFilter` and `NovaActLogFilter`
     - Implement `ThreadLogFilter(logging.Filter)` that accepts a `thread_id` in `__init__` and returns `record.thread == self.thread_id` in `filter()`
     - Implement `NovaActLogFilter(logging.Filter)` that returns `not record.name.startswith('nova_act')` in `filter()`
     - _Requirements: 3.1, 5.1_
@@ -22,7 +22,7 @@ Implement suite-level log capture, per-usecase log isolation via thread filterin
     - Generate random logger names, verify filter rejects iff name starts with `nova_act`
     - **Validates: Requirements 5.1**
 
-  - [x]* 1.4 Write unit tests for log filters in `cicd-runner/tests/test_log_filters.py`
+  - [x]* 1.4 Write unit tests for log filters in `qa-studio-ci-runner/tests/test_log_filters.py`
     - `test_thread_filter_accepts_matching_thread`
     - `test_thread_filter_rejects_different_thread`
     - `test_nova_act_filter_rejects_nova_act_logger`
@@ -31,7 +31,7 @@ Implement suite-level log capture, per-usecase log isolation via thread filterin
     - _Requirements: 3.1, 3.2, 5.1_
 
 - [x] 2. Create SuiteLogCapture module
-  - [x] 2.1 Create `cicd-runner/src/execution/suite_log_capture.py` with `SuiteLogCapture` class
+  - [x] 2.1 Create `qa-studio-ci-runner/src/execution/suite_log_capture.py` with `SuiteLogCapture` class
     - `__init__(self, suite_execution_id: str)` — set `log_dir` to `~/.ci_runner/{suite_execution_id}`, `log_path` to `suite_logs.txt`
     - `start() -> Path | None` — create directory, attach `FileHandler` (level=DEBUG, format `%(asctime)s - %(name)s - %(levelname)s - %(message)s`) to root logger, return path or `None` on `OSError`
     - `stop() -> Path | None` — flush, close, remove handler from root logger, return path if file exists
@@ -47,7 +47,7 @@ Implement suite-level log capture, per-usecase log isolation via thread filterin
     - Generate random log records, verify each line matches `<timestamp> - <logger_name> - <LEVEL> - <message>` pattern
     - **Validates: Requirements 1.3**
 
-  - [x]* 2.4 Write unit tests for SuiteLogCapture in `cicd-runner/tests/test_suite_log_capture.py`
+  - [x]* 2.4 Write unit tests for SuiteLogCapture in `qa-studio-ci-runner/tests/test_suite_log_capture.py`
     - `test_start_creates_log_file_and_handler` — verify file created and handler added to root logger
     - `test_stop_removes_handler_and_flushes` — verify handler removed after stop()
     - `test_start_returns_none_on_directory_failure` — mock `Path.mkdir` to raise `OSError`, verify returns `None`
@@ -55,23 +55,23 @@ Implement suite-level log capture, per-usecase log isolation via thread filterin
     - _Requirements: 1.1, 1.3, 1.4, 1.5_
 
 - [x] 3. Modify existing runner modules for log isolation and nova-act filtering
-  - [x] 3.1 Modify `ArtifactCapture.setup_logs()` in `cicd-runner/src/execution/artifacts.py` to attach `ThreadLogFilter`
+  - [x] 3.1 Modify `ArtifactCapture.setup_logs()` in `qa-studio-ci-runner/src/execution/artifacts.py` to attach `ThreadLogFilter`
     - Import `ThreadLogFilter` from `src.utils.log_filters` and `threading`
     - After creating the `FileHandler`, call `file_handler.addFilter(ThreadLogFilter(threading.get_ident()))`
     - _Requirements: 3.1, 3.2, 3.4_
 
-  - [x] 3.2 Modify `setup_logging()` in `cicd-runner/src/utils/logger.py` to attach `NovaActLogFilter`
+  - [x] 3.2 Modify `setup_logging()` in `qa-studio-ci-runner/src/utils/logger.py` to attach `NovaActLogFilter`
     - Import `NovaActLogFilter` from `.log_filters`
     - Add `console_handler.addFilter(NovaActLogFilter())` after creating the `StreamHandler`
     - Set `root_logger.setLevel(logging.DEBUG)` so file handlers get all records
     - _Requirements: 5.1, 5.4_
 
-  - [x]* 3.3 Write unit tests for modified `setup_logs()` in `cicd-runner/tests/test_artifact_capture.py`
+  - [x]* 3.3 Write unit tests for modified `setup_logs()` in `qa-studio-ci-runner/tests/test_artifact_capture.py`
     - `test_setup_logs_attaches_thread_filter` — verify `ThreadLogFilter` is added to the file handler
     - `test_setup_logs_thread_filter_uses_current_thread` — verify filter uses calling thread's ID
     - _Requirements: 3.1, 3.2_
 
-  - [x]* 3.4 Write unit tests for modified `setup_logging()` in `cicd-runner/tests/test_logger.py`
+  - [x]* 3.4 Write unit tests for modified `setup_logging()` in `qa-studio-ci-runner/tests/test_logger.py`
     - `test_setup_logging_attaches_nova_act_filter` — verify `NovaActLogFilter` on console handler
     - `test_setup_logging_sets_root_level_debug` — verify root logger level is DEBUG
     - _Requirements: 5.1, 5.4_
@@ -80,13 +80,13 @@ Implement suite-level log capture, per-usecase log isolation via thread filterin
   - Ensure all tests pass, ask the user if questions arise.
 
 - [x] 5. Add `upload_suite_artifacts` to ArtifactUploader
-  - [x] 5.1 Add `upload_suite_artifacts()` and `_upload_suite_artifact()` methods to `cicd-runner/src/execution/artifact_uploader.py`
+  - [x] 5.1 Add `upload_suite_artifacts()` and `_upload_suite_artifact()` methods to `qa-studio-ci-runner/src/execution/artifact_uploader.py`
     - `upload_suite_artifacts(suite_id, suite_execution_id, artifacts: dict[str, Path])` — iterate artifacts, call `_upload_suite_artifact`, log errors without raising
     - `_upload_suite_artifact(suite_id, suite_execution_id, artifact_type, artifact_path)` — decorated with `@retry(stop=stop_after_attempt(3))`, POST to `/test-suites/{suite_id}/executions/{suite_execution_id}/artifacts`, then PUT file to `upload_url` with correct content type
     - No DynamoDB confirm step (unlike execution artifacts)
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [x]* 5.2 Write unit tests for suite artifact upload in `cicd-runner/tests/test_artifact_uploader.py`
+  - [x]* 5.2 Write unit tests for suite artifact upload in `qa-studio-ci-runner/tests/test_artifact_uploader.py`
     - `test_upload_suite_artifacts_calls_suite_endpoint` — verify correct API path
     - `test_upload_suite_artifact_retry_on_failure` — verify 3 retries with tenacity
     - `test_upload_suite_artifact_uploads_to_presigned_url` — verify PUT to S3 upload URL
@@ -188,7 +188,7 @@ Implement suite-level log capture, per-usecase log isolation via thread filterin
     - _Requirements: 6.3, 6.4, 6.5_
 
 - [x] 11. Wire suite log lifecycle into main.py
-  - [x] 11.1 Modify `run_runner()` in `cicd-runner/src/main.py`
+  - [x] 11.1 Modify `run_runner()` in `qa-studio-ci-runner/src/main.py`
     - Import `SuiteLogCapture`
     - After `execution_engine` init, create `SuiteLogCapture(suite_execution_id)` and call `start()`
     - After summary is printed and exit code determined, call `suite_log_capture.stop()`
@@ -196,7 +196,7 @@ Implement suite-level log capture, per-usecase log isolation via thread filterin
     - Wrap upload in try/except — log error, do not change exit code
     - _Requirements: 1.1, 1.4, 2.1, 2.4_
 
-  - [x]* 11.2 Write unit tests for suite log integration in `cicd-runner/tests/test_main.py`
+  - [x]* 11.2 Write unit tests for suite log integration in `qa-studio-ci-runner/tests/test_main.py`
     - `test_run_runner_starts_suite_log_capture` — verify `SuiteLogCapture.start()` called
     - `test_run_runner_stops_suite_log_capture_on_success` — verify `stop()` called
     - `test_run_runner_stops_suite_log_capture_on_failure` — verify `stop()` called even on error

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design describes a new read-only Lambda endpoint (`GET /api/usecase/{id}/executions/{executionId}/video`) that returns video playback data for a given execution. The endpoint inspects the execution record's `trigger_type` to determine the recording type and returns either rrweb batch metadata (worker path) or a presigned S3 download URL (cicd-runner path), along with a `playback_type` discriminator so the frontend knows which player to render.
+This design describes a new read-only Lambda endpoint (`GET /api/usecase/{id}/executions/{executionId}/video`) that returns video playback data for a given execution. The endpoint inspects the execution record's `trigger_type` to determine the recording type and returns either rrweb batch metadata (worker path) or a presigned S3 download URL (qa-studio-ci-runner path), along with a `playback_type` discriminator so the frontend knows which player to render.
 
 The endpoint is a pure read operation — it does not create or modify any records. It reuses existing DynamoDB record types (execution records and artifact records) and existing S3 storage paths. No new record types, GSIs, or S3 key patterns are introduced.
 

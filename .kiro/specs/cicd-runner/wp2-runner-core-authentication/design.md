@@ -81,7 +81,7 @@ sequenceDiagram
 ### Directory Structure
 
 ```
-cicd-runner/
+qa-studio-ci-runner/
 ├── src/
 │   ├── __init__.py
 │   ├── main.py              # Main runner logic

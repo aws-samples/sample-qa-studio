@@ -7,16 +7,16 @@ Replace the fictional `nova_act_sdk` integration in the CI/CD runner with the re
 ## Tasks
 
 - [x] 1. Update dependencies and create data models
-  - [x] 1.1 Update `cicd-runner/requirements.txt` to include `bedrock_agentcore==1.0.5` (nova-act is already present)
+  - [x] 1.1 Update `qa-studio-ci-runner/requirements.txt` to include `bedrock_agentcore==1.0.5` (nova-act is already present)
     - Verify `nova-act==3.1.157.0` is already listed
     - Add `bedrock_agentcore==1.0.5`
     - _Requirements: 8.1_
-  - [x] 1.2 Create `cicd-runner/src/execution/models.py` with `StepResult` dataclass
+  - [x] 1.2 Create `qa-studio-ci-runner/src/execution/models.py` with `StepResult` dataclass
     - Define `StepResult` with fields: `success: bool`, `act_id: str = ""`, `logs: str = ""`, `actual_value: str = ""`
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
 - [ ] 2. Implement BrowserManager
-  - [x] 2.1 Create `cicd-runner/src/execution/browser_manager.py`
+  - [x] 2.1 Create `qa-studio-ci-runner/src/execution/browser_manager.py`
     - Implement `BrowserManager.__init__()` accepting region, execution_role_arn, optional s3_bucket and s3_prefix
     - Implement `create_and_start()` that creates browser via boto3 `bedrock-agentcore-control`, polls until READY, starts session via `BrowserClient`, returns `(ws_url, cdp_headers)`
     - Implement `_wait_for_browser_ready()` with 600s max wait, 1s polling interval, handling READY/FAILED/DELETED statuses
@@ -24,7 +24,7 @@ Replace the fictional `nova_act_sdk` integration in the CI/CD runner with the re
     - Support PUBLIC network mode, configure S3 recording when bucket is provided
     - Follow patterns from `worker/browser.py`
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8_
-  - [ ]* 2.2 Write unit tests for BrowserManager in `cicd-runner/tests/test_browser_manager.py`
+  - [ ]* 2.2 Write unit tests for BrowserManager in `qa-studio-ci-runner/tests/test_browser_manager.py`
     - Test create_and_start happy path with mocked boto3 and BrowserClient
     - Test polling with CREATING → READY sequence
     - Test polling timeout raises error
@@ -40,7 +40,7 @@ Replace the fictional `nova_act_sdk` integration in the CI/CD runner with the re
     - **Validates: Requirements 2.2, 2.3, 2.4**
 
 - [ ] 3. Implement StepExecutor
-  - [x] 3.1 Create `cicd-runner/src/execution/step_executor.py`
+  - [x] 3.1 Create `qa-studio-ci-runner/src/execution/step_executor.py`
     - Implement `StepExecutor.__init__()` accepting a `NovaAct` instance and optional secrets_resolver callable
     - Implement `execute()` dispatch method that routes by `step_type` to the correct handler
     - Implement `_execute_navigation()` using `nova.act(instruction)`, with support for `enable_advanced_click_types`
@@ -54,7 +54,7 @@ Replace the fictional `nova_act_sdk` integration in the CI/CD runner with the re
     - All handlers return `StepResult`
     - Follow patterns from `worker/navigation_step.py`, `worker/validation_step.py`, etc.
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8_
-  - [ ]* 3.2 Write unit tests for StepExecutor in `cicd-runner/tests/test_step_executor.py`
+  - [ ]* 3.2 Write unit tests for StepExecutor in `qa-studio-ci-runner/tests/test_step_executor.py`
     - Test dispatch for each step type with mocked NovaAct
     - Test unknown step type falls back to navigation
     - Test all validation operators for string, number, bool types
@@ -76,7 +76,7 @@ Replace the fictional `nova_act_sdk` integration in the CI/CD runner with the re
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 5. Implement variable resolution and WorkflowManager
-  - [x] 5.1 Create `cicd-runner/src/execution/workflow_manager.py`
+  - [x] 5.1 Create `qa-studio-ci-runner/src/execution/workflow_manager.py`
     - Implement `WorkflowManager.__init__()` accepting s3_bucket
     - Implement `ensure_workflow()` that checks/creates workflow definition via boto3 `nova-act` client
     - Follow patterns from `worker/nova_act_workflow.py`
@@ -93,20 +93,20 @@ Replace the fictional `nova_act_sdk` integration in the CI/CD runner with the re
     - **Validates: Requirements 6.1, 6.4**
 
 - [ ] 6. Extend ExecutionAPI with step status update
-  - [x] 6.1 Add `update_step_status()` method to `cicd-runner/src/api/executions.py`
+  - [x] 6.1 Add `update_step_status()` method to `qa-studio-ci-runner/src/api/executions.py`
     - Method signature: `async def update_step_status(self, usecase_id, execution_id, step_id, status, error_message=None, actual_value=None)`
     - Call `PATCH /usecase/{usecase_id}/executions/{execution_id}/steps/{step_id}/status`
     - Payload: `{status, error_message, actual_value}` (omit None fields)
     - Use `asyncio.to_thread()` for the synchronous HTTP call
     - _Requirements: 5.5_
-  - [ ]* 6.2 Write unit tests for update_step_status in `cicd-runner/tests/test_execution_api.py`
+  - [ ]* 6.2 Write unit tests for update_step_status in `qa-studio-ci-runner/tests/test_execution_api.py`
     - Test correct API path construction
     - Test payload includes all provided fields
     - Test payload omits None fields
     - _Requirements: 5.5_
 
 - [ ] 7. Rewrite ExecutionEngine to use real Nova Act
-  - [x] 7.1 Rewrite `cicd-runner/src/execution/engine.py`
+  - [x] 7.1 Rewrite `qa-studio-ci-runner/src/execution/engine.py`
     - Remove fictional `nova_act_sdk` import
     - Add imports for `NovaAct`, `Workflow` from `nova_act`
     - Add imports for `BrowserManager`, `StepExecutor`, `WorkflowManager`, `StepResult`
@@ -129,7 +129,7 @@ Replace the fictional `nova_act_sdk` integration in the CI/CD runner with the re
     - Keep `_replace_variables()` (now `_resolve_variables()`) with runtime variable support
     - Sanitize all error messages before API calls
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.6, 3.1, 3.2, 3.3, 3.4, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2, 6.3, 6.4, 7.1, 7.3, 8.2, 8.3, 8.4, 9.1, 9.2, 9.3, 9.4, 9.5, 10.1, 10.2, 10.3, 10.4_
-  - [ ]* 7.2 Write unit tests for rewritten ExecutionEngine in `cicd-runner/tests/test_execution_engine.py`
+  - [ ]* 7.2 Write unit tests for rewritten ExecutionEngine in `qa-studio-ci-runner/tests/test_execution_engine.py`
     - Mock BrowserManager, StepExecutor, ExecutionAPI, WorkflowManager
     - Test execute_usecase status lifecycle (running → completed on success, running → failed on failure)
     - Test step status reporting after each step
@@ -150,7 +150,7 @@ Replace the fictional `nova_act_sdk` integration in the CI/CD runner with the re
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 9. Update artifact handling and cleanup
-  - [x] 9.1 Update `cicd-runner/src/execution/artifacts.py` to work with synchronous Nova Act
+  - [x] 9.1 Update `qa-studio-ci-runner/src/execution/artifacts.py` to work with synchronous Nova Act
     - Remove async from `capture_step_screenshot` and `capture_step_trace` (Nova Act is sync)
     - Update to use Nova Act's page object for screenshots if needed
     - Ensure logs directory is created per execution and passed to NovaAct

@@ -2,16 +2,16 @@
 
 ## Introduction
 
-The CI/CD runner's execution engine (`cicd-runner/src/execution/engine.py`) currently references a fictional `nova_act_sdk` module that does not exist. The real Nova Act integration is already implemented in the `worker/` directory using `nova_act.NovaAct`, `nova_act.Workflow`, and `bedrock_agentcore.tools.browser_client.BrowserClient` for remote browser management. This feature replaces the fictional SDK integration with the real Nova Act SDK, adapting the worker's proven patterns for the CI/CD runner context. The runner communicates with the platform via HTTP API (not DynamoDB), runs locally with AWS credentials, and must handle the full browser lifecycle (create → start → use → stop → delete) plus all step types (navigation, validation, retrieve_value, url, assertion, secret, download).
+The CI/CD runner's execution engine (`qa-studio-ci-runner/src/execution/engine.py`) currently references a fictional `nova_act_sdk` module that does not exist. The real Nova Act integration is already implemented in the `worker/` directory using `nova_act.NovaAct`, `nova_act.Workflow`, and `bedrock_agentcore.tools.browser_client.BrowserClient` for remote browser management. This feature replaces the fictional SDK integration with the real Nova Act SDK, adapting the worker's proven patterns for the CI/CD runner context. The runner communicates with the platform via HTTP API (not DynamoDB), runs locally with AWS credentials, and must handle the full browser lifecycle (create → start → use → stop → delete) plus all step types (navigation, validation, retrieve_value, url, assertion, secret, download).
 
 ## Glossary
 
-- **Execution_Engine**: The Python class in `cicd-runner/src/execution/engine.py` responsible for orchestrating test execution using Nova Act.
+- **Execution_Engine**: The Python class in `qa-studio-ci-runner/src/execution/engine.py` responsible for orchestrating test execution using Nova Act.
 - **Nova_Act**: The real Nova Act SDK (`nova_act.NovaAct`) used as a synchronous context manager to control a remote browser via CDP.
 - **Workflow**: The `nova_act.Workflow` class used for Nova Act GA Service mode, wrapping NovaAct sessions with workflow definitions.
 - **Browser_Manager**: The component responsible for creating, starting, polling, stopping, and deleting remote browsers via the `bedrock-agentcore-control` boto3 client and `BrowserClient`.
 - **Step_Executor**: The component responsible for dispatching and executing individual test steps by type (navigation, validation, retrieve_value, url, assertion, secret, download).
-- **Execution_API**: The existing HTTP API client (`cicd-runner/src/api/executions.py`) used to communicate execution and step status to the platform backend.
+- **Execution_API**: The existing HTTP API client (`qa-studio-ci-runner/src/api/executions.py`) used to communicate execution and step status to the platform backend.
 - **Artifact_Uploader**: The existing component that uploads execution artifacts (logs, recordings) to S3 via presigned URLs.
 - **Variable_Resolver**: The component responsible for replacing `{{variable}}` placeholders in step instructions and managing runtime variables captured during execution.
 - **Step_Status_Reporter**: The component responsible for reporting individual step execution status (success/error, logs, actual values) back to the platform API.
@@ -110,7 +110,7 @@ The CI/CD runner's execution engine (`cicd-runner/src/execution/engine.py`) curr
 
 #### Acceptance Criteria
 
-1. THE `cicd-runner/requirements.txt` SHALL include `nova-act==3.1.157.0` and `bedrock_agentcore==1.0.5` as dependencies.
+1. THE `qa-studio-ci-runner/requirements.txt` SHALL include `nova-act==3.1.157.0` and `bedrock_agentcore==1.0.5` as dependencies.
 2. THE Execution_Engine SHALL require the `BEDROCK_EXECUTION_ROLE` environment variable and raise a clear error if it is missing.
 3. WHEN the GA Service mode is enabled, THE Execution_Engine SHALL require the `NOVA_ACT_S3_BUCKET` environment variable and raise a clear error if it is missing.
 4. WHEN the Preview API mode is used, THE Execution_Engine SHALL require the `NOVA_ACT_API_KEY` environment variable and raise a clear error if it is missing.

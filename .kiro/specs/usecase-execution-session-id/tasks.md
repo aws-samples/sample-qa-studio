@@ -7,7 +7,7 @@
   - **NOTE**: This test encodes the expected behavior — it will validate the fix when it passes after implementation
   - **GOAL**: Surface counterexamples that demonstrate the bug exists
   - **Scoped PBT Approach**: Scope the property to the concrete failing case: `_run_steps_with_nova` opens a NovaAct context but never calls `nova.get_session_id()` and never persists the session ID via the API
-  - Create test file `cicd-runner/tests/test_engine_session_id.py`
+  - Create test file `qa-studio-ci-runner/tests/test_engine_session_id.py`
   - Mock `NovaAct` context manager so that `nova.get_session_id()` returns a known session ID string (e.g. `"session-abc-123"`)
   - Mock `ExecutionAPI` (specifically `update_status`, `update_step_status`, and assert that a session-ID-persisting call is made)
   - Mock `StepExecutor` to return successful `StepResult` for each step
@@ -23,7 +23,7 @@
   - **Property 2: Preservation** - Existing Step Execution and Status Update Behavior Unchanged
   - **IMPORTANT**: Follow observation-first methodology
   - Create test file `lambdas/endpoints/test_update_execution_status.py` for Lambda endpoint preservation
-  - Create test section in `cicd-runner/tests/test_engine_session_id.py` for engine preservation
+  - Create test section in `qa-studio-ci-runner/tests/test_engine_session_id.py` for engine preservation
   - **Lambda endpoint preservation (observation-first)**:
     - Observe on UNFIXED code: PATCH with `{"status": "running"}` sets `status`, `started_at`, `updated_at` in DynamoDB — no `nova_session_id` attribute touched
     - Observe on UNFIXED code: PATCH with `{"status": "failed", "error_message": "err"}` sets `status`, `completed_at`, `updated_at`, `error_message`
@@ -38,7 +38,7 @@
     - Write test: when `nova.get_session_id()` raises an exception, step execution still completes and returns results (this test will be meaningful after the fix, but should also pass on unfixed code if guarded properly)
   - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-- [x] 3. Fix: Capture and persist Nova session ID in cicd-runner path
+- [x] 3. Fix: Capture and persist Nova session ID in qa-studio-ci-runner path
 
   - [x] 3.1 Extend PATCH endpoint to accept optional `nova_session_id`
     - In `lambdas/endpoints/update_execution_status.py`:
@@ -50,17 +50,17 @@
       - Test PATCH with `nova_session_id` persists it to DynamoDB
       - Test PATCH without `nova_session_id` does NOT add it to the update expression (backward compatible)
       - Test PATCH with empty string `nova_session_id` does NOT add it to the update expression
-    - _Bug_Condition: isBugCondition(input) where input.executionPath == "cicd-runner" AND nova_session_id IS EMPTY_
+    - _Bug_Condition: isBugCondition(input) where input.executionPath == "qa-studio-ci-runner" AND nova_session_id IS EMPTY_
     - _Expected_Behavior: PATCH endpoint accepts and persists optional nova_session_id to DynamoDB record_
     - _Preservation: Existing status/error_message/timestamp handling unchanged when nova_session_id not provided_
     - _Requirements: 2.2, 3.3_
 
   - [x] 3.2 Add `update_session_id` method to `ExecutionAPI`
-    - In `cicd-runner/src/api/executions.py`:
+    - In `qa-studio-ci-runner/src/api/executions.py`:
     - Add async method `update_session_id(self, usecase_id: str, execution_id: str, session_id: str) -> Dict[str, Any]`
     - Method calls PATCH `/usecase/{usecase_id}/executions/{execution_id}/status` with `{"status": "running", "nova_session_id": session_id}`
     - Re-sending `status: "running"` is safe and idempotent (execution is already running at this point)
-    - Write unit tests in `cicd-runner/tests/test_execution_api.py`:
+    - Write unit tests in `qa-studio-ci-runner/tests/test_execution_api.py`:
       - Test `update_session_id` calls `client.patch` with correct URL and payload
       - Test `update_session_id` propagates API errors
     - _Bug_Condition: ExecutionAPI has no method to persist session ID_
@@ -69,7 +69,7 @@
     - _Requirements: 2.2_
 
   - [x] 3.3 Call `nova.get_session_id()` and persist in `_run_steps_with_nova`
-    - In `cicd-runner/src/execution/engine.py`, inside `_run_steps_with_nova`:
+    - In `qa-studio-ci-runner/src/execution/engine.py`, inside `_run_steps_with_nova`:
     - Immediately after `with NovaAct(**nova_kwargs) as nova:` and before the header/step logic, add:
       ```python
       # Capture Nova Act session ID (non-fatal)
@@ -90,7 +90,7 @@
           logger.warning(f"Failed to capture Nova Act session ID: {sanitize_error_message(str(e))}")
       ```
     - Session ID capture failure MUST NOT interrupt step execution (requirement 3.4)
-    - Write unit tests in `cicd-runner/tests/test_engine_session_id.py`:
+    - Write unit tests in `qa-studio-ci-runner/tests/test_engine_session_id.py`:
       - Test `get_session_id()` called and result persisted via `update_session_id`
       - Test `get_session_id()` returning `None` logs warning, steps still execute
       - Test `get_session_id()` raising exception logs warning, steps still execute
@@ -118,6 +118,6 @@
     - Confirm: Session ID failure does not interrupt execution
 
 - [x] 4. Checkpoint - Ensure all tests pass
-  - Run full test suite: `cd cicd-runner && python -m pytest tests/ -v`
+  - Run full test suite: `cd qa-studio-ci-runner && python -m pytest tests/ -v`
   - Run Lambda endpoint tests: `cd lambdas/endpoints && python -m pytest test_update_execution_status.py -v`
   - Ensure all tests pass, ask the user if questions arise

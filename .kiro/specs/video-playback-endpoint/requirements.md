@@ -13,7 +13,7 @@ The endpoint reads the execution record's `trigger_type` field to determine whic
 
 - **Video_Playback_Endpoint**: The new GET endpoint that returns video playback information for a given execution
 - **Execution_Record**: DynamoDB record with pk=`USECASE_EXECUTION#{usecase_id}`, sk=`EXECUTION#{execution_id}` containing execution metadata including `trigger_type`
-- **trigger_type**: Field on the execution record indicating how the execution was triggered. Values: `OnDemand`, `Scheduled`, `OnDemandHeadless` (worker path), `ci_runner` (cicd-runner path)
+- **trigger_type**: Field on the execution record indicating how the execution was triggered. Values: `OnDemand`, `Scheduled`, `OnDemandHeadless` (worker path), `ci_runner` (qa-studio-ci-runner path)
 - **Worker_Recording**: rrweb-format recording produced by Bedrock Agent Core remote browser, stored as `.ndjson.gz` batch files in S3
 - **Runner_Recording**: `.webm` video file produced by local chromium via Nova Act, uploaded as an execution artifact to S3
 - **Playback_Type**: Discriminator returned by the endpoint: `rrweb` for worker recordings, `video` for runner recordings

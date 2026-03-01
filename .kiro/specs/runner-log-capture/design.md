@@ -595,10 +595,10 @@ except OSError as e:
 
 | Property | Test File | Description |
 |---|---|---|
-| 1: Suite log captures all | `cicd-runner/tests/test_suite_log_capture.py` | Generate random logger names and messages, verify all appear in suite log |
-| 2: Log format consistency | `cicd-runner/tests/test_suite_log_capture.py` | Generate random log records, verify each line matches format pattern |
-| 3: Thread-based isolation | `cicd-runner/tests/test_log_filters.py` | Generate random thread IDs and log records, verify filter accepts iff thread matches |
-| 4: NovaActLogFilter | `cicd-runner/tests/test_log_filters.py` | Generate random logger names, verify filter rejects iff name starts with `nova_act` |
+| 1: Suite log captures all | `qa-studio-ci-runner/tests/test_suite_log_capture.py` | Generate random logger names and messages, verify all appear in suite log |
+| 2: Log format consistency | `qa-studio-ci-runner/tests/test_suite_log_capture.py` | Generate random log records, verify each line matches format pattern |
+| 3: Thread-based isolation | `qa-studio-ci-runner/tests/test_log_filters.py` | Generate random thread IDs and log records, verify filter accepts iff thread matches |
+| 4: NovaActLogFilter | `qa-studio-ci-runner/tests/test_log_filters.py` | Generate random logger names, verify filter rejects iff name starts with `nova_act` |
 | 5: S3 key format | `lambdas/endpoints/test_generate_suite_artifact_url.py` | Generate random suite_id, execution_id, filename, verify key format |
 | 6: Endpoint response | `lambdas/endpoints/test_generate_suite_artifact_url.py` | Generate valid requests, verify response contains all required fields |
 | 7: S3 list discovery | `lambdas/endpoints/test_list_suite_artifacts.py` | Upload N objects to S3 prefix, verify list returns N artifacts with required fields |
@@ -609,14 +609,14 @@ except OSError as e:
 
 **Test Files and Coverage**:
 
-**`cicd-runner/tests/test_suite_log_capture.py`** (NEW):
+**`qa-studio-ci-runner/tests/test_suite_log_capture.py`** (NEW):
 - `test_start_creates_log_file_and_handler` — verify file created and handler added to root logger
 - `test_stop_removes_handler_and_flushes` — verify handler removed after stop()
 - `test_start_returns_none_on_directory_failure` — verify graceful degradation
 - `test_log_path_uses_suite_execution_id` — verify correct path structure
 - Property tests for Properties 1 and 2
 
-**`cicd-runner/tests/test_log_filters.py`** (NEW):
+**`qa-studio-ci-runner/tests/test_log_filters.py`** (NEW):
 - `test_thread_filter_accepts_matching_thread` — verify acceptance
 - `test_thread_filter_rejects_different_thread` — verify rejection
 - `test_nova_act_filter_rejects_nova_act_logger` — verify rejection of `nova_act`
@@ -624,11 +624,11 @@ except OSError as e:
 - `test_nova_act_filter_accepts_other_loggers` — verify acceptance of non-nova-act
 - Property tests for Properties 3 and 4
 
-**`cicd-runner/tests/test_artifact_capture.py`** (MODIFY):
+**`qa-studio-ci-runner/tests/test_artifact_capture.py`** (MODIFY):
 - `test_setup_logs_attaches_thread_filter` — verify ThreadLogFilter is added to handler
 - `test_setup_logs_thread_filter_uses_current_thread` — verify filter uses calling thread's ID
 
-**`cicd-runner/tests/test_artifact_uploader.py`** (MODIFY):
+**`qa-studio-ci-runner/tests/test_artifact_uploader.py`** (MODIFY):
 - `test_upload_suite_artifacts_calls_suite_endpoint` — verify correct API path
 - `test_upload_suite_artifact_retry_on_failure` — verify 3 retries
 - `test_upload_suite_artifact_uploads_to_presigned_url` — verify PUT to S3 upload URL

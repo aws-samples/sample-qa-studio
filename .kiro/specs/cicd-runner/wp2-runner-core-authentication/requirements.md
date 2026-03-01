@@ -57,7 +57,7 @@ Build the core Python CLI application for the CI/CD runner, including OAuth clie
 ### Project Structure
 
 ```
-cicd-runner/
+qa-studio-ci-runner/
 ├── src/
 │   ├── __init__.py
 │   ├── main.py              # CLI entry point

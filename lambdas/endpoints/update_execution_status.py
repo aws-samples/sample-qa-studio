@@ -159,7 +159,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             eventbridge.put_events(
                 Entries=[{
                     'Source': 'nova-act-qa-studio.execution',
-                    'DetailType': 'nova-act-qa-studio.execution.status-changed',
+                    'DetailType': 'nova-act-qa-studio.execution.status.changed',
                     'Detail': json.dumps(event_detail),
                     'EventBusName': 'default'
                 }]

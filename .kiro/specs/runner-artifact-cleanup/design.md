@@ -8,7 +8,7 @@ The cleanup is designed to be fail-safe — errors during cleanup are logged but
 
 ## Architecture
 
-The cleanup logic lives in a new `Cleanup` class under `cicd-runner/src/execution/cleanup.py`. It is invoked from `run_runner()` in `main.py` after the execution summary is printed and the exit code is determined.
+The cleanup logic lives in a new `Cleanup` class under `qa-studio-ci-runner/src/execution/cleanup.py`. It is invoked from `run_runner()` in `main.py` after the execution summary is printed and the exit code is determined.
 
 ```mermaid
 flowchart TD
@@ -33,7 +33,7 @@ Both phases are wrapped in try/except so failures never propagate.
 
 ### Cleanup class
 
-**Module**: `cicd-runner/src/execution/cleanup.py`
+**Module**: `qa-studio-ci-runner/src/execution/cleanup.py`
 
 ```python
 class Cleanup:
@@ -229,4 +229,4 @@ Each test runs a minimum of 100 iterations.
 
 ### Test File Location
 
-All tests go in `cicd-runner/tests/test_cleanup.py`.
+All tests go in `qa-studio-ci-runner/tests/test_cleanup.py`.

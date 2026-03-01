@@ -46,7 +46,7 @@ Serverless architecture on AWS:
 ├── scripts/          # Release and utility scripts
 ├── testcases/        # Sample test case definitions
 └── worker/           # Nova Act test execution engine
-└── cicd_runner/      # CI/CD runner capabilities
+└── qa-studio-ci-runner/  # CI/CD runner capabilities
 ```
 
 ## Getting Started

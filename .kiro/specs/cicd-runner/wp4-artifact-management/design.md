@@ -987,7 +987,7 @@ def test_upload_retries_with_exponential_backoff(failure_count):
 
 ### Python Packages
 
-**Add to `cicd-runner/requirements.txt`**:
+**Add to `qa-studio-ci-runner/requirements.txt`**:
 ```
 tenacity>=8.2.0  # Retry logic with exponential backoff
 ```

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design packages the existing CI/CD test runner (Python CLI at `cicd-runner/`) as a Docker container. The container bundles the runner code, all Python dependencies, the Nova Act SDK, and a pre-installed headless Chromium browser into a single portable image that can be executed in any CI/CD platform (GitHub Actions, GitLab CI, Jenkins).
+This design packages the existing CI/CD test runner (Python CLI at `qa-studio-ci-runner/`) as a Docker container. The container bundles the runner code, all Python dependencies, the Nova Act SDK, and a pre-installed headless Chromium browser into a single portable image that can be executed in any CI/CD platform (GitHub Actions, GitLab CI, Jenkins).
 
 The design follows established patterns from the existing `worker/Dockerfile` (multi-stage build, non-root user, venv) and the Nova Act SDK template Dockerfile (Playwright Chromium installation, browser cache copy to non-root user). The key challenge is combining these patterns while keeping the image size under 2GB (target ~500MB).
 
@@ -23,7 +23,7 @@ graph TD
     subgraph "Stage 1: Builder"
         A[python:3.12-slim] --> B[Create venv]
         B --> C[pip install --no-cache-dir]
-        C --> D[Install cicd-runner package]
+        C --> D[Install qa-studio-ci-runner package]
     end
 
     subgraph "Stage 2: Runtime"
@@ -33,7 +33,7 @@ graph TD
         H --> I[Copy browser cache to runner user]
         I --> J[Create /app/logs directory]
         J --> K[Switch to USER runner]
-        K --> L["ENTRYPOINT: cicd-runner"]
+        K --> L["ENTRYPOINT: qa-studio-ci-runner"]
     end
 
     D -.->|COPY venv| H
@@ -41,9 +41,9 @@ graph TD
 
 ### Build Flow
 
-1. **Builder stage**: Installs Python dependencies into a venv with `NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true` to avoid downloading Chromium during pip install. Installs the `cicd-runner` package in editable-like mode so the `cicd-runner` console script is created in the venv.
+1. **Builder stage**: Installs Python dependencies into a venv with `NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true` to avoid downloading Chromium during pip install. Installs the `qa-studio-ci-runner` package in editable-like mode so the `qa-studio-ci-runner` console script is created in the venv.
 
-2. **Runtime stage**: Starts fresh from `python:3.12-slim`. Installs Playwright Chromium and its OS-level dependencies (as root). Creates the `runner` user (uid 1000). Copies the venv from the builder stage. Copies the Playwright browser cache from `/root/.cache/ms-playwright` to `/home/runner/.cache/ms-playwright`. Sets the entrypoint to the `cicd-runner` CLI command.
+2. **Runtime stage**: Starts fresh from `python:3.12-slim`. Installs Playwright Chromium and its OS-level dependencies (as root). Creates the `runner` user (uid 1000). Copies the venv from the builder stage. Copies the Playwright browser cache from `/root/.cache/ms-playwright` to `/home/runner/.cache/ms-playwright`. Sets the entrypoint to the `qa-studio-ci-runner` CLI command.
 
 ### Runtime Flow
 
@@ -51,11 +51,11 @@ graph TD
 sequenceDiagram
     participant CI as CI/CD Platform
     participant D as Docker Container
-    participant CLI as cicd-runner CLI
+    participant CLI as qa-studio-ci-runner CLI
     participant S as Settings.from_env()
 
     CI->>D: docker run -e OAUTH_CLIENT_ID=... --suite-id abc
-    D->>CLI: ENTRYPOINT ["cicd-runner"] + CMD args
+    D->>CLI: ENTRYPOINT ["qa-studio-ci-runner"] + CMD args
     CLI->>S: Load env vars
     alt Missing env var
         S-->>CLI: ConfigurationError
@@ -69,7 +69,7 @@ sequenceDiagram
 
 ## Components and Interfaces
 
-### 1. Dockerfile (`cicd-runner/Dockerfile`)
+### 1. Dockerfile (`qa-studio-ci-runner/Dockerfile`)
 
 The primary deliverable. Two-stage build producing the final container image.
 
@@ -89,11 +89,11 @@ The primary deliverable. Two-stage build producing the final container image.
 - Copy Playwright browser cache from root to runner user
 - Create `/app/logs` with runner ownership
 - Set env vars: `NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true`, `PYTHONUNBUFFERED=1`
-- Set `ENTRYPOINT ["cicd-runner"]`
+- Set `ENTRYPOINT ["qa-studio-ci-runner"]`
 
 **Interface:** CLI arguments passed as Docker CMD, environment variables injected by CI/CD platform.
 
-### 2. Dockerignore (`cicd-runner/.dockerignore`)
+### 2. Dockerignore (`qa-studio-ci-runner/.dockerignore`)
 
 Excludes development artifacts from the build context to speed up builds and reduce image size.
 
@@ -109,7 +109,7 @@ Excludes development artifacts from the build context to speed up builds and red
 - `*.egg-info/` — build metadata
 - `.git/` — version control
 
-### 3. README Updates (`cicd-runner/README.md`)
+### 3. README Updates (`qa-studio-ci-runner/README.md`)
 
 New sections documenting Docker build, run, and CI/CD integration.
 
@@ -126,7 +126,7 @@ These existing components are used as-is inside the container:
 
 | Component | Path | Role |
 |-----------|------|------|
-| CLI Parser | `src/cli/parser.py` | Click-based CLI, entrypoint `cicd-runner` |
+| CLI Parser | `src/cli/parser.py` | Click-based CLI, entrypoint `qa-studio-ci-runner` |
 | Settings | `src/config/settings.py` | Pydantic model, loads from env vars, exits code 2 on missing |
 | Main Runner | `src/main.py` | Orchestrates auth, API calls, execution, exit codes |
 | OAuth Client | `src/auth/oauth_client.py` | Client credentials flow |
@@ -171,7 +171,7 @@ Two criteria are amenable to property-based testing:
 
 ### Property 1: CLI argument passthrough
 
-*For any* valid CLI argument string, when passed as Docker CMD arguments to the container, the arguments shall be forwarded unchanged to the `cicd-runner` CLI entrypoint.
+*For any* valid CLI argument string, when passed as Docker CMD arguments to the container, the arguments shall be forwarded unchanged to the `qa-studio-ci-runner` CLI entrypoint.
 
 **Validates: Requirements 4.2**
 
@@ -233,12 +233,12 @@ Unit tests verify specific structural requirements and container behaviors:
 - Browser cache copied from root to runner user
 - `useradd -m -u 1000 runner` present
 - `USER runner` set in runtime stage
-- `ENTRYPOINT` uses `cicd-runner`
+- `ENTRYPOINT` uses `qa-studio-ci-runner`
 - `rm -rf /var/lib/apt/lists/*` present
 - Runtime sets `NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true`
 
 **.dockerignore tests** (parse file content):
-- File exists at `cicd-runner/.dockerignore`
+- File exists at `qa-studio-ci-runner/.dockerignore`
 - Contains all required exclusion patterns: `venv/`, `__pycache__/`, `.pytest_cache/`, `.hypothesis/`, `htmlcov/`, `tests/`, `.env`, `.env.example`, `.coverage`, `*.egg-info/`
 
 **README tests** (parse file content):
@@ -253,7 +253,7 @@ Unit tests verify specific structural requirements and container behaviors:
 **Container integration tests** (require built image):
 - `docker run <image> --help` exits with code 0 and shows usage text
 - `docker run <image> id` shows uid 1000 (runner user)
-- `docker run <image> which cicd-runner` finds the CLI on PATH
+- `docker run <image> which qa-studio-ci-runner` finds the CLI on PATH
 - `docker run <image> test -x <chromium-path>` confirms browser is executable
 - `docker run <image> touch /app/logs/test.log` confirms write access
 - Running without required env vars exits with code 2

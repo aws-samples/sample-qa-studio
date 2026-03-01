@@ -113,7 +113,7 @@ docker run --rm \
   -e OAUTH_CLIENT_SECRET="your-client-secret" \
   -e OAUTH_TOKEN_ENDPOINT="https://domain.auth.region.amazoncognito.com/oauth2/token" \
   -e API_ENDPOINT="https://api.example.com" \
-  nova-act-cicd-runner:latest \
+  nova-act-qa-studio-ci-runner:latest \
   --suite-id suite-123 \
   --base-url https://staging.example.com \
   --verbose
@@ -228,7 +228,7 @@ jobs:
             -e OAUTH_CLIENT_SECRET="${{ secrets.OAUTH_CLIENT_SECRET }}" \
             -e OAUTH_TOKEN_ENDPOINT="${{ secrets.OAUTH_TOKEN_ENDPOINT }}" \
             -e API_ENDPOINT="${{ secrets.API_ENDPOINT }}" \
-            nova-act-cicd-runner:latest \
+            nova-act-qa-studio-ci-runner:latest \
             --suite-id ${{ vars.TEST_SUITE_ID }} \
             --base-url https://staging.example.com \
             --var username=testuser \
@@ -278,7 +278,7 @@ qa-tests:
         -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET"
         -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT"
         -e API_ENDPOINT="$API_ENDPOINT"
-        nova-act-cicd-runner:latest
+        nova-act-qa-studio-ci-runner:latest
         --suite-id $TEST_SUITE_ID
         --base-url https://staging.example.com
         --verbose
@@ -331,7 +331,7 @@ pipeline {
                                 -e OAUTH_CLIENT_SECRET="\${OAUTH_CLIENT_SECRET}" \
                                 -e OAUTH_TOKEN_ENDPOINT="\${OAUTH_TOKEN_ENDPOINT}" \
                                 -e API_ENDPOINT="\${API_ENDPOINT}" \
-                                nova-act-cicd-runner:latest \
+                                nova-act-qa-studio-ci-runner:latest \
                                 --suite-id \${TEST_SUITE_ID} \
                                 --base-url https://staging.example.com \
                                 --verbose

@@ -953,7 +953,7 @@ After analyzing the acceptance criteria, I identified several properties that ca
 
 ### Python Packages
 
-**Required Dependencies** (add to `cicd-runner/requirements.txt`):
+**Required Dependencies** (add to `qa-studio-ci-runner/requirements.txt`):
 
 ```
 nova-act-sdk>=1.0.0
@@ -962,7 +962,7 @@ asyncio>=3.4.3
 aiohttp>=3.9.0
 ```
 
-**Development Dependencies** (add to `cicd-runner/requirements-dev.txt`):
+**Development Dependencies** (add to `qa-studio-ci-runner/requirements-dev.txt`):
 
 ```
 pytest>=7.4.0
@@ -1399,7 +1399,7 @@ docker run --rm \
   -e OAUTH_CLIENT_SECRET=$CLIENT_SECRET \
   -e OAUTH_TOKEN_ENDPOINT=$TOKEN_ENDPOINT \
   -e API_ENDPOINT=$API_ENDPOINT \
-  cicd-runner \
+  qa-studio-ci-runner \
   --suite-id $SUITE_ID
 ```
 
@@ -1428,7 +1428,7 @@ jobs:
       
       - name: Install dependencies
         run: |
-          cd cicd-runner
+          cd qa-studio-ci-runner
           pip install -r requirements.txt
       
       - name: Run tests
@@ -1438,7 +1438,7 @@ jobs:
           OAUTH_TOKEN_ENDPOINT: ${{ secrets.OAUTH_TOKEN_ENDPOINT }}
           API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
         run: |
-          cd cicd-runner
+          cd qa-studio-ci-runner
           python -m src.cli.parser --suite-id ${{ vars.TEST_SUITE_ID }}
 ```
 

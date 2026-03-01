@@ -75,7 +75,7 @@ class TestSummaryFormatter:
         )
 
         # Verify key elements are present
-        assert 'Nova Act QA Studio - CI/CD Runner' in table
+        assert 'QA Studio - CI/CD Runner' in table
         assert 'Suite: Test Suite' in table
         assert 'Suite Execution ID: test-123' in table
         assert '✓ Login Test (45s)' in table

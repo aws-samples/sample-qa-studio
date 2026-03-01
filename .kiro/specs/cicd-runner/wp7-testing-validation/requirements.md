@@ -148,7 +148,7 @@ def test_single_usecase_execution(runner_env):
             '-e', f"OAUTH_CLIENT_SECRET={runner_env['OAUTH_CLIENT_SECRET']}",
             '-e', f"OAUTH_TOKEN_ENDPOINT={runner_env['OAUTH_TOKEN_ENDPOINT']}",
             '-e', f"API_ENDPOINT={runner_env['API_ENDPOINT']}",
-            'nova-act-cicd-runner:latest',
+            'qa-studio-ci-runner:latest',
             '--suite-id', 'test-suite-single',
             '--verbose'
         ],
@@ -168,7 +168,7 @@ def test_parallel_execution(runner_env):
             '-e', f"OAUTH_CLIENT_SECRET={runner_env['OAUTH_CLIENT_SECRET']}",
             '-e', f"OAUTH_TOKEN_ENDPOINT={runner_env['OAUTH_TOKEN_ENDPOINT']}",
             '-e', f"API_ENDPOINT={runner_env['API_ENDPOINT']}",
-            'nova-act-cicd-runner:latest',
+            'qa-studio-ci-runner:latest',
             '--suite-id', 'test-suite-parallel',
             '--verbose'
         ],
@@ -189,7 +189,7 @@ def test_base_url_override(runner_env):
             '-e', f"OAUTH_CLIENT_SECRET={runner_env['OAUTH_CLIENT_SECRET']}",
             '-e', f"OAUTH_TOKEN_ENDPOINT={runner_env['OAUTH_TOKEN_ENDPOINT']}",
             '-e', f"API_ENDPOINT={runner_env['API_ENDPOINT']}",
-            'nova-act-cicd-runner:latest',
+            'qa-studio-ci-runner:latest',
             '--suite-id', 'test-suite-url-override',
             '--base-url', 'https://staging.example.com',
             '--verbose'
@@ -210,7 +210,7 @@ def test_variable_override(runner_env):
             '-e', f"OAUTH_CLIENT_SECRET={runner_env['OAUTH_CLIENT_SECRET']}",
             '-e', f"OAUTH_TOKEN_ENDPOINT={runner_env['OAUTH_TOKEN_ENDPOINT']}",
             '-e', f"API_ENDPOINT={runner_env['API_ENDPOINT']}",
-            'nova-act-cicd-runner:latest',
+            'qa-studio-ci-runner:latest',
             '--suite-id', 'test-suite-variables',
             '--var', 'username=testuser',
             '--var', 'password=testpass',
@@ -231,7 +231,7 @@ def test_failed_test_exit_code(runner_env):
             '-e', f"OAUTH_CLIENT_SECRET={runner_env['OAUTH_CLIENT_SECRET']}",
             '-e', f"OAUTH_TOKEN_ENDPOINT={runner_env['OAUTH_TOKEN_ENDPOINT']}",
             '-e', f"API_ENDPOINT={runner_env['API_ENDPOINT']}",
-            'nova-act-cicd-runner:latest',
+            'qa-studio-ci-runner:latest',
             '--suite-id', 'test-suite-failing'
         ],
         capture_output=True,
@@ -250,7 +250,7 @@ def test_authentication_failure():
             '-e', 'OAUTH_CLIENT_SECRET=invalid',
             '-e', 'OAUTH_TOKEN_ENDPOINT=https://invalid.com/oauth2/token',
             '-e', 'API_ENDPOINT=https://api.example.com',
-            'nova-act-cicd-runner:latest',
+            'qa-studio-ci-runner:latest',
             '--suite-id', 'test-suite-id'
         ],
         capture_output=True,
@@ -296,7 +296,7 @@ class LoadTester:
                 '-e', f"OAUTH_CLIENT_SECRET={self.runner_env['OAUTH_CLIENT_SECRET']}",
                 '-e', f"OAUTH_TOKEN_ENDPOINT={self.runner_env['OAUTH_TOKEN_ENDPOINT']}",
                 '-e', f"API_ENDPOINT={self.runner_env['API_ENDPOINT']}",
-                'nova-act-cicd-runner:latest',
+                'qa-studio-ci-runner:latest',
                 '--suite-id', suite_id,
                 '--verbose'
             ],
@@ -378,7 +378,7 @@ if __name__ == '__main__':
 **Commands**:
 ```bash
 # Scan container for vulnerabilities
-trivy image nova-act-cicd-runner:latest
+trivy image qa-studio-ci-runner:latest
 
 # Scan Python dependencies
 safety check -r requirements.txt
@@ -433,7 +433,7 @@ jobs:
             -e OAUTH_CLIENT_SECRET="${{ secrets.OAUTH_CLIENT_SECRET }}" \
             -e OAUTH_TOKEN_ENDPOINT="${{ secrets.OAUTH_TOKEN_ENDPOINT }}" \
             -e API_ENDPOINT="${{ secrets.API_ENDPOINT }}" \
-            nova-act-cicd-runner:latest \
+            qa-studio-ci-runner:latest \
             --suite-id suite-small \
             --verbose
       
@@ -444,7 +444,7 @@ jobs:
             -e OAUTH_CLIENT_SECRET="${{ secrets.OAUTH_CLIENT_SECRET }}" \
             -e OAUTH_TOKEN_ENDPOINT="${{ secrets.OAUTH_TOKEN_ENDPOINT }}" \
             -e API_ENDPOINT="${{ secrets.API_ENDPOINT }}" \
-            nova-act-cicd-runner:latest \
+            qa-studio-ci-runner:latest \
             --suite-id suite-medium \
             --verbose
 ```

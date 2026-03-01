@@ -3,7 +3,7 @@
 **Validates: Requirements 2.2**
 
 Tests for the update_session_id method added to support Nova Act session ID
-persistence from the cicd-runner path.
+persistence from the qa-studio-ci-runner path.
 """
 
 import asyncio

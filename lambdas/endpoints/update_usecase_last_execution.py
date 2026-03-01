@@ -41,21 +41,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
-        # Update the usecase record with latest execution info
-        table.update_item(
-            Key={
-                'pk': 'USECASES',
-                'sk': f'USECASE#{usecase_id}'
-            },
-            UpdateExpression='SET last_execution_id = :exec_id, last_execution_status = :status, last_execution_time = :timestamp',
-            ExpressionAttributeValues={
-                ':exec_id': execution_id,
-                ':status': status,
-                ':timestamp': timestamp
-            }
-        )
-        
-        logger.info(f"Successfully updated usecase {usecase_id} with latest execution info")
+        # Update the usecase record with latest execution info.
+        # Use ConditionExpression to prevent DynamoDB upsert from creating
+        # ghost records when the usecase doesn't exist.
+        try:
+            table.update_item(
+                Key={
+                    'pk': 'USECASES',
+                    'sk': f'USECASE#{usecase_id}'
+                },
+                UpdateExpression='SET last_execution_id = :exec_id, last_execution_status = :status, last_execution_time = :timestamp',
+                ConditionExpression='attribute_exists(pk)',
+                ExpressionAttributeValues={
+                    ':exec_id': execution_id,
+                    ':status': status,
+                    ':timestamp': timestamp
+                }
+            )
+            logger.info(f"Successfully updated usecase {usecase_id} with latest execution info")
+        except dynamodb.meta.client.exceptions.ConditionalCheckFailedException:
+            logger.warning(f"Usecase {usecase_id} does not exist, skipping last execution update")
         
     except Exception as e:
         logger.error(f"Error updating usecase last execution: {str(e)}", exc_info=True)

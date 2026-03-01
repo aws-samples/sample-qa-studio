@@ -273,7 +273,7 @@ The implementation follows a bottom-up approach: build foundational components (
 - [x] 15. Create package setup and documentation
   - [x] 15.1 Create setup.py for package installation
     - Define package metadata (name, version, author)
-    - Define entry point: cicd-runner = src.cli.parser:main
+    - Define entry point: qa-studio-ci-runner = src.cli.parser:main
     - Define install_requires from requirements.txt
     - Define python_requires >= 3.9
     - _Requirements: All_

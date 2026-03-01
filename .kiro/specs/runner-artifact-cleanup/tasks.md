@@ -7,7 +7,7 @@ Implement a cleanup module that removes execution artifact directories after sui
 ## Tasks
 
 - [ ] 1. Add cleanup_retention_hours to Settings
-  - [ ] 1.1 Add `cleanup_retention_hours` field to `Settings` in `cicd-runner/src/config/settings.py`
+  - [ ] 1.1 Add `cleanup_retention_hours` field to `Settings` in `qa-studio-ci-runner/src/config/settings.py`
     - Add `cleanup_retention_hours: float = Field(default=24.0, description="Hours to retain old suite directories. 0 disables stale cleanup.")`
     - Load from `CLEANUP_RETENTION_HOURS` env var in `from_env()`
     - _Requirements: 2.3_
@@ -18,7 +18,7 @@ Implement a cleanup module that removes execution artifact directories after sui
     - _Requirements: 2.3_
 
 - [ ] 2. Implement Cleanup class
-  - [ ] 2.1 Create `cicd-runner/src/execution/cleanup.py` with `CleanupResult` dataclass and `Cleanup` class
+  - [ ] 2.1 Create `qa-studio-ci-runner/src/execution/cleanup.py` with `CleanupResult` dataclass and `Cleanup` class
     - Implement `CleanupResult` dataclass with `removed_dirs`, `removed_files`, `errors` fields
     - Implement `__init__(self, base_path: Path)`
     - Implement `remove_suite_directory(self, suite_execution_id: str) -> CleanupResult`
@@ -83,6 +83,6 @@ Implement a cleanup module that removes execution artifact directories after sui
 ## Notes
 
 - Tasks marked with `*` are optional and can be skipped for faster MVP
-- All tests go in `cicd-runner/tests/test_cleanup.py`
+- All tests go in `qa-studio-ci-runner/tests/test_cleanup.py`
 - Property tests use `hypothesis` (already in `requirements-dev.txt`)
 - The Cleanup class is intentionally simple — no background threads, no async, just synchronous file operations

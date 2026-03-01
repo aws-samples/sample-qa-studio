@@ -336,13 +336,13 @@ exec python -m src.cli.parser "$@"
 
 ```bash
 # Build with default Dockerfile
-docker build -t nova-act-cicd-runner:latest .
+docker build -t qa-studio-ci-runner:latest .
 
 # Build with optimized Dockerfile
-docker build -f Dockerfile.optimized -t nova-act-cicd-runner:latest .
+docker build -f Dockerfile.optimized -t qa-studio-ci-runner:latest .
 
 # Build with specific tag
-docker build -t nova-act-cicd-runner:v1.0.0 .
+docker build -t qa-studio-ci-runner:v1.0.0 .
 ```
 
 ### Run Container Locally
@@ -354,7 +354,7 @@ docker run --rm \
   -e OAUTH_CLIENT_SECRET="your-client-secret" \
   -e OAUTH_TOKEN_ENDPOINT="https://domain.auth.region.amazoncognito.com/oauth2/token" \
   -e API_ENDPOINT="https://api.example.com" \
-  nova-act-cicd-runner:latest \
+  qa-studio-ci-runner:latest \
   --suite-id suite-123 \
   --base-url https://staging.example.com \
   --var username=testuser \
@@ -363,7 +363,7 @@ docker run --rm \
 # Run with .env file
 docker run --rm \
   --env-file .env \
-  nova-act-cicd-runner:latest \
+  qa-studio-ci-runner:latest \
   --suite-id suite-123 \
   --verbose
 
@@ -375,12 +375,12 @@ docker-compose up
 
 ```bash
 # Test help command
-docker run --rm nova-act-cicd-runner:latest --help
+docker run --rm qa-studio-ci-runner:latest --help
 
 # Test with minimal config
 docker run --rm \
   --env-file .env \
-  nova-act-cicd-runner:latest \
+  qa-studio-ci-runner:latest \
   --suite-id test-suite-id
 ```
 
@@ -392,12 +392,12 @@ docker run --rm \
 
 ```bash
 # Tag image
-docker tag nova-act-cicd-runner:latest username/nova-act-cicd-runner:latest
-docker tag nova-act-cicd-runner:latest username/nova-act-cicd-runner:v1.0.0
+docker tag qa-studio-ci-runner:latest username/qa-studio-ci-runner:latest
+docker tag qa-studio-ci-runner:latest username/qa-studio-ci-runner:v1.0.0
 
 # Push to Docker Hub
-docker push username/nova-act-cicd-runner:latest
-docker push username/nova-act-cicd-runner:v1.0.0
+docker push username/qa-studio-ci-runner:latest
+docker push username/qa-studio-ci-runner:v1.0.0
 ```
 
 ### Push to ECR Public
@@ -408,10 +408,10 @@ aws ecr-public get-login-password --region us-east-1 | \
   docker login --username AWS --password-stdin public.ecr.aws
 
 # Tag image
-docker tag nova-act-cicd-runner:latest public.ecr.aws/xxx/nova-act-cicd-runner:latest
+docker tag qa-studio-ci-runner:latest public.ecr.aws/xxx/qa-studio-ci-runner:latest
 
 # Push to ECR Public
-docker push public.ecr.aws/xxx/nova-act-cicd-runner:latest
+docker push public.ecr.aws/xxx/qa-studio-ci-runner:latest
 ```
 
 ---

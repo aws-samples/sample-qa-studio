@@ -1518,10 +1518,10 @@ build-runner:
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
   script:
-    - docker build -t $CI_REGISTRY_IMAGE/cicd-runner:$CI_COMMIT_SHA .
-    - docker push $CI_REGISTRY_IMAGE/cicd-runner:$CI_COMMIT_SHA
-    - docker tag $CI_REGISTRY_IMAGE/cicd-runner:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE/cicd-runner:latest
-    - docker push $CI_REGISTRY_IMAGE/cicd-runner:latest
+    - docker build -t $CI_REGISTRY_IMAGE/qa-studio-ci-runner:$CI_COMMIT_SHA .
+    - docker push $CI_REGISTRY_IMAGE/qa-studio-ci-runner:$CI_COMMIT_SHA
+    - docker tag $CI_REGISTRY_IMAGE/qa-studio-ci-runner:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE/qa-studio-ci-runner:latest
+    - docker push $CI_REGISTRY_IMAGE/qa-studio-ci-runner:latest
   only:
     - main
 
@@ -1540,7 +1540,7 @@ qa-tests:
         -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET"
         -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT"
         -e API_ENDPOINT="$API_ENDPOINT"
-        $CI_REGISTRY_IMAGE/cicd-runner:latest
+        $CI_REGISTRY_IMAGE/qa-studio-ci-runner:latest
         --suite-id $TEST_SUITE_ID
         --verbose
   needs:

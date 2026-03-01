@@ -6,7 +6,7 @@ The CI/CD runner creates execution artifacts under `~/.ci_runner/{suite_executio
 
 ## Glossary
 
-- **Runner**: The CI/CD runner application (`cicd-runner/`) that executes test suites
+- **Runner**: The CI/CD runner application (`qa-studio-ci-runner/`) that executes test suites
 - **Cleanup_Module**: The module responsible for removing execution artifact directories from disk
 - **Execution_Directory**: A directory at `~/.ci_runner/{suite_execution_id}/{execution_id}/` containing artifacts, logs, and downloads for a single usecase execution
 - **Suite_Directory**: A directory at `~/.ci_runner/{suite_execution_id}/` containing all execution directories for a single suite run

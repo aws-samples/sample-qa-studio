@@ -53,9 +53,9 @@ COPY --from=builder --chown=runner:runner /app/.venv /app/.venv
 # Create logs directory with runner ownership
 RUN mkdir -p /app/logs && chown -R runner:runner /app
 
-# Add venv to PATH so cicd-runner is available
+# Add venv to PATH so qa-studio-ci-runner is available
 ENV PATH="/app/.venv/bin:$PATH"
 
 USER runner
 
-ENTRYPOINT ["/app/.venv/bin/cicd-runner"]
+ENTRYPOINT ["/app/.venv/bin/qa-studio-ci-runner"]
