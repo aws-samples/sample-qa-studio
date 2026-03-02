@@ -25,6 +25,8 @@ SCOPE_MAPPINGS = {
         'api/executions.read',
         'api/executions.write',
         'api/usecases.execute',
+        'api/suite.read',
+        'api/suite.write',
         'api/oauth-clients.read',
         'api/oauth-clients.write',
     ],
@@ -36,6 +38,8 @@ SCOPE_MAPPINGS = {
         'api/executions.read',
         'api/executions.write',
         'api/usecases.execute',
+        'api/suite.read',
+        'api/suite.write',
         'api/oauth-clients.read',
         'api/oauth-clients.write',
         'api/admin'
@@ -109,6 +113,7 @@ def handler(event, context):
         if 'claimsAndScopeOverrideDetails' not in event['response'] or event['response']['claimsAndScopeOverrideDetails'] is None:
             event['response']['claimsAndScopeOverrideDetails'] = {}
         
+        # --- ID Token: add scope as a custom claim ---
         if 'idTokenGeneration' not in event['response']['claimsAndScopeOverrideDetails'] or event['response']['claimsAndScopeOverrideDetails']['idTokenGeneration'] is None:
             event['response']['claimsAndScopeOverrideDetails']['idTokenGeneration'] = {}
         
@@ -117,6 +122,22 @@ def handler(event, context):
         
         # Add scope claim to ID token
         event['response']['claimsAndScopeOverrideDetails']['idTokenGeneration']['claimsToAddOrOverride']['scope'] = scope_string
+        
+        # --- Access Token: add scopes so require_scopes() can validate them ---
+        if 'accessTokenGeneration' not in event['response']['claimsAndScopeOverrideDetails'] or event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration'] is None:
+            event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration'] = {}
+        
+        if 'claimsToAddOrOverride' not in event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration'] or event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration']['claimsToAddOrOverride'] is None:
+            event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration']['claimsToAddOrOverride'] = {}
+        
+        # Add custom_scopes claim to access token (Cognito V2 allows this)
+        event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration']['claimsToAddOrOverride']['custom_scopes'] = scope_string
+        
+        # Also add scopes to the access token's scopesToAdd list
+        if 'scopesToAdd' not in event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration'] or event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration']['scopesToAdd'] is None:
+            event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration']['scopesToAdd'] = []
+        
+        event['response']['claimsAndScopeOverrideDetails']['accessTokenGeneration']['scopesToAdd'] = list(scopes)
         
         logger.info(f"Modified event response: {json.dumps(event['response'], default=str)}")
         logger.info("✅ Successfully injected scopes into token")

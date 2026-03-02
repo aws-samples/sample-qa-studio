@@ -9,7 +9,7 @@ import requests
 
 from qa_studio_cli.models.errors import AuthError
 from qa_studio_cli.models.token import TokenData
-from qa_studio_cli.utils.config import load_config
+from qa_studio_cli.config.manager import load_config
 
 QA_STUDIO_DIR = Path.home() / ".qa-studio"
 TOKEN_FILE = QA_STUDIO_DIR / "token.json"

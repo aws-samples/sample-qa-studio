@@ -144,7 +144,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         now = get_current_timestamp()
         
         # Build update expression for DynamoDB
-        update_expression, expression_values = get_suite_update_expression(
+        update_expression, expression_values, expression_names = get_suite_update_expression(
             schedule_enabled=schedule_enabled,
             schedule_expression=schedule_expression,
             schedule_timezone=schedule_timezone,
@@ -152,15 +152,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         )
         
         # Update the suite in DynamoDB
-        update_response = table.update_item(
-            Key={
+        update_kwargs = {
+            'Key': {
                 'pk': get_test_suites_pk(),
                 'sk': get_suite_sk(suite_id)
             },
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_values,
-            ReturnValues='ALL_NEW'
-        )
+            'UpdateExpression': update_expression,
+            'ExpressionAttributeValues': expression_values,
+            'ReturnValues': 'ALL_NEW'
+        }
+        if expression_names:
+            update_kwargs['ExpressionAttributeNames'] = expression_names
+        
+        update_response = table.update_item(**update_kwargs)
         
         updated_suite = update_response['Attributes']
         

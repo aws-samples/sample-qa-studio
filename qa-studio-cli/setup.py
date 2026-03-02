@@ -4,12 +4,22 @@ with open("requirements.txt") as f:
     requirements = f.read().splitlines()
 
 setup(
-    name="qa-studio-cli",
-    version="0.1.0",
+    name="qa-studio",
+    version="0.2.0",
     author="QA Studio Team",
-    description="QA Studio CLI — authenticate and manage QA Studio from the terminal",
+    description="QA Studio CLI — authenticate, manage, and execute QA Studio tests",
     packages=find_packages(),
+    package_data={"": ["skills/**/*.md"]},
+    include_package_data=True,
     install_requires=requirements,
+    extras_require={
+        "runner": [
+            "nova-act==3.1.157.0",
+            "boto3>=1.34.0",
+            "tenacity>=8.2.0",
+            "playwright",
+        ],
+    },
     python_requires=">=3.11",
     entry_points={
         "console_scripts": [

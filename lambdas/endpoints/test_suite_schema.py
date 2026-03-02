@@ -323,13 +323,16 @@ def get_suite_update_expression(
         total_usecases: Total use cases count
         
     Returns:
-        Tuple of (update_expression, expression_attribute_values)
+        Tuple of (update_expression, expression_attribute_values, expression_attribute_names)
     """
     update_parts = []
     expression_values = {}
+    expression_names = {}
     
     if name is not None:
-        update_parts.append('name = :name')
+        # 'name' is a DynamoDB reserved keyword — must use an alias
+        update_parts.append('#n = :name')
+        expression_names['#n'] = 'name'
         expression_values[':name'] = name
     
     if description is not None:
@@ -378,7 +381,7 @@ def get_suite_update_expression(
     
     update_expression = 'SET ' + ', '.join(update_parts) if update_parts else ''
     
-    return update_expression, expression_values
+    return update_expression, expression_values, expression_names
 
 
 def get_suite_execution_counter_update(

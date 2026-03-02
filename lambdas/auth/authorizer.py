@@ -17,6 +17,59 @@ logger.setLevel(logging.INFO)
 # Cache for JWKS
 jwks_cache = None
 
+# Group-to-scope mapping for user access tokens.
+# Cognito Lite tier does not include resource server scopes in the access token's
+# scope claim for authorization code flow (user tokens). We resolve scopes from
+# cognito:groups instead, which IS always present in the access token.
+# This mapping must stay in sync with pre_token_generation.py SCOPE_MAPPINGS.
+GROUP_SCOPE_MAPPINGS = {
+    'users': [
+        'api/usecases.read',
+        'api/usecases.write',
+        'api/templates.read',
+        'api/templates.write',
+        'api/executions.read',
+        'api/executions.write',
+        'api/usecases.execute',
+        'api/suite.read',
+        'api/suite.write',
+        'api/oauth-clients.read',
+        'api/oauth-clients.write',
+    ],
+    'admins': [
+        'api/usecases.read',
+        'api/usecases.write',
+        'api/templates.read',
+        'api/templates.write',
+        'api/executions.read',
+        'api/executions.write',
+        'api/usecases.execute',
+        'api/suite.read',
+        'api/suite.write',
+        'api/oauth-clients.read',
+        'api/oauth-clients.write',
+        'api/admin',
+    ],
+}
+
+
+def resolve_scopes_from_groups(groups: list) -> set:
+    """
+    Resolve OAuth scopes from Cognito group membership.
+
+    Args:
+        groups: List of Cognito group names from the cognito:groups claim.
+
+    Returns:
+        Set of scope strings derived from group membership.
+    """
+    scopes = set()
+    for group in groups:
+        group_name = group.strip() if isinstance(group, str) else str(group)
+        if group_name in GROUP_SCOPE_MAPPINGS:
+            scopes.update(GROUP_SCOPE_MAPPINGS[group_name])
+    return scopes
+
 # Import JWT libraries
 try:
     import jwt
@@ -220,8 +273,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             username = decoded_token.get('username')
             sub = decoded_token.get('sub')
             scope = decoded_token.get('scope', '')
+            cognito_groups = decoded_token.get('cognito:groups', [])
             
-            logger.info(f"Token claims - email: {email}, username: {username}, client_id: {client_id}, scope: '{scope}'")
+            logger.info(f"Token claims - email: {email}, username: {username}, client_id: {client_id}, scope: '{scope}', groups: {cognito_groups}")
             
             # Determine identity type
             if email:
@@ -240,6 +294,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Unknown token type
                 logger.warning(f"Unknown token type - no clear identity")
                 raise Exception('Unauthorized')
+            
+            # For user tokens, resolve API scopes from cognito:groups.
+            # Cognito Lite tier does not put resource server scopes in the
+            # access token's scope claim for authorization code flow, so we
+            # derive them from group membership instead.
+            if identity_type == 'user' and cognito_groups:
+                group_scopes = resolve_scopes_from_groups(cognito_groups)
+                # Merge with any scopes already in the token
+                existing_scopes = set(scope.split()) if scope else set()
+                all_scopes = existing_scopes | group_scopes
+                scope = ' '.join(sorted(all_scopes))
+                logger.info(f"Resolved scopes from groups {cognito_groups}: {group_scopes}")
             
             logger.info(f"Authorized: {principal_id} (type: {identity_type}, scopes: {scope})")
             

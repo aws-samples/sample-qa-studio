@@ -18,6 +18,22 @@ CALLBACK_PORT = 19847
 CALLBACK_PATH = "/callback"
 FLOW_TIMEOUT_SECONDS = 120
 
+# API scopes to request during OAuth login.
+# These must match the resource server scopes defined in the CDK auth stack.
+API_SCOPES = [
+    "api/usecases.read",
+    "api/usecases.write",
+    "api/templates.read",
+    "api/templates.write",
+    "api/executions.read",
+    "api/executions.write",
+    "api/usecases.execute",
+    "api/suite.read",
+    "api/suite.write",
+    "api/oauth-clients.read",
+    "api/oauth-clients.write",
+]
+
 
 def generate_pkce_pair() -> tuple[str, str]:
     """
@@ -134,12 +150,14 @@ def start_oauth_flow(cognito_domain: str, client_id: str) -> TokenData:
     server_thread = threading.Thread(target=server.handle_request, daemon=True)
     server_thread.start()
 
-    # Build authorize URL
+    # Build authorize URL — request OIDC + API scopes so the access token
+    # contains the permissions the backend validates via require_scopes().
+    all_scopes = " ".join(["openid", "profile", "email"] + API_SCOPES)
     authorize_url = f"{cognito_domain}/oauth2/authorize?" + urlencode({
         "response_type": "code",
         "client_id": client_id,
         "redirect_uri": f"http://localhost:{CALLBACK_PORT}{CALLBACK_PATH}",
-        "scope": "openid profile email",
+        "scope": all_scopes,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     })

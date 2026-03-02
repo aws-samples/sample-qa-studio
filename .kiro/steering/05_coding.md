@@ -16,3 +16,5 @@ inclusion: always
 * Aim for 70% unit test coverage
 * For new features also build end 2 end tests. How you can build those can be found in the prompt inside lambdas/endpoints/generate_userjourney.py lambda in the endpoints directory
 * All datamodels should be defined in pydantic
+* Validate that functionality is given by using `qa-studio` to determine ui tests that need to be executed. During development all tests MUST execute local only
+* when adding new userflows or updates to the UI use `qa-studio` to create new test cases
