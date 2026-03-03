@@ -72,6 +72,8 @@ yarn-debug.log*
 yarn-error.log*
 
 .coverage
-*.hypothesis
+**/.hypothesis
 .hypothesis
 .env
+
+.pytest_cache

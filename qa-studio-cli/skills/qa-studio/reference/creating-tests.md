@@ -34,6 +34,7 @@ qa-studio tests create --from-journey \
 - `--url`: Starting URL (required)
 - `--journey`: Natural language description of the test flow (required)
 - `--region`: AWS region for browser execution (default: us-east-1)
+- `--export-to`: Export generated test JSON to specified folder (optional)
 
 ### Writing Effective Journey Descriptions
 
@@ -87,6 +88,39 @@ qa-studio tests create --from-journey \
   --title "Profile Update" \
   --url "https://app.example.com" \
   --journey "Click profile icon in top right, click Settings, click Edit Profile, change display name to 'John Smith', change bio to 'Software Engineer', click Save Changes, verify success toast 'Profile updated' appears, refresh page, verify display name shows 'John Smith'"
+```
+
+### Exporting Test JSON
+
+Export the generated test JSON for version control, sharing, or backup:
+
+```bash
+qa-studio tests create --from-journey \
+  --title "Login Flow" \
+  --url "https://app.example.com/login" \
+  --journey "Enter credentials and log in" \
+  --export-to ./test-exports
+```
+
+This creates a JSON file in the specified folder with a sanitized filename based on the test title (e.g., `Login_Flow.json`).
+
+**Use cases:**
+- **Version control:** Track test definitions in Git
+- **Sharing:** Send test definitions to team members
+- **Backup:** Keep local copies of generated tests
+- **CI/CD:** Use exported JSON for automated test imports
+
+**Example workflow:**
+```bash
+# Generate and export test
+qa-studio tests create --from-journey \
+  --title "Checkout Flow" \
+  --url "https://shop.example.com" \
+  --journey "Add item to cart and complete checkout" \
+  --export-to ./tests
+
+# Later, import the test in another environment
+# (Import functionality via API or web interface)
 ```
 
 ---

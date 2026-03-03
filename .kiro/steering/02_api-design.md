@@ -9,4 +9,4 @@ inclusion: always
 * Reading endpoints must always be using GET
 * Writing endpoints must always use POST, PUT or PATCH
 * Deleting endpoints must always use DELETE and return a 204
-* All JSON returned from the API must be using camelcase
+<!-- * All JSON returned from the API must be using camelcase -->

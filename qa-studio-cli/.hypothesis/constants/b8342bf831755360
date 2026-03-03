@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/cli.py
-# hypothesis_version: 6.151.9
-
-['\nSkills:', '%Y-%m-%d %H:%M:%S', '--debug', 'API URL', 'Cognito Client ID', 'Cognito Domain', 'Enable debug logging', 'Installed', 'No skills to remove.', 'Please try again.\n', 'debug', 'qa_studio_cli', '✓ Authenticated']

@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/commands/suites.py
-# hypothesis_version: 6.151.9
-
-['--base-url', '--description', '--model-id', '--name', '--region', '--tags', '--var', '/api/test-suites', '=', 'AWS region override', 'Base URL override', 'No suites found.', 'Suite description', 'Suite name', 'Tags (repeatable)', 'add-tests', 'added', 'base_url', 'ci_runner', 'client', 'create', 'description', 'get', 'id', 'list', 'model_id', 'name', 'overrides', 'region', 'remove-test', 'run', 'suite_id', 'suites', 'tags', 'totalUsecases', 'trigger_type', 'usecaseIds', 'usecase_id', 'usecase_ids', 'usecases', 'variables']
