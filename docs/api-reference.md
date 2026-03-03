@@ -16,6 +16,11 @@ Nova Act QA Studio provides a RESTful API for managing test automation workflows
   - [OAuth 2.0 Client Credentials Flow](#oauth-20-client-credentials-flow)
   - [Token Management](#token-management)
   - [OAuth Scopes](#oauth-scopes)
+- [Usecase Management Endpoints](#usecase-management-endpoints)
+  - [Create Usecase](#create-usecase)
+  - [Get Usecase](#get-usecase)
+  - [Update Usecase](#update-usecase)
+  - [Get Usecase Steps](#get-usecase-steps)
 - [Execution Endpoints](#execution-endpoints)
   - [Execute Usecase](#execute-usecase)
   - [Update Execution Step Status](#update-execution-step-status)
@@ -142,6 +147,361 @@ Scopes follow the pattern `api/{resource}.{permission}`:
 | Manage OAuth clients | `api/oauth-clients.write`, `api/oauth-clients.read` |
 
 **Best Practice**: Grant only the minimum scopes required for your use case.
+
+---
+
+## Usecase Management Endpoints
+
+Usecase management endpoints allow you to create, read, and update test usecases, including enabling step caching for performance optimization.
+
+### Create Usecase
+
+Create a new test usecase with optional step caching enabled.
+
+**Endpoint**: `POST /usecases`
+
+**Required Scopes**: `api/usecases.write` or `api/admin`
+
+**Request Body**:
+```json
+{
+  "name": "Login with valid credentials",
+  "description": "Test user login flow with valid username and password",
+  "steps": [
+    {
+      "type": "navigation",
+      "url": "https://example.com/login",
+      "description": "Navigate to login page"
+    },
+    {
+      "type": "action",
+      "action": "fill",
+      "selector": "#username",
+      "value": "testuser",
+      "description": "Enter username"
+    }
+  ],
+  "enableCache": true
+}
+```
+
+**Request Body Fields**:
+- `name` (string, required) - Usecase name
+- `description` (string, optional) - Usecase description
+- `steps` (array, required) - List of test steps
+- `enableCache` (boolean, optional, default: false) - Enable step caching for navigation steps
+
+**Response (201 Created)**:
+```json
+{
+  "id": "01234567-89ab-cdef-0123-456789abcdef",
+  "name": "Login with valid credentials",
+  "description": "Test user login flow with valid username and password",
+  "enableCache": true,
+  "created_at": "2026-03-03T10:00:00Z",
+  "updated_at": "2026-03-03T10:00:00Z"
+}
+```
+
+**Error Responses**:
+- `400 Bad Request` - Missing required fields or invalid data
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - Insufficient scopes
+- `500 Internal Server Error` - Server error
+
+**Example (cURL)**:
+```bash
+curl -X POST \
+  'https://api.example.com/usecases' \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Login with valid credentials",
+    "description": "Test user login flow",
+    "steps": [...],
+    "enableCache": true
+  }'
+```
+
+**Example (Python)**:
+```python
+import requests
+
+response = requests.post(
+    'https://api.example.com/usecases',
+    headers={
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'name': 'Login with valid credentials',
+        'description': 'Test user login flow',
+        'steps': [...],
+        'enableCache': True
+    }
+)
+
+data = response.json()
+usecase_id = data['id']
+print(f"Usecase created: {usecase_id} (cache enabled: {data['enableCache']})")
+```
+
+---
+
+### Get Usecase
+
+Retrieve a usecase by ID, including cache status and metadata.
+
+**Endpoint**: `GET /usecases/{id}`
+
+**Path Parameters**:
+- `id` (string, required) - Usecase ID
+
+**Required Scopes**: `api/usecases.read` or `api/admin`
+
+**Response (200 OK)**:
+```json
+{
+  "id": "01234567-89ab-cdef-0123-456789abcdef",
+  "name": "Login with valid credentials",
+  "description": "Test user login flow with valid username and password",
+  "enableCache": true,
+  "created_at": "2026-03-03T10:00:00Z",
+  "updated_at": "2026-03-03T10:15:00Z",
+  "steps": [
+    {
+      "id": "step-001",
+      "type": "navigation",
+      "url": "https://example.com/login",
+      "description": "Navigate to login page"
+    }
+  ]
+}
+```
+
+**Response Fields**:
+- `id` - Usecase unique identifier
+- `name` - Usecase name
+- `description` - Usecase description
+- `enableCache` - Whether step caching is enabled
+- `created_at` - ISO8601 timestamp of creation
+- `updated_at` - ISO8601 timestamp of last update
+- `steps` - List of test steps
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - Insufficient scopes
+- `404 Not Found` - Usecase not found
+- `500 Internal Server Error` - Server error
+
+**Example (cURL)**:
+```bash
+curl -X GET \
+  'https://api.example.com/usecases/01234567-89ab-cdef-0123-456789abcdef' \
+  -H 'Authorization: Bearer <token>'
+```
+
+**Example (Python)**:
+```python
+import requests
+
+response = requests.get(
+    f'https://api.example.com/usecases/{usecase_id}',
+    headers={'Authorization': f'Bearer {access_token}'}
+)
+
+data = response.json()
+print(f"Usecase: {data['name']}")
+print(f"Cache enabled: {data['enableCache']}")
+```
+
+---
+
+### Update Usecase
+
+Update an existing usecase, including enabling or disabling step caching.
+
+**Endpoint**: `PATCH /usecases/{id}`
+
+**Path Parameters**:
+- `id` (string, required) - Usecase ID
+
+**Required Scopes**: `api/usecases.write` or `api/admin`
+
+**Request Body**:
+```json
+{
+  "name": "Login with valid credentials (updated)",
+  "description": "Updated description",
+  "enableCache": true
+}
+```
+
+**Request Body Fields** (all optional):
+- `name` (string) - Updated usecase name
+- `description` (string) - Updated description
+- `steps` (array) - Updated test steps
+- `enableCache` (boolean) - Enable or disable step caching
+
+**Response (200 OK)**:
+```json
+{
+  "id": "01234567-89ab-cdef-0123-456789abcdef",
+  "name": "Login with valid credentials (updated)",
+  "description": "Updated description",
+  "enableCache": true,
+  "updated_at": "2026-03-03T10:30:00Z"
+}
+```
+
+**Error Responses**:
+- `400 Bad Request` - Invalid data
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - Insufficient scopes
+- `404 Not Found` - Usecase not found
+- `500 Internal Server Error` - Server error
+
+**Example (cURL)**:
+```bash
+curl -X PATCH \
+  'https://api.example.com/usecases/01234567-89ab-cdef-0123-456789abcdef' \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "enableCache": true
+  }'
+```
+
+**Example (Python)**:
+```python
+import requests
+
+response = requests.patch(
+    f'https://api.example.com/usecases/{usecase_id}',
+    headers={
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    },
+    json={'enableCache': True}
+)
+
+data = response.json()
+print(f"Cache enabled: {data['enableCache']}")
+```
+
+---
+
+### Get Usecase Steps
+
+Retrieve all steps for a usecase, including cache metadata for cached steps.
+
+**Endpoint**: `GET /usecases/{id}/steps`
+
+**Path Parameters**:
+- `id` (string, required) - Usecase ID
+
+**Required Scopes**: `api/usecases.read` or `api/admin`
+
+**Response (200 OK)**:
+```json
+{
+  "usecase_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "steps": [
+    {
+      "id": "step-001",
+      "sort": 1,
+      "type": "navigation",
+      "url": "https://example.com/login",
+      "description": "Navigate to login page",
+      "cacheable": true
+    },
+    {
+      "id": "step-002",
+      "sort": 2,
+      "type": "action",
+      "action": "fill",
+      "selector": "#username",
+      "value": "testuser",
+      "description": "Enter username",
+      "cacheable": false
+    }
+  ],
+  "cachedSteps": "[{\"action\":\"goto\",\"url\":\"https://example.com/login\",\"options\":{\"waitUntil\":\"networkidle\"}}]",
+  "cacheLastUpdated": "2026-03-03T10:15:00Z"
+}
+```
+
+**Response Fields**:
+- `usecase_id` - Usecase unique identifier
+- `steps` - List of test steps with metadata
+  - `cacheable` - Whether this step type can be cached (navigation steps only)
+- `cachedSteps` - JSON string of cached Playwright actions (null if no cache)
+- `cacheLastUpdated` - ISO8601 timestamp when cache was last built (null if no cache)
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid token
+- `403 Forbidden` - Insufficient scopes
+- `404 Not Found` - Usecase not found
+- `500 Internal Server Error` - Server error
+
+**Example (cURL)**:
+```bash
+curl -X GET \
+  'https://api.example.com/usecases/01234567-89ab-cdef-0123-456789abcdef/steps' \
+  -H 'Authorization: Bearer <token>'
+```
+
+**Example (Python)**:
+```python
+import requests
+import json
+
+response = requests.get(
+    f'https://api.example.com/usecases/{usecase_id}/steps',
+    headers={'Authorization': f'Bearer {access_token}'}
+)
+
+data = response.json()
+print(f"Total steps: {len(data['steps'])}")
+
+if data['cachedSteps']:
+    cached_actions = json.loads(data['cachedSteps'])
+    print(f"Cached actions: {len(cached_actions)}")
+    print(f"Cache last updated: {data['cacheLastUpdated']}")
+else:
+    print("No cache available")
+```
+
+---
+
+### Cache Field Reference
+
+The following table summarizes all cache-related fields across usecase endpoints:
+
+| Field | Type | Default | Endpoints | Description |
+|-------|------|---------|-----------|-------------|
+| `enableCache` | boolean | false | POST /usecases, PATCH /usecases, GET /usecases | Whether step caching is enabled for this usecase |
+| `cachedSteps` | string (JSON) | null | GET /usecases/{id}/steps | JSON-serialized list of cached Playwright actions |
+| `cacheLastUpdated` | string (ISO8601) | null | GET /usecases/{id}/steps | Timestamp when cache was last built |
+| `cacheable` | boolean | - | GET /usecases/{id}/steps | Whether a specific step type can be cached (read-only, computed field) |
+
+**Cache Building Process**:
+1. Usecase executes successfully with `enableCache: true`
+2. EventBridge triggers cache builder Lambda asynchronously
+3. Lambda parses Nova Act responses from S3
+4. Lambda stores cached Playwright actions in DynamoDB
+5. Subsequent executions use cached actions for navigation steps
+
+**Cache Execution Behavior**:
+- First execution: Cache miss (normal execution time)
+- Subsequent executions: Cache hit (40-60% faster for navigation steps)
+- Cache failures: Automatic fallback to Nova Act
+
+**Notes**:
+- Only navigation steps are cacheable (goto, goBack, goForward, reload)
+- Cache builds asynchronously after successful execution
+- Cache is invalidated when usecase steps are modified
+- Cache execution failures automatically fall back to Nova Act
 
 ---
 

@@ -14,19 +14,10 @@ import json
 import logging
 import os
 import re
-import sys
 from typing import Any, Dict, List, Optional
 
 import boto3
 from botocore.exceptions import ClientError
-
-# Add worker module to path
-# For local testing: worker is at ../../worker relative to this file
-# For Lambda deployment: worker will need to be copied or made available via layer
-current_dir = os.path.dirname(os.path.abspath(__file__))
-worker_path = os.path.abspath(os.path.join(current_dir, '..', '..', 'worker'))
-if os.path.exists(worker_path) and worker_path not in sys.path:
-    sys.path.insert(0, os.path.dirname(worker_path))
 
 from worker.cache_parser import parse_nova_act_steps
 
