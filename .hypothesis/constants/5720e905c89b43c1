@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/update_execution_step_status.py
-# hypothesis_version: 6.151.9
-
-[200, 400, 404, 500, '#logs', '#status', ', #logs = :logs', ', act_id = :act_id', ':act_id', ':actual_value', ':completed_at', ':error_message', ':logs', ':started_at', ':status', 'Execution not found', 'Item', 'S', 'Step not found', 'act_id', 'actual_value', 'api/executions.write', 'body', 'completed', 'completed_at', 'dynamodb', 'error', 'error_message', 'executionId', 'failed', 'id', 'logs', 'pathParameters', 'pending', 'pk', 'running', 'sk', 'skipped', 'started_at', 'status', 'stepId', 'step_id', 'success', '{}']

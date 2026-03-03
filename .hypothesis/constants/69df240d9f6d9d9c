@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/cicd-runner/src/config/settings.py
-# hypothesis_version: 6.151.9
-
-['API_ENDPOINT', 'INFO', 'LOG_LEVEL', 'Logging level', 'OAUTH_CLIENT_ID', 'OAUTH_CLIENT_SECRET', 'OAUTH_TOKEN_ENDPOINT', 'Settings', 'api_endpoint', 'https://', 'loc', 'msg', 'oauth_token_endpoint']

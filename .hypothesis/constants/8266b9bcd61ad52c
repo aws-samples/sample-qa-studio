@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/generate_step_artifact_url.py
-# hypothesis_version: 6.151.9
-
-[200, 255, 400, 404, 500, 3600, '\x00', '/', 'BUCKET_NAME', 'Bucket', 'Configuration error', 'ContentType', 'Execution not found', 'Invalid JSON', 'Invalid content type', 'Item', 'Key', 'S', 'Step not found', '\\', '_', 'api/executions.write', 'application/json', 'artifact_id', 'artifact_type', 'body', 'content_type', 'created_at', 'dynamodb', 'error', 'event', 'executionId', 'execution_id', 'expires_in', 'filename', 'id', 'identity', 'image/jpeg', 'image/png', 'message', 'pathParameters', 'pending', 'pk', 'put_object', 's3', 's3_bucket', 's3_key', 'screenshot', 'sk', 'stepId', 'step_id', 'text/html', 'timestamp', 'trace', 'type', 'unknown', 'upload_status', 'upload_url', 'user_identity', '{}']

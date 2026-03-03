@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/config/manager.py
-# hypothesis_version: 6.151.9
-
-[384, '.qa-studio', 'OAUTH_CLIENT_ID', 'OAUTH_CLIENT_SECRET', 'OAUTH_TOKEN_ENDPOINT', 'QA_STUDIO_API_URL', 'QA_STUDIO_CLIENT_ID', 'api_url', 'client_id', 'cognito_domain', 'config.json', 'oauth_client_id', 'oauth_client_secret', 'oauth_token_endpoint']

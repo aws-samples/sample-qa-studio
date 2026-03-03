@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/generate_execution_artifact_url.py
-# hypothesis_version: 6.151.9
-
-[200, 255, 400, 404, 500, 3600, '\x00', '/', 'BUCKET_NAME', 'Bucket', 'Configuration error', 'ContentType', 'Execution not found', 'Invalid JSON', 'Invalid content type', 'Item', 'Key', 'S', '\\', '_', 'api/execution.write', 'artifact_id', 'artifact_type', 'body', 'content_type', 'created_at', 'dynamodb', 'error', 'event', 'executionId', 'execution_id', 'expires_in', 'filename', 'id', 'identity', 'logs', 'message', 'pathParameters', 'pending', 'pk', 'put_object', 'recording', 's3', 's3_bucket', 's3_key', 'sk', 'step_id', 'text/plain', 'timestamp', 'type', 'upload_status', 'upload_url', 'user_identity', 'video/mp4', 'video/webm', '{}']

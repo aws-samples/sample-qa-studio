@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/cicd-runner/src/execution/engine.py
-# hypothesis_version: 6.151.9
-
-['*', '.ci_runner', '.mp4', '.webm', 'AWS_REGION', 'ArtifactCapture', 'ArtifactUploader', 'EXECUTION_STEP#', 'FAILED', 'HEADLESS', 'PASSED', '\\{\\{(\\w+)\\}\\}', 'artifacts', 'capture_variable', 'downloads', 'duration', 'error', 'execution_id', 'failed', 'false', 'headers', 'headless', 'instruction', 'logs_directory', 'model_id', 'nova-act-v1.0', 'nova_act_logs', 'record_video', 'recording', 'region_name', 'retrieve_value', 'running', 'sk', 'sort', 'starting_page', 'starting_url', 'status', 'step_id', 'step_type', 'steps', 'success', 'trace', 'true', 'us-east-1', 'usecase_id', 'usecase_name', 'variables', 'workflow']

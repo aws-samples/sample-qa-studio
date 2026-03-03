@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/create_test_suite.py
-# hypothesis_version: 6.151.9
-
-[100, 201, 400, 500, '-', '--', '_', 'api/suite.write', 'body', 'description', 'dynamodb', 'error', 'identity', 'name', 'name is required', 'pk', 'schedule_enabled', 'schedule_expression', 'schedule_timezone', 'scope', 'sk', 'suite:', 'tags', '{}']

@@ -73,4 +73,5 @@ yarn-error.log*
 
 .coverage
 *.hypothesis
+.hypothesis
 .env

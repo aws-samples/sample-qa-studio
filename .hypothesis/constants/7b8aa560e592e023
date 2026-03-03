@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/delete_test_suite.py
-# hypothesis_version: 6.151.9
-
-[204, 400, 404, 500, '*', 'Code', 'Error', 'Item', 'Items', 'SCHEDULER_GROUP_NAME', 'Test suite not found', 'api/suite.write', 'body', 'dynamodb', 'error', 'headers', 'pathParameters', 'pk', 'schedule_enabled', 'scheduler', 'sk', 'statusCode', 'suite_id', 'suite_id is required']

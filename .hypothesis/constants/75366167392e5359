@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/list_test_suites.py
-# hypothesis_version: 6.151.9
-
-[200, 500, 'Items', 'api/suite.read', 'dynamodb', 'error', 'pk', 'schedule_enabled', 'schedule_expression', 'scope', 'sk', 'suites']

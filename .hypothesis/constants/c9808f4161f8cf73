@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-ci-runner/src/auth/oauth_client.py
-# hypothesis_version: 6.151.9
-
-[200, 400, 401, 3600, 'Content-Type', 'access_token', 'client_credentials', 'expires_in', 'grant_type', 'scope']

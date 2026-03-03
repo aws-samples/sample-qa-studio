@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/list_suite_usecases.py
-# hypothesis_version: 6.151.9
-
-[200, 400, 404, 500, ':pk', ':sk_prefix', 'Item', 'Items', 'Missing suite ID', 'Test suite not found', 'USECASE#', 'added_at', 'added_by', 'api/suite.read', 'dynamodb', 'error', 'identity', 'pathParameters', 'pk', 'sk', 'suite_id', 'total', 'usecase_id', 'usecase_name', 'usecases']

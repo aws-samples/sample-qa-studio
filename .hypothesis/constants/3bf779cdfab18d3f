@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/update_suite_schedule.py
-# hypothesis_version: 6.151.9
-
-[200, 400, 404, 500, '1', 'ALL_NEW', 'Arn', 'Attributes', 'BASE_NAME', 'Code', 'ENABLED', 'Error', 'Id', 'Input', 'Item', 'Test suite not found', '^[\\d\\*\\-\\/,]+$', 'accept-ai', 'api/suite.write', 'body', 'dynamodb', 'error', 'events', 'message', 'pathParameters', 'pk', 'schedule_enabled', 'schedule_expression', 'schedule_timezone', 'scheduled', 'sk', 'suite_id', 'suite_id is required', 'trigger_type', '{}']

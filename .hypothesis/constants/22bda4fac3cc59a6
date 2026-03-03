@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/update_test_suite.py
-# hypothesis_version: 6.151.9
-
-[100, 200, 400, 404, 500, 'ALL_NEW', 'Attributes', 'Item', 'Test suite not found', 'api/suite.write', 'body', 'description', 'dynamodb', 'error', 'name', 'name cannot be empty', 'pathParameters', 'pk', 'sk', 'suite_id', 'suite_id is required', 'tags', '{}']

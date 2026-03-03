@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/list_suite_executions.py
-# hypothesis_version: 6.151.9
-
-[100, 200, 400, 404, 500, 'EXECUTION#', 'Item', 'Items', 'Missing suite ID', 'Test suite not found', 'api/suite.read', 'completed', 'dynamodb', 'error', 'executions', 'failed', 'has_more', 'identity', 'limit', 'partial', 'pathParameters', 'pending', 'pk', 'running', 'sk', 'started_at', 'status', 'suite_id', 'total']

@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/list_execution_artifacts.py
-# hypothesis_version: 6.151.9
-
-[200, 400, 500, 3600, ':pk', ':sk_prefix', 'ARTIFACT#', 'Bucket', 'Items', 'Key', 'S', 'api/executions.read', 'artifact_count', 'artifact_id', 'artifacts', 'content_type', 'created_at', 'download_url', 'dynamodb', 'error', 'event', 'executionId', 'execution_id', 'filename', 'get_object', 'identity', 'message', 'pathParameters', 's3', 's3_bucket', 's3_key', 'type', 'upload_status', 'uploaded', 'user_identity']

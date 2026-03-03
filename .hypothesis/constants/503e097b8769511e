@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-ci-runner/src/main.py
-# hypothesis_version: 6.151.9
-
-[3600, 'ci_runner', 'completed', 'duration', 'executing_region', 'execution_id', 'execution_ids', 'failed', 'logs', 'model_id', 'name', 'nova-act-v1.0', 'partial', 'starting_url', 'status', 'sts', 'success', 'suite_execution_id', 'suite_log_capture', 'us-east-1', 'usecase_id', 'usecase_name']

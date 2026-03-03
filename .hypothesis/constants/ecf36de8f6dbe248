@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/update_execution_status.py
-# hypothesis_version: 6.151.9
-
-[200, 400, 404, 500, '#status', '-1', '1', ':completed_at', ':dec', ':error_message', ':inc', ':nova_session_id', ':started_at', ':status', ':updated_at', 'Detail', 'DetailType', 'EventBusName', 'Execution not found', 'Invalid status', 'Item', 'Missing status field', 'N', 'S', 'Source', 'api/executions.write', 'body', 'completed', 'default', 'dynamodb', 'error', 'error_message', 'events', 'executionId', 'execution_id', 'failed', 'id', 'message', 'nova_session_id', 'pathParameters', 'pending', 'pk', 'running', 'sk', 'status', 'success', 'suite_execution_id', 'suite_id', 'timestamp', 'updated_at', 'usecase_id', '{}']

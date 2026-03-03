@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/list_suite_artifacts.py
-# hypothesis_version: 6.151.9
-
-[200, 400, 500, 3600, '.mp4', '.txt', '.webm', '/', 'BUCKET_NAME', 'Bucket', 'Configuration error', 'Contents', 'Key', 'LastModified', 'Size', 'api/suite.read', 'artifact_count', 'artifacts', 'content_type', 'download_url', 'error', 'event', 'execution_id', 'filename', 'get_object', 'identity', 'isoformat', 'last_modified', 'logs', 'message', 'pathParameters', 'recording', 's3', 'size', 'suite_id', 'text/plain', 'type', 'unknown', 'user_identity', 'video/mp4', 'video/webm']

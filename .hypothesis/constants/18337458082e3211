@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/generate_suite_artifact_url.py
-# hypothesis_version: 6.151.9
-
-[200, 255, 400, 404, 500, 3600, '\x00', '/', 'BUCKET_NAME', 'Bucket', 'Configuration error', 'ContentType', 'Invalid JSON', 'Item', 'Key', 'S', '\\', '_', 'api/suite.write', 'artifact_type', 'body', 'content_type', 'dynamodb', 'error', 'event', 'executionId', 'execution_id', 'expires_in', 'filename', 'identity', 'logs', 'message', 'pathParameters', 'pk', 'put_object', 'recording', 's3', 's3_key', 'sk', 'suiteId', 'suite_id', 'type', 'upload_url', 'user_identity', '{}']

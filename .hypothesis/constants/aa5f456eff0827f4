@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-ci-runner/src/cli/parser.py
-# hypothesis_version: 6.151.9
-
-[3600, '--base-url', '--keep-artifacts', '--local-only', '--model-id', '--region', '--suite-id', '--timeout', '--token-file', '--usecase-id', '--var', '--verbose', '=', '__main__', 'variables']

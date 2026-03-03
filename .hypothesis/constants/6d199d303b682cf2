@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/update_usecase_last_execution.py
-# hypothesis_version: 6.151.9
-
-[':exec_id', ':status', ':timestamp', 'USECASES', 'attribute_exists(pk)', 'detail', 'dynamodb', 'execution_id', 'pk', 'sk', 'status', 'timestamp', 'usecase_id']

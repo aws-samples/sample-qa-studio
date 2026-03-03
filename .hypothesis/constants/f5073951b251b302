@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/../auth/pre_token_generation.py
-# hypothesis_version: 6.151.9
-
-[',', 'admins', 'api/admin', 'api/executions.read', 'api/executions.write', 'api/suite.read', 'api/suite.write', 'api/templates.read', 'api/templates.write', 'api/usecases.execute', 'api/usecases.read', 'api/usecases.write', 'cognito:groups', 'custom_scopes', 'groupConfiguration', 'groupsToOverride', 'idTokenGeneration', 'request', 'response', 'scope', 'scopesToAdd', 'userAttributes', 'users']

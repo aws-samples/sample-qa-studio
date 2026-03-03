@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/handle_task_state_change.py
-# hypothesis_version: 6.151.9
-
-['#status', '+00:00', '-1', '/', '0', '1', ':completed_at', ':dec', ':duration', ':error_msg', ':exec_id', ':failed', ':inc', ':pk_prefix', ':status', ':successful', ':task_arn', ':time', 'EXECUTION#', 'Item', 'Items', 'N', 'S', 'STOPPED', 'TEST_SUITES', 'TaskFailedToStart', 'USECASE_EXECUTION#', 'Z', 'completed', 'completed_usecases', 'containers', 'detail', 'dynamodb', 'error', 'essential container', 'exitCode', 'failed', 'failed_usecases', 'lastStatus', 'name', 'outofmemoryerror', 'partial', 'pk', 'reason', 'scaling', 'sk', 'started_at', 'status', 'stopCode', 'stopped', 'stoppedReason', 'success', 'successful_usecases', 'suite_execution_id', 'suite_id', 'taskArn', 'total_usecases', 'unknown', 'user']

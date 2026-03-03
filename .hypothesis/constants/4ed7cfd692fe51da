@@ -1,4 +1,0 @@
-# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/models/config.py
-# hypothesis_version: 6.151.9
-
-['/', 'OAuth M2M client ID', 'api_url', 'cognito_domain', 'https://', 'oauth_token_endpoint']
