@@ -1,975 +1,528 @@
 # Troubleshooting Guide
 
-This guide helps you diagnose and resolve common issues when using the Nova Act QA Studio CI/CD runner.
+This guide helps you diagnose and resolve common issues when using QA Studio.
 
-## Quick Diagnostics
+## Web Application Issues
 
-Before diving into specific errors, try these quick checks:
+### Cannot Access Web Application
 
-1. **Enable debug mode**: Set `LOG_LEVEL=DEBUG` and use `--verbose` flag
-2. **Verify credentials**: Check that OAuth client ID and secret are correct
-3. **Check network**: Ensure the runner can reach the API endpoint and Cognito
-4. **Validate configuration**: Ensure all required environment variables are set
-
-## Authentication Errors
-
-### OAuth Authentication Failed: 400/401
-
-**Error Message**:
-```
-OAuth authentication failed: 401 - {"error":"invalid_client"}
-```
-
-or
-
-```
-OAuth authentication failed: 400 - {"error":"invalid_grant"}
-```
-
-**Causes**:
-- Invalid OAuth client ID or secret
-- Client credentials not properly encoded
-- OAuth client has been deleted or disabled
-- Incorrect token endpoint URL
-- Client secret has been rotated but old secret is still in use
-- Wrong grant type configured in Cognito
+**Symptoms**:
+- CloudFront URL returns 404 or Access Denied
+- Page loads but shows blank screen
 
 **Solutions**:
 
-1. **Verify credentials are correct**:
+1. **Verify deployment completed successfully**:
    ```bash
-   # Check environment variables are set
-   echo $OAUTH_CLIENT_ID
-   echo $OAUTH_CLIENT_SECRET
+   cd web-app
+   npm run deploy
    ```
 
-2. **Regenerate OAuth client credentials**:
-   - Log into the Nova Act QA Studio web UI
-   - Navigate to Settings → OAuth Clients
-   - Delete the old client and create a new one
-   - Update your CI/CD secrets with the new credentials
+2. **Check CloudFront distribution status**:
+   - Log into AWS Console
+   - Navigate to CloudFront
+   - Verify distribution is "Deployed" (not "In Progress")
 
-3. **Verify token endpoint URL format**:
-   ```
-   https://{domain}.auth.{region}.amazoncognito.com/oauth2/token
-   ```
-   Example: `https://myapp.auth.us-east-1.amazoncognito.com/oauth2/token`
+3. **Clear browser cache**:
+   - Hard refresh: Ctrl+Shift+R (Windows/Linux) or Cmd+Shift+R (Mac)
+   - Or clear browser cache completely
 
-4. **Check OAuth client still exists**:
-   - Use the web UI to verify the client hasn't been deleted
-   - If deleted, create a new OAuth client
+4. **Check S3 bucket**:
+   - Verify frontend files were uploaded to S3
+   - Check bucket policy allows CloudFront access
 
-5. **Verify grant type**:
-   - Ensure the OAuth client is configured for "Client Credentials" grant type
-   - The runner uses client credentials flow, not authorization code flow
+### Authentication Fails
 
-**Prevention**:
-- Store credentials securely in your CI/CD platform's secret management
-- Use descriptive names for OAuth clients to track their usage
-- Document which client is used by which pipeline
-- After rotating secrets, update all pipelines immediately
+**Symptoms**:
+- Redirected to Cognito but login fails
+- "User does not exist" error
+- Infinite redirect loop
+
+**Solutions**:
+
+1. **Check Cognito user exists**:
+   - Log into AWS Console → Cognito
+   - Verify user exists in user pool
+   - Check user status is "CONFIRMED"
+
+2. **Reset password**:
+   - Use "Forgot password" flow
+   - Or reset via AWS Console
+
+3. **Verify Cognito configuration**:
+   - Check callback URLs match CloudFront URL
+   - Verify OAuth scopes are configured
+   - Check app client settings
+
+4. **Clear browser cookies**:
+   - Cognito stores session in cookies
+   - Clear cookies for your domain
+
+### Test Execution Fails
+
+**Symptoms**:
+- Test starts but never completes
+- Test fails immediately
+- No artifacts generated
+
+**Solutions**:
+
+1. **Check ECS task logs**:
+   - AWS Console → ECS → Clusters
+   - Find your worker task
+   - View CloudWatch logs
+
+2. **Verify SQS queue**:
+   - Check messages are being processed
+   - Look for dead letter queue messages
+
+3. **Check Nova Act configuration**:
+   - Verify Bedrock model access
+   - Check IAM permissions for worker role
+   - Verify VPC configuration if using private network
+
+4. **Review test steps**:
+   - Check for invalid instructions
+   - Verify URLs are accessible
+   - Test manually in browser first
+
+### Artifacts Not Loading
+
+**Symptoms**:
+- Videos/screenshots show "Access Denied"
+- Artifacts missing from execution details
+
+**Solutions**:
+
+1. **Check S3 bucket permissions**:
+   - Verify bucket policy allows CloudFront access
+   - Check CORS configuration
+
+2. **Verify presigned URLs**:
+   - URLs expire after 1 hour
+   - Refresh the page to get new URLs
+
+3. **Check artifact upload**:
+   - Review worker logs for upload errors
+   - Verify S3 bucket exists and is accessible
 
 ---
 
-### OAuth Token Request Failed: Network Error
+## CLI Issues
 
-**Error Message**:
-```
-OAuth token request failed due to network error: Connection timeout
-```
+### Installation Fails
 
-**Causes**:
-- Network connectivity issues
-- Firewall blocking outbound HTTPS requests
-- Incorrect token endpoint URL
-- DNS resolution failure
+**Symptoms**:
+- `pip install` fails with errors
+- Import errors when running commands
 
 **Solutions**:
 
-1. **Test network connectivity**:
+1. **Check Python version**:
+   ```bash
+   python3 --version  # Should be 3.11+
+   ```
+
+2. **Use virtual environment**:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -e ./qa-studio-cli
+   ```
+
+3. **Install runner dependencies** (for local execution):
+   ```bash
+   pip install -e "./qa-studio-cli[runner]"
+   ```
+
+4. **Check for conflicting packages**:
+   ```bash
+   pip list | grep qa-studio
+   # Uninstall old versions if found
+   pip uninstall qa-studio-cli
+   ```
+
+### Authentication Fails
+
+**Symptoms**:
+- `qa-studio login` fails
+- Browser doesn't open
+- "Invalid credentials" error
+
+**Solutions**:
+
+1. **Verify configuration**:
+   ```bash
+   qa-studio status
+   # Check API URL, Cognito domain, client ID
+   ```
+
+2. **Reconfigure**:
+   ```bash
+   qa-studio configure
+   # Enter correct values
+   ```
+
+3. **Check network connectivity**:
    ```bash
    # Test if you can reach Cognito
-   curl -v https://{domain}.auth.{region}.amazoncognito.com/oauth2/token
+   curl https://{domain}.auth.{region}.amazoncognito.com/.well-known/openid-configuration
    ```
 
-2. **Check firewall rules**:
+4. **Clear cached tokens**:
+   ```bash
+   rm ~/.qa-studio/tokens.json
+   qa-studio login
+   ```
+
+5. **Check firewall/proxy**:
    - Ensure outbound HTTPS (port 443) is allowed
-   - Whitelist `*.amazoncognito.com` if using allowlist
+   - Configure proxy if needed
 
-3. **Verify DNS resolution**:
-   ```bash
-   nslookup {domain}.auth.{region}.amazoncognito.com
-   ```
+### Local Test Execution Fails
 
-4. **Check proxy settings**:
-   - If behind a corporate proxy, configure Docker to use it
-   - Set `HTTP_PROXY` and `HTTPS_PROXY` environment variables
-
-**Prevention**:
-- Test network connectivity before deploying to production
-- Document network requirements for your infrastructure team
-- Use health checks in your CI/CD pipeline
-
----
-
-### Insufficient OAuth Scopes
-
-**Error Message**:
-```
-API request failed: 403 - {"error":"Forbidden","message":"Missing required scopes: api/suite.write"}
-```
-
-**Causes**:
-- OAuth client doesn't have required scopes
-- Scopes not requested during token acquisition
-- User who created client didn't have permission to grant scopes
+**Symptoms**:
+- `qa-studio run` command fails
+- "Module not found" errors
+- Browser fails to start
 
 **Solutions**:
 
-1. **Verify OAuth client has required scopes**:
-   - Log into the web UI
-   - Navigate to Settings → OAuth Clients
-   - Check the scopes listed for your client
-
-2. **Create new OAuth client with correct scopes**:
-   ```json
-   {
-     "name": "CI/CD Runner",
-     "scopes": [
-       "api/suite.read",
-       "api/suite.write",
-       "api/usecases.read",
-       "api/usecases.execute",
-       "api/executions.read",
-       "api/executions.write"
-     ]
-   }
+1. **Install runner dependencies**:
+   ```bash
+   pip install -e "./qa-studio-cli[runner]"
    ```
 
-3. **Required scopes for CI/CD runner**:
-   - `api/suite.read` - Read test suite definitions
-   - `api/suite.write` - Manage test suites
-   - `api/usecases.read` - Read use case definitions
-   - `api/usecases.execute` - Execute use cases
-   - `api/executions.read` - Read execution data
-   - `api/executions.write` - Create and update execution records
+2. **Check Nova Act SDK installation**:
+   ```bash
+   python3 -c "import nova_act; print(nova_act.__version__)"
+   ```
 
-**Prevention**:
-- Always grant all six required scopes when creating OAuth clients
-- Use the principle of least privilege (don't grant unnecessary scopes)
-- Document which scopes are required for each use case
+3. **Verify Playwright installation**:
+   ```bash
+   playwright install chromium
+   ```
 
----
+4. **Check AWS credentials** (for Bedrock access):
+   ```bash
+   aws configure list
+   # Ensure credentials are configured
+   ```
 
-## Configuration Errors
+5. **Enable debug logging**:
+   ```bash
+   qa-studio run --usecase-id test-123 --verbose
+   ```
 
-### Missing Required Environment Variable
+### Command Not Found
 
-**Error Message**:
-```
-Missing required environment variable: OAUTH_CLIENT_ID
-```
-
-**Causes**:
-- Environment variable not set in CI/CD configuration
-- Typo in variable name
-- Variable not exported in shell script
+**Symptoms**:
+- `qa-studio: command not found`
 
 **Solutions**:
 
-1. **Verify all required variables are set**:
+1. **Verify installation**:
    ```bash
-   # Check each required variable
-   echo $OAUTH_CLIENT_ID
-   echo $OAUTH_CLIENT_SECRET
-   echo $OAUTH_TOKEN_ENDPOINT
-   echo $API_ENDPOINT
+   pip show qa-studio-cli
    ```
 
-2. **Set missing variables**:
+2. **Check PATH**:
    ```bash
-   export OAUTH_CLIENT_ID="your-client-id"
-   export OAUTH_CLIENT_SECRET="your-client-secret"
-   export OAUTH_TOKEN_ENDPOINT="https://domain.auth.region.amazoncognito.com/oauth2/token"
-   export API_ENDPOINT="https://api.example.com"
+   # Find where pip installs scripts
+   python3 -m site --user-base
+   
+   # Add to PATH if needed
+   export PATH="$PATH:$(python3 -m site --user-base)/bin"
    ```
 
-3. **Check CI/CD platform configuration**:
-   - **GitHub Actions**: Settings → Secrets and variables → Actions
-   - **GitLab CI**: Settings → CI/CD → Variables
-   - **Jenkins**: Credentials management
-   - **CircleCI**: Project Settings → Environment Variables
+3. **Use python -m**:
+   ```bash
+   python3 -m qa_studio_cli --help
+   ```
 
-**Required Environment Variables**:
-- `OAUTH_CLIENT_ID` - OAuth client ID
-- `OAUTH_CLIENT_SECRET` - OAuth client secret
-- `OAUTH_TOKEN_ENDPOINT` - Cognito token endpoint URL
-- `API_ENDPOINT` - Platform API base URL
-
-**Optional Environment Variables**:
-- `LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR)
-
-**Prevention**:
-- Use a checklist when setting up new pipelines
-- Create a template with all required variables
-- Add validation step to verify variables are set
+4. **Reinstall in editable mode**:
+   ```bash
+   pip install -e ./qa-studio-cli
+   ```
 
 ---
 
-### Configuration Validation Failed: Invalid URL
+## API Issues
 
-**Error Message**:
-```
-Configuration validation failed: oauth_token_endpoint: must be an HTTPS URL
-```
+### 401 Unauthorized
 
-**Causes**:
-- URL uses HTTP instead of HTTPS
-- URL is malformed or incomplete
-- Extra whitespace in URL
+**Symptoms**:
+- API requests return 401
+- "Invalid token" error
 
 **Solutions**:
 
-1. **Verify URL format**:
+1. **Re-authenticate**:
    ```bash
-   # Correct format
-   https://domain.auth.region.amazoncognito.com/oauth2/token
-   
-   # Incorrect formats
-   http://domain.auth.region.amazoncognito.com/oauth2/token  # HTTP not allowed
-   domain.auth.region.amazoncognito.com/oauth2/token         # Missing protocol
+   qa-studio logout
+   qa-studio login
    ```
 
-2. **Check for whitespace**:
-   ```bash
-   # Trim whitespace
-   export OAUTH_TOKEN_ENDPOINT=$(echo "$OAUTH_TOKEN_ENDPOINT" | xargs)
-   ```
+2. **Check token expiration**:
+   - Access tokens expire after 1 hour
+   - CLI automatically refreshes tokens
+   - If refresh fails, login again
 
-3. **Validate API endpoint URL**:
-   ```bash
-   # Must start with https://
-   export API_ENDPOINT="https://api.example.com"
-   ```
+3. **Verify OAuth client**:
+   - Check client exists in web UI
+   - Verify client has required scopes
 
-**Prevention**:
-- Always use HTTPS for security
-- Copy URLs directly from deployment outputs
-- Validate URLs before storing in CI/CD secrets
+### 403 Forbidden
 
----
-
-### Python Version Compatibility Error
-
-**Error Message**:
-```
-ImportError: cannot import name 'formatargspec' from 'inspect'
-```
-
-or
-
-```
-error: metadata-generation-failed
-× Encountered error while generating package metadata.
-╰─> wrapt
-```
-
-**Causes**:
-- Using Python 3.13 or later, which is not yet supported
-- The `wrapt` dependency (used by Nova Act SDK) requires Python 3.12 or earlier
+**Symptoms**:
+- API requests return 403
+- "Missing required scopes" error
 
 **Solutions**:
 
-1. **Use Python 3.9 to 3.12**:
-   ```bash
-   # Check your Python version
-   python3 --version
-   
-   # If using pyenv, switch to a compatible version
-   pyenv install 3.12.0
-   pyenv local 3.12.0
-   
-   # Verify the version
-   python3 --version
-   ```
+1. **Check user permissions**:
+   - Verify user has access to the resource
+   - Check Cognito group memberships
 
-2. **Update virtual environment**:
-   ```bash
-   # Remove old virtual environment
-   rm -rf venv
-   
-   # Create new one with compatible Python version
-   python3.12 -m venv venv
-   source venv/bin/activate
-   
-   # Reinstall dependencies
-   pip install -r requirements.txt
-   ```
+2. **Verify OAuth scopes**:
+   - For CLI: User must have appropriate permissions
+   - For API clients: Client must have required scopes
 
-3. **For CI/CD pipelines**, specify Python version:
-   
-   **GitHub Actions**:
-   ```yaml
-   - uses: actions/setup-python@v4
-     with:
-       python-version: '3.12'
-   ```
-   
-   **GitLab CI**:
-   ```yaml
-   image: python:3.12
-   ```
+3. **Contact administrator**:
+   - Request access to the resource
+   - Or create new OAuth client with correct scopes
 
-**Prevention**:
-- Pin Python version in CI/CD configuration
-- Document Python version requirements in README
-- Use Docker image with compatible Python version
+### 404 Not Found
 
----
-
-## API Errors
-
-### Test Suite Not Found: 404
-
-**Error Message**:
-```
-API request failed: 404 - {"error":"Test suite not found"}
-```
-
-**Causes**:
-- Invalid suite ID
-- Suite has been deleted
-- Suite belongs to different account/organization
-- Typo in suite ID
+**Symptoms**:
+- Resource not found errors
+- Invalid ID errors
 
 **Solutions**:
 
-1. **Verify suite ID is correct**:
-   - Log into the web UI
-   - Navigate to Test Suites
-   - Copy the suite ID from the URL or suite details
+1. **Verify resource exists**:
+   - Check ID is correct
+   - Verify resource wasn't deleted
+   - Check you have access to the resource
 
-2. **Check suite exists**:
+2. **Check API endpoint**:
    ```bash
-   # Use API to verify suite exists
-   curl -X GET \
-     "https://api.example.com/test-suites/{suite-id}" \
-     -H "Authorization: Bearer $TOKEN"
+   qa-studio status
+   # Verify API URL is correct
    ```
 
-3. **Verify OAuth client has access**:
-   - Ensure the OAuth client was created by a user with access to the suite
-   - Check that the suite hasn't been moved to a different organization
+### 500 Internal Server Error
 
-**Prevention**:
-- Store suite IDs as CI/CD variables, not hardcoded
-- Use descriptive variable names (e.g., `SMOKE_TEST_SUITE_ID`)
-- Document which suite IDs are used in which pipelines
-
----
-
-### Unresolved Variables: 400
-
-**Error Message**:
-```
-API request failed: 400 - {"error":"Unresolved variables","message":"Unresolved variables: username, password"}
-```
-
-**Causes**:
-- Test suite uses variables that weren't provided
-- Typo in variable name
-- Variable not passed via `--var` flag
-
-**Solutions**:
-
-1. **Check which variables are required**:
-   - Log into the web UI
-   - Open the test suite
-   - Review the use cases to see which variables are used
-
-2. **Provide missing variables**:
-   ```bash
-   docker run --rm \
-     -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
-     -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-     -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT" \
-     -e API_ENDPOINT="$API_ENDPOINT" \
-     nova-act-cicd-runner:latest \
-     --suite-id suite-123 \
-     --var username=testuser \
-     --var password=testpass \
-     --var api_key=secret123
-   ```
-
-3. **Check variable names match exactly**:
-   - Variable names are case-sensitive
-   - Use the exact names from the test suite
-
-**Prevention**:
-- Document required variables for each test suite
-- Create environment-specific variable sets
-- Use CI/CD variables for sensitive values
-
----
-
-### API Request Failed: 500
-
-**Error Message**:
-```
-API request failed: 500 - {"error":"Internal server error"}
-```
-
-**Causes**:
-- Platform backend issue
-- Database connectivity problem
-- Temporary service disruption
+**Symptoms**:
+- API returns 500 error
+- Unexpected errors
 
 **Solutions**:
 
 1. **Retry the request**:
-   - Wait a few minutes and try again
    - Temporary issues often resolve automatically
 
-2. **Check platform status**:
-   - Contact support to verify platform health
-   - Check if there's scheduled maintenance
+2. **Check CloudWatch logs**:
+   - AWS Console → CloudWatch → Log Groups
+   - Look for Lambda function errors
 
-3. **Review request payload**:
-   - Ensure request is well-formed
-   - Check for invalid characters in variables
-
-4. **Contact support**:
-   - Provide the full error message
-   - Include the suite execution ID if available
-   - Share relevant logs (with sensitive data redacted)
-
-**Prevention**:
-- Implement retry logic in CI/CD pipelines
-- Set up monitoring and alerts
-- Have a fallback plan for critical pipelines
+3. **Contact support**:
+   - Provide error details
+   - Include request ID if available
 
 ---
 
-## Network Errors
+## Performance Issues
 
-### Connection Timeout
+### Slow Test Execution
 
-**Error Message**:
-```
-API request failed due to network error: Connection timeout
-```
-
-**Causes**:
-- Network connectivity issues
-- API endpoint unreachable
-- Firewall blocking requests
-- DNS resolution failure
+**Symptoms**:
+- Tests take longer than expected
+- Timeouts occur frequently
 
 **Solutions**:
 
-1. **Test API connectivity**:
-   ```bash
-   # Test if you can reach the API
-   curl -v https://api.example.com/health
-   ```
+1. **Check target application performance**:
+   - Test manually in browser
+   - Verify application is responsive
 
-2. **Check firewall rules**:
-   - Ensure outbound HTTPS (port 443) is allowed
-   - Whitelist the API endpoint domain
-
-3. **Verify DNS resolution**:
-   ```bash
-   nslookup api.example.com
-   ```
-
-4. **Check proxy configuration**:
-   - Configure Docker to use corporate proxy if needed
-   - Set `HTTP_PROXY` and `HTTPS_PROXY` environment variables
-
-**Prevention**:
-- Test network connectivity before deploying
-- Document network requirements
-- Use health checks in CI/CD pipelines
-
----
-
-### SSL Certificate Verification Failed
-
-**Error Message**:
-```
-SSL certificate verification failed
-```
-
-**Causes**:
-- Self-signed certificate
-- Expired certificate
-- Certificate chain issue
-- Corporate proxy intercepting SSL
-
-**Solutions**:
-
-1. **Verify certificate is valid**:
-   ```bash
-   openssl s_client -connect api.example.com:443 -showcerts
-   ```
-
-2. **Update CA certificates** (if using custom CA):
-   ```dockerfile
-   # In Dockerfile
-   COPY custom-ca.crt /usr/local/share/ca-certificates/
-   RUN update-ca-certificates
-   ```
-
-3. **Check for proxy interference**:
-   - Corporate proxies may intercept SSL
-   - Install proxy's CA certificate in the container
-
-**Prevention**:
-- Use valid SSL certificates from trusted CAs
-- Keep certificates up to date
-- Document certificate requirements
-
----
-
-## Timeout Errors
-
-### Execution Timeout
-
-**Error Message**:
-```
-Execution timed out after 3600 seconds
-```
-
-**Causes**:
-- Test suite takes longer than default timeout (1 hour)
-- Slow network or API responses
-- Browser automation issues
-- Infinite loops in test logic
-
-**Solutions**:
-
-1. **Increase timeout**:
-   ```bash
-   docker run --rm \
-     -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
-     -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-     -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT" \
-     -e API_ENDPOINT="$API_ENDPOINT" \
-     nova-act-cicd-runner:latest \
-     --suite-id suite-123 \
-     --timeout 7200  # 2 hours
-   ```
-
-2. **Split large test suites**:
-   - Break into smaller, focused suites
-   - Run suites in parallel in separate jobs
-
-3. **Optimize test steps**:
-   - Review test steps for inefficiencies
+2. **Optimize test steps**:
    - Remove unnecessary waits
-   - Optimize selectors and assertions
+   - Use more specific selectors
+   - Reduce number of steps
 
-4. **Check for hanging steps**:
-   - Review logs to identify which step is hanging
-   - Fix or skip problematic steps
+3. **Check network latency**:
+   - Test from same region as target application
+   - Verify network connectivity
 
-**Prevention**:
-- Set realistic timeouts based on suite size
-- Monitor execution times and optimize slow tests
-- Use parallel execution when possible
+4. **Review Nova Act model**:
+   - Try different model if available
+   - Check Bedrock service limits
 
----
+### High AWS Costs
 
-### Step Timeout
-
-**Error Message**:
-```
-Step execution timed out: Click button
-```
-
-**Causes**:
-- Element not found or not clickable
-- Page load too slow
-- Network latency
-- JavaScript not fully loaded
+**Symptoms**:
+- Unexpected AWS bills
+- High ECS or Bedrock costs
 
 **Solutions**:
 
-1. **Review step configuration**:
-   - Check if selector is correct
-   - Verify element exists on the page
+1. **Review execution frequency**:
+   - Reduce unnecessary test runs
+   - Use test suites instead of individual tests
 
-2. **Increase step timeout** (in test suite configuration):
-   - Edit the use case in the web UI
-   - Increase timeout for specific steps
+2. **Optimize test suites**:
+   - Remove duplicate tests
+   - Combine similar tests
 
-3. **Optimize page load**:
-   - Check if target application is slow
-   - Review network performance
+3. **Check artifact retention**:
+   - Configure S3 lifecycle policies
+   - Delete old artifacts
 
-4. **Fix test logic**:
-   - Add explicit waits for dynamic content
-   - Improve element selectors
-
-**Prevention**:
-- Use reliable selectors (data-testid, aria-label)
-- Add appropriate waits for dynamic content
-- Test against realistic environments
-
----
-
-## Container Errors
-
-### Container Out of Memory (OOMKilled)
-
-**Error Message**:
-```
-Container killed: OOMKilled
-```
-
-**Causes**:
-- Insufficient container memory
-- Memory leak in browser or runner
-- Too many parallel executions
-- Large artifacts consuming memory
-
-**Solutions**:
-
-1. **Increase container memory limit**:
-   ```bash
-   docker run --rm \
-     --memory=4g \
-     -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
-     -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-     -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT" \
-     -e API_ENDPOINT="$API_ENDPOINT" \
-     nova-act-cicd-runner:latest \
-     --suite-id suite-123
-   ```
-
-2. **Reduce test suite size**:
-   - Split into smaller suites
-   - Run fewer use cases per execution
-
-3. **Monitor memory usage**:
-   ```bash
-   docker stats
-   ```
-
-4. **Check for memory leaks**:
-   - Review logs for unusual patterns
-   - Update to latest runner version
-
-**Prevention**:
-- Allocate sufficient memory (recommended: 2-4GB)
-- Monitor resource usage
-- Keep runner updated
-
----
-
-### Container Permission Denied
-
-**Error Message**:
-```
-Permission denied: /app/artifacts
-```
-
-**Causes**:
-- Volume mount permission issues
-- SELinux or AppArmor restrictions
-- User/group ID mismatch
-
-**Solutions**:
-
-1. **Fix volume permissions**:
-   ```bash
-   # If mounting volumes
-   chmod 777 ./artifacts
-   ```
-
-2. **Run with appropriate user**:
-   ```bash
-   docker run --rm \
-     --user $(id -u):$(id -g) \
-     ...
-   ```
-
-3. **Check SELinux context** (if applicable):
-   ```bash
-   chcon -Rt svirt_sandbox_file_t ./artifacts
-   ```
-
-**Prevention**:
-- Avoid mounting volumes unless necessary
-- Use appropriate file permissions
-- Test in similar environment before production
+4. **Monitor usage**:
+   - Set up CloudWatch alarms
+   - Review Cost Explorer regularly
 
 ---
 
 ## Debug Mode
 
-### Enabling Debug Logging
+### Enable Debug Logging
 
-Enable verbose logging to diagnose issues:
+**Web Application**:
+- Open browser developer console (F12)
+- Check Console tab for errors
+- Check Network tab for API requests
 
-**Environment Variable**:
+**CLI**:
 ```bash
-export LOG_LEVEL=DEBUG
+qa-studio run --usecase-id test-123 --verbose
 ```
 
-**CLI Flag**:
-```bash
-docker run --rm \
-  -e LOG_LEVEL=DEBUG \
-  -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
-  -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-  -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT" \
-  -e API_ENDPOINT="$API_ENDPOINT" \
-  nova-act-cicd-runner:latest \
-  --suite-id suite-123 \
-  --verbose
-```
-
-### Debug Output
-
-Debug mode provides:
-- Detailed OAuth authentication flow
-- API request/response details (with sensitive data redacted)
-- Step-by-step execution progress
-- Artifact upload details
-- Timing information
-
-**Example Debug Output**:
-```
-DEBUG: Loading configuration from environment variables...
-DEBUG: Initializing OAuth client...
-DEBUG: Requesting access token from https://domain.auth.region.amazoncognito.com/oauth2/token
-DEBUG: Access token obtained, expires in 3600 seconds
-DEBUG: Fetching test suite: suite-123
-DEBUG: API GET /test-suites/suite-123
-DEBUG: Response: 200 OK
-DEBUG: Found test suite: Smoke Tests
-DEBUG: Creating execution records...
-DEBUG: API POST /test-suites/suite-123/execute
-DEBUG: Response: 200 OK
-DEBUG: Suite execution created: exec-456
-DEBUG: Created 5 execution records
-DEBUG: Executing use case: Login test (usecase-789)
-DEBUG: Fetching execution steps...
-DEBUG: Found 3 steps
-DEBUG: Executing step 1: Navigate to login page
-DEBUG: Updating step status: running
-DEBUG: Step completed successfully
-...
-```
-
----
-
-## Log Interpretation
-
-### Understanding Log Levels
-
-- **DEBUG**: Detailed diagnostic information (only with `LOG_LEVEL=DEBUG`)
-- **INFO**: General informational messages about execution progress
-- **WARNING**: Warning messages about potential issues
-- **ERROR**: Error messages indicating failures
+**Worker Logs**:
+- AWS Console → ECS → Tasks
+- Click on task → Logs tab
+- View CloudWatch logs
 
 ### Common Log Patterns
 
 **Successful Execution**:
 ```
-INFO: Loading configuration from environment variables...
-INFO: Initializing OAuth client...
-INFO: Authenticating with OAuth client credentials...
-INFO: Successfully authenticated
-INFO: Fetching test suite: suite-123
-INFO: Found test suite: Smoke Tests
-INFO: Creating execution records...
-INFO: Suite execution created: exec-456
-INFO: Created 5 execution records
-INFO: Executing use cases in parallel...
-INFO: All executions completed
-INFO: Execution completed with exit code: 0
+INFO: Fetching test steps...
+INFO: Executing step 1: Navigate to login page
+INFO: Step completed successfully
+INFO: Executing step 2: Enter credentials
+INFO: Step completed successfully
+INFO: Execution completed: success
 ```
 
-**Authentication Failure**:
+**Authentication Error**:
 ```
-INFO: Loading configuration from environment variables...
-INFO: Initializing OAuth client...
-INFO: Authenticating with OAuth client credentials...
-ERROR: Runner failed: OAuth authentication failed: 401 - {"error":"invalid_client"}
+ERROR: Authentication failed: Invalid credentials
 ```
 
 **API Error**:
 ```
-INFO: Fetching test suite: suite-123
-ERROR: Runner failed: API request failed: 404 - {"error":"Test suite not found"}
+ERROR: API request failed: 404 - Resource not found
 ```
 
-**Configuration Error**:
+**Network Error**:
 ```
-ERROR: Runner failed: Missing required environment variable: OAUTH_CLIENT_ID
-```
-
-### Sensitive Data Redaction
-
-The runner automatically redacts sensitive data from logs:
-- OAuth tokens and secrets
-- Query parameters in URLs
-- Email addresses
-- API keys in URLs
-
-**Example**:
-```
-# Original error
-Error: Failed to fetch https://api.example.com/data?token=abc123
-
-# Redacted in logs
-Error: Failed to fetch https://api.example.com/data?[REDACTED]
-```
-
----
-
-## Exit Codes
-
-The runner uses exit codes to indicate execution status:
-
-| Exit Code | Meaning | Description |
-|-----------|---------|-------------|
-| `0` | Success | All tests passed |
-| `1` | Failure | One or more tests failed |
-| `2` | Error | Runner error (authentication, configuration, API error) |
-
-**CI/CD Integration**:
-- Exit code `0`: Continue pipeline (tests passed)
-- Exit code `1`: Fail pipeline (tests failed)
-- Exit code `2`: Fail pipeline (runner error)
-
-**Example Usage**:
-```bash
-# Run tests and capture exit code
-docker run --rm \
-  -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
-  -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-  -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT" \
-  -e API_ENDPOINT="$API_ENDPOINT" \
-  nova-act-cicd-runner:latest \
-  --suite-id suite-123
-
-EXIT_CODE=$?
-
-if [ $EXIT_CODE -eq 0 ]; then
-  echo "All tests passed!"
-elif [ $EXIT_CODE -eq 1 ]; then
-  echo "Some tests failed"
-  exit 1
-elif [ $EXIT_CODE -eq 2 ]; then
-  echo "Runner error occurred"
-  exit 2
-fi
+ERROR: Connection timeout: Unable to reach API endpoint
 ```
 
 ---
 
 ## Getting Help
 
-If you're still experiencing issues after trying these solutions:
-
 ### Support Channels
 
-- **GitHub Issues**: [https://github.com/org/nova-act-cicd-runner/issues](https://github.com/org/nova-act-cicd-runner/issues)
-- **Email Support**: support@novaact.example.com
-- **Slack Community**: #qa-studio-support
+- **GitHub Issues**: [Report bugs and request features](https://github.com/aws-samples/sample-nova-act-qa-studio/issues)
+- **Documentation**: [Complete documentation](../README.md)
+- **AWS Support**: For AWS service issues
 
 ### Information to Provide
 
-When requesting support, please include:
+When requesting support, include:
 
 1. **Error message**: Full error message from logs
-2. **Configuration**: Environment variables used (redact secrets!)
-3. **Steps to reproduce**: What you were trying to do
-4. **Debug logs**: Output with `LOG_LEVEL=DEBUG` and `--verbose`
-5. **Environment**: CI/CD platform, Docker version, OS
-6. **Suite execution ID**: If available from the output
+2. **Steps to reproduce**: What you were trying to do
+3. **Environment**: OS, Python version, browser
+4. **Logs**: Relevant logs with sensitive data redacted
+5. **Configuration**: API endpoint, region (no secrets!)
 
-**Example Support Request**:
+**Example**:
 ```
-Subject: OAuth authentication failing with 401 error
+Subject: CLI authentication failing
 
 Description:
-I'm getting a 401 error when trying to authenticate with OAuth client credentials.
+I'm unable to authenticate with the CLI. The browser opens but returns an error.
 
 Error message:
-OAuth authentication failed: 401 - {"error":"invalid_client"}
+ERROR: Authentication failed: Invalid redirect URI
 
-Configuration:
-- OAUTH_TOKEN_ENDPOINT: https://myapp.auth.us-east-1.amazoncognito.com/oauth2/token
-- API_ENDPOINT: https://api.example.com
-- CI/CD Platform: GitHub Actions
-- Docker version: 24.0.5
+Environment:
+- OS: macOS 14.0
+- Python: 3.11.5
+- CLI version: 1.0.0
 
 Steps to reproduce:
-1. Set environment variables in GitHub Actions secrets
-2. Run docker command with OAuth credentials
-3. Authentication fails immediately
+1. Run `qa-studio configure`
+2. Enter API URL and Cognito domain
+3. Run `qa-studio login`
+4. Browser opens but shows error
 
-Debug logs:
-[Attach debug logs with sensitive data redacted]
+Configuration:
+- API URL: https://api.example.com
+- Cognito domain: myapp.auth.us-east-1.amazoncognito.com
+- Client ID: 7abc123def456
 
 I've verified:
-- OAuth client exists in the web UI
-- Client ID and secret are correct
-- Token endpoint URL is correct
-- Network connectivity is working
+- API URL is correct
+- Cognito domain is correct
+- Client ID exists in Cognito
 ```
-
-### Self-Service Resources
-
-- **Documentation**: [docs/](.)
-- **API Reference**: [docs/api-reference.md](api-reference.md)
-- **Configuration Guide**: [docs/configuration.md](configuration.md)
-- **CI/CD Examples**: [docs/ci-cd-integration/](ci-cd-integration/)
 
 ---
 
 ## Frequently Asked Questions
 
-### How do I rotate OAuth client credentials?
+### How do I reset my password?
 
-See [OAuth Client Management](API.md#rotate-client-secret) in the API documentation.
+Use the "Forgot password" link on the login page, or contact your administrator.
 
-### Can I run multiple test suites in parallel?
+### Can I run tests locally without cloud execution?
 
-Yes, run multiple Docker containers with different suite IDs. Each container is independent.
+Yes, use `qa-studio run --usecase-id test-123 --local-only`
 
-### How do I handle flaky tests?
+### How do I share tests with my team?
 
-- Review test logic for race conditions
-- Add appropriate waits for dynamic content
-- Use reliable selectors
-- Consider retry logic in your CI/CD pipeline
+Export tests as JSON and share the file, or grant team members access to your QA Studio instance.
 
-### What's the maximum test suite size?
+### What browsers are supported?
 
-There's no hard limit, but we recommend:
-- Keep suites under 50 use cases for reasonable execution time
-- Split large suites into logical groups
-- Use parallel execution for faster results
+QA Studio uses Chromium via Playwright. Other browsers are not currently supported.
 
-### How do I debug artifact upload failures?
+### How do I handle dynamic content?
 
-1. Enable debug logging (`LOG_LEVEL=DEBUG`)
-2. Check network connectivity to S3
-3. Verify artifact file exists and is readable
-4. Check file size (presigned URLs expire after 1 hour)
+Use appropriate wait conditions in your test steps, or add explicit wait steps.
 
-### Can I use the runner without Docker?
+### Can I run tests in parallel?
 
-The runner is designed to run in Docker for consistency and isolation. Running outside Docker is not officially supported.
+Yes, test suites execute tests in parallel automatically. For CLI, run multiple commands in separate terminals.
 
-### How do I handle rate limiting?
+### How long are artifacts retained?
 
-The platform doesn't currently enforce rate limits, but if you encounter issues:
-- Add delays between requests
-- Reduce parallel execution
-- Contact support to discuss your use case
+Configure S3 lifecycle policies to set retention period. Default is indefinite.
+
+### Can I use custom domains?
+
+Yes, configure a custom domain for CloudFront in the CDK stack.
+
+### How do I backup my tests?
+
+Export tests as JSON files regularly, or enable DynamoDB point-in-time recovery.
+
+### What's the maximum test size?
+
+No hard limit, but we recommend keeping tests focused and under 20 steps each.

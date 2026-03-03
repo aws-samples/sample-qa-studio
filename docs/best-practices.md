@@ -1,10 +1,10 @@
 # Best Practices Guide
 
-This guide provides recommendations for optimal usage of the Nova Act QA Studio CI/CD Runner, covering test suite organization, variable management, secret handling, artifact retention, performance optimization, and security best practices.
+This guide provides recommendations for optimal usage of QA Studio, covering test organization, test creation, security, and performance optimization.
 
-## Test Suite Organization
+## Test Organization
 
-### Logical Grouping Strategies
+### Test Suite Structure
 
 Organize test suites by functional area, user journey, or testing purpose:
 
@@ -26,825 +26,494 @@ Organize test suites by functional area, user journey, or testing purpose:
 
 **By Testing Purpose**:
 ```
-- Smoke Tests (critical paths, runs on every commit)
-- Regression Tests (comprehensive coverage, runs nightly)
-- Performance Tests (load testing, runs weekly)
-- Security Tests (authentication, authorization, runs on release)
+- Smoke Tests (critical paths)
+- Regression Tests (comprehensive coverage)
+- Integration Tests (cross-feature workflows)
+- Edge Cases (error handling, boundary conditions)
 ```
 
 ### Naming Conventions
 
-Use clear, descriptive names that indicate purpose and scope:
+Use clear, descriptive names:
 
 **Good Examples**:
 - `smoke-tests-critical-paths`
 - `regression-checkout-flow`
-- `security-authentication-tests`
-- `performance-api-endpoints`
+- `authentication-tests`
+- `api-integration-tests`
 
 **Poor Examples**:
 - `tests` (too generic)
 - `suite1` (not descriptive)
 - `my-tests` (unclear ownership)
 
-### Suite Size Recommendations
+### Suite Size
 
-Keep test suites focused and reasonably sized:
-
-| Suite Type | Recommended Size | Execution Time | Run Frequency |
-|------------|------------------|----------------|---------------|
-| Smoke Tests | 5-15 use cases | 5-15 minutes | Every commit |
-| Feature Tests | 10-30 use cases | 15-45 minutes | Every PR |
-| Regression Tests | 30-100 use cases | 1-3 hours | Nightly |
-| Full Suite | 100+ use cases | 3+ hours | Weekly |
-
-**Benefits of Smaller Suites**:
-- Faster feedback cycles
-- Easier to identify failing tests
-- Better parallelization opportunities
-- Lower timeout risk
-- Clearer purpose and ownership
-
-**When to Split Suites**:
-- Execution time exceeds 1 hour
-- Suite contains unrelated test scenarios
-- Different teams own different parts
-- Different environments require different tests
-
-### Suite Dependencies
-
-Avoid dependencies between test suites:
-
-**Good Practice**:
-```
-Each suite is independent and can run in any order:
-- Suite A: Tests feature X
-- Suite B: Tests feature Y
-- Suite C: Tests feature Z
-```
-
-**Poor Practice**:
-```
-Suites depend on each other:
-- Suite A: Creates test data
-- Suite B: Uses data from Suite A (FRAGILE!)
-- Suite C: Cleans up data from Suite A and B
-```
-
-**Recommendation**: Each suite should set up its own test data and clean up after itself.
-
-## Variable Management
-
-### Variable Naming Conventions
-
-Use clear, consistent naming for variables:
-
-**Recommended Patterns**:
-- `snake_case` for multi-word variables: `api_key`, `base_url`, `user_email`
-- Descriptive names: `admin_username` instead of `user1`
-- Environment prefixes: `staging_api_key`, `prod_base_url`
-
-**Examples**:
-```bash
-# Good
---var username=testuser
---var api_key=test_key_123
---var base_url=https://staging.example.com
---var admin_email=admin@example.com
-
-# Poor
---var u=testuser
---var key=test_key_123
---var url=https://staging.example.com
---var e=admin@example.com
-```
-
-### Environment-Specific Variables
-
-Organize variables by environment for clarity:
-
-**CI/CD Configuration Example (GitHub Actions)**:
-```yaml
-env:
-  # Staging environment
-  STAGING_BASE_URL: https://staging.example.com
-  STAGING_USERNAME: staging_user
-  STAGING_API_KEY: ${{ secrets.STAGING_API_KEY }}
-  
-  # Production environment
-  PROD_BASE_URL: https://production.example.com
-  PROD_USERNAME: prod_user
-  PROD_API_KEY: ${{ secrets.PROD_API_KEY }}
-
-jobs:
-  test-staging:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Run tests against staging
-        run: |
-          docker run --rm \
-            -e OAUTH_CLIENT_ID="${{ secrets.OAUTH_CLIENT_ID }}" \
-            -e OAUTH_CLIENT_SECRET="${{ secrets.OAUTH_CLIENT_SECRET }}" \
-            -e OAUTH_TOKEN_ENDPOINT="${{ secrets.OAUTH_TOKEN_ENDPOINT }}" \
-            -e API_ENDPOINT="${{ secrets.API_ENDPOINT }}" \
-            nova-act-cicd-runner:latest \
-            --suite-id ${{ vars.TEST_SUITE_ID }} \
-            --base-url ${{ env.STAGING_BASE_URL }} \
-            --var username=${{ env.STAGING_USERNAME }} \
-            --var api_key=${{ env.STAGING_API_KEY }}
-```
-
-### Variable Precedence
-
-Understand and leverage variable precedence (highest to lowest):
-
-1. **CLI arguments** (`--var key=value`) - Highest priority
-2. **Use case variables** (defined in test suite)
-3. **Secrets** (from Secrets Manager) - Lowest priority
-
-**Use Case**:
-```bash
-# Override production credentials for staging test
-docker run --rm \
-  -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
-  -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-  -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT" \
-  -e API_ENDPOINT="$API_ENDPOINT" \
-  nova-act-cicd-runner:latest \
-  --suite-id $SUITE_ID \
-  --var username=staging_user \
-  --var password=staging_pass \
-  --var environment=staging
-```
-
-### Secret vs. Non-Secret Variables
-
-Distinguish between sensitive and non-sensitive variables:
-
-**Sensitive Variables** (use secrets management):
-- Passwords
-- API keys
-- OAuth tokens
-- Database credentials
-- Encryption keys
-
-**Non-Sensitive Variables** (can use plain variables):
-- Usernames
-- Email addresses
-- Base URLs
-- Environment names
-- Feature flags
+**Recommendations**:
+- Keep suites under 30 tests for manageable execution time
+- Split large suites into logical groups
+- Create focused suites for specific features
 
 **Example**:
-```yaml
-# GitHub Actions
-secrets:
-  OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
-  API_KEY: ${{ secrets.API_KEY }}
-  PASSWORD: ${{ secrets.PASSWORD }}
+```
+Instead of:
+- All Tests (100 tests)
 
-variables:
-  USERNAME: testuser
-  BASE_URL: https://staging.example.com
-  ENVIRONMENT: staging
+Use:
+- Smoke Tests (10 tests)
+- Authentication Tests (15 tests)
+- Checkout Tests (20 tests)
+- Search Tests (15 tests)
+- Admin Tests (20 tests)
 ```
 
-## Secret Handling
+---
 
-### Never Commit Secrets
+## Test Creation
 
-**Critical Rule**: Never commit secrets to version control.
+### Writing Effective Instructions
 
-**Bad Practice**:
-```bash
-# DON'T DO THIS!
-export OAUTH_CLIENT_SECRET="secret_xyz789..."
-git add .env
-git commit -m "Add configuration"
+**Be Specific**:
+```
+✅ Good: "Click the blue 'Sign In' button in the top right corner"
+❌ Poor: "Click the button"
+
+✅ Good: "Enter 'test@example.com' in the email field"
+❌ Poor: "Enter email"
+
+✅ Good: "Verify the success message says 'Order placed successfully'"
+❌ Poor: "Check if it worked"
 ```
 
-**Good Practice**:
-```bash
-# Add .env to .gitignore
-echo ".env" >> .gitignore
-echo ".token_cache.json" >> .gitignore
+**Use Natural Language**:
+```
+✅ Good: "Navigate to the login page"
+❌ Poor: "goto('/login')"
 
-# Use environment variables or secrets management
-export OAUTH_CLIENT_SECRET="$SECRET_FROM_VAULT"
+✅ Good: "Fill in the username field with 'testuser'"
+❌ Poor: "input#username.value = 'testuser'"
 ```
 
-### Use CI/CD Secret Management
+**One Action Per Step**:
+```
+✅ Good:
+- Step 1: "Click the 'Add to Cart' button"
+- Step 2: "Click the 'Checkout' button"
 
-Leverage your CI/CD platform's built-in secret management:
-
-**GitHub Actions**:
-```yaml
-steps:
-  - name: Run tests
-    env:
-      OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
-    run: |
-      docker run --rm \
-        -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-        ...
+❌ Poor:
+- Step 1: "Click 'Add to Cart' and then click 'Checkout'"
 ```
 
-**GitLab CI**:
-```yaml
-variables:
-  OAUTH_CLIENT_SECRET: $OAUTH_CLIENT_SECRET  # Masked variable
+### Using Variables
 
-test:
-  script:
-    - docker run --rm -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" ...
+**When to Use Variables**:
+- Credentials (username, password)
+- Environment-specific values (URLs, API keys)
+- Test data that changes between runs
+- Sensitive information
+
+**Variable Naming**:
+```
+✅ Good: username, password, api_key, base_url
+❌ Poor: var1, x, temp, data
 ```
 
-**Jenkins**:
-```groovy
-environment {
-  OAUTH_CLIENT_SECRET = credentials('oauth-client-secret')
-}
+**Example**:
+```
+Step: "Enter {{username}} in the username field"
+Step: "Enter {{password}} in the password field"
+Step: "Navigate to {{base_url}}/login"
 ```
 
-### Secret Rotation Strategies
+### Using Secrets
 
-Rotate secrets regularly to minimize exposure risk:
+**Store Sensitive Data in Secrets Manager**:
+- Passwords
+- API keys
+- Tokens
+- Credit card numbers (test data)
 
-**Recommended Rotation Schedule**:
-- **OAuth client secrets**: Every 90 days
-- **API keys**: Every 90 days
-- **Passwords**: Every 90 days or after team member departure
-
-**Rotation Process**:
-
-1. **Create new OAuth client**:
-```bash
-curl -X POST \
-  'https://api.example.com/api/oauth-clients' \
-  -H 'Authorization: Bearer <jwt_token>' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name": "CI/CD Runner - Production (2024-Q2)",
-    "scopes": [
-      "api/suite.read",
-      "api/suite.write",
-      "api/execution.write"
-    ]
-  }'
+**Reference Secrets in Steps**:
 ```
-
-2. **Update CI/CD secrets** with new credentials
-
-3. **Test with new credentials** in non-production environment
-
-4. **Deploy to production** pipelines
-
-5. **Delete old OAuth client**:
-```bash
-curl -X DELETE \
-  'https://api.example.com/api/oauth-clients/OLD_CLIENT_ID' \
-  -H 'Authorization: Bearer <jwt_token>'
-```
-
-**Alternative: Use Rotate Secret Endpoint**:
-```bash
-# Rotate secret (changes client ID)
-curl -X POST \
-  'https://api.example.com/api/oauth-clients/CLIENT_ID/rotate-secret' \
-  -H 'Authorization: Bearer <jwt_token>' \
-  -H 'Content-Type: application/json'
-```
-
-**Note**: Rotation immediately invalidates old credentials. Update all systems before rotating.
-
-### Least Privilege Principle
-
-Grant only the minimum scopes required:
-
-**Good Practice** (CI/CD runner needs execution only):
-```json
-{
-  "name": "CI/CD Runner - Staging",
-  "scopes": [
-    "api/suite.read",
-    "api/suite.write",
-    "api/execution.write"
-  ]
-}
-```
-
-**Poor Practice** (unnecessary admin access):
-```json
-{
-  "name": "CI/CD Runner - Staging",
-  "scopes": [
-    "api/admin"
-  ]
-}
-```
-
-**Scope Requirements by Use Case**:
-
-| Use Case | Required Scopes |
-|----------|----------------|
-| Execute test suites | `api/suite.read`, `api/suite.write`, `api/execution.write` |
-| Read-only monitoring | `api/suite.read`, `api/execution.read` |
-| Manage OAuth clients | `api/oauth-clients.read`, `api/oauth-clients.write` |
-
-### Secure Credential Storage
-
-Store credentials securely in your CI/CD platform:
-
-**GitHub Actions**:
-- Use repository secrets (Settings → Secrets and variables → Actions)
-- Mark secrets as "Required" for protected branches
-- Use environment-specific secrets for staging/production
-
-**GitLab CI**:
-- Use CI/CD variables (Settings → CI/CD → Variables)
-- Mark variables as "Masked" to hide in logs
-- Mark variables as "Protected" for protected branches only
-
-**Jenkins**:
-- Use Credentials plugin
-- Store as "Secret text" type
-- Bind credentials in pipeline using `credentials()` function
-
-**CircleCI**:
-- Use project environment variables (Project Settings → Environment Variables)
-- Use contexts for shared secrets across projects
-
-### Token Caching Security
-
-The runner caches OAuth tokens locally:
-
-**Cache File**: `.token_cache.json`
-
-**Security Considerations**:
-- Contains access token and expiration time
-- Created in working directory
-- Should be added to `.gitignore`
-- Automatically refreshed when expired
-- Can be safely deleted to force re-authentication
-
-**Recommendation**:
-```bash
-# Add to .gitignore
-echo ".token_cache.json" >> .gitignore
-
-# Clean up after CI/CD run
-rm -f .token_cache.json
-```
-
-## Artifact Retention
-
-### Storage Considerations
-
-Artifacts (recordings, screenshots, logs, traces) are stored in S3:
-
-**Artifact Types and Sizes**:
-- **Recordings** (video/webm): 5-50 MB per execution
-- **Screenshots** (image/png): 100-500 KB per step
-- **Logs** (text/plain): 10-100 KB per execution
-- **Traces** (application/json): 50-500 KB per step
-
-**Storage Cost Estimation**:
-```
-Example: 100 executions/day with 10 steps each
-- Recordings: 100 × 20 MB = 2 GB/day
-- Screenshots: 100 × 10 × 200 KB = 200 MB/day
-- Logs: 100 × 50 KB = 5 MB/day
-- Traces: 100 × 10 × 100 KB = 100 MB/day
-Total: ~2.3 GB/day = ~70 GB/month
-```
-
-### Retention Policies
-
-Implement retention policies to manage storage costs:
-
-**Recommended Retention Periods**:
-
-| Artifact Type | Retention Period | Rationale |
-|---------------|------------------|-----------|
-| Failed execution artifacts | 90 days | Debugging and analysis |
-| Passed execution artifacts | 30 days | Compliance and auditing |
-| Smoke test artifacts | 7 days | Quick feedback only |
-| Production test artifacts | 180 days | Regulatory compliance |
-
-**S3 Lifecycle Policy Example**:
-```json
-{
-  "Rules": [
-    {
-      "Id": "Delete old artifacts",
-      "Status": "Enabled",
-      "Filter": {
-        "Prefix": "artifacts/"
-      },
-      "Expiration": {
-        "Days": 90
-      }
-    },
-    {
-      "Id": "Transition to Glacier",
-      "Status": "Enabled",
-      "Filter": {
-        "Prefix": "artifacts/production/"
-      },
-      "Transitions": [
-        {
-          "Days": 30,
-          "StorageClass": "GLACIER"
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Cleanup Strategies
-
-**Automated Cleanup** (recommended):
-- Use S3 lifecycle policies for automatic deletion
-- Configure in CDK/CloudFormation deployment
-- Set different policies for different environments
-
-**Manual Cleanup** (not recommended):
-- Requires custom scripts
-- Risk of accidental deletion
-- Operational overhead
-
-**Selective Retention**:
-```python
-# Example: Keep only failed execution artifacts
-import boto3
-
-s3 = boto3.client('s3')
-dynamodb = boto3.resource('dynamodb')
-table = dynamodb.Table('executions')
-
-# Query failed executions
-response = table.query(
-    IndexName='status-index',
-    KeyConditionExpression='status = :status',
-    ExpressionAttributeValues={':status': 'failed'}
-)
-
-failed_execution_ids = [item['execution_id'] for item in response['Items']]
-
-# Delete artifacts for passed executions only
-# (Keep failed execution artifacts for debugging)
-```
-
-### Artifact Access Patterns
-
-**When to Download Artifacts**:
-- Debugging failed tests
-- Compliance audits
-- Performance analysis
-- Bug reproduction
-
-**How to Access Artifacts**:
-1. Via web UI (recommended for manual review)
-2. Via API (for automated analysis)
-3. Direct S3 access (for bulk operations)
-
-**Best Practice**: Use presigned URLs for temporary access without exposing S3 credentials.
-
-## Performance Optimization
-
-### Parallel Execution Strategies
-
-Run multiple test suites in parallel for faster feedback:
-
-**GitHub Actions Example**:
-```yaml
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        suite: [smoke, auth, checkout, search]
-    steps:
-      - name: Run ${{ matrix.suite }} tests
-        run: |
-          docker run --rm \
-            -e OAUTH_CLIENT_ID="${{ secrets.OAUTH_CLIENT_ID }}" \
-            -e OAUTH_CLIENT_SECRET="${{ secrets.OAUTH_CLIENT_SECRET }}" \
-            -e OAUTH_TOKEN_ENDPOINT="${{ secrets.OAUTH_TOKEN_ENDPOINT }}" \
-            -e API_ENDPOINT="${{ secrets.API_ENDPOINT }}" \
-            nova-act-cicd-runner:latest \
-            --suite-id ${{ vars[format('{0}_SUITE_ID', matrix.suite)] }} \
-            --verbose
+Step: "Enter the password from secret 'test-user-password'"
 ```
 
 **Benefits**:
-- Faster total execution time
-- Independent failure isolation
-- Better resource utilization
+- Secrets never appear in logs
+- Centralized secret management
+- Easy rotation without updating tests
 
-**Considerations**:
-- CI/CD platform concurrency limits
-- API rate limits (if applicable)
-- Cost of parallel runners
+---
 
-### Timeout Tuning
+## Test Maintenance
 
-Set appropriate timeouts based on suite size:
+### Keep Tests Independent
 
-**Recommended Timeouts**:
-
-| Suite Size | Recommended Timeout | Example |
-|------------|---------------------|---------|
-| Small (5-15 use cases) | 900s (15 min) | Smoke tests |
-| Medium (15-30 use cases) | 1800s (30 min) | Feature tests |
-| Large (30-100 use cases) | 3600s (1 hour) | Regression tests |
-| Extra Large (100+ use cases) | 7200s (2 hours) | Full suite |
-
-**Setting Timeout**:
-```bash
-docker run --rm \
-  -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
-  -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-  -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT" \
-  -e API_ENDPOINT="$API_ENDPOINT" \
-  nova-act-cicd-runner:latest \
-  --suite-id $SUITE_ID \
-  --timeout 1800
-```
-
-**Timeout Best Practices**:
-- Set timeout 20-30% higher than average execution time
-- Monitor execution times and adjust accordingly
-- Use separate timeouts for different suite types
-- Fail fast on timeout to avoid wasting resources
-
-### Resource Allocation
-
-Allocate sufficient resources for the runner container:
-
-**Recommended Resources**:
-
-| Suite Size | Memory | CPU | Rationale |
-|------------|--------|-----|-----------|
-| Small | 2 GB | 1 vCPU | Minimal overhead |
-| Medium | 4 GB | 2 vCPU | Parallel step execution |
-| Large | 8 GB | 4 vCPU | Multiple browser instances |
-
-**Docker Resource Limits**:
-```bash
-docker run --rm \
-  --memory=4g \
-  --cpus=2 \
-  -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
-  -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-  -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT" \
-  -e API_ENDPOINT="$API_ENDPOINT" \
-  nova-act-cicd-runner:latest \
-  --suite-id $SUITE_ID
-```
-
-**Monitoring Resource Usage**:
-```bash
-# Monitor container resource usage
-docker stats
-```
-
-### Network Optimization
-
-Optimize network performance for faster execution:
-
-**Regional Considerations**:
-- Run tests in the same AWS region as the API
-- Use `--region` flag to specify region
-- Consider latency to target application
+Each test should:
+- Set up its own data
+- Clean up after itself
+- Not depend on other tests
+- Be runnable in any order
 
 **Example**:
-```bash
-# Run tests in us-west-2 for lower latency
-docker run --rm \
-  -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
-  -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
-  -e OAUTH_TOKEN_ENDPOINT="$OAUTH_TOKEN_ENDPOINT" \
-  -e API_ENDPOINT="$API_ENDPOINT" \
-  nova-act-cicd-runner:latest \
-  --suite-id $SUITE_ID \
-  --region us-west-2
+```
+❌ Poor:
+Test 1: Create user account
+Test 2: Login with that account (depends on Test 1)
+
+✅ Good:
+Test 1: Create user account, then delete it
+Test 2: Login with pre-existing test account
 ```
 
-### Caching Strategies
+### Handle Dynamic Content
 
-Leverage caching to reduce execution time:
-
-**OAuth Token Caching**:
-- Runner automatically caches OAuth tokens
-- Cache file: `.token_cache.json`
-- Reduces authentication overhead
-- Automatically refreshed when expired
-
-**Docker Image Caching**:
-```yaml
-# GitHub Actions - cache Docker layers
-- name: Set up Docker Buildx
-  uses: docker/setup-buildx-action@v2
-
-- name: Cache Docker layers
-  uses: actions/cache@v3
-  with:
-    path: /tmp/.buildx-cache
-    key: ${{ runner.os }}-buildx-${{ github.sha }}
-    restore-keys: |
-      ${{ runner.os }}-buildx-
+**Use Appropriate Waits**:
 ```
+✅ Good: "Wait for the loading spinner to disappear"
+✅ Good: "Wait for the 'Welcome' message to appear"
+
+❌ Poor: "Wait 5 seconds" (brittle, slow)
+```
+
+**Use Stable Selectors**:
+```
+✅ Good: "Click the button with text 'Submit'"
+✅ Good: "Click the button with aria-label 'Submit form'"
+
+❌ Poor: "Click the third button" (fragile)
+```
+
+### Regular Review
+
+- Review test results weekly
+- Update tests when UI changes
+- Remove obsolete tests
+- Refactor duplicate logic into templates
+
+---
 
 ## Security Best Practices
 
-### OAuth Client Management
+### Authentication
 
-**Create Separate Clients per Environment**:
-```
-- CI/CD Runner - Development
-- CI/CD Runner - Staging
-- CI/CD Runner - Production
-```
+**User Credentials**:
+- Store in AWS Secrets Manager
+- Never hardcode in test steps
+- Use separate test accounts
+- Rotate credentials regularly
 
-**Benefits**:
-- Isolated credentials per environment
-- Easier rotation and revocation
-- Better audit trail
-- Reduced blast radius on compromise
+**OAuth Clients**:
+- Create separate clients for different purposes
+- Use descriptive names
+- Grant minimum required scopes
+- Rotate secrets regularly
+- Delete unused clients
 
-**Naming Convention**:
-```
-{Purpose} - {Environment} ({Date})
-Examples:
-- CI/CD Runner - Production (2024-Q1)
-- Monitoring Bot - Staging (2024-02)
-- Integration Tests - Development (2024-01-15)
-```
+### Access Control
 
-### Scope Minimization
+**User Management**:
+- Use Cognito groups for role-based access
+- Grant minimum required permissions
+- Review user access regularly
+- Remove inactive users
 
-Grant only required scopes:
+**API Access**:
+- Use OAuth clients for programmatic access
+- Never share client secrets
+- Store secrets in secure secret management
+- Monitor API usage
 
-**CI/CD Runner** (execution only):
-```json
-{
-  "scopes": [
-    "api/suite.read",
-    "api/suite.write",
-    "api/execution.write"
-  ]
-}
-```
+### Data Protection
 
-**Monitoring Bot** (read-only):
-```json
-{
-  "scopes": [
-    "api/suite.read",
-    "api/execution.read"
-  ]
-}
-```
-
-**Admin Tool** (full access):
-```json
-{
-  "scopes": [
-    "api/admin"
-  ]
-}
-```
-
-### Network Security
-
-**Use HTTPS Only**:
-- All API endpoints must use HTTPS
-- Configuration validation enforces HTTPS
-- Never use HTTP in production
-
-**Firewall Rules**:
-```
-Outbound (required):
-- HTTPS (443) to API endpoint
-- HTTPS (443) to Cognito (*.amazoncognito.com)
-- HTTPS (443) to S3 (*.s3.amazonaws.com)
-
-Inbound:
-- None required (runner is client-only)
-```
-
-**VPC Considerations**:
-- Run in private subnet if possible
-- Use NAT Gateway for outbound access
-- Restrict security group rules
-
-### Audit Logging
-
-Enable audit logging for compliance:
-
-**What to Log**:
-- OAuth client creation/deletion
-- Test suite executions
-- Artifact uploads
-- Authentication attempts
-- Configuration changes
-
-**Where to Log**:
-- CloudWatch Logs (AWS)
-- CI/CD platform logs
-- SIEM system (enterprise)
-
-**Log Retention**:
-- Security logs: 1 year minimum
-- Execution logs: 90 days
-- Debug logs: 30 days
-
-### Incident Response
-
-**Compromised Credentials**:
-
-1. **Immediate Actions**:
-   - Delete compromised OAuth client
-   - Rotate all related secrets
-   - Review audit logs for unauthorized access
-
-2. **Investigation**:
-   - Identify scope of compromise
-   - Check for unauthorized executions
-   - Review artifact access logs
-
-3. **Remediation**:
-   - Create new OAuth client with new credentials
-   - Update all CI/CD pipelines
-   - Document incident and lessons learned
-
-**Example Incident Response Script**:
-```bash
-#!/bin/bash
-# Emergency credential rotation
-
-# 1. Delete compromised client
-curl -X DELETE \
-  "https://api.example.com/api/oauth-clients/$COMPROMISED_CLIENT_ID" \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
-
-# 2. Create new client
-NEW_CLIENT=$(curl -X POST \
-  'https://api.example.com/api/oauth-clients' \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name": "CI/CD Runner - Production (Emergency Rotation)",
-    "scopes": [
-      "api/suite.read",
-      "api/suite.write",
-      "api/execution.write"
-    ]
-  }')
-
-# 3. Extract new credentials
-NEW_CLIENT_ID=$(echo $NEW_CLIENT | jq -r '.client_id')
-NEW_CLIENT_SECRET=$(echo $NEW_CLIENT | jq -r '.client_secret')
-
-echo "New Client ID: $NEW_CLIENT_ID"
-echo "New Client Secret: $NEW_CLIENT_SECRET"
-echo "Update CI/CD secrets immediately!"
-```
-
-### Compliance Considerations
-
-**GDPR/Privacy**:
-- Avoid storing PII in test data
+**Test Data**:
 - Use synthetic test data
-- Implement data retention policies
-- Provide data deletion mechanisms
+- Never use production data
+- Anonymize any real data
+- Delete test data after use
 
-**SOC 2/ISO 27001**:
-- Enable audit logging
-- Implement access controls
-- Regular security reviews
-- Incident response procedures
+**Artifacts**:
+- Configure S3 lifecycle policies
+- Delete old artifacts regularly
+- Restrict access to artifacts
+- Use presigned URLs (expire after 1 hour)
 
-**Industry-Specific**:
-- Healthcare (HIPAA): Encrypt artifacts at rest
-- Finance (PCI DSS): Secure credential storage
-- Government (FedRAMP): Use approved regions
+---
 
-## Summary
+## Performance Optimization
 
-Following these best practices will help you:
+### Test Execution
 
-- **Organize tests effectively** for maintainability and clarity
-- **Manage variables securely** with proper precedence and naming
-- **Handle secrets safely** with rotation and least privilege
-- **Optimize performance** with parallelization and resource tuning
-- **Maintain security** with proper OAuth client management and audit logging
-- **Control costs** with appropriate artifact retention policies
+**Optimize Test Steps**:
+- Remove unnecessary waits
+- Use specific selectors
+- Minimize navigation between pages
+- Combine related actions
 
-For more information, see:
-- [Configuration Reference](configuration.md)
-- [Security Documentation](API.md#authentication)
-- [Troubleshooting Guide](troubleshooting.md)
-- [CI/CD Integration Examples](ci-cd-integration/)
+**Example**:
+```
+❌ Slow:
+- Navigate to homepage
+- Click login link
+- Wait 2 seconds
+- Enter username
+- Wait 1 second
+- Enter password
+- Wait 1 second
+- Click submit
+
+✅ Fast:
+- Navigate to login page directly
+- Enter username
+- Enter password
+- Click submit
+```
+
+**Parallel Execution**:
+- Group independent tests into suites
+- Suites execute tests in parallel automatically
+- Split large suites for faster execution
+
+### Resource Usage
+
+**Artifact Management**:
+- Configure S3 lifecycle policies
+- Transition old artifacts to Glacier
+- Delete artifacts after retention period
+- Only capture necessary artifacts
+
+**Example Lifecycle Policy**:
+```
+- Keep artifacts for 30 days (Standard)
+- Move to Glacier after 30 days
+- Delete after 90 days
+```
+
+**DynamoDB Optimization**:
+- Use on-demand capacity mode
+- Archive old execution records
+- Delete test executions after analysis
+
+---
+
+## Monitoring & Observability
+
+### CloudWatch Logs
+
+**What to Monitor**:
+- Lambda function errors
+- ECS task failures
+- API Gateway errors
+- Worker execution logs
+
+**Set Up Alarms**:
+- High error rate
+- Execution timeouts
+- Failed authentications
+- Resource exhaustion
+
+### Execution History
+
+**Review Regularly**:
+- Test success rates
+- Execution times
+- Failure patterns
+- Resource usage
+
+**Identify Issues**:
+- Flaky tests (intermittent failures)
+- Slow tests (optimization opportunities)
+- Failing tests (bugs or test issues)
+
+---
+
+## Cost Optimization
+
+### Compute Costs
+
+**Lambda**:
+- Functions are billed per invocation
+- Optimize function memory allocation
+- Reduce cold starts with provisioned concurrency (if needed)
+
+**ECS Fargate**:
+- Tasks are billed per second
+- Optimize test execution time
+- Use appropriate task size (CPU/memory)
+
+**Bedrock (Nova Act)**:
+- Billed per API call
+- Optimize test steps to reduce calls
+- Use caching when available
+
+### Storage Costs
+
+**S3**:
+- Configure lifecycle policies
+- Delete old artifacts
+- Use Intelligent-Tiering for variable access patterns
+
+**DynamoDB**:
+- Use on-demand pricing for variable workloads
+- Archive old execution records
+- Delete unnecessary data
+
+### Cost Monitoring
+
+**Set Up Budgets**:
+- Create AWS Budgets for QA Studio resources
+- Set alerts for unexpected costs
+- Review Cost Explorer monthly
+
+**Tag Resources**:
+- Tag all resources with project/team
+- Use cost allocation tags
+- Track costs by environment (dev/staging/prod)
+
+---
+
+## Collaboration
+
+### Team Workflows
+
+**Test Ownership**:
+- Assign tests to team members
+- Use naming conventions to indicate ownership
+- Document test purpose and scope
+
+**Code Reviews**:
+- Review test changes before merging
+- Ensure tests follow best practices
+- Verify tests are maintainable
+
+**Documentation**:
+- Document test suites and their purpose
+- Maintain a test plan document
+- Keep README updated with setup instructions
+
+### Sharing Tests
+
+**Export/Import**:
+- Export tests as JSON for sharing
+- Version control test definitions
+- Import tests into other environments
+
+**Templates**:
+- Create templates for common patterns
+- Share templates across team
+- Document template usage
+
+---
+
+## Continuous Improvement
+
+### Metrics to Track
+
+**Test Quality**:
+- Test success rate
+- Flaky test count
+- Test coverage
+
+**Performance**:
+- Average execution time
+- Time to detect bugs
+- Time to fix failing tests
+
+**Cost**:
+- Cost per test execution
+- Total monthly cost
+- Cost trends over time
+
+### Regular Reviews
+
+**Weekly**:
+- Review failed tests
+- Update flaky tests
+- Check execution times
+
+**Monthly**:
+- Review test coverage
+- Analyze cost trends
+- Update documentation
+
+**Quarterly**:
+- Review test strategy
+- Evaluate tool effectiveness
+- Plan improvements
+
+---
+
+## Common Pitfalls
+
+### Avoid These Mistakes
+
+**Over-Reliance on Waits**:
+```
+❌ Poor: "Wait 5 seconds" after every action
+✅ Good: "Wait for element to appear" only when needed
+```
+
+**Brittle Selectors**:
+```
+❌ Poor: "Click the third button in the second div"
+✅ Good: "Click the button with text 'Submit'"
+```
+
+**Test Dependencies**:
+```
+❌ Poor: Tests that must run in specific order
+✅ Good: Independent tests that can run in any order
+```
+
+**Hardcoded Values**:
+```
+❌ Poor: "Navigate to https://staging.example.com/login"
+✅ Good: "Navigate to {{base_url}}/login"
+```
+
+**Ignoring Failures**:
+```
+❌ Poor: Marking flaky tests as "known issues"
+✅ Good: Fixing or removing flaky tests
+```
+
+---
+
+## Getting Started Checklist
+
+### Initial Setup
+
+- [ ] Deploy QA Studio to AWS
+- [ ] Create admin user account
+- [ ] Configure OAuth clients
+- [ ] Set up AWS Secrets Manager for test secrets
+- [ ] Configure S3 lifecycle policies
+- [ ] Set up CloudWatch alarms
+
+### First Test Suite
+
+- [ ] Create test suite with descriptive name
+- [ ] Add 3-5 smoke tests for critical paths
+- [ ] Use variables for environment-specific values
+- [ ] Store credentials in Secrets Manager
+- [ ] Execute suite and verify results
+- [ ] Review artifacts (videos, screenshots)
+
+### Team Onboarding
+
+- [ ] Create user accounts for team members
+- [ ] Assign appropriate permissions
+- [ ] Share documentation and best practices
+- [ ] Conduct training session
+- [ ] Create example tests for reference
+- [ ] Set up regular review meetings
+
+---
+
+## Additional Resources
+
+- [User Guide](user-guide.md) - Complete walkthrough of the web interface
+- [Prompting Best Practices](prompting-best-practices.md) - Writing effective test steps
+- [Architecture](architecture.md) - System design and data flows
+- [API Reference](api-reference.md) - Complete API documentation
+- [Troubleshooting](troubleshooting.md) - Common issues and solutions
