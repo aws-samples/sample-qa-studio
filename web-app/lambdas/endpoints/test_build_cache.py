@@ -1421,7 +1421,7 @@ class TestLambdaHandler:
             }
         }
         
-        response = build_cache.lambda_handler(event, None)
+        response = build_cache.handler(event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -1432,7 +1432,7 @@ class TestLambdaHandler:
         """Test that Lambda skips processing when execution_status is not 'success'."""
         valid_event['detail']['execution_status'] = 'failed'
         
-        response = build_cache.lambda_handler(valid_event, None)
+        response = build_cache.handler(valid_event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -1442,7 +1442,7 @@ class TestLambdaHandler:
     def test_missing_environment_variables_returns_200(self, valid_event):
         """Test that Lambda returns 200 when environment variables are missing."""
         with patch.dict(os.environ, {}, clear=True):
-            response = build_cache.lambda_handler(valid_event, None)
+            response = build_cache.handler(valid_event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -1464,7 +1464,7 @@ class TestLambdaHandler:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3.resource.return_value = mock_dynamodb
         
-        response = build_cache.lambda_handler(valid_event, None)
+        response = build_cache.handler(valid_event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -1481,7 +1481,7 @@ class TestLambdaHandler:
         mock_dynamodb.Table.return_value = mock_table
         mock_boto3.resource.return_value = mock_dynamodb
         
-        response = build_cache.lambda_handler(valid_event, None)
+        response = build_cache.handler(valid_event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -1560,7 +1560,7 @@ class TestLambdaHandler:
         mock_boto3.resource.return_value = mock_dynamodb
         mock_boto3.client.return_value = mock_s3_client
         
-        response = build_cache.lambda_handler(valid_event, None)
+        response = build_cache.handler(valid_event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -1575,7 +1575,7 @@ class TestLambdaHandler:
     def test_unexpected_exception_returns_200(self, mock_env_vars, valid_event):
         """Test that Lambda returns 200 even on unexpected exceptions (fire-and-forget)."""
         with patch('build_cache.boto3.resource', side_effect=Exception('Unexpected error')):
-            response = build_cache.lambda_handler(valid_event, None)
+            response = build_cache.handler(valid_event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -1632,7 +1632,7 @@ class TestLambdaHandler:
         mock_boto3.resource.return_value = MagicMock(Table=lambda x: mock_table)
         mock_boto3.client.return_value = mock_s3_client
         
-        response = build_cache.lambda_handler(valid_event, None)
+        response = build_cache.handler(valid_event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -1706,7 +1706,7 @@ class TestLambdaHandler:
         mock_boto3.resource.return_value = MagicMock(Table=lambda x: mock_table)
         mock_boto3.client.return_value = mock_s3_client
         
-        response = build_cache.lambda_handler(valid_event, None)
+        response = build_cache.handler(valid_event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -1782,7 +1782,7 @@ class TestLambdaHandler:
         mock_boto3.resource.return_value = MagicMock(Table=lambda x: mock_table)
         mock_boto3.client.return_value = mock_s3_client
         
-        response = build_cache.lambda_handler(valid_event, None)
+        response = build_cache.handler(valid_event, None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])

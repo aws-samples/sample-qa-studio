@@ -382,7 +382,7 @@ def update_step_caches(
 
 
 
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler for cache building triggered by EventBridge.
     
