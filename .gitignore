@@ -35,35 +35,35 @@ env/
 ENV/
 
 # Lambda dependencies
-endpoints/dependencies/
-endpoints/.cache/
-lambdas/endpoints/dependencies/
-lambdas/auth/dependencies/
-lambdas/events/dependencies/
+web-app/endpoints/dependencies/
+web-app/endpoints/.cache/
+web-app/lambdas/endpoints/dependencies/
+web-app/lambdas/auth/dependencies/
+web-app/lambdas/events/dependencies/
 
-frontend/.env
-frontend/src/amplifyconfiguration.json
+web-app/frontend/.env
+web-app/frontend/src/amplifyconfiguration.json
 
-configuration.json
+web-app/configuration.json
 
 # DCV SDK downloads
-frontend/public/dcv/*
-.tmp-dcv-download/
+web-app/frontend/public/dcv/*
+web-app/.tmp-dcv-download/
 
 # Release artifacts
-release/
+web-app/release/
 
 # test cases for nova-act-qa-studio
 test-usecases/*
 
 # Frontend build outputs (if not already covered by *.js)
-frontend/build/*
-!frontend/build/.gitkeep
-frontend/dist/
-frontend/node_modules/
+web-app/frontend/build/*
+!web-app/frontend/build/.gitkeep
+web-app/frontend/dist/
+web-app/frontend/node_modules/
 
 # CDK context (can be regenerated)
-cdk.context.json
+web-app/cdk.context.json
 
 # Additional log files
 *.log
@@ -72,7 +72,5 @@ yarn-debug.log*
 yarn-error.log*
 
 .coverage
-.hypothesis
-.token_cache.json
+*.hypothesis
 .env
-qa_studio_ci_runner.egg-info
