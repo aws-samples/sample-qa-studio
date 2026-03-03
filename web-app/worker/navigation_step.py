@@ -62,6 +62,12 @@ def execute_navigation_step(nova: NovaAct, step: ExecutionStep):
       logger.warning(f"Failed to parse cached_steps for step {step.sort}: {e}, falling back to Nova Act")
     except Exception as e:
       logger.warning(f"Unexpected error during cache execution for step {step.sort}: {e}, falling back to Nova Act")
+  else:
+    # Log cache miss reasons
+    if not enable_cache:
+      logger.info(f"Cache miss for step {step.sort}: caching disabled")
+    elif not cached_steps or not cached_steps.strip():
+      logger.info(f"Cache miss for step {step.sort}: no cached steps available")
   
   try:
     # Build the instruction with optional advanced click types prompt

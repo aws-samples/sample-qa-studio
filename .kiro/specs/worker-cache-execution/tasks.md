@@ -29,7 +29,7 @@ This implementation integrates cached step execution into the worker's navigatio
     - Fall back to Nova Act execution on any exception
     - _Requirements: 2.6, 3.1, 3.2, 3.3, 3.4, 7.1, 7.6_
   
-  - [~] 1.4 Add cache observability logging
+  - [x] 1.4 Add cache observability logging
     - Log INFO "Cache hit for step {sort} (executed in {duration_ms}ms)" on success
     - Log INFO "Cache miss for step {sort}: caching disabled" when enable_cache=False
     - Log INFO "Cache miss for step {sort}: no cached steps available" when cached_steps missing
