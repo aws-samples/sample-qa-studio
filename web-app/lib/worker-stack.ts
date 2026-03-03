@@ -185,6 +185,39 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     this.log('executionStatusRule', executionStatusRule.ruleName);
 
+    // Cache Builder Lambda - builds step caches from Nova Act responses
+    const buildCacheLambda = this.createPythonLambda({
+      path: 'build_cache',
+      timeout: Duration.seconds(60),
+      memorySize: 512,
+      environment: {
+        DYNAMODB_TABLE_NAME: props.table.tableName,
+        S3_BUCKET: this.artefactsBucket.bucketName
+      }
+    });
+
+    // Grant S3 read access to artefacts bucket
+    this.artefactsBucket.grantRead(buildCacheLambda);
+
+    // Grant DynamoDB read/write access
+    buildCacheLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    buildCacheLambda.role?.addManagedPolicy(props.tableWritePolicy);
+
+    // EventBridge rule for cache builder - triggers on successful execution completion
+    const cacheBuilderRule = new Rule(this, 'cache_builder_rule', {
+      ruleName: this.cdkName('cache-builder'),
+      description: 'Triggers cache builder after successful execution',
+      eventBus: eventBus,
+      eventPattern: {
+        source: ['qa-studio.worker'],
+        detailType: ['usecase.execution.completed']
+      }
+    });
+
+    cacheBuilderRule.addTarget(new LambdaFunction(buildCacheLambda));
+
+    this.log('cacheBuilderRule', cacheBuilderRule.ruleName);
+
     // TODO: Remove this as the local queue feature is not needed anymore
     this.executionQueue = new Queue(this, 'queue', {
       queueName: this.cdkName('workhorse'),
