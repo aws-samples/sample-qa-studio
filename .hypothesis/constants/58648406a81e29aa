@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/add_usecases_to_suite.py
+# hypothesis_version: 6.151.9
+
+[200, 400, 404, 500, ':pk', ':sk_prefix', ':total', ':updated_at', 'Item', 'Items', 'Missing suite ID', 'Test suite not found', 'USECASE#', 'USECASES', 'added', 'api/suite.write', 'body', 'dynamodb', 'error', 'identity', 'name', 'pathParameters', 'pk', 'scope', 'sk', 'suite_id', 'total_usecases', 'usecase:default', 'usecase_id', 'usecase_ids', '{}']

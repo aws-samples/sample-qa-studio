@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/delete_oauth_client.py
+# hypothesis_version: 6.151.9
+
+[200, 400, 403, 500, 'Item', 'OAUTH_CLIENTS', 'USER_POOL_ID', 'clientId', 'client_id', 'cognito-idp', 'created_by', 'dynamodb', 'error', 'message', 'pathParameters', 'pk', 'sk']

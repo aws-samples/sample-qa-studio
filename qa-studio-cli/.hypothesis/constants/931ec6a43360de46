@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/commands/tests.py
+# hypothesis_version: 6.151.9
+
+['--from-journey', '--yes', '-y', '/api/import', '/api/usecases', 'Aborted.', 'No tests found.', 'Region', 'Starting URL', 'Title', 'client', 'create', 'delete', 'get', 'id', 'list', 'name', 'region', 'startingUrl', 'title', 'usecaseData', 'usecases', 'userJourney']

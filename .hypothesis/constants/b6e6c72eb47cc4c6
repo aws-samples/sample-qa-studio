@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/cicd-runner/src/execution/suite_log_capture.py
+# hypothesis_version: 6.151.9
+
+['.ci_runner', 'suite_logs.txt']

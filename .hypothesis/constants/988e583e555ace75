@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/list_oauth_clients.py
+# hypothesis_version: 6.151.9
+
+[200, 404, 500, 'AccessTokenValidity', 'AllowedOAuthFlows', 'AllowedOAuthScopes', 'ClientId', 'ClientName', 'CreationDate', 'ExplicitAuthFlows', 'IdTokenValidity', 'Item', 'LastModifiedDate', 'NextToken', 'OAUTH_CLIENTS', 'RefreshTokenValidity', 'TokenValidityUnits', 'USER_POOL_ID', 'User pool not found', 'UserPoolClient', 'UserPoolClients', 'allowed_oauth_flows', 'allowed_oauth_scopes', 'client_id', 'client_name', 'clients', 'cognito-idp', 'count', 'created_by', 'created_date', 'dynamodb', 'enabled', 'error', 'explicit_auth_flows', 'id_token_validity', 'last_modified_date', 'pk', 'sk', 'token_validity_units']

@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/cicd-runner/src/main.py
+# hypothesis_version: 6.151.9
+
+['completed', 'execution_ids', 'failed', 'logs', 'name', 'partial', 'status', 'sts', 'success', 'suite_execution_id', 'suite_log_capture']

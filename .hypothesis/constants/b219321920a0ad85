@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/update_suite_execution_status.py
+# hypothesis_version: 6.151.9
+
+[200, 400, 404, 500, '#status', '+00:00', '0', ':completed_at', ':duration', ':exec_id', ':failed', ':status', ':successful', ':time', ':updated_at', 'Invalid status', 'Item', 'Missing status field', 'N', 'S', 'TEST_SUITES', 'Z', 'api/executions.write', 'body', 'completed', 'dynamodb', 'error', 'execution_id', 'failed', 'failed_usecases', 'message', 'partial', 'pathParameters', 'pk', 'running', 'sk', 'started_at', 'status', 'successful_usecases', 'suite_execution_id', 'suite_id', 'updated_at', '{}']

@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/auth/oauth.py
+# hypothesis_version: 6.151.9
+
+[b'=', b'Login failed.', b'Login successful. You can close this tab.', 120, 200, 400, 19847, '/callback', 'Bearer', 'Content-Type', 'S256', 'access_token', 'ascii', 'authorization_code', 'client_id', 'code', 'code_challenge', 'code_verifier', 'error', 'error_description', 'expires_in', 'grant_type', 'localhost', 'openid profile email', 'redirect_uri', 'refresh_token', 'response_type', 'scope', 'token_type']

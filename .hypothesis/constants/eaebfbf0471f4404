@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/get_video_playback.py
+# hypothesis_version: 6.151.9
+
+[200, 400, 404, 500, 3600, '.gz', '.ndjson', '/', ':pk', ':sk_prefix', 'ARTIFACT#', 'Body', 'Bucket', 'CommonPrefixes', 'Configuration error', 'Contents', 'Execution not found', 'Item', 'Items', 'Key', 'OnDemand', 'OnDemandHeadless', 'Prefix', 'Recording not found', 'S', 'Scheduled', 'api/executions.read', 'batch_', 'batches', 'ci_runner', 'content_type', 'download_url', 'dynamodb', 'error', 'executionId', 'execution_id', 'expires_in', 'get_object', 'id', 'message', 'metadata', 'pathParameters', 'pk', 'playback_type', 'recording', 'rrweb', 's3', 's3_bucket', 's3_key', 'sk', 'trigger_type', 'type', 'upload_status', 'uploaded', 'utf-8', 'video', 'video/webm']

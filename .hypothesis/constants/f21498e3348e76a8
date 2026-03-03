@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/auth/client_credentials.py
+# hypothesis_version: 6.151.9
+
+[200, 3600, 'Content-Type', 'access_token', 'client_credentials', 'expires_in', 'grant_type', 'scope']

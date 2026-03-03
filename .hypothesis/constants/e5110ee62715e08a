@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/variable_merge.py
+# hypothesis_version: 6.151.9
+
+['\\{\\{(\\w+)\\}\\}']

@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/get_suite_execution.py
+# hypothesis_version: 6.151.9
+
+[200, 400, 404, 500, 'EXECUTION#', 'ExclusiveStartKey', 'IndexName', 'Item', 'Items', 'LastEvaluatedKey', 'Missing execution ID', 'Missing suite ID', 'USECASES', 'USECASE_EXECUTION#', 'api/suite.read', 'dynamodb', 'error', 'execution_id', 'identity', 'name', 'pathParameters', 'pk', 'results', 'sk', 'suite_execution_id', 'suite_id', 'usecase_execution_id', 'usecase_id', 'usecase_name']

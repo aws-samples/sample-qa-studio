@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/commands/run.py
+# hypothesis_version: 6.151.9
+
+[3600, '--base-url', '--format', '--keep-artifacts', '--local-only', '--model-id', '--region', '--suite-id', '--timeout', '--token-file', '--usecase-id', '--var', '--verbose', '=', 'human', 'json', 'output_format', 'variables']

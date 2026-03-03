@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/cicd-runner/src/output/summary.py
+# hypothesis_version: 6.151.9
+
+[100, 3600, 'duration', 'status', 'success', '✓', '✗']

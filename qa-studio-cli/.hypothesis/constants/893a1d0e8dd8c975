@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/commands/tests.py
+# hypothesis_version: 6.151.9
+
+['  No steps defined.', '--from-journey', '--trigger-type', '--yes', '-y', '/api/import', '/api/usecases', 'Aborted.', 'No tests found.', 'OnDemand', 'OnDemandHeadless', 'Region', 'Starting URL', 'Title', 'ci_runner', 'client', 'create', 'delete', 'get', 'id', 'list', 'name', 'region', 'run', 'starting_url', 'steps', 'title', 'trigger-type', 'usecaseData', 'usecases', 'user_journey']

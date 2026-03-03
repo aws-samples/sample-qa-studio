@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/api/client.py
+# hypothesis_version: 6.151.9
+
+[204, 401, 403, 404, 500, '/', 'Authorization', 'Content-Type', 'DELETE', 'GET', 'POST', 'Resource not found.', 'application/json', 'client', 'message', '← %s %s', '→ %s %s']

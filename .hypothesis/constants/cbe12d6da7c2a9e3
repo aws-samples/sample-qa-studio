@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/remove_usecase_from_suite.py
+# hypothesis_version: 6.151.9
+
+[204, 400, 404, 500, '*', ':total', ':updated_at', 'Item', 'Missing suite ID', 'Missing usecase ID', 'Test suite not found', 'api/suite.write', 'body', 'dynamodb', 'error', 'headers', 'identity', 'pathParameters', 'pk', 'sk', 'statusCode', 'suite_id', 'total_usecases', 'usecase_id']

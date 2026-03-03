@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/create_oauth_client.py
+# hypothesis_version: 6.151.9
+
+[201, 400, 403, 404, 429, 500, 'ALLOW_USER_SRP_AUTH', 'AccessToken', 'AccessTokenValidity', 'COGNITO', 'ClientId', 'ClientName', 'ClientSecret', 'CreationDate', 'ENABLED', 'IdToken', 'IdTokenValidity', 'OAUTH_CLIENTS', 'RefreshToken', 'RefreshTokenValidity', 'ResourceServer', 'Scopes', 'USER_POOL_ID', 'User pool not found', 'UserPoolClient', 'api', 'api/admin', 'api/usecases.execute', 'body', 'client_credentials', 'client_id', 'client_name', 'client_secret', 'cognito-idp', 'created_at', 'created_by', 'created_date', 'days', 'dynamodb', 'entity_type', 'error', 'id_token_validity', 'identity', 'message', 'minutes', 'name', 'oauth_client', 'pk', 'requested_scopes', 'scopes', 'sk', 'unknown', 'valid_scopes', 'your_scopes', '{}']

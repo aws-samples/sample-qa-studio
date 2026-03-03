@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/get_usecase_secret_value.py
+# hypothesis_version: 6.151.9
+
+[200, 400, 404, 500, 'Missing secret key', 'Missing use case ID', 'SecretString', 'api/usecases.read', 'error', 'id', 'key', 'pathParameters', 'secret_key', 'secretsmanager', 'value']

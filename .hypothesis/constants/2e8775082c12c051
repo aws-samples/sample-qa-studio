@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/lambdas/endpoints/get_test_suite.py
+# hypothesis_version: 6.151.9
+
+[200, 400, 404, 500, 'Item', 'Test suite not found', 'api/suite.read', 'dynamodb', 'error', 'pathParameters', 'pk', 'sk', 'suite_id', 'suite_id is required']

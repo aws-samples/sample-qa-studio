@@ -1,0 +1,4 @@
+# file: /Users/jawie/Repositories/programs/sample-nova-act-qa-studio/qa-studio-cli/qa_studio_cli/auth/token_manager.py
+# hypothesis_version: 6.151.9
+
+[200, 384, '.qa-studio', 'Bearer', 'Content-Type', 'access_token', 'client_id', 'expires_in', 'grant_type', 'refresh_token', 'token.json', 'token_type']
