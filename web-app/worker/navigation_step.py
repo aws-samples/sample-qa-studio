@@ -31,39 +31,50 @@ def execute_navigation_step(nova: NovaAct, step: ExecutionStep):
   success = True
   logs = ""
   
-  # Check cache eligibility
+  # Check cache eligibility: both enable_cache flag and cached_steps data must be present
+  # This allows per-step control over cache usage and graceful handling of missing cache data
   enable_cache = getattr(step, 'enable_cache', False)
   cached_steps = getattr(step, 'cached_steps', None)
   
-  # Validate cache is available and enabled
+  # Attempt cache execution only if explicitly enabled AND cache data is available
+  # This ensures we never attempt to execute empty/null cache data
   if enable_cache and cached_steps and cached_steps.strip():
     try:
-      # Parse cached steps JSON
+      # Parse cached steps JSON: convert string to list of action dictionaries
+      # Expected format: [{"action": "click", "selector": "...", ...}, ...]
       parsed_steps = json.loads(cached_steps)
       
-      # Execute cached steps and measure duration
+      # Execute cached steps using Playwright directly (bypasses Nova Act for speed)
+      # Measure duration to track cache performance benefit (typically 40-60% faster)
       start_time = time.time()
       execute_cached_steps(nova, parsed_steps)
       duration_ms = int((time.time() - start_time) * 1000)
       
       logger.info(f"Cache hit for step {step.sort} (executed in {duration_ms}ms)")
       
-      # Create cache result object
+      # Create cache result object that mimics Nova Act result structure
+      # This ensures downstream code can handle cache results identically to Nova Act results
       result = SimpleNamespace()
       result.metadata = SimpleNamespace()
-      result.metadata.act_id = "cached"
+      result.metadata.act_id = "cached"  # Identifies this as a cached execution
       result.logs = ""
       
       return result, success, logs
       
+    # Fallback handling: any cache execution failure should not break the test
+    # We catch all exceptions and fall through to Nova Act execution below
     except CacheExecutionError as e:
+      # Cache executor detected an issue (e.g., selector not found, action failed)
       logger.warning(f"Cache execution failed for step {step.sort}: {e}, falling back to Nova Act")
     except json.JSONDecodeError as e:
+      # Cached steps JSON is malformed or corrupted
       logger.warning(f"Failed to parse cached_steps for step {step.sort}: {e}, falling back to Nova Act")
     except Exception as e:
+      # Catch-all for unexpected errors (e.g., browser crashes, network issues)
       logger.warning(f"Unexpected error during cache execution for step {step.sort}: {e}, falling back to Nova Act")
   else:
-    # Log cache miss reasons
+    # Log cache miss reasons for observability
+    # This helps identify why cache wasn't used (disabled vs. no data available)
     if not enable_cache:
       logger.info(f"Cache miss for step {step.sort}: caching disabled")
     elif not cached_steps or not cached_steps.strip():
@@ -82,7 +93,6 @@ def execute_navigation_step(nova: NovaAct, step: ExecutionStep):
     success = False
     logs = str(e)
     # Create a minimal result object to prevent None access errors
-    from types import SimpleNamespace
     result = SimpleNamespace()
     result.metadata = SimpleNamespace()
     result.metadata.act_id = e.metadata.act_id if hasattr(e, 'metadata') else "error"

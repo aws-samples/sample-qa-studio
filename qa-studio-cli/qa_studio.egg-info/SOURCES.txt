@@ -20,10 +20,6 @@ qa_studio_cli/auth/oauth.py
 qa_studio_cli/auth/resolver.py
 qa_studio_cli/auth/token_file_provider.py
 qa_studio_cli/auth/token_manager.py
-qa_studio_cli/commands/__init__.py
-qa_studio_cli/commands/run.py
-qa_studio_cli/commands/suites.py
-qa_studio_cli/commands/tests.py
 qa_studio_cli/config/__init__.py
 qa_studio_cli/config/manager.py
 qa_studio_cli/models/__init__.py
