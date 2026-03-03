@@ -282,6 +282,112 @@ The quality of your test steps directly affects how reliably your tests run. For
 
 ---
 
+## Step Caching
+
+Step caching is a performance optimization feature that reduces test execution time by 40-60%. When enabled, QA Studio caches the browser actions from successful test executions and replays them directly using Playwright API instead of calling Nova Act for every execution.
+
+### How It Works
+
+1. **First Execution**: Your test runs normally using Nova Act. After successful completion, the system automatically analyzes the Nova Act responses and builds a cache of the browser actions (clicks, typing, navigation, etc.).
+
+2. **Subsequent Executions**: When you run the test again, cached navigation steps execute directly using Playwright, bypassing Nova Act entirely. This eliminates AI inference latency (typically 2-5 seconds per step).
+
+3. **Automatic Fallback**: If a cached step fails (e.g., the page changed), the system automatically falls back to Nova Act, ensuring your tests remain reliable.
+
+### Benefits
+
+- **40-60% faster execution**: Cached steps execute in 200-400ms vs 2-5 seconds with Nova Act
+- **Cost savings**: Reduced Nova Act API calls
+- **Same reliability**: Automatic fallback ensures tests don't break
+- **Zero maintenance**: Cache updates automatically when steps change
+
+### Which Steps Are Cached?
+
+Only **navigation steps** are cacheable. These include:
+- Clicking buttons and links
+- Typing text into fields
+- Hovering over elements
+- Scrolling
+- Navigating to URLs
+
+Other step types (validation, assertion, retrieve value) always execute normally since they need to read current page state.
+
+### Enabling Cache for New Use Cases
+
+When creating a new use case:
+
+1. Fill in the use case details (name, URL, description)
+2. Look for the **"Enable Step Caching"** toggle
+3. Enable the toggle
+4. Complete use case creation as normal
+
+![Cache toggle in use case creation form](images/cache-toggle-creation.png)
+
+### Enabling Cache for Existing Use Cases
+
+To enable caching on an existing use case:
+
+1. Open the use case in the UI
+2. Click the **Settings** or **Edit** button
+3. Find the **"Enable Step Caching"** toggle
+4. Enable the toggle
+5. Click **Save**
+
+![Cache toggle in use case settings](images/cache-toggle-settings.png)
+
+The cache will build automatically after the next successful execution.
+
+### Understanding Cache Status
+
+In the step list, you'll see cache indicators:
+
+- **Green cache icon**: Step has cached actions available
+- **Gray cache icon**: Step is cacheable but no cache yet
+- **No icon**: Step type is not cacheable
+
+![Cache indicators in step list](images/cache-indicators-steps.png)
+
+In execution logs, you'll see messages like:
+- `Cache hit for step 3 (executed in 250ms)` - Step used cache
+- `Cache miss for step 3: no cached steps available` - First execution, cache building
+- `Cache execution failed for step 3: ..., falling back to Nova Act` - Cache failed, used fallback
+
+![Cache status in execution logs](images/cache-execution-logs.png)
+
+### When Cache Is Built
+
+Cache builds automatically after **successful test execution**. The process is asynchronous and typically completes within 30 seconds. You don't need to do anything - just run your test again and the cache will be used.
+
+### Cache Invalidation
+
+Cache automatically invalidates when:
+- You change the step instruction
+- You reorder steps
+- You delete and recreate a step
+
+The system detects these changes and rebuilds the cache on the next successful execution.
+
+### Troubleshooting
+
+**Cache not building after execution**:
+- Verify the execution completed successfully (failed executions don't build cache)
+- Check that caching is enabled in use case settings
+- Wait 30-60 seconds for asynchronous cache building to complete
+
+**Cache execution fails repeatedly**:
+- The page may have changed since cache was built
+- Disable cache temporarily to verify test works with Nova Act
+- If test works without cache, the cache will rebuild on next successful execution
+
+**Test slower with cache enabled**:
+- First execution is always slower (cache building overhead)
+- Subsequent executions should be 40-60% faster
+- Check execution logs to verify cache hits
+
+For more troubleshooting guidance, see [Troubleshooting Guide](troubleshooting.md#step-cache-troubleshooting).
+
+---
+
 ## User Management (Admin Only)
 
 If you have admin access, the Users section lets you manage who can access QA Studio.
