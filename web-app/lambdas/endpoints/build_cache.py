@@ -73,9 +73,12 @@ def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: st
     """
     List S3 act files and build act_id to s3_key mapping.
 
-    Lists S3 objects with prefix {usecase_id}/{execution_id}/recording/act_ and extracts
+    Lists S3 objects with prefix {usecase_id}/{execution_id}/ and extracts
     act_id from each key using regex pattern act_(.+)\\.json. Handles empty
     results and S3 access errors gracefully with logging.
+
+    Note: Nova Act stores artifacts at {usecase_id}/{execution_id}/{session_id}/act_*.json
+    but we list at the execution level to find all session artifacts.
 
     Args:
         s3_client: boto3 S3 client
@@ -87,7 +90,7 @@ def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: st
         Dictionary mapping {act_id: s3_key}
     """
     act_mapping = {}
-    prefix = f'{usecase_id}/{execution_id}/recording/act_'
+    prefix = f'{usecase_id}/{execution_id}/'
 
     try:
         logger.info(f"Listing S3 objects with prefix={prefix} in bucket={bucket}")

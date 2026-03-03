@@ -131,21 +131,21 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'uc_123/exec_456/recording/act_act_789.json'},
-                {'Key': 'uc_123/exec_456/recording/act_act_790.json'},
-                {'Key': 'uc_123/exec_456/recording/act_act_791.json'}
+                {'Key': 'uc_123/exec_456/session_abc/act_act_789.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_act_790.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_act_791.json'}
             ]
         }
         
         result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
         
         assert len(result) == 3
-        assert result['act_789'] == 'uc_123/exec_456/recording/act_act_789.json'
-        assert result['act_790'] == 'uc_123/exec_456/recording/act_act_790.json'
-        assert result['act_791'] == 'uc_123/exec_456/recording/act_act_791.json'
+        assert result['act_789'] == 'uc_123/exec_456/session_abc/act_act_789.json'
+        assert result['act_790'] == 'uc_123/exec_456/session_abc/act_act_790.json'
+        assert result['act_791'] == 'uc_123/exec_456/session_abc/act_act_791.json'
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
-            Prefix='uc_123/exec_456/recording/act_'
+            Prefix='uc_123/exec_456/'
         )
     
     def test_empty_s3_results_returns_empty_dict(self):
@@ -162,10 +162,10 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'uc_123/exec_456/recording/act_simple_id.json'},
-                {'Key': 'uc_123/exec_456/recording/act_id-with-dashes.json'},
-                {'Key': 'uc_123/exec_456/recording/act_id_with_underscores.json'},
-                {'Key': 'uc_123/exec_456/recording/act_123456.json'}
+                {'Key': 'uc_123/exec_456/session_abc/act_simple_id.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_id-with-dashes.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_id_with_underscores.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_123456.json'}
             ]
         }
         
@@ -182,9 +182,9 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'uc_123/exec_456/recording/act_valid_id.json'},
-                {'Key': 'uc_123/exec_456/recording/invalid_file.txt'},
-                {'Key': 'uc_123/exec_456/recording/act_no_extension'}
+                {'Key': 'uc_123/exec_456/session_abc/act_valid_id.json'},
+                {'Key': 'uc_123/exec_456/recording/video.webm'},
+                {'Key': 'uc_123/exec_456/session_abc/other_file.txt'}
             ]
         }
         
@@ -224,7 +224,7 @@ class TestDiscoverActFiles:
         
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
-            Prefix='my_uc_123/my_exec_123/recording/act_'
+            Prefix='my_uc_123/my_exec_123/'
         )
 
 
