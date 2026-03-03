@@ -69,24 +69,25 @@ def check_cache_eligibility(table, usecase_id: str) -> bool:
     except Exception as e:
         logger.error(f"Unexpected error checking cache eligibility for usecase_id={usecase_id}: {e}", exc_info=True)
         return False
-def discover_act_files(s3_client, bucket: str, execution_id: str) -> Dict[str, str]:
+def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: str) -> Dict[str, str]:
     """
     List S3 act files and build act_id to s3_key mapping.
 
-    Lists S3 objects with prefix executions/{execution_id}/act_ and extracts
+    Lists S3 objects with prefix {usecase_id}/{execution_id}/recording/act_ and extracts
     act_id from each key using regex pattern act_(.+)\\.json. Handles empty
     results and S3 access errors gracefully with logging.
 
     Args:
         s3_client: boto3 S3 client
         bucket: S3 bucket name
+        usecase_id: Usecase identifier
         execution_id: Execution identifier
 
     Returns:
         Dictionary mapping {act_id: s3_key}
     """
     act_mapping = {}
-    prefix = f'executions/{execution_id}/act_'
+    prefix = f'{usecase_id}/{execution_id}/recording/act_'
 
     try:
         logger.info(f"Listing S3 objects with prefix={prefix} in bucket={bucket}")
@@ -98,7 +99,7 @@ def discover_act_files(s3_client, bucket: str, execution_id: str) -> Dict[str, s
 
         # Check if any objects were found
         if 'Contents' not in response:
-            logger.warning(f"No S3 act files found for execution_id={execution_id}")
+            logger.warning(f"No S3 act files found for usecase={usecase_id}, execution={execution_id}")
             return act_mapping
 
         # Parse act_id from each S3 key
@@ -114,14 +115,14 @@ def discover_act_files(s3_client, bucket: str, execution_id: str) -> Dict[str, s
             else:
                 logger.warning(f"S3 key does not match expected pattern: {s3_key}")
 
-        logger.info(f"Found {len(act_mapping)} act files for execution_id={execution_id}")
+        logger.info(f"Found {len(act_mapping)} act files for usecase={usecase_id}, execution={execution_id}")
         return act_mapping
 
     except ClientError as e:
-        logger.error(f"S3 access error listing act files for execution_id={execution_id}: {e}", exc_info=True)
+        logger.error(f"S3 access error listing act files for usecase={usecase_id}, execution={execution_id}: {e}", exc_info=True)
         return act_mapping
     except Exception as e:
-        logger.error(f"Unexpected error listing act files for execution_id={execution_id}: {e}", exc_info=True)
+        logger.error(f"Unexpected error listing act files for usecase={usecase_id}, execution={execution_id}: {e}", exc_info=True)
         return act_mapping
 
 
@@ -485,7 +486,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
         
         # Discover act files in S3
-        act_mapping = discover_act_files(s3_client, s3_bucket, execution_id)
+        act_mapping = discover_act_files(s3_client, s3_bucket, usecase_id, execution_id)
         
         if not act_mapping:
             logger.warning(f"No act files found for execution_id={execution_id}, skipping cache build")

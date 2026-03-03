@@ -131,21 +131,21 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'executions/exec_456/act_act_789.json'},
-                {'Key': 'executions/exec_456/act_act_790.json'},
-                {'Key': 'executions/exec_456/act_act_791.json'}
+                {'Key': 'uc_123/exec_456/recording/act_act_789.json'},
+                {'Key': 'uc_123/exec_456/recording/act_act_790.json'},
+                {'Key': 'uc_123/exec_456/recording/act_act_791.json'}
             ]
         }
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
         
         assert len(result) == 3
-        assert result['act_789'] == 'executions/exec_456/act_act_789.json'
-        assert result['act_790'] == 'executions/exec_456/act_act_790.json'
-        assert result['act_791'] == 'executions/exec_456/act_act_791.json'
+        assert result['act_789'] == 'uc_123/exec_456/recording/act_act_789.json'
+        assert result['act_790'] == 'uc_123/exec_456/recording/act_act_790.json'
+        assert result['act_791'] == 'uc_123/exec_456/recording/act_act_791.json'
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
-            Prefix='executions/exec_456/act_'
+            Prefix='uc_123/exec_456/recording/act_'
         )
     
     def test_empty_s3_results_returns_empty_dict(self):
@@ -153,7 +153,7 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {}  # No Contents key
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
         
         assert result == {}
     
@@ -162,14 +162,14 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'executions/exec_456/act_simple_id.json'},
-                {'Key': 'executions/exec_456/act_id-with-dashes.json'},
-                {'Key': 'executions/exec_456/act_id_with_underscores.json'},
-                {'Key': 'executions/exec_456/act_123456.json'}
+                {'Key': 'uc_123/exec_456/recording/act_simple_id.json'},
+                {'Key': 'uc_123/exec_456/recording/act_id-with-dashes.json'},
+                {'Key': 'uc_123/exec_456/recording/act_id_with_underscores.json'},
+                {'Key': 'uc_123/exec_456/recording/act_123456.json'}
             ]
         }
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
         
         assert len(result) == 4
         assert 'simple_id' in result
@@ -182,13 +182,13 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'executions/exec_456/act_valid_id.json'},
-                {'Key': 'executions/exec_456/invalid_file.txt'},
-                {'Key': 'executions/exec_456/act_no_extension'}
+                {'Key': 'uc_123/exec_456/recording/act_valid_id.json'},
+                {'Key': 'uc_123/exec_456/recording/invalid_file.txt'},
+                {'Key': 'uc_123/exec_456/recording/act_no_extension'}
             ]
         }
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
         
         # Only the valid key should be in the result
         assert len(result) == 1
@@ -202,7 +202,7 @@ class TestDiscoverActFiles:
             'ListObjectsV2'
         )
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
         
         assert result == {}
     
@@ -211,7 +211,7 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.side_effect = Exception('Unexpected error')
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
         
         assert result == {}
     
@@ -220,11 +220,11 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {}
         
-        build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'my_exec_123')
+        build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'my_uc_123', 'my_exec_123')
         
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
-            Prefix='executions/my_exec_123/act_'
+            Prefix='my_uc_123/my_exec_123/recording/act_'
         )
 
 
