@@ -66,7 +66,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'tags': body.get('tags', []),
             'created_at': now,
             'executing_region': executing_region,
-            'model_id': model_id
+            'model_id': model_id,
+            'enable_cache': body.get('enableCache', False)
         }
         
         # Create created_by record

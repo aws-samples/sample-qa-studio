@@ -152,6 +152,7 @@ sequenceDiagram
     participant NovaAct as Nova Act SDK
     participant DynamoDB
     participant S3
+    participant EventBridge as EventBridge
     
     User->>WebUI: Trigger test execution
     WebUI->>API: POST /usecase/{id}/execute
@@ -173,7 +174,10 @@ sequenceDiagram
     end
     
     ECS->>DynamoDB: Update execution status
+    ECS->>EventBridge: Emit usecase.execution.completed event
     ECS->>ECS: Task completes
+    
+    Note over EventBridge: Event triggers downstream<br/>processes (e.g., cache building)
 ```
 
 ### Test Execution Flow (Local CLI)
@@ -289,6 +293,13 @@ sequenceDiagram
 4. Execute each step with `nova.act(instruction)`
 5. Upload artifacts to S3 via presigned URLs
 6. Update execution status in DynamoDB
+7. Emit EventBridge event for downstream processing
+
+**Event Emission**:
+- After execution completes (success or failure), the worker emits a `usecase.execution.completed` event to EventBridge
+- Event includes: usecase_id, execution_id, execution_status, timestamp
+- Fire-and-forget pattern: failures are logged but don't affect test execution
+- Triggers downstream processes such as cache building for step optimization
 
 **Artifacts Generated**:
 - Screenshots (PNG)

@@ -24,6 +24,7 @@ from retrieve_value_step import execute_retrieve_value_step
 from assertion_step import execute_assertion_step
 from url_step import execute_url_step
 from download_step import execute_download_step
+from event_emitter import emit_execution_completed_event
 
 # Configure logging
 logging.basicConfig(
@@ -211,6 +212,9 @@ def main_batch():
             db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=completed_at)
             # Update suite execution counters if part of a suite
             db_client.update_suite_execution_counters(execution_id, usecase_id, "failed")
+            
+            # Emit event after failed execution
+            emit_execution_completed_event(usecase_id, execution_id, "failed", region_name)
         except Exception as db_error:
             logger.error(f"Failed to update execution status after Nova Act error: {str(db_error)}")
         
@@ -233,11 +237,18 @@ def main_batch():
         db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=get_time())
         # Update suite execution counters if part of a suite
         db_client.update_suite_execution_counters(execution_id, usecase_id, "failed")
+        
+        # Emit event after failed execution
+        emit_execution_completed_event(usecase_id, execution_id, "failed", region_name)
+        
         return False
 
     db_client.update_execution_status(usecase_id, execution_id, "success", completed_at=get_time())
     # Update suite execution counters if part of a suite
     db_client.update_suite_execution_counters(execution_id, usecase_id, "success")
+    
+    # Emit event after successful execution
+    emit_execution_completed_event(usecase_id, execution_id, "success", region_name)
     
     logger.info(f"Execution {execution_id} completed successfully")
     return True

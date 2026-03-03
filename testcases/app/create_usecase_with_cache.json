@@ -1,0 +1,160 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-03-03T12:19:00Z",
+  "usecase": {
+    "name": "[QA Validation] Create Usecase with Cache Enabled",
+    "description": "Test creating a usecase with step caching enabled and verify the toggle works",
+    "starting_url": "https://d3a3f5h4u5xzj7.cloudfront.net/",
+    "active": true,
+    "executing_region": "",
+    "tags": ["cache", "create", "usecase", "test"]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "instruction": "focus username field",
+      "step_type": "secret",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "instruction": "focus password field",
+      "step_type": "secret",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "instruction": "Click the 'Sign in' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 4,
+      "instruction": "Click the 'Create Use case' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 5,
+      "instruction": "Click the 'Create Blank' card",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 6,
+      "instruction": "Type '[QA Test] Cache Test {{UniqueID}}' in the name field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 7,
+      "instruction": "Type 'Testing cache toggle' in the description field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 8,
+      "instruction": "Type 'https://example.com' in the starting URL field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 9,
+      "instruction": "Enable the 'Enable step caching' toggle",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 10,
+      "instruction": "Click the 'Create' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 11,
+      "instruction": "Verify the usecase was created successfully",
+      "step_type": "validation",
+      "expected_value": "true",
+      "operator": "boolean_true"
+    },
+    {
+      "sort": 12,
+      "instruction": "Click on the created usecase '[QA Test] Cache Test {{UniqueID}}'",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 13,
+      "instruction": "Click the 'Edit' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 14,
+      "instruction": "Verify the 'Enable step caching' toggle is enabled",
+      "step_type": "validation",
+      "expected_value": "true",
+      "operator": "boolean_true"
+    },
+    {
+      "sort": 15,
+      "instruction": "Disable the 'Enable step caching' toggle",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 16,
+      "instruction": "Click 'Save Changes' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 17,
+      "instruction": "Click the 'Edit' button again",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 18,
+      "instruction": "Verify the 'Enable step caching' toggle is now disabled",
+      "step_type": "validation",
+      "expected_value": "false",
+      "operator": "boolean_false"
+    },
+    {
+      "sort": 19,
+      "instruction": "Click 'Cancel' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 20,
+      "instruction": "Click the 'Use cases' menu item",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 21,
+      "instruction": "Type '[QA Test] Cache Test' in the search bar",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 22,
+      "instruction": "Click checkbox in front of usecase '[QA Test] Cache Test {{UniqueID}}'",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 23,
+      "instruction": "Open the dropdown menu",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 24,
+      "instruction": "Select 'Delete Selected' from dropdown",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 25,
+      "instruction": "Confirm deletion",
+      "step_type": "navigation"
+    }
+  ],
+  "variables": [],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Username for login"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Password for login"
+    }
+  ]
+}

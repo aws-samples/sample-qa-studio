@@ -13,8 +13,38 @@ It receives execution parameters via environment variables and orchestrates a re
 5. Each step is executed sequentially. The worker stops on the first failure.
 6. Artifacts (video recordings, screenshots, logs) are written to S3 via the Nova Act `S3Writer`
 7. Step results and execution status are persisted back to DynamoDB
+8. An EventBridge event is emitted after execution completes (success or failure) to trigger downstream processes
 
 For the full architecture diagram and how the worker integrates with the API layer, SQS queue, and other services, see the [Architecture](../README.md#architecture) section.
+
+## Event Emission
+
+After each test execution completes, the worker emits a `usecase.execution.completed` event to EventBridge. This event triggers downstream processes such as cache building for step optimization.
+
+### Event Structure
+
+```json
+{
+  "Source": "qa-studio.worker",
+  "DetailType": "usecase.execution.completed",
+  "Detail": {
+    "usecase_id": "uc_abc123",
+    "execution_id": "exec_xyz789",
+    "execution_status": "success",
+    "timestamp": "2025-01-15T14:32:45.123456Z"
+  }
+}
+```
+
+### Fire-and-Forget Pattern
+
+Event emission follows a fire-and-forget pattern:
+- Failures are logged but do not affect test execution outcomes
+- The worker continues normally even if EventBridge is unavailable
+- No retries are attempted if event emission fails
+- Test execution status is always updated before event emission
+
+This ensures that adding event emission doesn't introduce new failure modes or impact test reliability.
 
 ## Execution Modes
 
@@ -75,6 +105,7 @@ The worker supports two Nova Act backends, controlled by the `USE_NOVA_ACT_GA` e
 worker/
 ├── worker.py                # Entry point, routes to batch or wizard mode
 ├── wizard_worker.py         # Wizard mode: persistent session with command loop
+├── event_emitter.py         # EventBridge event emission for execution completion
 ├── nova_act_workflow.py     # Nova Act GA workflow definition management
 ├── browser.py               # Bedrock AgentCore browser lifecycle (create/start/delete)
 ├── navigation_step.py       # Navigation step execution

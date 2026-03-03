@@ -8,6 +8,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
 import Checkbox from "@cloudscape-design/components/checkbox";
+import Toggle from "@cloudscape-design/components/toggle";
 import Select, {SelectProps} from "@cloudscape-design/components/select";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
 import { api } from '../utils/api';
@@ -20,6 +21,7 @@ export default function CreateUsecase() {
   const [description, setDescription] = useState('');
   const [starting_url, setStartingUrl] = useState('');
   const [active, setActive] = useState(true);
+  const [enableCache, setEnableCache] = useState(false);
   const [tags, setTags] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState(findRegionOptions() as SelectProps.Option);
@@ -41,6 +43,7 @@ export default function CreateUsecase() {
         description, 
         starting_url,
         active,
+        enableCache,
         executing_region: selectedRegion.value,
         model_id: selectedModel?.value,
         tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag)
@@ -142,6 +145,18 @@ export default function CreateUsecase() {
           >
             Active
           </Checkbox>
+        </FormField>
+        
+        <FormField
+          label="Step caching"
+          description="Cache navigation steps to reduce execution time by 40-60%"
+        >
+          <Toggle
+            checked={enableCache}
+            onChange={({ detail }) => setEnableCache(detail.checked)}
+          >
+            Enable step caching
+          </Toggle>
         </FormField>
         
           <SpaceBetween direction="horizontal" size="xs">

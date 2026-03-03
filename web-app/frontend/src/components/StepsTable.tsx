@@ -4,6 +4,7 @@ import Link from "@cloudscape-design/components/link";
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Badge from "@cloudscape-design/components/badge";
+import Icon from "@cloudscape-design/components/icon";
 import { api } from '../utils/api';
 import StepFormModal from './usecase/StepFormModal';
 import './StepsTable.css';
@@ -24,6 +25,8 @@ interface UsecaseStep {
   template_id?: string;
   template_step_id?: string;
   template_version?: number;
+  cached_steps?: string | null;
+  cache_last_updated?: string | null;
 }
 
 interface StepsTableProps {
@@ -44,6 +47,21 @@ export default function StepsTable({
   const [movingSteps, setMovingSteps] = useState<Set<string>>(new Set());
   const [editingStep, setEditingStep] = useState<UsecaseStep | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+
+  const getRelativeTime = (timestamp: string): string => {
+    const now = new Date();
+    const past = new Date(timestamp);
+    const diffMs = now.getTime() - past.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffMins > 0) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    return 'just now';
+  };
 
   const moveStep = async (stepId: string, direction: 'up' | 'down') => {
     const currentIndex = steps.findIndex(step => step.sk === stepId);
@@ -106,24 +124,47 @@ export default function StepsTable({
     setShowEditModal(false);
   };
 
-  const getStepTypeBadge = (stepType?: string) => {
+  const getStepTypeBadge = (item: UsecaseStep) => {
+    const stepType = item.step_type;
+    const hasCachedSteps = item.cached_steps && item.cached_steps !== 'null';
+    const isNavigation = !stepType || stepType === 'navigation';
+    
+    let typeBadge;
     switch (stepType) {
       case 'secret':
-        return <Badge color="severity-high" className="step">Secret</Badge>;
+        typeBadge = <Badge color="severity-high" className="step">Secret</Badge>;
+        break;
       case 'validation':
-        return <Badge color="green" className="step">Validation</Badge>;
+        typeBadge = <Badge color="green" className="step">Validation</Badge>;
+        break;
       case 'assertion':
-          return <Badge color="green" className="step">Assertion</Badge>;
+        typeBadge = <Badge color="green" className="step">Assertion</Badge>;
+        break;
       case 'retrieve_value':
-        return <Badge color="blue" className="step">Value</Badge>;
+        typeBadge = <Badge color="blue" className="step">Value</Badge>;
+        break;
       case 'url':
-        return <Badge color="severity-medium" className="step">Goto</Badge>;
+        typeBadge = <Badge color="severity-medium" className="step">Goto</Badge>;
+        break;
       case 'download':
-        return <Badge className="step badge-purple">Download</Badge>;
+        typeBadge = <Badge className="step badge-purple">Download</Badge>;
+        break;
       case 'navigation':
       default:
-        return <Badge className="step">Navigation</Badge>;
+        typeBadge = <Badge className="step">Navigation</Badge>;
+        break;
     }
+
+    return (
+      <SpaceBetween direction="vertical" size="xxs">
+        {typeBadge}
+        {isNavigation && hasCachedSteps && (
+          <Badge color="green">
+            <Icon name="check" /> Cached
+          </Badge>
+        )}
+      </SpaceBetween>
+    );
   };
 
   const renderStepDetails = (item: UsecaseStep) => {
@@ -197,6 +238,13 @@ export default function StepsTable({
     } else if (item.step_type === 'retrieve_value' && item.capture_variable) {
       details.push(`Captures variable: ${item.capture_variable}`);
     }
+
+    // Add cache age for navigation steps with cache
+    const isNavigation = !item.step_type || item.step_type === 'navigation';
+    const hasCachedSteps = item.cached_steps && item.cached_steps !== 'null';
+    if (isNavigation && hasCachedSteps && item.cache_last_updated) {
+      details.push(`Cached ${getRelativeTime(item.cache_last_updated)}`);
+    }
     
     return (
       <div>
@@ -242,7 +290,7 @@ export default function StepsTable({
         { 
           id: 'type', 
           header: 'Type', 
-          cell: item => getStepTypeBadge(item.step_type),
+          cell: item => getStepTypeBadge(item),
           maxWidth: 120,
           minWidth: 120,
         },

@@ -47,6 +47,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not usecase:
             return create_response(404, {'error': 'Use case not found'})
         
+        # Transform to camelCase for API response
+        usecase['enableCache'] = usecase.get('enable_cache', False)
+        
         return create_response(200, usecase)
         
     except Exception as e:

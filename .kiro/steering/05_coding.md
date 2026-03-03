@@ -18,3 +18,4 @@ inclusion: always
 * All datamodels should be defined in pydantic
 * after finishing a coding task make sure that all UI tests are running. use the `qa-studio` skill to find the best suites or tests matching the changed user flows
 * when adding new userflows or updates to the UI use `qa-studio` skill to create new test cases using the user journey mode based on the user journey section in the design document.
+* Always commit any changes after finishing a coding task with an an concise apappropiate commit message

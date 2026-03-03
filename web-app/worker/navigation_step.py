@@ -1,6 +1,10 @@
 import logging
+import json
+import time
+from types import SimpleNamespace
 from nova_act import NovaAct, BOOL_SCHEMA
 from models import ExecutionStep
+from cache_executor import execute_cached_steps, CacheExecutionError
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,38 @@ def execute_navigation_step(nova: NovaAct, step: ExecutionStep):
   result = None
   success = True
   logs = ""
+  
+  # Check cache eligibility
+  enable_cache = getattr(step, 'enable_cache', False)
+  cached_steps = getattr(step, 'cached_steps', None)
+  
+  # Validate cache is available and enabled
+  if enable_cache and cached_steps and cached_steps.strip():
+    try:
+      # Parse cached steps JSON
+      parsed_steps = json.loads(cached_steps)
+      
+      # Execute cached steps and measure duration
+      start_time = time.time()
+      execute_cached_steps(nova, parsed_steps)
+      duration_ms = int((time.time() - start_time) * 1000)
+      
+      logger.info(f"Cache hit for step {step.sort} (executed in {duration_ms}ms)")
+      
+      # Create cache result object
+      result = SimpleNamespace()
+      result.metadata = SimpleNamespace()
+      result.metadata.act_id = "cached"
+      result.logs = ""
+      
+      return result, success, logs
+      
+    except CacheExecutionError as e:
+      logger.warning(f"Cache execution failed for step {step.sort}: {e}, falling back to Nova Act")
+    except json.JSONDecodeError as e:
+      logger.warning(f"Failed to parse cached_steps for step {step.sort}: {e}, falling back to Nova Act")
+    except Exception as e:
+      logger.warning(f"Unexpected error during cache execution for step {step.sort}: {e}, falling back to Nova Act")
   
   try:
     # Build the instruction with optional advanced click types prompt

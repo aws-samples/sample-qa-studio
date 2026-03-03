@@ -1,3 +1,4 @@
 boto3
 nova-act==3.1.157.0
 bedrock_agentcore==1.0.5
+pytest>=7.0.0

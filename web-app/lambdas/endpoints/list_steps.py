@@ -45,6 +45,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Sort steps by sort field
         steps.sort(key=lambda x: x.get('sort', 0))
         
+        # Add cache fields (read-only, return null if not present)
+        for step in steps:
+            step['cached_steps'] = step.get('cached_steps')
+            step['cache_last_updated'] = step.get('cache_last_updated')
+        
         # Return successful response
         return create_response(200, {'steps': steps})
         

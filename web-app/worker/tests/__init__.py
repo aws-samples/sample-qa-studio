@@ -1,0 +1,1 @@
+# Worker tests init file

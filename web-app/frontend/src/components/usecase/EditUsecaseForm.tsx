@@ -4,6 +4,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
 import Checkbox from "@cloudscape-design/components/checkbox";
+import Toggle from "@cloudscape-design/components/toggle";
 import Button from "@cloudscape-design/components/button";
 import Select, { SelectProps } from "@cloudscape-design/components/select";
 import { regionOptions, findRegionOptions } from './../../utils/browser_regions';
@@ -20,6 +21,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
   const [description, setDescription] = useState(usecase.description || '');
   const [starting_url, setStartingUrl] = useState(usecase.starting_url || '');
   const [active, setActive] = useState(usecase.active || false);
+  const [enableCache, setEnableCache] = useState(usecase.enableCache || false);
   const [tags, setTags] = useState(usecase.tags?.join(', ') || '');
   const [selectedRegion, setSelectedRegion] = useState(findRegionOptions(usecase.executing_region) as SelectProps.Option);
   const { modelOptions, findModelOption, loading: modelsLoading } = useModels();
@@ -38,6 +40,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
       description,
       starting_url,
       active,
+      enableCache,
       executing_region: selectedRegion.value,
       model_id: selectedModel?.value,
       tags: tags.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0)
@@ -114,6 +117,18 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
         >
           Active
         </Checkbox>
+      </FormField>
+
+      <FormField
+        label="Step caching"
+        description="Cache navigation steps to reduce execution time by 40-60%"
+      >
+        <Toggle
+          checked={enableCache}
+          onChange={({ detail }) => setEnableCache(detail.checked)}
+        >
+          Enable step caching
+        </Toggle>
       </FormField>
 
       <SpaceBetween direction="horizontal" size="xs">

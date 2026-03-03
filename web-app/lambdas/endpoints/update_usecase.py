@@ -45,6 +45,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             executing_region = os.environ.get('DEFAULT_REGION', 'us-east-1')
         model_id = body.get('model_id', '')
         tags = body.get('tags', [])
+        enable_cache = body.get('enableCache')
         
         # Initialize DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
@@ -74,6 +75,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if model_id:
             update_expression_parts.append('model_id = :model_id')
             expression_attribute_values[':model_id'] = model_id
+        
+        # Update enable_cache if provided
+        if enable_cache is not None:
+            update_expression_parts.append('enable_cache = :enable_cache')
+            expression_attribute_values[':enable_cache'] = enable_cache
         
         # Only update tags if provided and not empty (DynamoDB String Sets cannot be empty)
         if tags:

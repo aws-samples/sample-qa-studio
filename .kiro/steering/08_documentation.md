@@ -21,5 +21,6 @@ Depending on the persona different aspects are important. Below is a list with m
 - (always) Flags and options for CLI tools as a table with defaults
 - (if applicable) User journeys and End user documentation.
 - (always) Datamodel as table with data types
+- (always) Document eventmessages and their structure
 
 Always make sure that documentation is updated at the end of a coding task.
