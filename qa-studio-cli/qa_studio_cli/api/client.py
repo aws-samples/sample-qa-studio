@@ -87,20 +87,22 @@ class ApiClient:
         except Exception:
             body = {}
 
+        error_code = body.get("code")
+
         if status == 401:
-            raise ApiError(401, "Session expired. Run 'qa-studio login' to re-authenticate.")
+            raise ApiError(401, "Session expired. Run 'qa-studio login' to re-authenticate.", response_data=body)
         if status == 403:
             detail = body.get("message", "")
             msg = "Insufficient permissions."
             if detail:
                 msg += f" {detail}"
             logger.debug("403 response body: %s", body)
-            raise ApiError(403, msg)
+            raise ApiError(403, msg, error_code=error_code, response_data=body)
         if status == 404:
-            raise ApiError(404, "Resource not found.")
+            raise ApiError(404, "Resource not found.", response_data=body)
 
         message = body.get("message", response.text)
-        raise ApiError(status, message)
+        raise ApiError(status, message, error_code=error_code, response_data=body)
 
 
 def require_auth(fn):

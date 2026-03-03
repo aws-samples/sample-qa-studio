@@ -216,7 +216,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       timeout: cdk.Duration.seconds(60),
       environment: {
         TABLE_NAME: props.table.tableName,
-        BEDROCK_MODEL_ID: props.bedrockModelId || 'us.amazon.nova-2-lite-v1:0'
+        BEDROCK_MODEL_ID: props.bedrockModelId || 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
       }
     })
 

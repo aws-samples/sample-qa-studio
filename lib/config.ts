@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
   apiDeploymentStage: 'api',
   enabledRegions: ['us-east-1', 'us-west-2', 'ap-southeast-2', 'eu-central-1'],
   defaultRegion: 'us-east-1',
-  bedrockModelId: 'us.amazon.nova-2-lite-v1:0',
+  bedrockModelId: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0',
   dcvRelease: 'https://d1uj6qtbmh3dt5.cloudfront.net/webclientsdk/nice-dcv-web-client-sdk-1.10.1-1011.zip',
   vpcId: null,
   workerSecurityGroupId: null,

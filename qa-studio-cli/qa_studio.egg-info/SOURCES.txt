@@ -8,6 +8,7 @@ qa_studio.egg-info/requires.txt
 qa_studio.egg-info/top_level.txt
 qa_studio_cli/__init__.py
 qa_studio_cli/cli.py
+qa_studio_cli/validation.py
 qa_studio_cli/api/__init__.py
 qa_studio_cli/api/client.py
 qa_studio_cli/api/executions.py
@@ -72,3 +73,4 @@ tests/test_step_executor_compare.py
 tests/test_suites_commands.py
 tests/test_tests_commands.py
 tests/test_utils.py
+tests/test_validation.py

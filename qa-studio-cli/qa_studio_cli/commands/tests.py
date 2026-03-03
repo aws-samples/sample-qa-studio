@@ -87,22 +87,56 @@ def get_test(ctx, id):
 @tests.command("create")
 @require_auth
 @click.option("--from-journey", is_flag=True, required=True, help="Create from user journey description")
+@click.option("--title", help="Test name")
+@click.option("--url", help="Starting URL")
+@click.option("--journey", help="User journey description")
+@click.option("--region", type=click.Choice(['us-east-1', 'us-west-2', 'ap-southeast-2', 'eu-central-1']), help="AWS region for execution (default: us-east-1)")
 @click.pass_context
-def create_test(ctx, from_journey):
+def create_test(ctx, from_journey, title, url, journey, region):
     """Create a test from a user journey description."""
+    from qa_studio_cli.validation import (
+        validate_title, validate_url, validate_journey_description, validate_region
+    )
+    
     client = ctx.obj["client"]
 
-    title = click.prompt("Title")
-    starting_url = click.prompt("Starting URL")
-    user_journey = click.prompt("User journey description")
-    region = click.prompt("Region")
+    # Get inputs from options or prompts
+    title = title or click.prompt("Title")
+    starting_url = url or click.prompt("Starting URL")
+    user_journey = journey or click.prompt("User journey description")
+    region = region or click.prompt("Region", default="us-east-1", type=click.Choice(['us-east-1', 'us-west-2', 'ap-southeast-2', 'eu-central-1']))
+
+    # Client-side validation
+    validation_errors = []
+    
+    is_valid, errors = validate_title(title)
+    if not is_valid:
+        validation_errors.extend([f"Title: {e}" for e in errors])
+    
+    is_valid, errors = validate_url(starting_url)
+    if not is_valid:
+        validation_errors.extend([f"URL: {e}" for e in errors])
+    
+    is_valid, errors = validate_journey_description(user_journey)
+    if not is_valid:
+        validation_errors.extend([f"Journey: {e}" for e in errors])
+    
+    is_valid, errors = validate_region(region)
+    if not is_valid:
+        validation_errors.extend([f"Region: {e}" for e in errors])
+    
+    if validation_errors:
+        click.echo("Validation failed:", err=True)
+        for error in validation_errors:
+            click.echo(f"  • {error}", err=True)
+        raise SystemExit(1)
 
     try:
         # Step 1: Generate usecase from journey
         gen_data = client.post("/api/generate-usecase", json_body={
             "title": title,
-            "startingUrl": starting_url,
-            "userJourney": user_journey,
+            "starting_url": starting_url,
+            "user_journey": user_journey,
             "region": region,
         })
         gen_response = GenerateUsecaseResponse.model_validate(gen_data)
@@ -112,10 +146,16 @@ def create_test(ctx, from_journey):
             raise SystemExit(1)
 
         # Step 2: Import the generated usecase
-        import_data = client.post("/api/import", json_body={
-            "usecaseData": gen_response.usecase_data,
-            "name": title,
-        })
+        # Parse the usecaseData JSON string into a dict
+        import json as json_module
+        try:
+            usecase_data_dict = json_module.loads(gen_response.usecase_data)
+        except json_module.JSONDecodeError as e:
+            click.echo(f"Failed to parse generated usecase data: {e}", err=True)
+            raise SystemExit(1)
+        
+        # Send the parsed data directly to import endpoint
+        import_data = client.post("/api/import", json_body=usecase_data_dict)
         import_response = ImportUsecaseResponse.model_validate(import_data)
 
         if not import_response.success:
@@ -125,7 +165,21 @@ def create_test(ctx, from_journey):
         click.echo(f"✓ Test created: {title} (ID: {import_response.usecase_id})")
 
     except ApiError as e:
-        click.echo(str(e), err=True)
+        # Try to parse validation errors from API response
+        error_str = str(e)
+        if "validation" in error_str.lower() and hasattr(e, 'response_data'):
+            details = e.response_data.get('details', {})
+            validation_errors = details.get('validationErrors', [])
+            if validation_errors:
+                click.echo("API validation failed:", err=True)
+                for err in validation_errors:
+                    field = err.get('field', 'unknown')
+                    message = err.get('message', 'Unknown error')
+                    click.echo(f"  • {field}: {message}", err=True)
+            else:
+                click.echo(error_str, err=True)
+        else:
+            click.echo(error_str, err=True)
         raise SystemExit(1)
 
 

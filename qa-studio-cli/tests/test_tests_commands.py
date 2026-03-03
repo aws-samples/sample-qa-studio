@@ -323,7 +323,7 @@ class TestCreateCommand:
         ]
 
         runner = CliRunner()
-        input_text = "My Test\nhttps://example.com\nLogin and checkout\nus-east-1\n"
+        input_text = "My Test\nhttps://example.com\nNavigate to the login page, click the sign in button, enter username and password, click submit button, verify dashboard is visible\nus-east-1\n"
         result = _invoke_with_mock(runner, mock_client, ["create", "--from-journey"], input_text=input_text)
 
         assert result.exit_code == 0
@@ -335,8 +335,8 @@ class TestCreateCommand:
         gen_call = mock_client.post.call_args_list[0]
         assert gen_call[0][0] == "/api/generate-usecase"
         assert gen_call[1]["json_body"]["title"] == "My Test"
-        assert gen_call[1]["json_body"]["startingUrl"] == "https://example.com"
-        assert gen_call[1]["json_body"]["userJourney"] == "Login and checkout"
+        assert gen_call[1]["json_body"]["starting_url"] == "https://example.com"
+        assert "Navigate to the login page" in gen_call[1]["json_body"]["userJourney"]
         assert gen_call[1]["json_body"]["region"] == "us-east-1"
 
         import_call = mock_client.post.call_args_list[1]
@@ -351,7 +351,7 @@ class TestCreateCommand:
         }
 
         runner = CliRunner()
-        input_text = "My Test\nhttps://example.com\nLogin and checkout\nus-east-1\n"
+        input_text = "My Test\nhttps://example.com\nNavigate to the login page, click the sign in button, enter username and password, click submit button, verify dashboard is visible\nus-east-1\n"
         result = _invoke_with_mock(runner, mock_client, ["create", "--from-journey"], input_text=input_text)
 
         assert result.exit_code == 1
@@ -362,11 +362,90 @@ class TestCreateCommand:
         mock_client.post.side_effect = ApiError(502, "Bad gateway")
 
         runner = CliRunner()
-        input_text = "My Test\nhttps://example.com\nLogin and checkout\nus-east-1\n"
+        input_text = "My Test\nhttps://example.com\nNavigate to the login page, click the sign in button, enter username and password, click submit button, verify dashboard is visible\nus-east-1\n"
         result = _invoke_with_mock(runner, mock_client, ["create", "--from-journey"], input_text=input_text)
 
         assert result.exit_code == 1
         assert "Bad gateway" in result.output
+
+    def test_accepts_cli_options(self):
+        """Test create accepts CLI options instead of prompts."""
+        mock_client = MagicMock()
+        mock_client.post.side_effect = [
+            {"success": True, "usecaseData": '{"steps": []}', "message": ""},
+            {"success": True, "usecaseId": "opt-test-id", "message": ""},
+        ]
+
+        runner = CliRunner()
+        result = _invoke_with_mock(
+            runner,
+            mock_client,
+            [
+                "create",
+                "--from-journey",
+                "--title", "CLI Options Test",
+                "--url", "https://example.com/test",
+                "--journey", "Navigate to the login page, click the sign in button, enter username and password, click submit button, verify dashboard is visible",
+                "--region", "us-west-2",
+            ],
+            input_text=""  # No prompts needed
+        )
+
+        assert result.exit_code == 0
+        assert "opt-test-id" in result.output
+
+        # Verify API call used CLI options
+        gen_call = mock_client.post.call_args_list[0]
+        assert gen_call[1]["json_body"]["title"] == "CLI Options Test"
+        assert gen_call[1]["json_body"]["starting_url"] == "https://example.com/test"
+        assert gen_call[1]["json_body"]["region"] == "us-west-2"
+
+    def test_validates_journey_client_side(self):
+        """Test client-side validation rejects invalid journey."""
+        mock_client = MagicMock()
+
+        runner = CliRunner()
+        result = _invoke_with_mock(
+            runner,
+            mock_client,
+            [
+                "create",
+                "--from-journey",
+                "--title", "Test",
+                "--url", "https://example.com",
+                "--journey", "Too short",  # Invalid: too short, no action words
+                "--region", "us-east-1",
+            ],
+            input_text=""
+        )
+
+        assert result.exit_code == 1
+        assert "Validation failed" in result.output
+        # Should not make API call
+        assert mock_client.post.call_count == 0
+
+    def test_validates_url_client_side(self):
+        """Test client-side validation rejects invalid URL."""
+        mock_client = MagicMock()
+
+        runner = CliRunner()
+        result = _invoke_with_mock(
+            runner,
+            mock_client,
+            [
+                "create",
+                "--from-journey",
+                "--title", "Test",
+                "--url", "not-a-url",  # Invalid URL
+                "--journey", "Navigate to the login page, click the sign in button, enter username and password, click submit button, verify dashboard is visible",
+                "--region", "us-east-1",
+            ],
+            input_text=""
+        )
+
+        assert result.exit_code == 1
+        assert "Validation failed" in result.output
+        assert mock_client.post.call_count == 0
 
 
 class TestDeleteCommand:
@@ -557,3 +636,82 @@ class TestRunCommand:
 
         assert result.exit_code == 1
         assert "Failed to execute usecase" in result.output
+
+    def test_accepts_cli_options(self):
+        """Test create accepts CLI options instead of prompts."""
+        mock_client = MagicMock()
+        mock_client.post.side_effect = [
+            {"success": True, "usecaseData": '{"steps": []}', "message": ""},
+            {"success": True, "usecaseId": "opt-test-id", "message": ""},
+        ]
+
+        runner = CliRunner()
+        result = _invoke_with_mock(
+            runner,
+            mock_client,
+            [
+                "create",
+                "--from-journey",
+                "--title", "CLI Options Test",
+                "--url", "https://example.com/test",
+                "--journey", "Navigate to the login page, click the sign in button, enter username and password, click submit button, verify dashboard is visible",
+                "--region", "us-west-2",
+            ],
+            input_text=""  # No prompts needed
+        )
+
+        assert result.exit_code == 0
+        assert "opt-test-id" in result.output
+
+        # Verify API call used CLI options
+        gen_call = mock_client.post.call_args_list[0]
+        assert gen_call[1]["json_body"]["title"] == "CLI Options Test"
+        assert gen_call[1]["json_body"]["starting_url"] == "https://example.com/test"
+        assert gen_call[1]["json_body"]["region"] == "us-west-2"
+
+    def test_validates_journey_client_side(self):
+        """Test client-side validation rejects invalid journey."""
+        mock_client = MagicMock()
+
+        runner = CliRunner()
+        result = _invoke_with_mock(
+            runner,
+            mock_client,
+            [
+                "create",
+                "--from-journey",
+                "--title", "Test",
+                "--url", "https://example.com",
+                "--journey", "Too short",  # Invalid: too short, no action words
+                "--region", "us-east-1",
+            ],
+            input_text=""
+        )
+
+        assert result.exit_code == 1
+        assert "Validation failed" in result.output
+        # Should not make API call
+        assert mock_client.post.call_count == 0
+
+    def test_validates_url_client_side(self):
+        """Test client-side validation rejects invalid URL."""
+        mock_client = MagicMock()
+
+        runner = CliRunner()
+        result = _invoke_with_mock(
+            runner,
+            mock_client,
+            [
+                "create",
+                "--from-journey",
+                "--title", "Test",
+                "--url", "not-a-url",  # Invalid URL
+                "--journey", "Navigate to the login page, click the sign in button, enter username and password, click submit button, verify dashboard is visible",
+                "--region", "us-east-1",
+            ],
+            input_text=""
+        )
+
+        assert result.exit_code == 1
+        assert "Validation failed" in result.output
+        assert mock_client.post.call_count == 0

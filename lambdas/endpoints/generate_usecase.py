@@ -1,9 +1,6 @@
 import json
 import os
 import time
-import math
-import random
-from datetime import datetime, timezone
 import boto3
 from utils import (create_response, get_current_timestamp, validate_title, 
                    validate_url, validate_user_journey, sanitize_and_fix_json,
@@ -11,92 +8,8 @@ from utils import (create_response, get_current_timestamp, validate_title,
 
 bedrock_runtime = boto3.client('bedrock-runtime')
 
-# Circuit breaker state
-class CircuitBreaker:
-    """Implements the circuit breaker pattern for Bedrock calls."""
-    
-    def __init__(self):
-        self.state = 'CLOSED'  # CLOSED, OPEN, HALF_OPEN
-        self.failure_count = 0
-        self.success_count = 0
-        self.last_failure_time = None
-        self.max_failures = 5
-        self.reset_timeout = 60  # seconds
-    
-    def can_execute(self):
-        """Check if the circuit breaker allows execution."""
-        if self.state == 'CLOSED':
-            return True
-        elif self.state == 'OPEN':
-            if self.last_failure_time and (time.time() - self.last_failure_time) >= self.reset_timeout:
-                self.state = 'HALF_OPEN'
-                self.success_count = 0
-                return True
-            return False
-        elif self.state == 'HALF_OPEN':
-            return True
-        return False
-    
-    def on_success(self):
-        """Record a successful execution."""
-        self.failure_count = 0
-        if self.state == 'HALF_OPEN':
-            self.success_count += 1
-            if self.success_count >= 3:  # Require 3 successes to close
-                self.state = 'CLOSED'
-                self.success_count = 0
-    
-    def on_failure(self):
-        """Record a failed execution."""
-        self.failure_count += 1
-        self.last_failure_time = time.time()
-        
-        if self.failure_count >= self.max_failures:
-            self.state = 'OPEN'
-        elif self.state == 'HALF_OPEN':
-            self.state = 'OPEN'
 
-# Global circuit breaker instance
-circuit_breaker = CircuitBreaker()
 
-def calculate_backoff_delay(attempt, base_delay=1.0, max_delay=30.0, backoff_factor=2.0):
-    """Calculate exponential backoff delay with jitter."""
-    delay = base_delay * (backoff_factor ** (attempt - 1))
-    delay = min(delay, max_delay)
-    
-    # Add jitter to prevent thundering herd
-    jitter = delay * 0.1 * (2.0 * random.random() - 1.0)
-    delay += jitter
-    
-    return delay
-
-def is_retryable_error(error_msg):
-    """Determine if an error is retryable."""
-    error_lower = error_msg.lower()
-    
-    # Retryable errors
-    retryable_patterns = [
-        'throttling', 'rate limit', 'timeout', 'temporary',
-        'service unavailable', 'internal server error',
-        'connection', 'network', '502', '503', '504'
-    ]
-    
-    for pattern in retryable_patterns:
-        if pattern in error_lower:
-            return True
-    
-    # Non-retryable errors
-    non_retryable_patterns = [
-        'access denied', 'unauthorized', 'forbidden',
-        'invalid', 'bad request', '400', '401', '403'
-    ]
-    
-    for pattern in non_retryable_patterns:
-        if pattern in error_lower:
-            return False
-    
-    # Default to retryable for unknown errors
-    return True
 
 
 def create_prompt(title, starting_url, user_journey, region):
@@ -120,7 +33,7 @@ Generate a JSON object that matches this EXACT schema. This JSON will be importe
   "exportVersion": "1.0",
   "exportedAt": "{current_time}",
   "usecase": {{
-    "name": "(Wizard) {escaped_title}",
+    "name": "{escaped_title}",
     "description": "Generated from user journey: {escaped_journey}",
     "starting_url": "{starting_url}",
     "active": true,
@@ -201,7 +114,6 @@ def invoke_bedrock(title, starting_url, user_journey, region, model_id):
             inferenceConfig={
                 'maxTokens': 4096,
                 'temperature': 0.1,
-                'topP': 0.9,
             }
         )
 
@@ -263,40 +175,6 @@ def extract_json(text):
     return extracted
 
 
-def generate_usecase_with_retry(title, starting_url, user_journey, region, model_id, max_retries=3):
-    """Generate usecase with retry logic and circuit breaker."""
-    # Check circuit breaker state
-    if not circuit_breaker.can_execute():
-        state = circuit_breaker.state
-        print(f'Circuit breaker is {state}, rejecting request')
-        raise Exception(f'Bedrock service is temporarily unavailable (circuit breaker {state})')
-    
-    last_error = None
-    for attempt in range(max_retries + 1):
-        if attempt > 0:
-            # Calculate exponential backoff with jitter
-            delay = calculate_backoff_delay(attempt)
-            print(f'Retrying Bedrock call (attempt {attempt + 1}/{max_retries + 1}) after {delay:.2f}s')
-            time.sleep(delay)
-        
-        try:
-            generated_json = invoke_bedrock(title, starting_url, user_journey, region, model_id)
-            circuit_breaker.on_success()
-            print(f'Bedrock call succeeded on attempt {attempt + 1}')
-            return generated_json
-            
-        except Exception as e:
-            last_error = str(e)
-            print(f'Bedrock call attempt {attempt + 1} failed: {last_error}')
-            
-            # Check if error is retryable
-            if not is_retryable_error(last_error):
-                print(f'Non-retryable error encountered: {last_error}')
-                circuit_breaker.on_failure()
-                raise Exception(f'Bedrock call failed with non-retryable error: {last_error}')
-    
-    circuit_breaker.on_failure()
-    raise Exception(f'Bedrock call failed after {max_retries + 1} attempts: {last_error}')
 
 def get_error_code(error_message):
     """Map error messages to error codes."""
@@ -362,7 +240,7 @@ def handler(event, context):
     
     title = body.get('title', '')
     starting_url = body.get('starting_url', '')
-    user_journey = body.get('userJourney', '')
+    user_journey = body.get('user_journey', '')
     region = body.get('region', '')
     
     # Validate inputs
@@ -442,7 +320,7 @@ def handler(event, context):
     # Generate the usecase using Bedrock
     try:
         print(f'[INFO] [{request_id}] Calling Bedrock service to generate usecase')
-        generated_json = generate_usecase_with_retry(title, starting_url, user_journey, region, model_id)
+        generated_json = invoke_bedrock(title, starting_url, user_journey, region, model_id)
         
         # Sanitize and validate the generated JSON
         print(f'[INFO] [{request_id}] Sanitizing and validating generated JSON')
@@ -457,6 +335,11 @@ def handler(event, context):
                 'error': f'Generated test case validation failed: {"; ".join(errors)}',
                 'code': 'INVALID_GENERATED_JSON'
             })
+        
+        # Log export version and full JSON for debugging
+        export_version = schema.get('exportVersion', 'NOT_FOUND') if schema else 'NO_SCHEMA'
+        print(f'[INFO] [{request_id}] Export version: {export_version}')
+        print(f'[DEBUG] [{request_id}] Generated JSON: {sanitized_json}')
         
         steps_count = len(schema.get('steps', [])) if schema else 0
         print(f'[INFO] [{request_id}] JSON validation successful, {steps_count} steps generated')
