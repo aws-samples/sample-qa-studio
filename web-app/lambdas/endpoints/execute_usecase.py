@@ -234,6 +234,11 @@ def handler(event, context):
                 if field in step:
                     execution_step[field] = step[field]
             
+            # Propagate enable_cache from usecase to each execution step
+            enable_cache = usecase.get('enable_cache', {})
+            if enable_cache:
+                execution_step['enable_cache'] = enable_cache
+            
             dynamodb.put_item(TableName=table_name, Item=execution_step)
         
         print(f'Created {len(steps)} execution steps')

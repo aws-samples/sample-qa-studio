@@ -236,7 +236,8 @@ def get_usecase_definition(usecase_id: str, table_name: str) -> Dict[str, Any]:
         'name': item.get('name', {}).get('S', ''),
         'starting_url': item.get('starting_url', {}).get('S', ''),
         'executing_region': item.get('executing_region', {}).get('S', ''),
-        'model_id': item.get('model_id', {}).get('S', '')
+        'model_id': item.get('model_id', {}).get('S', ''),
+        'enable_cache': item.get('enable_cache', {}).get('BOOL', False)
     }
 
 
@@ -535,9 +536,14 @@ def create_execution_record_for_usecase(
         
         # Copy optional fields if present
         for field in ['secret_key', 'validation_type', 'validation_operator', 
-                     'validation_value', 'capture_variable', 'assertion_variable', 'value_type', 'enable_advanced_click_types']:
+                     'validation_value', 'capture_variable', 'assertion_variable', 'value_type', 'enable_advanced_click_types',
+                     'cached_steps', 'cache_last_updated']:
             if field in step:
                 execution_step[field] = step[field]
+        
+        # Propagate enable_cache from usecase to each execution step
+        if usecase_definition.get('enable_cache', False):
+            execution_step['enable_cache'] = {'BOOL': True}
         
         dynamodb.put_item(TableName=table_name, Item=execution_step)
     

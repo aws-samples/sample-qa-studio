@@ -40,6 +40,9 @@ class ExecutionStep:
     value_type: str
     assertion_variable: str
     enable_advanced_click_types: bool = False
+    cached_steps: Optional[str] = None
+    enable_cache: bool = False
+    cache_last_updated: Optional[str] = None
 
 @dataclass
 class ExecutionVariables:

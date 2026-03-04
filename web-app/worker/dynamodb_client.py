@@ -86,7 +86,10 @@ class DynamoDBClient:
                         capture_variable=item.get('capture_variable', ''),
                         value_type=item.get('value_type', ''),
                         assertion_variable=item.get('assertion_variable', ''),
-                        enable_advanced_click_types=item.get('enable_advanced_click_types', False)
+                        enable_advanced_click_types=item.get('enable_advanced_click_types', False),
+                        cached_steps=item.get('cached_steps', None),
+                        enable_cache=item.get('enable_cache', False),
+                        cache_last_updated=item.get('cache_last_updated', None)
                     )
                     steps.append(step)
                 except Exception as e:
