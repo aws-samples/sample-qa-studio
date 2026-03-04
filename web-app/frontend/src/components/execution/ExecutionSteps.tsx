@@ -76,7 +76,7 @@ export default function ExecutionSteps({
                   <div style={{ marginBottom: '4px' }}>
                     {item.instruction}
                   </div>
-                  {actId && actId !== "error" && (
+                  {actId && actId !== "error" && actId !== "cached" && (
                     <div style={{ fontSize: '12px', color: '#5f6b7a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Button
                         variant="inline-link"
