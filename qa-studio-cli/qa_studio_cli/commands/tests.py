@@ -87,15 +87,15 @@ def get_test(ctx, id):
 @tests.command("create")
 @require_auth
 @click.option("--from-journey", is_flag=True, required=True, help="Create from user journey description")
+@click.option("--title", prompt=True, help="Title for the test case")
+@click.option("--url", "starting_url", prompt="Starting URL", help="Starting URL for the test")
+@click.option("--journey", "user_journey", prompt="User journey description", help="Description of the user journey")
+@click.option("--region", prompt=True, help="AWS region for execution (e.g. us-east-1, eu-central-1)")
+@click.option("--export-to", "export_to", default=None, help="Directory to export generated JSON to")
 @click.pass_context
-def create_test(ctx, from_journey):
+def create_test(ctx, from_journey, title, starting_url, user_journey, region, export_to):
     """Create a test from a user journey description."""
     client = ctx.obj["client"]
-
-    title = click.prompt("Title")
-    starting_url = click.prompt("Starting URL")
-    user_journey = click.prompt("User journey description")
-    region = click.prompt("Region")
 
     try:
         # Step 1: Generate usecase from journey
@@ -123,6 +123,17 @@ def create_test(ctx, from_journey):
             raise SystemExit(1)
 
         click.echo(f"✓ Test created: {title} (ID: {import_response.usecase_id})")
+
+        # Step 3: Export JSON if --export-to is provided
+        if export_to:
+            import os
+            os.makedirs(export_to, exist_ok=True)
+            safe_title = title.replace(" ", "_")
+            safe_title = "".join(c if c.isalnum() or c in "_-" else "_" for c in safe_title)
+            filepath = os.path.join(export_to, f"{safe_title}.json")
+            with open(filepath, "w") as f:
+                f.write(gen_response.usecase_data)
+            click.echo(f"Test JSON exported to: {filepath}")
 
     except ApiError as e:
         click.echo(str(e), err=True)

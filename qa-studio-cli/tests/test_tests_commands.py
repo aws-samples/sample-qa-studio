@@ -1,4 +1,4 @@
-"""Tests for qa-studio tests commands."""
+"""Tests for qa-studio tests create command."""
 
 import json
 import os
@@ -14,222 +14,117 @@ from qa_studio_cli.models.errors import ApiError
 
 @pytest.fixture
 def runner():
-    """Create a Click CLI runner."""
     return CliRunner()
 
 
 @pytest.fixture
 def mock_client():
-    """Create a mock API client."""
-    client = MagicMock()
-    return client
+    return MagicMock()
 
 
-@pytest.fixture
-def mock_context(mock_client):
-    """Create a mock Click context with client."""
-    return {"client": mock_client}
+def invoke_create(runner, mock_client, extra_args=None):
+    """Helper to invoke create command with auth mocked out."""
+    args = [
+        "tests", "create", "--from-journey",
+        "--title", "Test Login",
+        "--url", "https://example.com",
+        "--journey", "Navigate to login page, enter credentials, click Sign In, verify dashboard",
+        "--region", "us-east-1",
+    ]
+    if extra_args:
+        args.extend(extra_args)
+
+    with patch("qa_studio_cli.api.client.config_exists", return_value=True), \
+         patch("qa_studio_cli.api.client.load_config") as mock_config, \
+         patch("qa_studio_cli.api.client.get_valid_token", return_value="fake-token"), \
+         patch("qa_studio_cli.api.client.ApiClient", return_value=mock_client):
+        mock_config.return_value = MagicMock(api_url="https://fake-api.example.com")
+        return runner.invoke(cli, args)
 
 
 class TestTestsCreate:
     """Tests for 'qa-studio tests create' command."""
 
-    def test_create_with_export_to_flag(self, runner, mock_client):
-        """Test creating a test with --export-to flag exports JSON to specified folder."""
-        # The usecaseData should match what the import endpoint expects
-        usecase_json_data = {
-            "title": "Test Login",
-            "description": "Login test",
-            "starting_url": "https://example.com",
-            "steps": []
-        }
-        
-        # Mock API responses
-        generate_response = {
-            "success": True,
-            "message": "Generated",
-            "usecaseData": json.dumps(usecase_json_data)
-        }
-        
-        import_response = {
-            "success": True,
-            "message": "Imported",
-            "usecase_id": "test-123"
-        }
-        
-        mock_client.post.side_effect = [generate_response, import_response]
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("qa_studio_cli.commands.tests.require_auth", lambda f: f):
-                result = runner.invoke(
-                    cli,
-                    [
-                        "tests", "create",
-                        "--from-journey",
-                        "--title", "Test Login",
-                        "--url", "https://example.com",
-                        "--journey", "Navigate to the login page, enter username into the email field, enter password into the password field, click the Sign In button, and verify the dashboard heading is visible",
-                        "--region", "us-east-1",
-                        "--export-to", tmpdir
-                    ],
-                    obj={"client": mock_client}
-                )
-            
-            # Verify command succeeded
-            if result.exit_code != 0:
-                print(f"Output: {result.output}")
-                print(f"Exception: {result.exception}")
-            assert result.exit_code == 0
-            assert "Test created: Test Login" in result.output
-            assert "(ID:" in result.output  # Verify ID is present (could be UUID or test-123)
-            
-            # Verify JSON file was created
-            expected_file = os.path.join(tmpdir, "Test_Login.json")
-            assert os.path.exists(expected_file)
-            
-            # Verify JSON content is valid
-            with open(expected_file, 'r') as f:
-                exported_data = json.load(f)
-            
-            # Verify it's valid JSON (structure may vary based on API response)
-            assert isinstance(exported_data, dict)
-            assert len(exported_data) > 0  # Has some content
-            assert "Test JSON exported to:" in result.output
+    def test_create_without_export(self, runner, mock_client):
+        """Test creating a test without --export-to."""
+        mock_client.post.side_effect = [
+            {"success": True, "message": "Generated", "usecaseData": json.dumps({"name": "Test Login", "steps": []})},
+            {"success": True, "message": "Imported", "usecase_id": "test-123"},
+        ]
 
-    def test_create_without_export_to_flag(self, runner, mock_client):
-        """Test creating a test without --export-to flag does not export JSON."""
-        # Mock API responses
-        generate_response = {
-            "success": True,
-            "message": "Generated",
-            "usecaseData": json.dumps({
-                "name": "Test Login",
-                "description": "Login test",
-                "starting_url": "https://example.com",
-                "steps": []
-            })
-        }
-        
-        import_response = {
-            "success": True,
-            "message": "Imported",
-            "usecase_id": "test-123"
-        }
-        
-        mock_client.post.side_effect = [generate_response, import_response]
-        
-        with patch("qa_studio_cli.commands.tests.require_auth", lambda f: f):
-            result = runner.invoke(
-                cli,
-                [
-                    "tests", "create",
-                    "--from-journey",
-                    "--title", "Test Login",
-                    "--url", "https://example.com",
-                    "--journey", "Navigate to the login page, enter username into the email field, enter password into the password field, click the Sign In button, and verify the dashboard heading is visible",
-                    "--region", "us-east-1"
-                ],
-                obj={"client": mock_client}
-            )
-        
-        # Verify command succeeded
+        result = invoke_create(runner, mock_client)
+
+        if result.exit_code != 0:
+            print(f"Output: {result.output}")
+            print(f"Exception: {result.exception}")
         assert result.exit_code == 0
         assert "Test created: Test Login" in result.output
         assert "Test JSON exported to:" not in result.output
 
-    def test_create_with_export_creates_directory(self, runner, mock_client):
-        """Test that --export-to creates the directory if it doesn't exist."""
-        # Mock API responses
-        generate_response = {
-            "success": True,
-            "message": "Generated",
-            "usecaseData": json.dumps({
-                "name": "Test Login",
-                "description": "Login test",
-                "starting_url": "https://example.com",
-                "steps": []
-            })
-        }
-        
-        import_response = {
-            "success": True,
-            "message": "Imported",
-            "usecase_id": "test-123"
-        }
-        
-        mock_client.post.side_effect = [generate_response, import_response]
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            export_dir = os.path.join(tmpdir, "nested", "export", "folder")
-            
-            with patch("qa_studio_cli.commands.tests.require_auth", lambda f: f):
-                result = runner.invoke(
-                    cli,
-                    [
-                        "tests", "create",
-                        "--from-journey",
-                        "--title", "Test Login",
-                        "--url", "https://example.com",
-                        "--journey", "Navigate to the login page, enter username into the email field, enter password into the password field, click the Sign In button, and verify the dashboard heading is visible",
-                        "--region", "us-east-1",
-                        "--export-to", export_dir
-                    ],
-                    obj={"client": mock_client}
-                )
-            
-            # Verify command succeeded
-            assert result.exit_code == 0
-            
-            # Verify directory was created
-            assert os.path.exists(export_dir)
-            
-            # Verify JSON file was created
-            expected_file = os.path.join(export_dir, "Test_Login.json")
-            assert os.path.exists(expected_file)
+    def test_create_with_export(self, runner, mock_client):
+        """Test creating a test with --export-to exports JSON."""
+        mock_client.post.side_effect = [
+            {"success": True, "message": "Generated", "usecaseData": json.dumps({"title": "Test Login", "steps": []})},
+            {"success": True, "message": "Imported", "usecase_id": "test-123"},
+        ]
 
-    def test_create_with_export_sanitizes_filename(self, runner, mock_client):
-        """Test that special characters in title are sanitized in filename."""
-        # Mock API responses
-        generate_response = {
-            "success": True,
-            "message": "Generated",
-            "usecaseData": json.dumps({
-                "name": "Test: Login/Logout & More!",
-                "description": "Login test",
-                "starting_url": "https://example.com",
-                "steps": []
-            })
-        }
-        
-        import_response = {
-            "success": True,
-            "message": "Imported",
-            "usecase_id": "test-123"
-        }
-        
-        mock_client.post.side_effect = [generate_response, import_response]
-        
         with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("qa_studio_cli.commands.tests.require_auth", lambda f: f):
-                result = runner.invoke(
-                    cli,
-                    [
-                        "tests", "create",
-                        "--from-journey",
-                        "--title", "Test Login Logout More",  # Use simpler title without special chars
-                        "--url", "https://example.com",
-                        "--journey", "Navigate to the login page, enter username into the email field, enter password into the password field, click the Sign In button, and verify the dashboard heading is visible",
-                        "--region", "us-east-1",
-                        "--export-to", tmpdir
-                    ],
-                    obj={"client": mock_client}
-                )
-            
-            # Verify command succeeded
-            if result.exit_code != 0:
-                print(f"Output: {result.output}")
+            result = invoke_create(runner, mock_client, ["--export-to", tmpdir])
+
             assert result.exit_code == 0
-            
-            # Verify sanitized filename was created
-            expected_file = os.path.join(tmpdir, "Test_Login_Logout_More.json")
+            expected_file = os.path.join(tmpdir, "Test_Login.json")
             assert os.path.exists(expected_file)
+            with open(expected_file, 'r') as f:
+                data = json.load(f)
+            assert isinstance(data, dict)
+            assert "Test JSON exported to:" in result.output
+
+    def test_create_export_creates_nested_directory(self, runner, mock_client):
+        """Test that --export-to creates nested directories."""
+        mock_client.post.side_effect = [
+            {"success": True, "message": "Generated", "usecaseData": json.dumps({"name": "Test Login", "steps": []})},
+            {"success": True, "message": "Imported", "usecase_id": "test-123"},
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = os.path.join(tmpdir, "nested", "export")
+            result = invoke_create(runner, mock_client, ["--export-to", export_dir])
+
+            assert result.exit_code == 0
+            assert os.path.exists(export_dir)
+            assert os.path.exists(os.path.join(export_dir, "Test_Login.json"))
+
+    def test_create_generation_failure(self, runner, mock_client):
+        """Test handling of generation failure."""
+        mock_client.post.return_value = {"success": False, "message": "Bedrock error"}
+
+        result = invoke_create(runner, mock_client)
+
+        assert result.exit_code == 1
+        assert "Generation failed" in result.output
+
+    def test_create_api_error(self, runner, mock_client):
+        """Test handling of API error."""
+        mock_client.post.side_effect = ApiError(400, "Bad request")
+
+        result = invoke_create(runner, mock_client)
+
+        assert result.exit_code == 1
+
+    def test_create_sends_correct_payload(self, runner, mock_client):
+        """Test that the correct payload is sent to the API."""
+        mock_client.post.side_effect = [
+            {"success": True, "message": "Generated", "usecaseData": json.dumps({"steps": []})},
+            {"success": True, "message": "Imported", "usecase_id": "test-123"},
+        ]
+
+        invoke_create(runner, mock_client)
+
+        # Verify generate-usecase call
+        gen_call = mock_client.post.call_args_list[0]
+        assert gen_call[0][0] == "/api/generate-usecase"
+        body = gen_call[1]["json_body"]
+        assert body["title"] == "Test Login"
+        assert body["startingUrl"] == "https://example.com"
+        assert "Navigate to login page" in body["userJourney"]
+        assert body["region"] == "us-east-1"
