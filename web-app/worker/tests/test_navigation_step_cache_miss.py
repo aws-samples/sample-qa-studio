@@ -46,7 +46,7 @@ class TestCacheMissLogging:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            result, success, logs = execute_navigation_step(mock_nova, mock_step)
+            result, success, logs = execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify INFO log with correct message
         assert "Cache miss for step 1: caching disabled" in caplog.text
@@ -64,7 +64,7 @@ class TestCacheMissLogging:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            result, success, logs = execute_navigation_step(mock_nova, mock_step)
+            result, success, logs = execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify INFO log with correct message
         assert "Cache miss for step 1: no cached steps available" in caplog.text
@@ -82,7 +82,7 @@ class TestCacheMissLogging:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            result, success, logs = execute_navigation_step(mock_nova, mock_step)
+            result, success, logs = execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify INFO log with correct message
         assert "Cache miss for step 1: no cached steps available" in caplog.text
@@ -99,7 +99,7 @@ class TestCacheMissLogging:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            result, success, logs = execute_navigation_step(mock_nova, mock_step)
+            result, success, logs = execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify INFO log with correct message
         assert "Cache miss for step 1: no cached steps available" in caplog.text
@@ -116,7 +116,7 @@ class TestCacheMissLogging:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            result, success, logs = execute_navigation_step(mock_nova, mock_step)
+            result, success, logs = execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify "caching disabled" message (takes precedence)
         assert "Cache miss for step 1: caching disabled" in caplog.text
@@ -136,7 +136,7 @@ class TestCacheMissWithStepSort:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            execute_navigation_step(mock_nova, mock_step)
+            execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify step sort in log message
         assert "Cache miss for step 5" in caplog.text
@@ -151,7 +151,7 @@ class TestCacheMissWithStepSort:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            execute_navigation_step(mock_nova, mock_step)
+            execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify step sort in log message
         assert "Cache miss for step 10" in caplog.text
@@ -166,7 +166,7 @@ class TestCacheMissDoesNotAffectExecution:
         mock_step.cached_steps = json.dumps([{"type": "click", "bbox": {"x1": 100, "y1": 200, "x2": 300, "y2": 400}}])
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify Nova Act called and result returned
         mock_nova.act.assert_called_once()
@@ -180,7 +180,7 @@ class TestCacheMissDoesNotAffectExecution:
         mock_step.cached_steps = None
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify Nova Act called and result returned
         mock_nova.act.assert_called_once()
@@ -195,7 +195,7 @@ class TestCacheMissDoesNotAffectExecution:
         mock_step.enable_advanced_click_types = True
         
         # Execute
-        execute_navigation_step(mock_nova, mock_step)
+        execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify instruction includes click_base_prompt
         call_args = mock_nova.act.call_args[0][0]
@@ -219,7 +219,7 @@ class TestNoLogWhenCacheHit:
             # Capture INFO level logs
             with caplog.at_level(logging.INFO):
                 # Execute
-                execute_navigation_step(mock_nova, mock_step)
+                execute_navigation_step(mock_nova, mock_step, mock_step.enable_cache)
         
         # Verify no cache miss log
         assert "Cache miss" not in caplog.text

@@ -51,7 +51,7 @@ class TestCacheExecutionErrorHandling:
         mock_execute.side_effect = CacheExecutionError("Element not found at bbox")
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify warning logged with error details
         assert "Cache execution failed for step 1" in caplog.text
@@ -65,7 +65,7 @@ class TestCacheExecutionErrorHandling:
         mock_execute.side_effect = CacheExecutionError("Click failed")
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify Nova Act was called as fallback
         mock_nova.act.assert_called_once_with("Click login button")
@@ -85,7 +85,7 @@ class TestJSONDecodeErrorHandling:
         mock_step.cached_steps = "not valid json {["
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify warning logged with parse error
         assert "Failed to parse cached_steps for step 1" in caplog.text
@@ -97,7 +97,7 @@ class TestJSONDecodeErrorHandling:
         mock_step.cached_steps = "invalid json"
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify Nova Act was called as fallback
         mock_nova.act.assert_called_once_with("Click login button")
@@ -117,7 +117,7 @@ class TestGeneralExceptionHandling:
         mock_execute.side_effect = RuntimeError("Unexpected error")
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify warning logged with error details
         assert "Unexpected error during cache execution for step 1" in caplog.text
@@ -131,7 +131,7 @@ class TestGeneralExceptionHandling:
         mock_execute.side_effect = ValueError("Something went wrong")
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify Nova Act was called as fallback
         mock_nova.act.assert_called_once_with("Click login button")
@@ -147,7 +147,7 @@ class TestGeneralExceptionHandling:
         mock_json_loads.side_effect = TypeError("Unexpected type error")
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify Nova Act was called as fallback
         mock_nova.act.assert_called_once()
@@ -162,7 +162,7 @@ class TestFallbackExecutionCorrectness:
         mock_execute.side_effect = CacheExecutionError("Cache failed")
         
         # Execute
-        execute_navigation_step(mock_nova, mock_step)
+        execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify instruction passed to Nova Act unchanged
         mock_nova.act.assert_called_once_with("Click login button")
@@ -174,7 +174,7 @@ class TestFallbackExecutionCorrectness:
         mock_step.enable_advanced_click_types = True
         
         # Execute
-        execute_navigation_step(mock_nova, mock_step)
+        execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify instruction includes click_base_prompt
         call_args = mock_nova.act.call_args[0][0]
@@ -188,7 +188,7 @@ class TestFallbackExecutionCorrectness:
         mock_execute.side_effect = CacheExecutionError("Cache failed")
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify Nova Act result returned unchanged
         assert result.metadata.act_id == "nova_act_123"
@@ -205,7 +205,7 @@ class TestMultipleExceptionTypes:
         """Test CacheExecutionError is caught by specific handler"""
         mock_execute.side_effect = CacheExecutionError("Specific cache error")
         
-        execute_navigation_step(mock_nova, mock_step)
+        execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify specific CacheExecutionError message
         assert "Cache execution failed for step 1" in caplog.text
@@ -215,7 +215,7 @@ class TestMultipleExceptionTypes:
         """Test JSONDecodeError is caught by specific handler"""
         mock_step.cached_steps = '{"invalid": json}'
         
-        execute_navigation_step(mock_nova, mock_step)
+        execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify specific JSONDecodeError message
         assert "Failed to parse cached_steps for step 1" in caplog.text
@@ -225,7 +225,7 @@ class TestMultipleExceptionTypes:
         """Test other exceptions caught by general Exception handler"""
         mock_execute.side_effect = KeyError("Missing key")
         
-        execute_navigation_step(mock_nova, mock_step)
+        execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify general exception message
         assert "Unexpected error during cache execution for step 1" in caplog.text
@@ -240,7 +240,7 @@ class TestNoExceptionWhenCacheDisabled:
         mock_step.enable_cache = False
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, False)
         
         # Verify Nova Act called directly
         mock_nova.act.assert_called_once_with("Click login button")
@@ -251,7 +251,7 @@ class TestNoExceptionWhenCacheDisabled:
         mock_step.cached_steps = None
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify Nova Act called directly
         mock_nova.act.assert_called_once_with("Click login button")

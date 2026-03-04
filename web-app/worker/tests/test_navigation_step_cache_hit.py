@@ -51,7 +51,7 @@ class TestSuccessfulCacheExecution:
         mock_execute.return_value = None  # Success
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify return signature
         assert success is True
@@ -65,7 +65,7 @@ class TestSuccessfulCacheExecution:
         mock_execute.return_value = None
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify result structure
         assert hasattr(result, 'metadata')
@@ -79,7 +79,7 @@ class TestSuccessfulCacheExecution:
         mock_execute.return_value = None
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify result has empty logs attribute
         assert hasattr(result, 'logs')
@@ -96,7 +96,7 @@ class TestNovaActNotCalledOnCacheHit:
         mock_execute.return_value = None
         
         # Execute
-        execute_navigation_step(mock_nova, mock_step)
+        execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify Nova Act was NOT called
         mock_nova.act.assert_not_called()
@@ -108,7 +108,7 @@ class TestNovaActNotCalledOnCacheHit:
         mock_execute.return_value = None
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify Nova Act not called and cache result returned
         mock_nova.act.assert_not_called()
@@ -125,7 +125,7 @@ class TestCacheExecutionIntegration:
         mock_execute.return_value = None
         
         # Execute
-        execute_navigation_step(mock_nova, mock_step)
+        execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify execute_cached_steps called with nova
         mock_execute.assert_called_once()
@@ -139,7 +139,7 @@ class TestCacheExecutionIntegration:
         mock_execute.return_value = None
         
         # Execute
-        execute_navigation_step(mock_nova, mock_step)
+        execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify execute_cached_steps called with parsed steps
         mock_execute.assert_called_once()
@@ -165,7 +165,7 @@ class TestCacheHitLogging:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            execute_navigation_step(mock_nova, mock_step)
+            execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify INFO log contains "Cache hit"
         assert "Cache hit for step 1" in caplog.text
@@ -180,7 +180,7 @@ class TestCacheHitLogging:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            execute_navigation_step(mock_nova, mock_step)
+            execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify step sort in log message
         assert "Cache hit for step 5" in caplog.text
@@ -194,7 +194,7 @@ class TestCacheHitLogging:
         # Capture INFO level logs
         with caplog.at_level(logging.INFO):
             # Execute
-            execute_navigation_step(mock_nova, mock_step)
+            execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify duration in log message (format: "executed in XXXms")
         assert "executed in" in caplog.text
@@ -216,7 +216,7 @@ class TestCacheHitWithMultipleSteps:
         mock_execute.return_value = None
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify execute_cached_steps called with all steps
         mock_execute.assert_called_once()
@@ -244,7 +244,7 @@ class TestCacheHitWithAdvancedClickTypes:
         mock_execute.return_value = None
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify cache execution succeeded
         assert result.metadata.act_id == "cached"
@@ -261,7 +261,7 @@ class TestCacheHitWithAdvancedClickTypes:
         mock_execute.return_value = None
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify execute_cached_steps was called (cache path taken)
         mock_execute.assert_called_once()
@@ -292,7 +292,7 @@ class TestCacheHitReturnSignature:
         mock_execute.return_value = None
         
         # Execute
-        return_value = execute_navigation_step(mock_nova, mock_step)
+        return_value = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify tuple of 3 elements
         assert isinstance(return_value, tuple)
@@ -305,7 +305,7 @@ class TestCacheHitReturnSignature:
         mock_execute.return_value = None
         
         # Execute
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify types
         assert isinstance(result, SimpleNamespace)
@@ -324,7 +324,7 @@ class TestCacheHitWithDifferentStepTypes:
         ])
         mock_execute.return_value = None
         
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         assert result.metadata.act_id == "cached"
         assert success is True
@@ -337,7 +337,7 @@ class TestCacheHitWithDifferentStepTypes:
         ])
         mock_execute.return_value = None
         
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         assert result.metadata.act_id == "cached"
         assert success is True
@@ -350,7 +350,7 @@ class TestCacheHitWithDifferentStepTypes:
         ])
         mock_execute.return_value = None
         
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         assert result.metadata.act_id == "cached"
         assert success is True
@@ -363,7 +363,7 @@ class TestCacheHitWithDifferentStepTypes:
         ])
         mock_execute.return_value = None
         
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         assert result.metadata.act_id == "cached"
         assert success is True
@@ -376,7 +376,7 @@ class TestCacheHitWithDifferentStepTypes:
         ])
         mock_execute.return_value = None
         
-        result, success, logs = execute_navigation_step(mock_nova, mock_step)
+        result, success, logs = execute_navigation_step(mock_nova, mock_step, True)
         
         assert result.metadata.act_id == "cached"
         assert success is True
@@ -394,7 +394,7 @@ class TestCacheHitNoMissLogs:
         # Capture all logs
         with caplog.at_level(logging.INFO):
             # Execute
-            execute_navigation_step(mock_nova, mock_step)
+            execute_navigation_step(mock_nova, mock_step, True)
         
         # Verify no cache miss log
         assert "Cache miss" not in caplog.text

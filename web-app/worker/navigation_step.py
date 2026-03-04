@@ -25,19 +25,16 @@ agentClick("bbox", "left-double") performs a double-click on the bbox.
 Prompt: 
 """
 
-def execute_navigation_step(nova: NovaAct, step: ExecutionStep):
+def execute_navigation_step(nova: NovaAct, step: ExecutionStep, enable_cache: bool = False):
   logger.info(f"Executing navigation step {step.sort}: {step.instruction}")
   result = None
   success = True
   logs = ""
   
-  # Check cache eligibility: both enable_cache flag and cached_steps data must be present
-  # This allows per-step control over cache usage and graceful handling of missing cache data
-  enable_cache = getattr(step, 'enable_cache', False)
+  # Check cache eligibility: enable_cache from execution + cached_steps on the step
   cached_steps = getattr(step, 'cached_steps', None)
   
-  # Attempt cache execution only if explicitly enabled AND cache data is available
-  # This ensures we never attempt to execute empty/null cache data
+  # Attempt cache execution only if enabled on execution AND step has cache data
   if enable_cache and cached_steps and cached_steps.strip():
     try:
       # Parse cached steps JSON: convert string to list of action dictionaries

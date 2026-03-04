@@ -310,7 +310,7 @@ def _execute_steps(nova, execution, execution_headers, template_parser, usecase_
                         case 'download':
                             result, success, logs, actual_value = execute_download_step(nova, parsed_step, usecase_id, execution_id, s3_bucket_name)
                         case _:
-                            result, success, logs = execute_navigation_step(nova, parsed_step)
+                            result, success, logs = execute_navigation_step(nova, parsed_step, execution.enable_cache)
 
                     # Safely extract act_id from result
                     if result and hasattr(result, 'metadata') and hasattr(result.metadata, 'act_id'):

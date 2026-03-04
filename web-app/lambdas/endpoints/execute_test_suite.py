@@ -494,6 +494,10 @@ def create_execution_record_for_usecase(
         'usecase_name': {'S': usecase_definition.get('name', '')}
     }
     
+    # Propagate enable_cache from usecase to execution record
+    if usecase_definition.get('enable_cache', False):
+        execution_item['enable_cache'] = {'BOOL': True}
+    
     dynamodb.put_item(
         TableName=table_name,
         Item=execution_item
@@ -540,10 +544,6 @@ def create_execution_record_for_usecase(
                      'cached_steps', 'cache_last_updated']:
             if field in step:
                 execution_step[field] = step[field]
-        
-        # Propagate enable_cache from usecase to each execution step
-        if usecase_definition.get('enable_cache', False):
-            execution_step['enable_cache'] = {'BOOL': True}
         
         dynamodb.put_item(TableName=table_name, Item=execution_step)
     

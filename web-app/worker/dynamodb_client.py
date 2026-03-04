@@ -47,9 +47,10 @@ class DynamoDBClient:
                 executing_at=item.get('executing_at'),
                 trigger_type=item.get('trigger_type'),
                 session_id=item.get('session_id'),
-                region=item.get('executing_region', 'us-east-1'),  # Read from executing_region field
-                suite_execution_id=item.get('suite_execution_id'),  # Read suite_execution_id if present
-                suite_id=item.get('suite_id')  # Read suite_id if present
+                region=item.get('executing_region', 'us-east-1'),
+                suite_execution_id=item.get('suite_execution_id'),
+                suite_id=item.get('suite_id'),
+                enable_cache=item.get('enable_cache', False)
             )
             
         except ClientError as e:
@@ -88,7 +89,6 @@ class DynamoDBClient:
                         assertion_variable=item.get('assertion_variable', ''),
                         enable_advanced_click_types=item.get('enable_advanced_click_types', False),
                         cached_steps=item.get('cached_steps', None),
-                        enable_cache=item.get('enable_cache', False),
                         cache_last_updated=item.get('cache_last_updated', None)
                     )
                     steps.append(step)

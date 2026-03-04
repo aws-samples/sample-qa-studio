@@ -175,6 +175,11 @@ def handler(event, context):
             'model_id': {'S': model_id}
         }
         
+        # Propagate enable_cache from usecase to execution record
+        enable_cache_val = usecase.get('enable_cache', {}).get('BOOL', False)
+        if enable_cache_val:
+            execution_item['enable_cache'] = {'BOOL': True}
+        
         # Add suite_execution_id and suite_id if this is part of a suite execution
         if suite_execution_id:
             execution_item['suite_execution_id'] = {'S': suite_execution_id}
@@ -233,11 +238,6 @@ def handler(event, context):
                          'cached_steps', 'cache_last_updated']:
                 if field in step:
                     execution_step[field] = step[field]
-            
-            # Propagate enable_cache from usecase to each execution step
-            enable_cache = usecase.get('enable_cache', {})
-            if enable_cache:
-                execution_step['enable_cache'] = enable_cache
             
             dynamodb.put_item(TableName=table_name, Item=execution_step)
         

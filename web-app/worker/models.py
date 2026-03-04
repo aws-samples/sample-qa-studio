@@ -20,6 +20,7 @@ class Execution:
     region: str
     suite_execution_id: Optional[str] = None
     suite_id: Optional[str] = None
+    enable_cache: bool = False
 
 @dataclass
 class ExecutionStep:
@@ -41,7 +42,6 @@ class ExecutionStep:
     assertion_variable: str
     enable_advanced_click_types: bool = False
     cached_steps: Optional[str] = None
-    enable_cache: bool = False
     cache_last_updated: Optional[str] = None
 
 @dataclass
