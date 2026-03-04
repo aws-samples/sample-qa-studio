@@ -100,13 +100,70 @@ Running `qa-studio configure` stores settings in `~/.qa-studio/config.json`.
 
 You can override any config value with environment variables:
 
-| Environment Variable         | Overrides       |
-|------------------------------|-----------------|
-| `QA_STUDIO_API_URL`         | API base URL    |
-| `QA_STUDIO_COGNITO_DOMAIN`  | Cognito domain  |
-| `QA_STUDIO_CLIENT_ID`       | Cognito client ID |
+| Environment Variable         | Overrides              | Description |
+|------------------------------|------------------------|-------------|
+| `QA_STUDIO_API_URL`         | `api_url`              | API base URL |
+| `QA_STUDIO_COGNITO_DOMAIN`  | `cognito_domain`       | Cognito domain |
+| `QA_STUDIO_CLIENT_ID`       | `client_id`            | Cognito client ID |
+| `OAUTH_CLIENT_ID`           | `oauth_client_id`      | OAuth M2M client ID |
+| `OAUTH_CLIENT_SECRET`       | `oauth_client_secret`  | OAuth M2M client secret |
+| `OAUTH_TOKEN_ENDPOINT`      | `oauth_token_endpoint` | Cognito token endpoint URL |
 
 Environment variables take precedence over file values.
+
+## Authentication
+
+The CLI supports multiple authentication methods, resolved in this priority order:
+
+1. **Token file** (`--token-file` flag) — pre-generated token JSON
+2. **Environment variables** (`OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` / `OAUTH_TOKEN_ENDPOINT`) — M2M client credentials
+3. **Config file M2M credentials** (`oauth_client_id` / `oauth_client_secret` / `oauth_token_endpoint` in `~/.qa-studio/config.json`)
+4. **Stored user token** from `qa-studio login` (with auto-refresh)
+
+### Interactive Login (Development)
+
+```bash
+qa-studio login    # Opens browser for Cognito hosted UI login
+qa-studio status   # Check current auth status
+qa-studio logout   # Delete stored tokens
+```
+
+### OAuth Client Credentials (CI/CD, Headless)
+
+No browser login required. Set all three environment variables:
+
+```bash
+export OAUTH_CLIENT_ID="your-m2m-client-id"
+export OAUTH_CLIENT_SECRET="your-m2m-client-secret"
+export OAUTH_TOKEN_ENDPOINT="https://your-cognito-domain.auth.region.amazoncognito.com/oauth2/token"
+
+qa-studio run --suite-id suite-456
+```
+
+Or add them to `~/.qa-studio/config.json`:
+
+```json
+{
+  "api_url": "https://your-api-url",
+  "cognito_domain": "https://your-cognito-domain.auth.region.amazoncognito.com",
+  "client_id": "your-public-client-id",
+  "oauth_client_id": "your-m2m-client-id",
+  "oauth_client_secret": "your-m2m-client-secret",
+  "oauth_token_endpoint": "https://your-cognito-domain.auth.region.amazoncognito.com/oauth2/token"
+}
+```
+
+M2M tokens are cached in memory and automatically refreshed before expiry (5-minute buffer).
+
+Granted scopes: `api/suite.read`, `api/suite.write`, `api/usecases.read`, `api/usecases.execute`, `api/executions.read`, `api/executions.write`.
+
+### Token File
+
+```bash
+qa-studio run --token-file /path/to/token.json --usecase-id test-123
+```
+
+See [CI/CD Integration Guide](../docs/ci-cd-integration.md) for detailed pipeline examples.
 
 ## Local Test Execution
 

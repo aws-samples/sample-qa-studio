@@ -45,50 +45,93 @@ qa-studio run --suite-id suite-456
 
 ## Authentication
 
-### Option 1: User Authentication (Development)
+The CLI supports multiple authentication methods. The token resolver tries them in this priority order:
 
-For local development and testing:
+1. Token file (`--token-file` flag)
+2. Environment variables (`OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` / `OAUTH_TOKEN_ENDPOINT`)
+3. Config file M2M credentials (`~/.qa-studio/config.json`)
+4. Stored user token from `qa-studio login` (with auto-refresh)
+
+Higher-priority sources override lower ones. For example, environment variables override config file values.
+
+### Option 1: OAuth Client Credentials via Environment Variables (Recommended for CI/CD)
+
+The recommended approach for CI/CD pipelines. No browser login required.
+
+First, create an OAuth client in the QA Studio web UI:
+
+1. Navigate to OAuth Clients (admin only)
+2. Click "Create OAuth Client"
+3. Name it (e.g., "CI/CD Pipeline")
+4. Grant required scopes:
+   - `api/suite.read`, `api/suite.write`
+   - `api/usecases.read`, `api/usecases.execute`
+   - `api/executions.read`, `api/executions.write`
+5. Save the client ID and secret (secret is only shown once)
+
+Then set these environment variables in your pipeline:
 
 ```bash
-# Interactive browser-based login
+export OAUTH_CLIENT_ID="your-m2m-client-id"
+export OAUTH_CLIENT_SECRET="your-m2m-client-secret"
+export OAUTH_TOKEN_ENDPOINT="https://your-cognito-domain.auth.region.amazoncognito.com/oauth2/token"
+
+# No login needed — just run
+qa-studio run --suite-id suite-456
+```
+
+The CLI automatically requests a token using the OAuth client credentials grant, caches it in memory, and refreshes it when it expires (with a 5-minute buffer).
+
+Granted scopes for M2M tokens: `api/suite.read`, `api/suite.write`, `api/usecases.read`, `api/usecases.execute`, `api/executions.read`, `api/executions.write`.
+
+### Option 2: OAuth Client Credentials via Config File
+
+Same as Option 1, but credentials are stored in `~/.qa-studio/config.json` instead of environment variables. Useful for dedicated CI/CD runners or local headless setups.
+
+```json
+{
+  "api_url": "https://your-api-url",
+  "cognito_domain": "https://your-cognito-domain.auth.region.amazoncognito.com",
+  "client_id": "your-public-client-id",
+  "oauth_client_id": "your-m2m-client-id",
+  "oauth_client_secret": "your-m2m-client-secret",
+  "oauth_token_endpoint": "https://your-cognito-domain.auth.region.amazoncognito.com/oauth2/token"
+}
+```
+
+**Security Note**: The config file is created with `chmod 600` (owner-only read/write). Never commit this file to version control.
+
+### Option 3: Token File
+
+For pipelines where you pre-generate a token or receive one from a secrets manager:
+
+```bash
+qa-studio run --token-file /path/to/token.json --usecase-id test-123
+```
+
+Token file format:
+```json
+{
+  "access_token": "eyJraWQiOiI...",
+  "refresh_token": "eyJjdHkiOiJ...",
+  "expires_at": 1234567890,
+  "token_type": "Bearer"
+}
+```
+
+**Security Note**: Store token files as secrets in your CI/CD platform. Access tokens expire after 1 hour; refresh tokens are valid for 30 days.
+
+### Option 4: User Authentication (Development)
+
+For local development and interactive use:
+
+```bash
+# Interactive browser-based login (opens Cognito hosted UI)
 qa-studio login
 
-# Tokens stored in ~/.qa-studio/tokens.json
+# Tokens stored in ~/.qa-studio/token.json
 # Automatically refreshed when expired
 ```
-
-### Option 2: Token File (CI/CD)
-
-For CI/CD pipelines, use a pre-generated token file:
-
-```bash
-# Generate token locally
-qa-studio login
-# This creates ~/.qa-studio/tokens.json
-
-# Copy token file to CI/CD secrets
-# Then use in pipeline:
-qa-studio run --token-file /path/to/tokens.json --usecase-id test-123
-```
-
-**Security Note**: Store token file as a secret in your CI/CD platform. Tokens expire after 1 hour but include refresh tokens valid for 30 days.
-
-### Option 3: OAuth Client Credentials (Recommended for CI/CD)
-
-Create an OAuth client in QA Studio web UI:
-
-1. Navigate to Settings → OAuth Clients
-2. Click "Create OAuth Client"
-3. Name: "CI/CD Pipeline"
-4. Grant required scopes:
-   - `api/usecase.read`
-   - `api/usecase.execute`
-   - `api/suite.read`
-   - `api/execution.read`
-   - `api/execution.write`
-5. Save client ID and secret
-
-**Note**: OAuth client credentials flow is not yet implemented in the CLI. Use token file method for now.
 
 ---
 
@@ -204,13 +247,11 @@ jobs:
       
       - name: Run Smoke Tests
         env:
-          QA_STUDIO_TOKEN: ${{ secrets.QA_STUDIO_TOKEN }}
+          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+          OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+          OAUTH_TOKEN_ENDPOINT: ${{ secrets.OAUTH_TOKEN_ENDPOINT }}
+          QA_STUDIO_API_URL: ${{ secrets.QA_STUDIO_API_URL }}
         run: |
-          # Create token file from secret
-          mkdir -p ~/.qa-studio
-          echo "$QA_STUDIO_TOKEN" > ~/.qa-studio/tokens.json
-          
-          # Run tests
           qa-studio run \
             --suite-id ${{ vars.SMOKE_TEST_SUITE_ID }} \
             --base-url https://staging.example.com \
@@ -225,7 +266,10 @@ jobs:
 ```
 
 **Secrets to Configure**:
-- `QA_STUDIO_TOKEN`: Token file content (JSON)
+- `OAUTH_CLIENT_ID`: OAuth M2M client ID
+- `OAUTH_CLIENT_SECRET`: OAuth M2M client secret
+- `OAUTH_TOKEN_ENDPOINT`: Cognito token endpoint URL
+- `QA_STUDIO_API_URL`: QA Studio API base URL
 - `AWS_ACCESS_KEY_ID`: AWS access key for Bedrock
 - `AWS_SECRET_ACCESS_KEY`: AWS secret key
 
@@ -249,8 +293,10 @@ smoke-tests:
   
   before_script:
     - pip install -e "./qa-studio-cli[runner]"
-    - mkdir -p ~/.qa-studio
-    - echo "$QA_STUDIO_TOKEN" > ~/.qa-studio/tokens.json
+    - export OAUTH_CLIENT_ID=$OAUTH_CLIENT_ID
+    - export OAUTH_CLIENT_SECRET=$OAUTH_CLIENT_SECRET
+    - export OAUTH_TOKEN_ENDPOINT=$OAUTH_TOKEN_ENDPOINT
+    - export QA_STUDIO_API_URL=$QA_STUDIO_API_URL
     - export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
     - export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
     - export AWS_DEFAULT_REGION=us-east-1
@@ -279,8 +325,10 @@ regression-tests:
   
   before_script:
     - pip install -e "./qa-studio-cli[runner]"
-    - mkdir -p ~/.qa-studio
-    - echo "$QA_STUDIO_TOKEN" > ~/.qa-studio/tokens.json
+    - export OAUTH_CLIENT_ID=$OAUTH_CLIENT_ID
+    - export OAUTH_CLIENT_SECRET=$OAUTH_CLIENT_SECRET
+    - export OAUTH_TOKEN_ENDPOINT=$OAUTH_TOKEN_ENDPOINT
+    - export QA_STUDIO_API_URL=$QA_STUDIO_API_URL
     - export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
     - export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
     - export AWS_DEFAULT_REGION=us-east-1
@@ -304,7 +352,10 @@ regression-tests:
 ```
 
 **CI/CD Variables to Configure**:
-- `QA_STUDIO_TOKEN`: Token file content (JSON) - Protected, Masked
+- `OAUTH_CLIENT_ID`: OAuth M2M client ID - Protected, Masked
+- `OAUTH_CLIENT_SECRET`: OAuth M2M client secret - Protected, Masked
+- `OAUTH_TOKEN_ENDPOINT`: Cognito token endpoint URL - Protected
+- `QA_STUDIO_API_URL`: QA Studio API base URL - Protected
 - `AWS_ACCESS_KEY_ID`: AWS access key - Protected, Masked
 - `AWS_SECRET_ACCESS_KEY`: AWS secret key - Protected, Masked
 - `SMOKE_TEST_SUITE_ID`: Test suite ID
@@ -337,13 +388,18 @@ pipeline {
         stage('Configure') {
             steps {
                 withCredentials([
-                    file(credentialsId: 'qa-studio-token', variable: 'TOKEN_FILE'),
+                    string(credentialsId: 'oauth-client-id', variable: 'OAUTH_CLIENT_ID'),
+                    string(credentialsId: 'oauth-client-secret', variable: 'OAUTH_CLIENT_SECRET'),
+                    string(credentialsId: 'oauth-token-endpoint', variable: 'OAUTH_TOKEN_ENDPOINT'),
+                    string(credentialsId: 'qa-studio-api-url', variable: 'QA_STUDIO_API_URL'),
                     string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
                     string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
                 ]) {
                     sh '''
-                        mkdir -p ~/.qa-studio
-                        cp $TOKEN_FILE ~/.qa-studio/tokens.json
+                        export OAUTH_CLIENT_ID=$OAUTH_CLIENT_ID
+                        export OAUTH_CLIENT_SECRET=$OAUTH_CLIENT_SECRET
+                        export OAUTH_TOKEN_ENDPOINT=$OAUTH_TOKEN_ENDPOINT
+                        export QA_STUDIO_API_URL=$QA_STUDIO_API_URL
                         export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
                         export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
                     '''
@@ -373,7 +429,10 @@ pipeline {
 ```
 
 **Credentials to Configure**:
-- `qa-studio-token`: Secret file (tokens.json)
+- `oauth-client-id`: Secret text (OAuth M2M client ID)
+- `oauth-client-secret`: Secret text (OAuth M2M client secret)
+- `oauth-token-endpoint`: Secret text (Cognito token endpoint URL)
+- `qa-studio-api-url`: Secret text (QA Studio API base URL)
 - `aws-access-key-id`: Secret text
 - `aws-secret-access-key`: Secret text
 
@@ -407,8 +466,7 @@ jobs:
       - run:
           name: Configure Authentication
           command: |
-            mkdir -p ~/.qa-studio
-            echo "$QA_STUDIO_TOKEN" > ~/.qa-studio/tokens.json
+            echo "Using OAuth client credentials from environment"
       
       - run:
           name: Run Smoke Tests
@@ -418,6 +476,10 @@ jobs:
               --base-url https://staging.example.com \
               --format human
           environment:
+            OAUTH_CLIENT_ID: $OAUTH_CLIENT_ID
+            OAUTH_CLIENT_SECRET: $OAUTH_CLIENT_SECRET
+            OAUTH_TOKEN_ENDPOINT: $OAUTH_TOKEN_ENDPOINT
+            QA_STUDIO_API_URL: $QA_STUDIO_API_URL
             AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
             AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
             AWS_DEFAULT_REGION: us-east-1
@@ -451,7 +513,10 @@ workflows:
 ```
 
 **Context Variables** (qa-studio):
-- `QA_STUDIO_TOKEN`: Token file content (JSON)
+- `OAUTH_CLIENT_ID`: OAuth M2M client ID
+- `OAUTH_CLIENT_SECRET`: OAuth M2M client secret
+- `OAUTH_TOKEN_ENDPOINT`: Cognito token endpoint URL
+- `QA_STUDIO_API_URL`: QA Studio API base URL
 - `AWS_ACCESS_KEY_ID`: AWS access key
 - `AWS_SECRET_ACCESS_KEY`: AWS secret key
 - `SMOKE_TEST_SUITE_ID`: Test suite ID
@@ -708,9 +773,14 @@ fi
 | `QA_STUDIO_API_URL` | API base URL | From config | No |
 | `QA_STUDIO_COGNITO_DOMAIN` | Cognito domain | From config | No |
 | `QA_STUDIO_CLIENT_ID` | Cognito client ID | From config | No |
+| `OAUTH_CLIENT_ID` | OAuth M2M client ID (for client credentials flow) | From config | No* |
+| `OAUTH_CLIENT_SECRET` | OAuth M2M client secret | From config | No* |
+| `OAUTH_TOKEN_ENDPOINT` | Cognito token endpoint URL | From config | No* |
 | `AWS_ACCESS_KEY_ID` | AWS access key for Bedrock | - | Yes |
 | `AWS_SECRET_ACCESS_KEY` | AWS secret key for Bedrock | - | Yes |
 | `AWS_DEFAULT_REGION` | AWS region | us-east-1 | No |
+
+\* All three `OAUTH_*` variables must be set together for client credentials auth. If any is missing, the CLI falls back to the next auth source.
 
 ### Configuration File
 
@@ -719,10 +789,24 @@ Location: `~/.qa-studio/config.json`
 ```json
 {
   "api_url": "https://api.example.com",
-  "cognito_domain": "myapp.auth.us-east-1.amazoncognito.com",
-  "client_id": "7abc123def456"
+  "cognito_domain": "https://myapp.auth.us-east-1.amazoncognito.com",
+  "client_id": "7abc123def456",
+  "oauth_client_id": "your-m2m-client-id",
+  "oauth_client_secret": "your-m2m-client-secret",
+  "oauth_token_endpoint": "https://myapp.auth.us-east-1.amazoncognito.com/oauth2/token"
 }
 ```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `api_url` | string | Yes | QA Studio API base URL (must start with `https://`) |
+| `cognito_domain` | string | Yes | Cognito hosted UI domain (must start with `https://`) |
+| `client_id` | string | Yes | Cognito app client ID (public, for browser-based login) |
+| `oauth_client_id` | string | No | OAuth M2M client ID (for client credentials flow) |
+| `oauth_client_secret` | string | No | OAuth M2M client secret |
+| `oauth_token_endpoint` | string | No | Cognito token endpoint URL (must start with `https://`) |
+
+The M2M fields (`oauth_client_id`, `oauth_client_secret`, `oauth_token_endpoint`) are optional and only needed for headless/CI authentication. They are excluded from the JSON file when not set.
 
 ### Token File
 
