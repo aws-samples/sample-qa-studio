@@ -210,7 +210,8 @@ class ExecutionEngine:
         logger.info("[%s] Starting execution: %s", usecase_name, execution_id)
         start_time = datetime.utcnow()
 
-        execution_dir = Path.home() / ".ci_runner" / self.suite_execution_id / execution_id
+        suite_id = self.suite_execution_id or "standalone"
+        execution_dir = Path.home() / ".ci_runner" / suite_id / execution_id
         execution_dir.mkdir(parents=True, exist_ok=True)
         artifact_capture = ArtifactCapture(execution_id, execution_dir / "artifacts")
         artifact_capture.setup_recording()
@@ -330,7 +331,8 @@ class ExecutionEngine:
         variables = execution_details.get("variables", {})
         headers = execution_details.get("headers", {})
 
-        execution_dir = Path.home() / ".ci_runner" / self.suite_execution_id / execution_id
+        suite_id = self.suite_execution_id or "standalone"
+        execution_dir = Path.home() / ".ci_runner" / suite_id / execution_id
         logs_dir = str(execution_dir / "nova_act_logs")
         os.makedirs(logs_dir, exist_ok=True)
 
@@ -373,7 +375,8 @@ class ExecutionEngine:
         logs_dir: str,
     ) -> Dict[str, Any]:
         """Open NovaAct context and execute steps sequentially."""
-        downloads_dir = Path.home() / ".ci_runner" / self.suite_execution_id / execution_id / "downloads"
+        suite_id = self.suite_execution_id or "standalone"
+        downloads_dir = Path.home() / ".ci_runner" / suite_id / execution_id / "downloads"
         downloads_dir.mkdir(parents=True, exist_ok=True)
 
         with NovaAct(**nova_kwargs) as nova:
