@@ -235,7 +235,7 @@ class TestGetNovaSessionId:
         """Test successful retrieval of nova_session_id."""
         mock_dynamodb_table.get_item.return_value = {
             'Item': {
-                'pk': 'USECASE#uc_123',
+                'pk': 'USECASE_EXECUTION#uc_123',
                 'sk': 'EXECUTION#exec_456',
                 'nova_session_id': 'session_abc'
             }
@@ -245,7 +245,7 @@ class TestGetNovaSessionId:
 
         assert result == 'session_abc'
         mock_dynamodb_table.get_item.assert_called_once_with(
-            Key={'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456'}
+            Key={'pk': 'USECASE_EXECUTION#uc_123', 'sk': 'EXECUTION#exec_456'}
         )
 
     def test_returns_none_when_record_missing(self, mock_dynamodb_table):
@@ -260,7 +260,7 @@ class TestGetNovaSessionId:
         """Test returns None when nova_session_id field is not set."""
         mock_dynamodb_table.get_item.return_value = {
             'Item': {
-                'pk': 'USECASE#uc_123',
+                'pk': 'USECASE_EXECUTION#uc_123',
                 'sk': 'EXECUTION#exec_456'
             }
         }
@@ -1559,8 +1559,8 @@ class TestLambdaHandler:
             key = kwargs.get('Key', {})
             if key.get('pk') == 'USECASES':
                 return {'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}}
-            elif key.get('pk') == 'USECASE#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
-                return {'Item': {'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
+            elif key.get('pk') == 'USECASE_EXECUTION#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
+                return {'Item': {'pk': 'USECASE_EXECUTION#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
             return {}
         
         mock_table.get_item.side_effect = get_item_side_effect
@@ -1657,8 +1657,8 @@ class TestLambdaHandler:
             key = kwargs.get('Key', {})
             if key.get('pk') == 'USECASES':
                 return {'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}}
-            elif key.get('pk') == 'USECASE#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
-                return {'Item': {'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
+            elif key.get('pk') == 'USECASE_EXECUTION#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
+                return {'Item': {'pk': 'USECASE_EXECUTION#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
             return {}
         
         mock_table.get_item.side_effect = get_item_side_effect
@@ -1726,8 +1726,8 @@ class TestLambdaHandler:
             key = kwargs.get('Key', {})
             if key.get('pk') == 'USECASES':
                 return {'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}}
-            elif key.get('pk') == 'USECASE#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
-                return {'Item': {'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
+            elif key.get('pk') == 'USECASE_EXECUTION#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
+                return {'Item': {'pk': 'USECASE_EXECUTION#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
             return {}
         
         mock_table.get_item.side_effect = get_item_side_effect
@@ -1807,8 +1807,8 @@ class TestLambdaHandler:
             key = kwargs.get('Key', {})
             if key.get('pk') == 'USECASES':
                 return {'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}}
-            elif key.get('pk') == 'USECASE#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
-                return {'Item': {'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
+            elif key.get('pk') == 'USECASE_EXECUTION#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
+                return {'Item': {'pk': 'USECASE_EXECUTION#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
             return {}
         
         mock_table.get_item.side_effect = get_item_side_effect

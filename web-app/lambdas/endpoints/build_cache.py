@@ -86,7 +86,7 @@ def get_nova_session_id(table, usecase_id: str, execution_id: str) -> Optional[s
     try:
         response = table.get_item(
             Key={
-                'pk': f'USECASE#{usecase_id}',
+                'pk': f'USECASE_EXECUTION#{usecase_id}',
                 'sk': f'EXECUTION#{execution_id}'
             }
         )
