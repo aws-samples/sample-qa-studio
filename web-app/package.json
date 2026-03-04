@@ -22,7 +22,7 @@
     "deploy:lambdas": "cdk deploy lambdas --require-approval never",
     "config:write": "ts-node scripts/write-config.ts",
     "dcv:download": "ts-node scripts/download-dcv-sdk.ts",
-    "deploy": "npm run deploy:storage && npm run deploy:auth && npm run deploy:worker && npm run deploy:lambdas && npm run deploy:api && npm run config:write && npm run dcv:download && cd frontend && npm install && cd .. && npm run deploy:frontend-build && npm run deploy:frontend",
+    "deploy": "mkdir -p frontend/build && npm run deploy:storage && npm run deploy:auth && npm run deploy:worker && npm run deploy:lambdas && npm run deploy:api && npm run config:write && npm run dcv:download && cd frontend && npm install && cd .. && npm run deploy:frontend-build && npm run deploy:frontend",
     "changelog": "ts-node scripts/generate-changelog.ts",
     "release:patch": "ts-node scripts/release.ts patch",
     "release:minor": "ts-node scripts/release.ts minor",
