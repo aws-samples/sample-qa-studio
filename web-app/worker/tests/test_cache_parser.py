@@ -3,12 +3,15 @@
 import pytest
 from cache_parser import parse_nova_act_steps
 
+# Nova Act box format: <box>top,left,bottom,right</box>
+# Parsed to: x1=left, y1=top, x2=right, y2=bottom
+
 
 class TestParseClick:
     """Tests for agentClick parsing."""
     
     def test_parse_single_click(self):
-        """Parse single click action."""
+        """Parse single click action. <box>100,200,300,400</box> = top=100,left=200,bottom=300,right=400"""
         response = {
             'steps': [{
                 'response': {
@@ -19,11 +22,11 @@ class TestParseClick:
         result = parse_nova_act_steps(response)
         assert result == [{
             'type': 'click',
-            'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}
+            'bbox': {'x1': 200, 'y1': 100, 'x2': 400, 'y2': 300}
         }]
     
     def test_parse_click_with_quotes(self):
-        """Parse click with quoted bbox."""
+        """Parse click with quoted bbox. <box>621,71,640,143</box> = top=621,left=71,bottom=640,right=143"""
         response = {
             'steps': [{
                 'response': {
@@ -34,7 +37,7 @@ class TestParseClick:
         result = parse_nova_act_steps(response)
         assert result == [{
             'type': 'click',
-            'bbox': {'x1': 621, 'y1': 71, 'x2': 640, 'y2': 143}
+            'bbox': {'x1': 71, 'y1': 621, 'x2': 143, 'y2': 640}
         }]
 
 
@@ -42,7 +45,7 @@ class TestParseHover:
     """Tests for agentHover parsing."""
     
     def test_parse_single_hover(self):
-        """Parse single hover action."""
+        """Parse single hover action. <box>100,200,150,250</box> = top=100,left=200,bottom=150,right=250"""
         response = {
             'steps': [{
                 'response': {
@@ -53,7 +56,7 @@ class TestParseHover:
         result = parse_nova_act_steps(response)
         assert result == [{
             'type': 'hover',
-            'bbox': {'x1': 100, 'y1': 200, 'x2': 150, 'y2': 250}
+            'bbox': {'x1': 200, 'y1': 100, 'x2': 250, 'y2': 150}
         }]
 
 
@@ -61,7 +64,7 @@ class TestParseType:
     """Tests for agentType parsing."""
     
     def test_parse_type_without_enter(self):
-        """Parse type action without pressing Enter."""
+        """Parse type action. <box>300,400,500,450</box> = top=300,left=400,bottom=500,right=450"""
         response = {
             'steps': [{
                 'response': {
@@ -73,12 +76,12 @@ class TestParseType:
         assert result == [{
             'type': 'type',
             'text': 'admin',
-            'bbox': {'x1': 300, 'y1': 400, 'x2': 500, 'y2': 450},
+            'bbox': {'x1': 400, 'y1': 300, 'x2': 450, 'y2': 500},
             'press_enter': False
         }]
     
     def test_parse_type_with_enter(self):
-        """Parse type action with pressing Enter."""
+        """Parse type action with Enter. <box>100,100,400,150</box> = top=100,left=100,bottom=400,right=150"""
         response = {
             'steps': [{
                 'response': {
@@ -90,7 +93,7 @@ class TestParseType:
         assert result == [{
             'type': 'type',
             'text': 'search query',
-            'bbox': {'x1': 100, 'y1': 100, 'x2': 400, 'y2': 150},
+            'bbox': {'x1': 100, 'y1': 100, 'x2': 150, 'y2': 400},
             'press_enter': True
         }]
     
@@ -123,7 +126,7 @@ class TestParseScroll:
     """Tests for agentScroll parsing."""
     
     def test_parse_scroll_down_no_value(self):
-        """Parse scroll down without explicit value."""
+        """Parse scroll down. <box>0,0,1920,1080</box> = top=0,left=0,bottom=1920,right=1080"""
         response = {
             'steps': [{
                 'response': {
@@ -135,7 +138,7 @@ class TestParseScroll:
         assert result == [{
             'type': 'scroll',
             'direction': 'down',
-            'bbox': {'x1': 0, 'y1': 0, 'x2': 1920, 'y2': 1080},
+            'bbox': {'x1': 0, 'y1': 0, 'x2': 1080, 'y2': 1920},
             'value': None
         }]
     
@@ -178,10 +181,7 @@ class TestParseNavigate:
             }]
         }
         result = parse_nova_act_steps(response)
-        assert result == [{
-            'type': 'navigate',
-            'url': 'https://example.com/login'
-        }]
+        assert result == [{'type': 'navigate', 'url': 'https://example.com/login'}]
     
     def test_parse_navigate_complex_url(self):
         """Parse navigate with complex URL."""
@@ -203,16 +203,8 @@ class TestMultipleSteps:
         """Parse response with multiple steps."""
         response = {
             'steps': [
-                {
-                    'response': {
-                        'rawProgramBody': 'think("clicking");\nagentClick("<box>100,200,300,400</box>");'
-                    }
-                },
-                {
-                    'response': {
-                        'rawProgramBody': 'think("typing");\nagentType("text", "<box>10,20,30,40</box>");\nreturn();'
-                    }
-                }
+                {'response': {'rawProgramBody': 'think("clicking");\nagentClick("<box>100,200,300,400</box>");'}},
+                {'response': {'rawProgramBody': 'think("typing");\nagentType("text", "<box>10,20,30,40</box>");\nreturn();'}}
             ]
         }
         result = parse_nova_act_steps(response)
@@ -224,21 +216,9 @@ class TestMultipleSteps:
         """Parse response with cacheable and non-cacheable actions."""
         response = {
             'steps': [
-                {
-                    'response': {
-                        'rawProgramBody': 'think("analyzing page");'
-                    }
-                },
-                {
-                    'response': {
-                        'rawProgramBody': 'agentClick("<box>100,200,300,400</box>");'
-                    }
-                },
-                {
-                    'response': {
-                        'rawProgramBody': 'return();'
-                    }
-                }
+                {'response': {'rawProgramBody': 'think("analyzing page");'}},
+                {'response': {'rawProgramBody': 'agentClick("<box>100,200,300,400</box>");'}},
+                {'response': {'rawProgramBody': 'return();'}}
             ]
         }
         result = parse_nova_act_steps(response)
@@ -250,29 +230,18 @@ class TestEdgeCases:
     """Tests for edge cases and error handling."""
     
     def test_empty_steps_array(self):
-        """Handle empty steps array."""
-        response = {'steps': []}
-        result = parse_nova_act_steps(response)
+        result = parse_nova_act_steps({'steps': []})
         assert result is None
     
     def test_missing_steps_field(self):
-        """Handle missing steps field."""
-        response = {}
-        result = parse_nova_act_steps(response)
+        result = parse_nova_act_steps({})
         assert result is None
     
     def test_missing_raw_program_body(self):
-        """Handle missing rawProgramBody."""
-        response = {
-            'steps': [{
-                'response': {}
-            }]
-        }
-        result = parse_nova_act_steps(response)
+        result = parse_nova_act_steps({'steps': [{'response': {}}]})
         assert result is None
     
     def test_only_non_cacheable_actions(self):
-        """Handle response with only non-cacheable actions."""
         response = {
             'steps': [
                 {'response': {'rawProgramBody': 'think("analyzing");'}},
@@ -281,78 +250,44 @@ class TestEdgeCases:
                 {'response': {'rawProgramBody': 'takeObservation();'}}
             ]
         }
-        result = parse_nova_act_steps(response)
-        assert result is None
+        assert parse_nova_act_steps(response) is None
     
     def test_malformed_bbox_coordinates(self):
-        """Handle malformed bbox coordinates."""
-        response = {
-            'steps': [{
-                'response': {
-                    'rawProgramBody': 'agentClick("<box>abc,def,ghi,jkl</box>");'
-                }
-            }]
-        }
-        result = parse_nova_act_steps(response)
-        assert result is None
+        response = {'steps': [{'response': {'rawProgramBody': 'agentClick("<box>abc,def,ghi,jkl</box>");'}}]}
+        assert parse_nova_act_steps(response) is None
     
     def test_none_input(self):
-        """Handle None input."""
-        result = parse_nova_act_steps(None)
-        assert result is None
+        assert parse_nova_act_steps(None) is None
     
     def test_missing_response_field(self):
-        """Handle missing response field in step."""
-        response = {
-            'steps': [{'other_field': 'value'}]
-        }
-        result = parse_nova_act_steps(response)
-        assert result is None
+        assert parse_nova_act_steps({'steps': [{'other_field': 'value'}]}) is None
 
 
 class TestRealWorldScenario:
     """Tests based on real Nova Act responses."""
     
     def test_close_popup_scenario(self):
-        """Test scenario: Close any popups on the page."""
+        """<box>621,71,640,143</box> = top=621,left=71,bottom=640,right=143"""
         response = {
             'steps': [
-                {
-                    'response': {
-                        'rawProgramBody': 'think("Looking for popup close button");\nagentClick("<box>621,71,640,143</box>");'
-                    }
-                },
-                {
-                    'response': {
-                        'rawProgramBody': 'think("Popup closed successfully");\nreturn();'
-                    }
-                }
+                {'response': {'rawProgramBody': 'think("Looking for popup close button");\nagentClick("<box>621,71,640,143</box>");'}},
+                {'response': {'rawProgramBody': 'think("Popup closed successfully");\nreturn();'}}
             ],
-            'metadata': {
-                'num_steps_executed': 2
-            }
+            'metadata': {'num_steps_executed': 2}
         }
         result = parse_nova_act_steps(response)
         assert len(result) == 1
         assert result[0] == {
             'type': 'click',
-            'bbox': {'x1': 621, 'y1': 71, 'x2': 640, 'y2': 143}
+            'bbox': {'x1': 71, 'y1': 621, 'x2': 143, 'y2': 640}
         }
     
     def test_login_scenario(self):
-        """Test scenario: Login with username and password."""
+        """Test login with username and password."""
         response = {
             'steps': [
-                {
-                    'response': {
-                        'rawProgramBody': 'agentType("admin", "<box>300,400,500,450</box>");'
-                    }
-                },
-                {
-                    'response': {
-                        'rawProgramBody': 'agentType("password123", "<box>300,500,500,550</box>", true);'
-                    }
-                }
+                {'response': {'rawProgramBody': 'agentType("admin", "<box>300,400,500,450</box>");'}},
+                {'response': {'rawProgramBody': 'agentType("password123", "<box>300,500,500,550</box>", true);'}}
             ]
         }
         result = parse_nova_act_steps(response)

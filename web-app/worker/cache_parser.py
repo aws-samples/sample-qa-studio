@@ -55,40 +55,39 @@ def parse_nova_act_steps(act_response: dict) -> Optional[List[Dict]]:
 
 
 def _parse_click(raw_body: str) -> Optional[Dict]:
-    """Parse agentClick action."""
+    """Parse agentClick action. Box format: <box>top,left,bottom,right</box>"""
     match = re.search(r'agentClick\("?<box>(\d+),(\d+),(\d+),(\d+)</box>"?\)', raw_body)
     if match:
         return {
             'type': 'click',
             'bbox': {
-                'x1': int(match.group(1)),
-                'y1': int(match.group(2)),
-                'x2': int(match.group(3)),
-                'y2': int(match.group(4))
+                'x1': int(match.group(2)),
+                'y1': int(match.group(1)),
+                'x2': int(match.group(4)),
+                'y2': int(match.group(3))
             }
         }
     return None
 
 
 def _parse_hover(raw_body: str) -> Optional[Dict]:
-    """Parse agentHover action."""
+    """Parse agentHover action. Box format: <box>top,left,bottom,right</box>"""
     match = re.search(r'agentHover\("?<box>(\d+),(\d+),(\d+),(\d+)</box>"?\)', raw_body)
     if match:
         return {
             'type': 'hover',
             'bbox': {
-                'x1': int(match.group(1)),
-                'y1': int(match.group(2)),
-                'x2': int(match.group(3)),
-                'y2': int(match.group(4))
+                'x1': int(match.group(2)),
+                'y1': int(match.group(1)),
+                'x2': int(match.group(4)),
+                'y2': int(match.group(3))
             }
         }
     return None
 
 
 def _parse_type(raw_body: str) -> Optional[Dict]:
-    """Parse agentType action."""
-    # Match: agentType("text", "<box>x1,y1,x2,y2</box>", true/false)
+    """Parse agentType action. Box format: <box>top,left,bottom,right</box>"""
     match = re.search(
         r'agentType\("([^"]*)",\s*"?<box>(\d+),(\d+),(\d+),(\d+)</box>"?(?:,\s*(true|false))?\)',
         raw_body
@@ -98,10 +97,10 @@ def _parse_type(raw_body: str) -> Optional[Dict]:
             'type': 'type',
             'text': match.group(1),
             'bbox': {
-                'x1': int(match.group(2)),
-                'y1': int(match.group(3)),
-                'x2': int(match.group(4)),
-                'y2': int(match.group(5))
+                'x1': int(match.group(3)),
+                'y1': int(match.group(2)),
+                'x2': int(match.group(5)),
+                'y2': int(match.group(4))
             },
             'press_enter': match.group(6) == 'true' if match.group(6) else False
         }
@@ -109,8 +108,7 @@ def _parse_type(raw_body: str) -> Optional[Dict]:
 
 
 def _parse_scroll(raw_body: str) -> Optional[Dict]:
-    """Parse agentScroll action."""
-    # Match: agentScroll("direction", "<box>x1,y1,x2,y2</box>", value?)
+    """Parse agentScroll action. Box format: <box>top,left,bottom,right</box>"""
     match = re.search(
         r'agentScroll\("(up|down|left|right)",\s*"?<box>(\d+),(\d+),(\d+),(\d+)</box>"?(?:,\s*(\d+(?:\.\d+)?))?\)',
         raw_body
@@ -120,10 +118,10 @@ def _parse_scroll(raw_body: str) -> Optional[Dict]:
             'type': 'scroll',
             'direction': match.group(1),
             'bbox': {
-                'x1': int(match.group(2)),
-                'y1': int(match.group(3)),
-                'x2': int(match.group(4)),
-                'y2': int(match.group(5))
+                'x1': int(match.group(3)),
+                'y1': int(match.group(2)),
+                'x2': int(match.group(5)),
+                'y2': int(match.group(4))
             },
             'value': float(match.group(6)) if match.group(6) else None
         }

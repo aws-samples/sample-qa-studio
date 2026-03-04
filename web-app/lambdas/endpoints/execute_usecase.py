@@ -372,6 +372,7 @@ def handler(event, context):
                             'name': 'container',
                             'environment': [
                                 {'name': 'AWS_REGION', 'value': os.environ['AWS_REGION']},
+                                {'name': 'CACHE_ACTION_DELAY_MS', 'value': '1000'},
                                 {'name': 'EXECUTION_ID', 'value': execution_id},
                                 {'name': 'USECASE_ID', 'value': usecase_id},
                                 {'name': 'DYNAMODB_TABLE_NAME', 'value': table_name},
