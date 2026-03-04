@@ -69,28 +69,68 @@ def check_cache_eligibility(table, usecase_id: str) -> bool:
     except Exception as e:
         logger.error(f"Unexpected error checking cache eligibility for usecase_id={usecase_id}: {e}", exc_info=True)
         return False
-def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: str) -> Dict[str, str]:
+
+
+def get_nova_session_id(table, usecase_id: str, execution_id: str) -> Optional[str]:
+    """
+    Fetch the nova_session_id from the EXECUTION record.
+
+    Args:
+        table: DynamoDB table resource
+        usecase_id: Usecase identifier
+        execution_id: Execution identifier
+
+    Returns:
+        nova_session_id string, or None if not found
+    """
+    try:
+        response = table.get_item(
+            Key={
+                'pk': f'USECASE#{usecase_id}',
+                'sk': f'EXECUTION#{execution_id}'
+            }
+        )
+
+        if 'Item' not in response:
+            logger.error(f"EXECUTION record not found for usecase={usecase_id}, execution={execution_id}")
+            return None
+
+        nova_session_id = response['Item'].get('nova_session_id')
+        if not nova_session_id:
+            logger.warning(f"nova_session_id not set on execution record for execution={execution_id}")
+            return None
+
+        logger.info(f"Found nova_session_id={nova_session_id} for execution={execution_id}")
+        return nova_session_id
+
+    except ClientError as e:
+        logger.error(f"DynamoDB error fetching nova_session_id for execution={execution_id}: {e}", exc_info=True)
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error fetching nova_session_id for execution={execution_id}: {e}", exc_info=True)
+        return None
+
+
+def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: str, nova_session_id: str) -> Dict[str, str]:
     """
     List S3 act files and build act_id to s3_key mapping.
 
-    Lists S3 objects with prefix {usecase_id}/{execution_id}/ and extracts
-    act_id from each key using regex pattern act_(.+)\\.json. Handles empty
-    results and S3 access errors gracefully with logging.
-
-    Note: Nova Act stores artifacts at {usecase_id}/{execution_id}/{session_id}/act_*.json
-    but we list at the execution level to find all session artifacts.
+    Lists S3 objects with prefix {usecase_id}/{execution_id}/{nova_session_id}/act_
+    and extracts act_id from each key using regex pattern act_(.+)\\.json.
+    Handles empty results and S3 access errors gracefully with logging.
 
     Args:
         s3_client: boto3 S3 client
         bucket: S3 bucket name
         usecase_id: Usecase identifier
         execution_id: Execution identifier
+        nova_session_id: Nova Act session identifier
 
     Returns:
         Dictionary mapping {act_id: s3_key}
     """
     act_mapping = {}
-    prefix = f'{usecase_id}/{execution_id}/'
+    prefix = f'{usecase_id}/{execution_id}/{nova_session_id}/act_'
 
     try:
         logger.info(f"Listing S3 objects with prefix={prefix} in bucket={bucket}")
@@ -102,8 +142,12 @@ def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: st
 
         # Check if any objects were found
         if 'Contents' not in response:
-            logger.warning(f"No S3 act files found for usecase={usecase_id}, execution={execution_id}")
+            logger.warning(f"No S3 act files found for usecase={usecase_id}, execution={execution_id}, session={nova_session_id}")
             return act_mapping
+
+        # Log all files found for debugging
+        all_keys = [obj['Key'] for obj in response['Contents']]
+        logger.info(f"Found {len(all_keys)} files under prefix={prefix}: {all_keys}")
 
         # Parse act_id from each S3 key
         pattern = re.compile(r'.*/act_(.+)\.json$')
@@ -490,8 +534,24 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
         
+        # Fetch nova_session_id from execution record
+        nova_session_id = get_nova_session_id(table, usecase_id, execution_id)
+        if not nova_session_id:
+            logger.warning(f"No nova_session_id found for execution={execution_id}, skipping cache build")
+            return {
+                'statusCode': 200,
+                'body': json.dumps({
+                    'message': 'No nova_session_id found on execution record',
+                    'stats': {
+                        'steps_processed': 0,
+                        'successful_updates': 0,
+                        'failed_updates': 0
+                    }
+                })
+            }
+
         # Discover act files in S3
-        act_mapping = discover_act_files(s3_client, s3_bucket, usecase_id, execution_id)
+        act_mapping = discover_act_files(s3_client, s3_bucket, usecase_id, execution_id, nova_session_id)
         
         if not act_mapping:
             logger.warning(f"No act files found for execution_id={execution_id}, skipping cache build")

@@ -137,7 +137,7 @@ class TestDiscoverActFiles:
             ]
         }
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456', 'session_abc')
         
         assert len(result) == 3
         assert result['act_789'] == 'uc_123/exec_456/session_abc/act_act_789.json'
@@ -145,7 +145,7 @@ class TestDiscoverActFiles:
         assert result['act_791'] == 'uc_123/exec_456/session_abc/act_act_791.json'
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
-            Prefix='uc_123/exec_456/'
+            Prefix='uc_123/exec_456/session_abc/act_'
         )
     
     def test_empty_s3_results_returns_empty_dict(self):
@@ -153,7 +153,7 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {}  # No Contents key
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456', 'session_abc')
         
         assert result == {}
     
@@ -169,7 +169,7 @@ class TestDiscoverActFiles:
             ]
         }
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456', 'session_abc')
         
         assert len(result) == 4
         assert 'simple_id' in result
@@ -188,7 +188,7 @@ class TestDiscoverActFiles:
             ]
         }
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456', 'session_abc')
         
         # Only the valid key should be in the result
         assert len(result) == 1
@@ -202,7 +202,7 @@ class TestDiscoverActFiles:
             'ListObjectsV2'
         )
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456', 'session_abc')
         
         assert result == {}
     
@@ -211,7 +211,7 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.side_effect = Exception('Unexpected error')
         
-        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456')
+        result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456', 'session_abc')
         
         assert result == {}
     
@@ -220,12 +220,73 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {}
         
-        build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'my_uc_123', 'my_exec_123')
+        build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'my_uc_123', 'my_exec_123', 'my_session_456')
         
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
-            Prefix='my_uc_123/my_exec_123/'
+            Prefix='my_uc_123/my_exec_123/my_session_456/act_'
         )
+
+
+class TestGetNovaSessionId:
+    """Tests for get_nova_session_id function."""
+
+    def test_returns_session_id_when_present(self, mock_dynamodb_table):
+        """Test successful retrieval of nova_session_id."""
+        mock_dynamodb_table.get_item.return_value = {
+            'Item': {
+                'pk': 'USECASE#uc_123',
+                'sk': 'EXECUTION#exec_456',
+                'nova_session_id': 'session_abc'
+            }
+        }
+
+        result = build_cache.get_nova_session_id(mock_dynamodb_table, 'uc_123', 'exec_456')
+
+        assert result == 'session_abc'
+        mock_dynamodb_table.get_item.assert_called_once_with(
+            Key={'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456'}
+        )
+
+    def test_returns_none_when_record_missing(self, mock_dynamodb_table):
+        """Test returns None when execution record doesn't exist."""
+        mock_dynamodb_table.get_item.return_value = {}
+
+        result = build_cache.get_nova_session_id(mock_dynamodb_table, 'uc_123', 'exec_456')
+
+        assert result is None
+
+    def test_returns_none_when_field_missing(self, mock_dynamodb_table):
+        """Test returns None when nova_session_id field is not set."""
+        mock_dynamodb_table.get_item.return_value = {
+            'Item': {
+                'pk': 'USECASE#uc_123',
+                'sk': 'EXECUTION#exec_456'
+            }
+        }
+
+        result = build_cache.get_nova_session_id(mock_dynamodb_table, 'uc_123', 'exec_456')
+
+        assert result is None
+
+    def test_returns_none_on_client_error(self, mock_dynamodb_table):
+        """Test returns None on DynamoDB ClientError."""
+        mock_dynamodb_table.get_item.side_effect = ClientError(
+            {'Error': {'Code': 'InternalServerError', 'Message': 'error'}},
+            'GetItem'
+        )
+
+        result = build_cache.get_nova_session_id(mock_dynamodb_table, 'uc_123', 'exec_456')
+
+        assert result is None
+
+    def test_returns_none_on_unexpected_error(self, mock_dynamodb_table):
+        """Test returns None on unexpected exception."""
+        mock_dynamodb_table.get_item.side_effect = Exception('Unexpected')
+
+        result = build_cache.get_nova_session_id(mock_dynamodb_table, 'uc_123', 'exec_456')
+
+        assert result is None
 
 
 class TestGetExecutionSteps:
@@ -1493,13 +1554,16 @@ class TestLambdaHandler:
         """Test that Lambda proceeds when cache is enabled and processes steps successfully."""
         # Mock DynamoDB resource and table
         mock_table = MagicMock()
-        mock_table.get_item.return_value = {
-            'Item': {
-                'pk': 'USECASES',
-                'sk': 'USECASE#uc_123',
-                'enable_cache': True
-            }
-        }
+        
+        def get_item_side_effect(**kwargs):
+            key = kwargs.get('Key', {})
+            if key.get('pk') == 'USECASES':
+                return {'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}}
+            elif key.get('pk') == 'USECASE#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
+                return {'Item': {'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
+            return {}
+        
+        mock_table.get_item.side_effect = get_item_side_effect
         
         # Mock query for execution steps
         mock_table.query.return_value = {
@@ -1588,9 +1652,16 @@ class TestLambdaHandler:
         """Test that steps with missing step_id field are skipped with error logging."""
         # Mock DynamoDB
         mock_table = MagicMock()
-        mock_table.get_item.return_value = {
-            'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}
-        }
+        
+        def get_item_side_effect(**kwargs):
+            key = kwargs.get('Key', {})
+            if key.get('pk') == 'USECASES':
+                return {'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}}
+            elif key.get('pk') == 'USECASE#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
+                return {'Item': {'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
+            return {}
+        
+        mock_table.get_item.side_effect = get_item_side_effect
         
         # Mock execution steps - one with step_id, one without
         mock_table.query.return_value = {
@@ -1650,9 +1721,16 @@ class TestLambdaHandler:
         """Test that individual step failures don't stop processing of remaining steps."""
         # Mock DynamoDB
         mock_table = MagicMock()
-        mock_table.get_item.return_value = {
-            'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}
-        }
+        
+        def get_item_side_effect(**kwargs):
+            key = kwargs.get('Key', {})
+            if key.get('pk') == 'USECASES':
+                return {'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}}
+            elif key.get('pk') == 'USECASE#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
+                return {'Item': {'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
+            return {}
+        
+        mock_table.get_item.side_effect = get_item_side_effect
         
         # Mock execution steps
         mock_table.query.return_value = {
@@ -1724,9 +1802,16 @@ class TestLambdaHandler:
         """Test complete flow with accurate statistics tracking."""
         # Mock DynamoDB
         mock_table = MagicMock()
-        mock_table.get_item.return_value = {
-            'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}
-        }
+        
+        def get_item_side_effect(**kwargs):
+            key = kwargs.get('Key', {})
+            if key.get('pk') == 'USECASES':
+                return {'Item': {'pk': 'USECASES', 'sk': 'USECASE#uc_123', 'enable_cache': True}}
+            elif key.get('pk') == 'USECASE#uc_123' and key.get('sk', '').startswith('EXECUTION#'):
+                return {'Item': {'pk': 'USECASE#uc_123', 'sk': 'EXECUTION#exec_456', 'nova_session_id': 'session_abc'}}
+            return {}
+        
+        mock_table.get_item.side_effect = get_item_side_effect
         
         # Mock execution steps - mix of navigation and assertion steps
         mock_table.query.return_value = {
