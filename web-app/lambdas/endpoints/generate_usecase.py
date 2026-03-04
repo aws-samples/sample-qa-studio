@@ -239,8 +239,8 @@ def handler(event, context):
         })
     
     title = body.get('title', '')
-    starting_url = body.get('starting_url', '')
-    user_journey = body.get('user_journey', '')
+    starting_url = body.get('starting_url', '') or body.get('startingUrl', '')
+    user_journey = body.get('userJourney', '') or body.get('user_journey', '')
     region = body.get('region', '')
     
     # Validate inputs
