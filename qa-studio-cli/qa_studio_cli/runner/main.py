@@ -186,7 +186,7 @@ def _run_usecase_remote(
         model_id=model_id,
     )
 
-    execution_id = execution_response.get("execution_id")
+    execution_id = execution_response.get("executionId") or execution_response.get("execution_id")
     logger.info("Execution created: %s", execution_id)
 
     execution_api = ExecutionAPI(api_client)
