@@ -131,18 +131,18 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'uc_123/exec_456/session_abc/act_act_789.json'},
-                {'Key': 'uc_123/exec_456/session_abc/act_act_790.json'},
-                {'Key': 'uc_123/exec_456/session_abc/act_act_791.json'}
+                {'Key': 'uc_123/exec_456/session_abc/act_act-789_Click_button_calls.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_act-790_Navigate_to_page_calls.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_act-791_Fill_form_calls.json'}
             ]
         }
         
         result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456', 'session_abc')
         
         assert len(result) == 3
-        assert result['act_789'] == 'uc_123/exec_456/session_abc/act_act_789.json'
-        assert result['act_790'] == 'uc_123/exec_456/session_abc/act_act_790.json'
-        assert result['act_791'] == 'uc_123/exec_456/session_abc/act_act_791.json'
+        assert result['act-789'] == 'uc_123/exec_456/session_abc/act_act-789_Click_button_calls.json'
+        assert result['act-790'] == 'uc_123/exec_456/session_abc/act_act-790_Navigate_to_page_calls.json'
+        assert result['act-791'] == 'uc_123/exec_456/session_abc/act_act-791_Fill_form_calls.json'
         mock_s3_client.list_objects_v2.assert_called_once_with(
             Bucket='test-bucket',
             Prefix='uc_123/exec_456/session_abc/act_'
@@ -162,27 +162,25 @@ class TestDiscoverActFiles:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'uc_123/exec_456/session_abc/act_simple_id.json'},
-                {'Key': 'uc_123/exec_456/session_abc/act_id-with-dashes.json'},
-                {'Key': 'uc_123/exec_456/session_abc/act_id_with_underscores.json'},
-                {'Key': 'uc_123/exec_456/session_abc/act_123456.json'}
+                {'Key': 'uc_123/exec_456/session_abc/act_019c9f2a-d303-7dc3-9fd1-c4793981fe63_Close_popups_calls.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_abc123_Click_button_calls.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_simple_Navigate_calls.json'}
             ]
         }
         
         result = build_cache.discover_act_files(mock_s3_client, 'test-bucket', 'uc_123', 'exec_456', 'session_abc')
         
-        assert len(result) == 4
-        assert 'simple_id' in result
-        assert 'id-with-dashes' in result
-        assert 'id_with_underscores' in result
-        assert '123456' in result
+        assert len(result) == 3
+        assert '019c9f2a-d303-7dc3-9fd1-c4793981fe63' in result
+        assert 'abc123' in result
+        assert 'simple' in result
     
     def test_invalid_key_format_skipped(self):
         """Test that keys not matching pattern are skipped with warning."""
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'uc_123/exec_456/session_abc/act_valid_id.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_valid-id_Click_calls.json'},
                 {'Key': 'uc_123/exec_456/recording/video.webm'},
                 {'Key': 'uc_123/exec_456/session_abc/other_file.txt'}
             ]
@@ -192,7 +190,7 @@ class TestDiscoverActFiles:
         
         # Only the valid key should be in the result
         assert len(result) == 1
-        assert 'valid_id' in result
+        assert 'valid-id' in result
     
     def test_s3_client_error_returns_empty_dict(self):
         """Test that S3 ClientError is handled gracefully."""
@@ -1573,14 +1571,14 @@ class TestLambdaHandler:
                     'sk': 'EXECUTION_STEP#exec_step_1',
                     'step_id': 'step_1',
                     'step_type': 'navigation',
-                    'act_id': 'act_789'
+                    'act_id': 'act-789'
                 },
                 {
                     'pk': 'EXECUTION#exec_456',
                     'sk': 'EXECUTION_STEP#exec_step_2',
                     'step_id': 'step_2',
                     'step_type': 'navigation',
-                    'act_id': 'act_790'
+                    'act_id': 'act-790'
                 }
             ]
         }
@@ -1596,8 +1594,8 @@ class TestLambdaHandler:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'executions/exec_456/act_act_789.json'},
-                {'Key': 'executions/exec_456/act_act_790.json'}
+                {'Key': 'uc_123/exec_456/session_abc/act_act-789_Click_calls.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_act-790_Navigate_calls.json'}
             ]
         }
         
@@ -1671,14 +1669,14 @@ class TestLambdaHandler:
                     'sk': 'EXECUTION_STEP#exec_step_1',
                     'step_id': 'step_1',  # Has step_id
                     'step_type': 'navigation',
-                    'act_id': 'act_789'
+                    'act_id': 'act-789'
                 },
                 {
                     'pk': 'EXECUTION#exec_456',
                     'sk': 'EXECUTION_STEP#exec_step_2',
                     # Missing step_id field
                     'step_type': 'navigation',
-                    'act_id': 'act_790'
+                    'act_id': 'act-790'
                 }
             ]
         }
@@ -1690,8 +1688,8 @@ class TestLambdaHandler:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'executions/exec_456/act_act_789.json'},
-                {'Key': 'executions/exec_456/act_act_790.json'}
+                {'Key': 'uc_123/exec_456/session_abc/act_act-789_Click_calls.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_act-790_Navigate_calls.json'}
             ]
         }
         mock_s3_client.get_object.return_value = {
@@ -1740,21 +1738,21 @@ class TestLambdaHandler:
                     'sk': 'EXECUTION_STEP#exec_step_1',
                     'step_id': 'step_1',
                     'step_type': 'navigation',
-                    'act_id': 'act_789'
+                    'act_id': 'act-789'
                 },
                 {
                     'pk': 'EXECUTION#exec_456',
                     'sk': 'EXECUTION_STEP#exec_step_2',
                     'step_id': 'step_2',
                     'step_type': 'navigation',
-                    'act_id': 'act_790'
+                    'act_id': 'act-790'
                 },
                 {
                     'pk': 'EXECUTION#exec_456',
                     'sk': 'EXECUTION_STEP#exec_step_3',
                     'step_id': 'step_3',
                     'step_type': 'navigation',
-                    'act_id': 'act_791'
+                    'act_id': 'act-791'
                 }
             ]
         }
@@ -1766,9 +1764,9 @@ class TestLambdaHandler:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'executions/exec_456/act_act_789.json'},
-                {'Key': 'executions/exec_456/act_act_790.json'},
-                {'Key': 'executions/exec_456/act_act_791.json'}
+                {'Key': 'uc_123/exec_456/session_abc/act_act-789_Click_calls.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_act-790_Navigate_calls.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_act-791_Fill_calls.json'}
             ]
         }
         
@@ -1821,21 +1819,21 @@ class TestLambdaHandler:
                     'sk': 'EXECUTION_STEP#exec_step_1',
                     'step_id': 'step_1',
                     'step_type': 'navigation',
-                    'act_id': 'act_789'
+                    'act_id': 'act-789'
                 },
                 {
                     'pk': 'EXECUTION#exec_456',
                     'sk': 'EXECUTION_STEP#exec_step_2',
                     'step_id': 'step_2',
                     'step_type': 'assertion',  # Not navigation - should be filtered out
-                    'act_id': 'act_790'
+                    'act_id': 'act-790'
                 },
                 {
                     'pk': 'EXECUTION#exec_456',
                     'sk': 'EXECUTION_STEP#exec_step_3',
                     'step_id': 'step_3',
                     'step_type': 'navigation',
-                    'act_id': 'act_791'
+                    'act_id': 'act-791'
                 },
                 {
                     'pk': 'EXECUTION#exec_456',
@@ -1854,8 +1852,8 @@ class TestLambdaHandler:
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
             'Contents': [
-                {'Key': 'executions/exec_456/act_act_789.json'},
-                {'Key': 'executions/exec_456/act_act_791.json'}
+                {'Key': 'uc_123/exec_456/session_abc/act_act-789_Click_calls.json'},
+                {'Key': 'uc_123/exec_456/session_abc/act_act-791_Fill_calls.json'}
             ]
         }
         mock_s3_client.get_object.return_value = {

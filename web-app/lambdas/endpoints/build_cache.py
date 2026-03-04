@@ -150,7 +150,7 @@ def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: st
         logger.info(f"Found {len(all_keys)} files under prefix={prefix}: {all_keys}")
 
         # Parse act_id from each S3 key
-        pattern = re.compile(r'.*/act_(.+)\.json$')
+        pattern = re.compile(r'.*/act_([^_]+)_.*\.json$')
         for obj in response['Contents']:
             s3_key = obj['Key']
             match = pattern.match(s3_key)
