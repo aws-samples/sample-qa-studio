@@ -130,7 +130,7 @@ export default function ExecutionDetailRefactored() {
     };
   }, [execution?.status, usecaseId, executionId]);
 
-  // Fetch usecase execution log artifact
+  // Fetch usecase execution log artifact (only for ci_runner executions)
   useEffect(() => {
     const fetchLogArtifact = async () => {
       if (!usecaseId || !executionId) return;
@@ -150,11 +150,17 @@ export default function ExecutionDetailRefactored() {
       }
     };
 
-    // Only fetch when execution is terminal
-    if (execution && execution.status !== 'executing' && execution.status !== 'pending') {
+    // Only fetch logs for ci_runner executions in terminal state
+    const isCiRunner = execution?.trigger_type === 'ci_runner';
+    const isTerminal = execution && execution.status !== 'executing' && execution.status !== 'pending';
+    if (isCiRunner && isTerminal) {
       fetchLogArtifact();
+    } else if (execution) {
+      // Not a ci_runner execution — skip log fetching
+      setLogArtifactsLoading(false);
+      setLogDownloadUrl(null);
     }
-  }, [usecaseId, executionId, execution?.status]);
+  }, [usecaseId, executionId, execution?.status, execution?.trigger_type]);
 
   const handleViewContent = (content: { url: string, title: string, fileType: string }) => {
     setModalContent(content);
@@ -275,8 +281,8 @@ export default function ExecutionDetailRefactored() {
             executionRegion={execution?.region}
           />
 
-          {/* Execution Logs */}
-          {(logArtifactsLoading || logDownloadUrl) && (
+          {/* Execution Logs (ci_runner only) */}
+          {execution?.trigger_type === 'ci_runner' && (logArtifactsLoading || logDownloadUrl) && (
             <Container
               header={<Header variant="h2">Execution Logs</Header>}
             >
