@@ -77,14 +77,15 @@ class TestUseCaseAPI:
         assert result == [{"key": "api_key"}]
 
     def test_create_execution_minimal(self):
-        self.client._session.request.return_value = _mock_response(200, {"execution_id": "ex-1"})
+        self.client._session.request.return_value = _mock_response(200, {"executionId": "ex-1"})
         result = self.api.create_execution("uc-1")
-        assert result["execution_id"] == "ex-1"
+        assert result["executionId"] == "ex-1"
         call_args = self.client._session.request.call_args
         assert call_args[0] == ("POST", "https://api.example.com/api/usecase/uc-1/execute")
+        assert call_args[1]["params"] == {"trigger-type": "ci_runner"}
 
     def test_create_execution_with_overrides(self):
-        self.client._session.request.return_value = _mock_response(200, {"execution_id": "ex-1"})
+        self.client._session.request.return_value = _mock_response(200, {"executionId": "ex-1"})
         self.api.create_execution(
             "uc-1",
             base_url="https://staging.example.com",
@@ -93,6 +94,7 @@ class TestUseCaseAPI:
             model_id="model-v2",
         )
         call_args = self.client._session.request.call_args
+        assert call_args[1]["params"] == {"trigger-type": "ci_runner"}
         body = call_args[1]["json"]
         assert body["base_url"] == "https://staging.example.com"
         assert body["variables"] == {"env": "staging"}

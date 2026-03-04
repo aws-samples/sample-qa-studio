@@ -53,7 +53,7 @@ class UseCaseAPI:
         model_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create an execution record for a use case."""
-        payload: Dict[str, Any] = {"trigger_type": trigger_type}
+        payload: Dict[str, Any] = {}
         if base_url is not None:
             payload["base_url"] = base_url
         if variables is not None:
@@ -62,4 +62,8 @@ class UseCaseAPI:
             payload["region"] = region
         if model_id is not None:
             payload["model_id"] = model_id
-        return self.client.post(f"/api/usecase/{usecase_id}/execute", json_body=payload)
+        return self.client.post(
+            f"/api/usecase/{usecase_id}/execute",
+            json_body=payload if payload else None,
+            params={"trigger-type": trigger_type},
+        )
