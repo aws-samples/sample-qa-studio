@@ -407,6 +407,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         Dict with statusCode 200 and body containing processing statistics
     """
     try:
+        # Log the full event for debugging and manual triggering
+        logger.info(f"Received event: {json.dumps(event, indent=2)}")
         logger.info(f"Received cache builder event: {event.get('detail-type')}")
         
         # Extract event details
