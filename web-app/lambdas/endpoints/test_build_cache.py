@@ -1171,245 +1171,9 @@ class TestFetchAndParseActResponse:
 
 class TestUpdateStepCaches:
     """Tests for update_step_caches function."""
-    
-    def test_successful_batch_update(self, mock_dynamodb_table):
-        """Test successful batch update of STEP records."""
-        # Mock batch_writer context manager
-        mock_batch = MagicMock()
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
 
-        step_updates = [
-            ('step_1', [{'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}]),
-            ('step_2', [{'type': 'type', 'text': 'hello', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}, 'press_enter': False}])
-        ]
-        timestamp = '2024-01-01T12:00:00.000Z'
-
-        successful, failed = build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
-        )
-
-        assert successful == 2
-        assert failed == 0
-        assert mock_batch.put_item.call_count == 2
-
-        # Verify first call
-        first_call = mock_batch.put_item.call_args_list[0]
-        first_item = first_call[1]['Item']
-        assert first_item['pk'] == 'USECASE#uc_123'
-        assert first_item['sk'] == 'STEP#step_1'
-        assert first_item['cache_last_updated'] == timestamp
-        assert 'cached_steps' in first_item
-
-        # Verify cached_steps is JSON string
-        cached_steps_1 = json.loads(first_item['cached_steps'])
-        assert cached_steps_1[0]['type'] == 'click'
-
-    def test_empty_step_updates_list(self, mock_dynamodb_table):
-        """Test handling of empty step_updates list."""
-        mock_batch = MagicMock()
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
-
-        step_updates = []
-        timestamp = '2024-01-01T12:00:00.000Z'
-
-        successful, failed = build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
-        )
-
-        assert successful == 0
-        assert failed == 0
-        assert mock_batch.put_item.call_count == 0
-
-    def test_missing_step_id_skipped(self, mock_dynamodb_table):
-        """Test that updates with missing step_id are skipped and counted as failed."""
-        mock_batch = MagicMock()
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
-
-        step_updates = [
-            ('step_1', [{'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}]),
-            ('', [{'type': 'type', 'text': 'hello'}]),  # Empty step_id
-            (None, [{'type': 'navigate', 'url': 'https://example.com'}])  # None step_id
-        ]
-        timestamp = '2024-01-01T12:00:00.000Z'
-
-        successful, failed = build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
-        )
-
-        assert successful == 1
-        assert failed == 2
-        assert mock_batch.put_item.call_count == 1
-
-    def test_json_encoding_error_handled(self, mock_dynamodb_table):
-        """Test that JSON encoding errors are handled gracefully."""
-        mock_batch = MagicMock()
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
-
-        # Create an object that can't be JSON serialized
-        class NonSerializable:
-            pass
-
-        step_updates = [
-            ('step_1', [{'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}]),
-            ('step_2', [{'type': 'custom', 'obj': NonSerializable()}])  # Will fail JSON encoding
-        ]
-        timestamp = '2024-01-01T12:00:00.000Z'
-
-        successful, failed = build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
-        )
-
-        assert successful == 1
-        assert failed == 1
-        assert mock_batch.put_item.call_count == 1
-
-    def test_batch_writer_exception_handled(self, mock_dynamodb_table):
-        """Test that batch_writer exceptions are handled gracefully."""
-        # Mock batch_writer to raise exception
-        mock_dynamodb_table.batch_writer.side_effect = ClientError(
-            {'Error': {'Code': 'ProvisionedThroughputExceededException', 'Message': 'Throttled'}},
-            'BatchWriteItem'
-        )
-
-        step_updates = [
-            ('step_1', [{'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}])
-        ]
-        timestamp = '2024-01-01T12:00:00.000Z'
-
-        successful, failed = build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
-        )
-
-        assert successful == 0
-        assert failed == 1
-
-    def test_individual_put_item_exception_handled(self, mock_dynamodb_table):
-        """Test that individual put_item exceptions are handled gracefully."""
-        mock_batch = MagicMock()
-
-        # Make put_item raise exception on second call
-        def put_item_side_effect(Item):
-            if Item['sk'] == 'STEP#step_2':
-                raise Exception('DynamoDB error')
-
-        mock_batch.put_item.side_effect = put_item_side_effect
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
-
-        step_updates = [
-            ('step_1', [{'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}]),
-            ('step_2', [{'type': 'type', 'text': 'hello'}]),
-            ('step_3', [{'type': 'navigate', 'url': 'https://example.com'}])
-        ]
-        timestamp = '2024-01-01T12:00:00.000Z'
-
-        successful, failed = build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
-        )
-
-        assert successful == 2
-        assert failed == 1
-        assert mock_batch.put_item.call_count == 3
-
-    def test_correct_step_record_key_construction(self, mock_dynamodb_table):
-        """Test that STEP record keys are constructed correctly."""
-        mock_batch = MagicMock()
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
-
-        step_updates = [
-            ('my_step_123', [{'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}])
-        ]
-        timestamp = '2024-01-01T12:00:00.000Z'
-
-        build_cache.update_step_caches(
-            mock_dynamodb_table, 'my_usecase_456', step_updates, timestamp
-        )
-
-        call_args = mock_batch.put_item.call_args
-        item = call_args[1]['Item']
-
-        assert item['pk'] == 'USECASE#my_usecase_456'
-        assert item['sk'] == 'STEP#my_step_123'
-
-    def test_cached_steps_serialized_as_json_string(self, mock_dynamodb_table):
-        """Test that cached_steps are stored as JSON string."""
-        mock_batch = MagicMock()
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
-
-        cached_steps = [
-            {'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}},
-            {'type': 'type', 'text': 'test', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}, 'press_enter': False}
-        ]
-        step_updates = [('step_1', cached_steps)]
-        timestamp = '2024-01-01T12:00:00.000Z'
-
-        build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
-        )
-
-        call_args = mock_batch.put_item.call_args
-        item = call_args[1]['Item']
-
-        # Verify cached_steps is a string
-        assert isinstance(item['cached_steps'], str)
-
-        # Verify it can be deserialized back to original structure
-        deserialized = json.loads(item['cached_steps'])
-        assert deserialized == cached_steps
-
-    def test_cache_last_updated_timestamp_stored(self, mock_dynamodb_table):
-        """Test that cache_last_updated timestamp is stored correctly."""
-        mock_batch = MagicMock()
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
-
-        step_updates = [
-            ('step_1', [{'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}])
-        ]
-        timestamp = '2024-01-15T14:30:45.123Z'
-
-        build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
-        )
-
-        call_args = mock_batch.put_item.call_args
-        item = call_args[1]['Item']
-
-        assert item['cache_last_updated'] == timestamp
-
-    def test_multiple_steps_with_mixed_success_failure(self, mock_dynamodb_table):
-        """Test batch update with mixed success and failure scenarios."""
-        mock_batch = MagicMock()
-
-        # Make put_item fail for specific steps
-        call_count = [0]
-        def put_item_side_effect(Item):
-            call_count[0] += 1
-            if call_count[0] == 2 or call_count[0] == 4:
-                raise Exception('DynamoDB error')
-
-        mock_batch.put_item.side_effect = put_item_side_effect
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
-
-        step_updates = [
-            ('step_1', [{'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}]),
-            ('step_2', [{'type': 'type', 'text': 'hello'}]),  # Will fail
-            ('step_3', [{'type': 'navigate', 'url': 'https://example.com'}]),
-            ('step_4', [{'type': 'hover', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}]),  # Will fail
-            ('step_5', [{'type': 'scroll', 'direction': 'down'}])
-        ]
-        timestamp = '2024-01-01T12:00:00.000Z'
-
-        successful, failed = build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
-        )
-
-        assert successful == 3
-        assert failed == 2
-        assert mock_batch.put_item.call_count == 5
-
-    def test_unexpected_exception_in_batch_writer(self, mock_dynamodb_table):
-        """Test handling of unexpected exceptions in batch_writer."""
-        mock_dynamodb_table.batch_writer.side_effect = Exception('Unexpected error')
-
+    def test_successful_update(self, mock_dynamodb_table):
+        """Test successful update_item calls for STEP records."""
         step_updates = [
             ('step_1', [{'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}}]),
             ('step_2', [{'type': 'type', 'text': 'hello'}])
@@ -1420,51 +1184,151 @@ class TestUpdateStepCaches:
             mock_dynamodb_table, 'uc_123', step_updates, timestamp
         )
 
+        assert successful == 2
+        assert failed == 0
+        assert mock_dynamodb_table.update_item.call_count == 2
+
+        first_call = mock_dynamodb_table.update_item.call_args_list[0]
+        assert first_call[1]['Key'] == {'pk': 'USECASE#uc_123', 'sk': 'STEP#step_1'}
+        assert first_call[1]['ExpressionAttributeValues'][':ts'] == timestamp
+        cached = json.loads(first_call[1]['ExpressionAttributeValues'][':cs'])
+        assert cached[0]['type'] == 'click'
+
+    def test_empty_step_updates_list(self, mock_dynamodb_table):
+        """Test handling of empty step_updates list."""
+        successful, failed = build_cache.update_step_caches(
+            mock_dynamodb_table, 'uc_123', [], '2024-01-01T12:00:00.000Z'
+        )
+
         assert successful == 0
-        assert failed == 2
+        assert failed == 0
+        assert mock_dynamodb_table.update_item.call_count == 0
 
-    def test_complex_cached_steps_structure(self, mock_dynamodb_table):
-        """Test serialization of complex cached_steps structures."""
-        mock_batch = MagicMock()
-        mock_dynamodb_table.batch_writer.return_value.__enter__.return_value = mock_batch
-
-        # Complex nested structure
-        cached_steps = [
-            {
-                'type': 'click',
-                'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400},
-                'metadata': {
-                    'confidence': 0.95,
-                    'element': 'button',
-                    'attributes': ['primary', 'enabled']
-                }
-            },
-            {
-                'type': 'type',
-                'text': 'test@example.com',
-                'bbox': {'x1': 50, 'y1': 100, 'x2': 250, 'y2': 150},
-                'press_enter': True,
-                'modifiers': ['shift']
-            }
+    def test_missing_step_id_skipped(self, mock_dynamodb_table):
+        """Test that updates with missing step_id are skipped."""
+        step_updates = [
+            ('step_1', [{'type': 'click', 'bbox': {}}]),
+            ('', [{'type': 'type', 'text': 'hello'}]),
+            (None, [{'type': 'navigate', 'url': 'https://example.com'}])
         ]
-        step_updates = [('step_1', cached_steps)]
-        timestamp = '2024-01-01T12:00:00.000Z'
 
         successful, failed = build_cache.update_step_caches(
-            mock_dynamodb_table, 'uc_123', step_updates, timestamp
+            mock_dynamodb_table, 'uc_123', step_updates, '2024-01-01T12:00:00.000Z'
         )
 
         assert successful == 1
-        assert failed == 0
+        assert failed == 2
+        assert mock_dynamodb_table.update_item.call_count == 1
 
-        call_args = mock_batch.put_item.call_args
-        item = call_args[1]['Item']
+    def test_json_encoding_error_handled(self, mock_dynamodb_table):
+        """Test that JSON encoding errors are handled gracefully."""
+        class NonSerializable:
+            pass
 
-        # Verify complex structure is preserved
-        deserialized = json.loads(item['cached_steps'])
-        assert deserialized == cached_steps
-        assert deserialized[0]['metadata']['confidence'] == 0.95
-        assert deserialized[1]['modifiers'] == ['shift']
+        step_updates = [
+            ('step_1', [{'type': 'click', 'bbox': {}}]),
+            ('step_2', [{'type': 'custom', 'obj': NonSerializable()}])
+        ]
+
+        successful, failed = build_cache.update_step_caches(
+            mock_dynamodb_table, 'uc_123', step_updates, '2024-01-01T12:00:00.000Z'
+        )
+
+        assert successful == 1
+        assert failed == 1
+
+    def test_dynamodb_client_error_handled(self, mock_dynamodb_table):
+        """Test that DynamoDB ClientError is handled per-step."""
+        mock_dynamodb_table.update_item.side_effect = ClientError(
+            {'Error': {'Code': 'ProvisionedThroughputExceededException', 'Message': 'Throttled'}},
+            'UpdateItem'
+        )
+
+        step_updates = [('step_1', [{'type': 'click', 'bbox': {}}])]
+
+        successful, failed = build_cache.update_step_caches(
+            mock_dynamodb_table, 'uc_123', step_updates, '2024-01-01T12:00:00.000Z'
+        )
+
+        assert successful == 0
+        assert failed == 1
+
+    def test_individual_update_exception_handled(self, mock_dynamodb_table):
+        """Test that individual update_item exceptions don't stop other updates."""
+        call_count = [0]
+        def update_side_effect(**kwargs):
+            call_count[0] += 1
+            if call_count[0] == 2:
+                raise Exception('DynamoDB error')
+
+        mock_dynamodb_table.update_item.side_effect = update_side_effect
+
+        step_updates = [
+            ('step_1', [{'type': 'click', 'bbox': {}}]),
+            ('step_2', [{'type': 'type', 'text': 'hello'}]),
+            ('step_3', [{'type': 'navigate', 'url': 'https://example.com'}])
+        ]
+
+        successful, failed = build_cache.update_step_caches(
+            mock_dynamodb_table, 'uc_123', step_updates, '2024-01-01T12:00:00.000Z'
+        )
+
+        assert successful == 2
+        assert failed == 1
+        assert mock_dynamodb_table.update_item.call_count == 3
+
+    def test_correct_step_record_key_construction(self, mock_dynamodb_table):
+        """Test that STEP record keys are constructed correctly."""
+        step_updates = [('my_step_123', [{'type': 'click', 'bbox': {}}])]
+
+        build_cache.update_step_caches(
+            mock_dynamodb_table, 'my_usecase_456', step_updates, '2024-01-01T12:00:00.000Z'
+        )
+
+        call_args = mock_dynamodb_table.update_item.call_args[1]
+        assert call_args['Key'] == {'pk': 'USECASE#my_usecase_456', 'sk': 'STEP#my_step_123'}
+
+    def test_cached_steps_serialized_as_json_string(self, mock_dynamodb_table):
+        """Test that cached_steps are stored as JSON string."""
+        cached_steps = [
+            {'type': 'click', 'bbox': {'x1': 100, 'y1': 200, 'x2': 300, 'y2': 400}},
+            {'type': 'type', 'text': 'test', 'bbox': {}, 'press_enter': False}
+        ]
+        step_updates = [('step_1', cached_steps)]
+
+        build_cache.update_step_caches(
+            mock_dynamodb_table, 'uc_123', step_updates, '2024-01-01T12:00:00.000Z'
+        )
+
+        call_args = mock_dynamodb_table.update_item.call_args[1]
+        stored = call_args['ExpressionAttributeValues'][':cs']
+        assert isinstance(stored, str)
+        assert json.loads(stored) == cached_steps
+
+    def test_cache_last_updated_timestamp_stored(self, mock_dynamodb_table):
+        """Test that cache_last_updated timestamp is stored correctly."""
+        step_updates = [('step_1', [{'type': 'click', 'bbox': {}}])]
+        timestamp = '2024-01-15T14:30:45.123Z'
+
+        build_cache.update_step_caches(
+            mock_dynamodb_table, 'uc_123', step_updates, timestamp
+        )
+
+        call_args = mock_dynamodb_table.update_item.call_args[1]
+        assert call_args['ExpressionAttributeValues'][':ts'] == timestamp
+
+    def test_update_expression_sets_only_cache_fields(self, mock_dynamodb_table):
+        """Test that update_item only sets cached_steps and cache_last_updated."""
+        step_updates = [('step_1', [{'type': 'click', 'bbox': {}}])]
+
+        build_cache.update_step_caches(
+            mock_dynamodb_table, 'uc_123', step_updates, '2024-01-01T12:00:00.000Z'
+        )
+
+        call_args = mock_dynamodb_table.update_item.call_args[1]
+        assert 'SET cached_steps' in call_args['UpdateExpression']
+        assert 'cache_last_updated' in call_args['UpdateExpression']
+        assert len(call_args['ExpressionAttributeValues']) == 2
 
 
 
@@ -1583,10 +1447,6 @@ class TestLambdaHandler:
             ]
         }
         
-        # Mock batch_writer
-        mock_batch_writer = MagicMock()
-        mock_table.batch_writer.return_value.__enter__.return_value = mock_batch_writer
-        
         mock_dynamodb = MagicMock()
         mock_dynamodb.Table.return_value = mock_table
         
@@ -1631,8 +1491,10 @@ class TestLambdaHandler:
         assert body['stats']['successful_updates'] == 2
         assert body['stats']['failed_updates'] == 0
         
-        # Verify batch_writer was used
-        assert mock_batch_writer.put_item.call_count == 2
+        # Verify update_item was called for cache updates
+        update_calls = [c for c in mock_table.update_item.call_args_list
+                       if 'cached_steps' in str(c)]
+        assert len(update_calls) == 2
     
     def test_unexpected_exception_returns_200(self, mock_env_vars, valid_event):
         """Test that Lambda returns 200 even on unexpected exceptions (fire-and-forget)."""
@@ -1681,9 +1543,6 @@ class TestLambdaHandler:
             ]
         }
         
-        mock_batch_writer = MagicMock()
-        mock_table.batch_writer.return_value.__enter__.return_value = mock_batch_writer
-        
         # Mock S3
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
@@ -1710,8 +1569,10 @@ class TestLambdaHandler:
         assert body['stats']['successful_updates'] == 1
         assert body['stats']['failed_updates'] == 0
         
-        # Verify only one put_item call (for step with step_id)
-        assert mock_batch_writer.put_item.call_count == 1
+        # Verify only one update_item call (for step with step_id)
+        update_calls = [c for c in mock_table.update_item.call_args_list
+                       if 'cached_steps' in str(c)]
+        assert len(update_calls) == 1
 
     @patch('build_cache.parse_nova_act_steps')
     @patch('build_cache.boto3')
@@ -1757,9 +1618,6 @@ class TestLambdaHandler:
             ]
         }
         
-        mock_batch_writer = MagicMock()
-        mock_table.batch_writer.return_value.__enter__.return_value = mock_batch_writer
-        
         # Mock S3 - second get_object call will fail
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
@@ -1791,8 +1649,10 @@ class TestLambdaHandler:
         assert body['stats']['successful_updates'] == 2
         assert body['stats']['failed_updates'] == 0
         
-        # Verify two put_item calls (steps 1 and 3)
-        assert mock_batch_writer.put_item.call_count == 2
+        # Verify two update_item calls (steps 1 and 3)
+        update_calls = [c for c in mock_table.update_item.call_args_list
+                       if 'cached_steps' in str(c)]
+        assert len(update_calls) == 2
 
     @patch('build_cache.parse_nova_act_steps')
     @patch('build_cache.boto3')
@@ -1845,9 +1705,6 @@ class TestLambdaHandler:
             ]
         }
         
-        mock_batch_writer = MagicMock()
-        mock_table.batch_writer.return_value.__enter__.return_value = mock_batch_writer
-        
         # Mock S3
         mock_s3_client = MagicMock()
         mock_s3_client.list_objects_v2.return_value = {
@@ -1874,18 +1731,18 @@ class TestLambdaHandler:
         assert body['stats']['successful_updates'] == 2
         assert body['stats']['failed_updates'] == 0
         
-        # Verify correct STEP record keys were constructed
-        put_item_calls = mock_batch_writer.put_item.call_args_list
-        assert len(put_item_calls) == 2
+        # Verify correct STEP record keys were constructed via update_item
+        update_calls = [c for c in mock_table.update_item.call_args_list
+                       if 'cached_steps' in str(c)]
+        assert len(update_calls) == 2
         
         # Check first call
-        first_item = put_item_calls[0][1]['Item']
-        assert first_item['pk'] == 'USECASE#uc_123'
-        assert first_item['sk'] == 'STEP#step_1'
-        assert 'cached_steps' in first_item
-        assert first_item['cache_last_updated'] == '2024-01-01T12:00:00.000Z'
+        first_key = update_calls[0][1]['Key']
+        assert first_key['pk'] == 'USECASE#uc_123'
+        assert first_key['sk'] == 'STEP#step_1'
+        assert update_calls[0][1]['ExpressionAttributeValues'][':ts'] == '2024-01-01T12:00:00.000Z'
         
         # Check second call
-        second_item = put_item_calls[1][1]['Item']
-        assert second_item['pk'] == 'USECASE#uc_123'
-        assert second_item['sk'] == 'STEP#step_3'
+        second_key = update_calls[1][1]['Key']
+        assert second_key['pk'] == 'USECASE#uc_123'
+        assert second_key['sk'] == 'STEP#step_3'

@@ -331,12 +331,12 @@ def update_step_caches(
     timestamp: str
 ) -> tuple:
     """
-    Update STEP records with cached steps using batch_writer.
+    Update STEP records with cached steps using update_item.
 
-    Uses DynamoDB batch_writer for efficient batch updates of STEP records.
-    Each step update contains (step_id, cached_steps) tuple. Stores cached_steps
-    as JSON string and cache_last_updated timestamp. Tracks successful and failed
-    updates, handling errors gracefully by logging and continuing.
+    Uses DynamoDB update_item to add cache fields to existing STEP records
+    without overwriting other attributes. Each step update contains
+    (step_id, cached_steps) tuple. Stores cached_steps as JSON string and
+    cache_last_updated timestamp.
 
     Args:
         table: DynamoDB table resource
@@ -346,86 +346,48 @@ def update_step_caches(
 
     Returns:
         Tuple of (successful_updates, failed_updates)
-
-    Example:
-        >>> table = dynamodb.Table('qa-studio-table')
-        >>> step_updates = [
-        ...     ('step_1', [{'type': 'click', 'bbox': {...}}]),
-        ...     ('step_2', [{'type': 'type', 'text': 'hello'}])
-        ... ]
-        >>> successful, failed = update_step_caches(
-        ...     table, 'uc_123', step_updates, '2024-01-01T12:00:00.000Z'
-        ... )
-        >>> print(f"Success: {successful}, Failed: {failed}")
     """
     successful = 0
     failed = 0
 
-    logger.info(f"Starting batch update of {len(step_updates)} STEP records for usecase_id={usecase_id}")
+    logger.info(f"Updating {len(step_updates)} STEP records for usecase_id={usecase_id}")
 
-    try:
-        with table.batch_writer() as batch:
-            for step_id, cached_steps in step_updates:
-                try:
-                    # Validate step_id
-                    if not step_id:
-                        logger.error(f"Missing step_id in update, skipping")
-                        failed += 1
-                        continue
+    for step_id, cached_steps in step_updates:
+        try:
+            if not step_id:
+                logger.error("Missing step_id in update, skipping")
+                failed += 1
+                continue
 
-                    # Serialize cached_steps to JSON string
-                    cached_steps_json = json.dumps(cached_steps)
+            cached_steps_json = json.dumps(cached_steps)
 
-                    # Construct STEP record key and update
-                    item = {
-                        'pk': f'USECASE#{usecase_id}',
-                        'sk': f'STEP#{step_id}',
-                        'cached_steps': cached_steps_json,
-                        'cache_last_updated': timestamp
-                    }
+            table.update_item(
+                Key={
+                    'pk': f'USECASE#{usecase_id}',
+                    'sk': f'STEP#{step_id}'
+                },
+                UpdateExpression='SET cached_steps = :cs, cache_last_updated = :ts',
+                ExpressionAttributeValues={
+                    ':cs': cached_steps_json,
+                    ':ts': timestamp
+                }
+            )
+            successful += 1
+            logger.debug(f"Updated cache for step_id={step_id}")
 
-                    batch.put_item(Item=item)
-                    successful += 1
-                    logger.debug(f"Queued cache update for step_id={step_id}")
+        except TypeError as e:
+            logger.error(f"JSON encoding error for step_id={step_id}: {str(e)}", exc_info=True)
+            failed += 1
 
-                except TypeError as e:
-                    # JSON encoding errors raise TypeError
-                    logger.error(
-                        f"JSON encoding error for step_id={step_id}: {str(e)}",
-                        exc_info=True
-                    )
-                    failed += 1
+        except ClientError as e:
+            logger.error(f"DynamoDB error updating step_id={step_id}: {str(e)}", exc_info=True)
+            failed += 1
 
-                except Exception as e:
-                    logger.error(
-                        f"Error updating cache for step_id={step_id}: {str(e)}",
-                        exc_info=True
-                    )
-                    failed += 1
+        except Exception as e:
+            logger.error(f"Error updating cache for step_id={step_id}: {str(e)}", exc_info=True)
+            failed += 1
 
-        logger.info(
-            f"Batch update completed: {successful} successful, {failed} failed "
-            f"for usecase_id={usecase_id}"
-        )
-
-    except ClientError as e:
-        logger.error(
-            f"DynamoDB batch_writer error for usecase_id={usecase_id}: {str(e)}",
-            exc_info=True
-        )
-        # If batch_writer itself fails, count all as failed
-        failed = len(step_updates)
-        successful = 0
-
-    except Exception as e:
-        logger.error(
-            f"Unexpected error in batch update for usecase_id={usecase_id}: {str(e)}",
-            exc_info=True
-        )
-        # If unexpected error, count all as failed
-        failed = len(step_updates)
-        successful = 0
-
+    logger.info(f"Update completed: {successful} successful, {failed} failed for usecase_id={usecase_id}")
     return (successful, failed)
 
 
