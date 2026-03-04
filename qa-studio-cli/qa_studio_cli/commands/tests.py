@@ -1,5 +1,6 @@
 """Click command group for test (usecase) management."""
 
+import json
 import click
 
 from qa_studio_cli.api.client import require_auth
@@ -112,10 +113,8 @@ def create_test(ctx, from_journey, title, starting_url, user_journey, region, ex
             raise SystemExit(1)
 
         # Step 2: Import the generated usecase
-        import_data = client.post("/api/import", json_body={
-            "usecaseData": gen_response.usecase_data,
-            "name": title,
-        })
+        usecase_data = json.loads(gen_response.usecase_data)
+        import_data = client.post("/api/import", json_body=usecase_data)
         import_response = ImportUsecaseResponse.model_validate(import_data)
 
         if not import_response.success:
