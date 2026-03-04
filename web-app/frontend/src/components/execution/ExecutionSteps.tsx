@@ -3,6 +3,7 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Table from "@cloudscape-design/components/table";
 import Button from "@cloudscape-design/components/button";
+import Badge from "@cloudscape-design/components/badge";
 import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import StatusIndicatorCompact from '../common/StatusIndicatorCompact';
 import ValidationResult from '../common/ValidationResult';
@@ -94,6 +95,11 @@ export default function ExecutionSteps({
                         textToCopy={actId}
                         variant="inline"
                       />
+                    </div>
+                  )}
+                  {actId === "cached" && (
+                    <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                      <Badge color="blue">Cached</Badge>
                     </div>
                   )}
                 </div>
