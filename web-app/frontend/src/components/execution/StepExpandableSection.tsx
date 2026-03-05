@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import ExpandableSection from '@cloudscape-design/components/expandable-section';
 import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
 import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import CopyToClipboard from '@cloudscape-design/components/copy-to-clipboard';
 import StepHeader from './StepHeader';
@@ -30,41 +31,11 @@ export default function StepExpandableSection({
   const actId = step.actId || step.act_id;
   const hasTrace = actId && actId !== 'cached' && actId !== 'error';
 
-  const stepHeader = (
-    <StepHeader
-      stepNum={step.sort}
-      status={step.status || 'pending'}
-      isCached={actId === 'cached'}
-      instruction={step.instruction}
-      stepType={step.step_type}
-      validation={
-        step.actual_value
-          ? {
-              validation_type: step.validation_type,
-              validation_operator: step.validation_operator,
-              validation_value: step.validation_value,
-              actual_value: step.actual_value,
-            }
-          : undefined
-      }
-      logs={step.logs}
-    />
-  );
+  const handleToggle = async () => {
+    const willExpand = !expanded;
+    onExpandChange(willExpand);
 
-  // Steps without trace data render as a plain container (no expand arrow)
-  if (!hasTrace) {
-    return (
-      <Container header={stepHeader}>
-        {null}
-      </Container>
-    );
-  }
-
-  const handleExpandChange = async ({ detail }: { detail: { expanded: boolean } }) => {
-    const isExpanding = detail.expanded;
-    onExpandChange(isExpanding);
-
-    if (isExpanding && !traceData) {
+    if (willExpand && !traceData) {
       setLoading(true);
       setError(null);
       try {
@@ -80,32 +51,62 @@ export default function StepExpandableSection({
     }
   };
 
-  // Steps with trace data render as an expandable section (with arrow)
-  // Using deprecated `header` prop because `headerText` only accepts string,
-  // and we need custom JSX (StepHeader with status icons, badges, validation).
   return (
-    <ExpandableSection
-      variant="container"
-      expanded={expanded}
-      onChange={handleExpandChange}
-      header={stepHeader}
-    >
-      <SpaceBetween size="s">
-        <StepTraceContent
-          traceSteps={traceData || []}
-          loading={loading}
-          error={error}
-        />
-        <Box fontSize="body-s" color="text-body-secondary">
-          <CopyToClipboard
-            copyButtonAriaLabel="Copy Act ID"
-            copyErrorText="failed to copy"
-            copySuccessText="copied"
-            textToCopy={actId}
-            variant="inline"
+    <Container
+      header={
+        <Header
+          actions={
+            hasTrace ? (
+              <Button
+                variant="inline-link"
+                iconName={expanded ? 'angle-up' : 'angle-down'}
+                iconAlign="right"
+                onClick={handleToggle}
+              >
+                {expanded ? 'Collapse' : 'Expand'}
+              </Button>
+            ) : undefined
+          }
+        >
+          <StepHeader
+            stepNum={step.sort}
+            status={step.status || 'pending'}
+            isCached={actId === 'cached'}
+            instruction={step.instruction}
+            stepType={step.step_type}
+            validation={
+              step.actual_value
+                ? {
+                    validation_type: step.validation_type,
+                    validation_operator: step.validation_operator,
+                    validation_value: step.validation_value,
+                    actual_value: step.actual_value,
+                  }
+                : undefined
+            }
+            logs={step.logs}
           />
-        </Box>
-      </SpaceBetween>
-    </ExpandableSection>
+        </Header>
+      }
+    >
+      {expanded && hasTrace && (
+        <SpaceBetween size="s">
+          <StepTraceContent
+            traceSteps={traceData || []}
+            loading={loading}
+            error={error}
+          />
+          <Box fontSize="body-s" color="text-body-secondary">
+            <CopyToClipboard
+              copyButtonAriaLabel="Copy Act ID"
+              copyErrorText="failed to copy"
+              copySuccessText="copied"
+              textToCopy={actId}
+              variant="inline"
+            />
+          </Box>
+        </SpaceBetween>
+      )}
+    </Container>
   );
 }
