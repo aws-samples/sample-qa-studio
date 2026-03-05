@@ -22,6 +22,11 @@ def create_prompt(title, starting_url, user_journey, region):
     
     prompt = f'''You are an expert test automation engineer. Convert the following user journey description into a structured JSON format for automated web testing.
 
+DESIGN PRINCIPLES:
+- SIMPLICITY FIRST: Prefer the fewest steps possible. Each step should do exactly one thing. Shorter test cases are better — do not add steps that are not strictly necessary to cover the user journey.
+- STEP TYPE PRIORITY: Always prefer "validation" over "retrieve_value" + "assertion". Only use retrieve_value/assertion when a value must be captured and compared after a state change or reused across multiple later steps.
+- CLEAR TRANSITIONS: Each navigation step must describe exactly one action with an unambiguous target element. Moving between steps should be logical and precise.
+
 User Journey Details:
 - Title: (Wizard) {title}
 - Starting URL: {starting_url}
@@ -43,13 +48,13 @@ Generate a JSON object that matches this EXACT schema. This JSON will be importe
   "steps": [
     {{
       "sort": 1,
-      "instruction": "Navigate to the starting page",
-      "step_type": "navigation",
+      "instruction": "return the value for the page title or a key element confirming the page has fully loaded",
+      "step_type": "validation",
       "secret_key": "",
       "capture_variable": "",
-      "validation_type": "",
-      "validation_operator": "",
-      "validation_value": "",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true",
       "assertion_variable": "",
       "value_step": "",
       "value_type": ""
@@ -61,11 +66,11 @@ Generate a JSON object that matches this EXACT schema. This JSON will be importe
 }}
 
 CRITICAL REQUIREMENTS:
-1. Generate comprehensive steps covering the entire user journey
+1. Generate steps covering the entire user journey. Keep the test case as short and focused as possible — every step must serve a clear purpose.
 2. Include navigation steps for page interactions (clicking, typing, etc.)
 3. Include validation steps for expected outcomes and assertions, only values can be asserted. the types are string, bool and number.
-4. Use retrieve_value steps to capture values from the page into runtime variables for later use.
-5. Use assertion steps to compare previously captured runtime variables against expected values without interacting with the browser.
+4. Use retrieve_value steps ONLY when a value must be stored for comparison in a later assertion step or reused across multiple steps. If you just need to check something on the current page, use a validation step instead.
+5. Use assertion steps ONLY to compare a previously captured runtime variable against an expected value after a state change. Do NOT use retrieve_value + assertion as a substitute for a single validation step.
 6. Use ONLY these step types: "navigation", "validation", "secret", "retrieve_value", "assertion", "url", "download"
 7. Validation and assertion operators for string are exact, exact_case_insensitive, contains, contains_case_insensitive and not_equal
 8. Validation and assertion operators for bool are exact
@@ -79,18 +84,42 @@ CRITICAL REQUIREMENTS:
 16. All strings must be properly escaped for JSON
 17. Return ONLY the JSON object, no markdown, no explanations, no additional text
 18. Ensure the JSON is valid and can be parsed
-19. You do not need a step to move to the start page.
+19. NEVER generate a URL step or navigation step to the starting_url. The system automatically navigates to the starting_url before step 1. Do not duplicate this.
 20. Secret steps must always focus an input field only.
 21. Instructions must be written as instructions. Like "click the search button" or "Return the amount of items in the basket"
+22. The FIRST step of every use case MUST be a validation step that confirms the page has fully loaded (e.g. verifying a key heading, title, or element is visible). This ensures all subsequent steps operate on a stable, fully rendered page.
+23. Every retrieve_value step MUST be followed by at least one assertion step that references the captured variable. Never generate a retrieve_value step without a corresponding assertion that uses it. If the value only needs to be checked once and not compared after a state change, use a validation step instead.
 
 Step Type Guidelines:
-- "navigation": For clicking buttons, filling forms, navigating pages
-- "validation": For checking page content, verifying elements exist. Reads a value from the live page and compares it.
+- "navigation": For clicking buttons, filling forms, navigating pages. Each step should describe exactly one interaction.
+- "validation": PREFERRED for any check. For checking page content, verifying elements exist. Reads a value from the live page and compares it. Use this instead of retrieve_value + assertion whenever possible.
 - "secret": For using stored credentials (set secret_key field)
-- "retrieve_value": For extracting a value from the page and storing it as a runtime variable (set capture_variable and value_type fields)
-- "assertion": For comparing a previously captured runtime variable against an expected value without browser interaction (set assertion_variable, validation_type, validation_operator, validation_value fields)
-- "url": For navigating directly to a specific URL (instruction is the URL)
+- "retrieve_value": ONLY use when the value must be stored for later comparison after a state change or reused in multiple assertion steps. Do NOT use just to read and immediately check a value — use validation instead.
+- "assertion": ONLY use to compare a previously captured runtime variable. Requires a preceding retrieve_value step. Do NOT use as a substitute for validation.
+- "url": For navigating directly to a specific URL (instruction is the URL). NEVER use to navigate to the starting_url.
 - "download": For downloading a file from the page
+
+DO / DON'T Examples:
+
+DON'T: retrieve_value to capture a button label, then assertion to check it equals "Submit"
+DO: Use a single validation step: "return the value for the submit button label" with validation_type "string" and validation_value "Submit"
+
+DON'T: Use a URL step to navigate to the starting_url as the first step
+DO: Start with a validation step confirming the page has loaded, e.g. "return the value for the page heading being visible"
+
+DON'T: Split a single check into retrieve_value + assertion when the value is only needed once
+DO: Use validation to check the value directly on the page
+
+DO: Use retrieve_value + assertion when you need to capture a count before an action, perform the action, then capture and compare the count after
+DO: Use retrieve_value when the same value needs to be referenced in multiple later assertion steps
+
+Variables:
+- Variables are user-defined key-value pairs listed in the "variables" array. They are referenced in step instructions using {{VariableName}} syntax and resolved at runtime before the step executes.
+- Use variables for strings that appear in multiple steps to avoid repetition and keep the test DRY. Define the value once in the variables array and reference it everywhere with {{VariableName}}.
+- Use variables for key elements that make the test reusable with different inputs (e.g., a sorting mode, a search term, or a category name that someone might want to test with different values).
+- Use the built-in {{UniqueID}} variable when creating resources that need unique names to avoid collisions across test runs (e.g., "[QA Test] {{UniqueID}}").
+- Do NOT create variables for strings that only appear once and are not a parameterizable key element. Static values like button labels, menu item names, or fixed URLs should be hardcoded directly in the instruction.
+- Other built-in variables available without definition: {{Time}}, {{ExecutionID}}, {{CreatedAt}}.
 
 Generate the complete, valid JSON now:'''
     
