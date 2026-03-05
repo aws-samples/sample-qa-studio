@@ -29,38 +29,47 @@ export default function StepHeader({
   validation,
   logs,
 }: StepHeaderProps) {
+  const hasValidation = (stepType === 'validation' || stepType === 'assertion') && validation;
+  const hasDownload = stepType === 'download' && validation?.actual_value;
+
   return (
-    <SpaceBetween direction="horizontal" size="xs" alignItems="center">
-      <Box fontWeight="bold" display="inline">
-        Step {stepNum}
-      </Box>
+    <SpaceBetween direction="vertical" size="xxs">
+      {/* Top row: status icon + step number + instruction */}
+      <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+        <StatusIndicatorCompact status={status as any} />
 
-      <StatusIndicatorCompact status={status as any} />
+        <Box fontWeight="bold" display="inline">
+          Step {stepNum}
+        </Box>
 
-      {isCached && <Badge color="blue">Cached</Badge>}
+        {isCached && <Badge color="blue">Cached</Badge>}
 
-      <Box display="inline" color="text-body-secondary">
-        {instruction}
-      </Box>
+        <Box display="inline" color="text-body-secondary">
+          {instruction}
+        </Box>
+      </SpaceBetween>
 
-      {(stepType === 'validation' || stepType === 'assertion') && validation && (
-        <ValidationResult
-          validationType={validation.validation_type}
-          validationOperator={validation.validation_operator}
-          validationValue={validation.validation_value}
-          actualValue={validation.actual_value}
-          status={status}
-        />
+      {/* Validation info below */}
+      {hasValidation && (
+        <Box padding={{ left: 'l' }}>
+          <ValidationResult
+            validationType={validation.validation_type}
+            validationOperator={validation.validation_operator}
+            validationValue={validation.validation_value}
+            actualValue={validation.actual_value}
+            status={status}
+          />
+        </Box>
       )}
 
-      {stepType === 'download' && validation?.actual_value && (
-        <Box display="inline" fontSize="body-s" color="text-body-secondary">
+      {hasDownload && (
+        <Box padding={{ left: 'l' }} fontSize="body-s" color="text-body-secondary">
           Downloaded: {validation.actual_value}
         </Box>
       )}
 
       {logs && (
-        <Box display="inline">
+        <Box padding={{ left: 'l' }}>
           <pre style={{ margin: 0, fontSize: '12px' }}>{logs}</pre>
         </Box>
       )}
