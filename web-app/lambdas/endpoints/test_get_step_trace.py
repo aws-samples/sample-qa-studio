@@ -67,7 +67,7 @@ def valid_event():
         "pathParameters": {
             "id": "uc_123",
             "executionId": "exec_456",
-            "stepId": "step_789",
+            "stepId": "3",
         },
         "requestContext": {
             "authorizer": {
@@ -78,6 +78,19 @@ def valid_event():
             }
         },
     }
+
+
+def _make_step_item(sort_value, act_id=None, **extra):
+    """Helper to build a DynamoDB step item returned by query."""
+    item = {
+        "pk": "EXECUTION#exec_456",
+        "sk": "EXECUTION_STEP#some-uuid",
+        "sort": sort_value,
+    }
+    if act_id is not None:
+        item["act_id"] = act_id
+    item.update(extra)
+    return item
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +249,7 @@ class TestFindTraceS3Key:
         assert result == "uc/ex/sess/act_001_first_calls.json"
 
 
+
 # ---------------------------------------------------------------------------
 # handler tests
 # ---------------------------------------------------------------------------
@@ -276,7 +290,25 @@ class TestHandler:
     def test_step_not_found(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.return_value = {}  # no Item
+        # query returns no matching step items
+        table.query.return_value = {"Items": []}
+        mock_boto3.resource.return_value.Table.return_value = table
+
+        result = handler(valid_event, None)
+        body = json.loads(result["body"])
+        assert result["statusCode"] == 404
+        assert "Execution step not found" in body["error"]
+
+    @patch("get_step_trace.boto3")
+    @patch("get_step_trace.require_scopes")
+    def test_step_not_found_wrong_sort(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
+        """Query returns steps but none match the requested sort value."""
+        mock_scopes.return_value = ({"identity": "user"}, None)
+        table = MagicMock()
+        table.query.return_value = {"Items": [
+            _make_step_item(sort_value=1, act_id="act_001"),
+            _make_step_item(sort_value=2, act_id="act_002"),
+        ]}
         mock_boto3.resource.return_value.Table.return_value = table
 
         result = handler(valid_event, None)
@@ -289,7 +321,8 @@ class TestHandler:
     def test_no_act_id(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.return_value = {"Item": {"pk": "x", "sk": "y"}}  # no act_id
+        # step found but has no act_id
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3)]}
         mock_boto3.resource.return_value.Table.return_value = table
 
         result = handler(valid_event, None)
@@ -302,7 +335,7 @@ class TestHandler:
     def test_cached_act_id(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.return_value = {"Item": {"act_id": "cached"}}
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3, act_id="cached")]}
         mock_boto3.resource.return_value.Table.return_value = table
 
         result = handler(valid_event, None)
@@ -315,7 +348,7 @@ class TestHandler:
     def test_error_act_id(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.return_value = {"Item": {"act_id": "error"}}
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3, act_id="error")]}
         mock_boto3.resource.return_value.Table.return_value = table
 
         result = handler(valid_event, None)
@@ -328,11 +361,9 @@ class TestHandler:
     def test_execution_not_found(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        # First call: step found with act_id; second call: execution not found
-        table.get_item.side_effect = [
-            {"Item": {"act_id": "act_001"}},
-            {},
-        ]
+        # step query succeeds, execution get_item returns nothing
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3, act_id="act_001")]}
+        table.get_item.return_value = {}
         mock_boto3.resource.return_value.Table.return_value = table
 
         result = handler(valid_event, None)
@@ -345,10 +376,8 @@ class TestHandler:
     def test_no_session_id(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.side_effect = [
-            {"Item": {"act_id": "act_001"}},
-            {"Item": {"pk": "x"}},  # no nova_session_id
-        ]
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3, act_id="act_001")]}
+        table.get_item.return_value = {"Item": {"pk": "x"}}  # no nova_session_id
         mock_boto3.resource.return_value.Table.return_value = table
 
         result = handler(valid_event, None)
@@ -362,10 +391,8 @@ class TestHandler:
     def test_trace_file_not_found(self, mock_scopes, mock_boto3, mock_find, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.side_effect = [
-            {"Item": {"act_id": "act_001"}},
-            {"Item": {"nova_session_id": "sess_abc"}},
-        ]
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3, act_id="act_001")]}
+        table.get_item.return_value = {"Item": {"nova_session_id": "sess_abc"}}
         mock_boto3.resource.return_value.Table.return_value = table
 
         result = handler(valid_event, None)
@@ -380,10 +407,8 @@ class TestHandler:
     def test_successful_trace_retrieval(self, mock_scopes, mock_boto3, mock_find, mock_parse, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.side_effect = [
-            {"Item": {"act_id": "act_001"}},
-            {"Item": {"nova_session_id": "sess_abc"}},
-        ]
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3, act_id="act_001")]}
+        table.get_item.return_value = {"Item": {"nova_session_id": "sess_abc"}}
         mock_boto3.resource.return_value.Table.return_value = table
 
         s3_client = MagicMock()
@@ -411,10 +436,8 @@ class TestHandler:
     def test_s3_get_object_no_such_key(self, mock_scopes, mock_boto3, mock_find, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.side_effect = [
-            {"Item": {"act_id": "act_001"}},
-            {"Item": {"nova_session_id": "sess_abc"}},
-        ]
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3, act_id="act_001")]}
+        table.get_item.return_value = {"Item": {"nova_session_id": "sess_abc"}}
         mock_boto3.resource.return_value.Table.return_value = table
 
         s3_client = MagicMock()
@@ -435,10 +458,8 @@ class TestHandler:
     def test_s3_get_object_other_error(self, mock_scopes, mock_boto3, mock_find, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.side_effect = [
-            {"Item": {"act_id": "act_001"}},
-            {"Item": {"nova_session_id": "sess_abc"}},
-        ]
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3, act_id="act_001")]}
+        table.get_item.return_value = {"Item": {"nova_session_id": "sess_abc"}}
         mock_boto3.resource.return_value.Table.return_value = table
 
         s3_client = MagicMock()
@@ -458,10 +479,8 @@ class TestHandler:
     def test_parse_failure(self, mock_scopes, mock_boto3, mock_find, mock_parse, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
-        table.get_item.side_effect = [
-            {"Item": {"act_id": "act_001"}},
-            {"Item": {"nova_session_id": "sess_abc"}},
-        ]
+        table.query.return_value = {"Items": [_make_step_item(sort_value=3, act_id="act_001")]}
+        table.get_item.return_value = {"Item": {"nova_session_id": "sess_abc"}}
         mock_boto3.resource.return_value.Table.return_value = table
 
         s3_client = MagicMock()

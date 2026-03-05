@@ -6,6 +6,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 import boto3
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from pydantic import BaseModel
 
@@ -168,15 +169,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(get_table_name())
 
-        # --- 1. Look up execution step to get act_id ---
-        step_response = table.get_item(
-            Key={
-                "pk": f"EXECUTION#{execution_id}",
-                "sk": f"EXECUTION_STEP#{step_id}",
-            }
+        # --- 1. Look up execution step by sort value to get act_id ---
+        # stepId from the URL is the sort value, not the SK UUID.
+        # Query all EXECUTION_STEP# records and find the one matching sort.
+        step_query = table.query(
+            KeyConditionExpression=Key("pk").eq(f"EXECUTION#{execution_id}")
+            & Key("sk").begins_with("EXECUTION_STEP#")
         )
 
-        step_item = step_response.get("Item")
+        step_item = None
+        for item in step_query.get("Items", []):
+            # sort is stored as a number (Decimal)
+            if str(item.get("sort", "")) == str(step_id):
+                step_item = item
+                break
+
         if not step_item:
             return create_response(404, {"error": "Execution step not found"})
 
