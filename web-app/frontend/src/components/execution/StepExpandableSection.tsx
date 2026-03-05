@@ -69,7 +69,6 @@ export default function StepExpandableSection({
           }
         >
           <StepHeader
-            stepNum={step.sort}
             status={step.status || 'pending'}
             isCached={actId === 'cached'}
             instruction={step.instruction}

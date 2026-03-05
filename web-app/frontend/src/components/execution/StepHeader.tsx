@@ -1,4 +1,3 @@
-import React from 'react';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Badge from '@cloudscape-design/components/badge';
 import Box from '@cloudscape-design/components/box';
@@ -6,7 +5,6 @@ import StatusIndicatorCompact from '../common/StatusIndicatorCompact';
 import ValidationResult from '../common/ValidationResult';
 
 export interface StepHeaderProps {
-  stepNum: number;
   status: string;
   isCached: boolean;
   instruction: string;
@@ -21,7 +19,6 @@ export interface StepHeaderProps {
 }
 
 export default function StepHeader({
-  stepNum,
   status,
   isCached,
   instruction,
@@ -38,15 +35,11 @@ export default function StepHeader({
       <SpaceBetween direction="horizontal" size="xs" alignItems="center">
         <StatusIndicatorCompact status={status as any} />
 
-        <Box fontWeight="bold" display="inline">
-          Step {stepNum}
-        </Box>
-
-        {isCached && <Badge color="blue">Cached</Badge>}
-
         <Box display="inline" color="text-body-secondary">
           {instruction}
         </Box>
+
+        {isCached && <Badge color="blue">Cached</Badge>}
       </SpaceBetween>
 
       {/* Validation info below */}
