@@ -1,4 +1,5 @@
 """Lambda handler for fetching and parsing JSON trace data for an execution step."""
+import lambda_init  # noqa: F401 — Must be first to set up Python path
 import json
 import logging
 import re
