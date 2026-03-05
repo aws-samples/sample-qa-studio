@@ -11,7 +11,7 @@
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
-    "lambda:install-deps": "pip install -r lambdas/endpoints/requirements.txt -t lambdas/endpoints/dependencies --upgrade",
+    "lambda:install-deps": "pip install -r lambdas/endpoints/requirements.txt -t lambdas/endpoints/dependencies --upgrade --platform manylinux2014_aarch64 --implementation cp --python-version 3.13 --only-binary=:all:",
     "deploy:storage": "cdk deploy storage --require-approval never",
     "deploy:auth": "cdk deploy auth --require-approval never",
     "deploy:api": "cdk deploy api --require-approval never",
