@@ -16,6 +16,7 @@ export interface TraceStepResponse {
 export interface TraceStep {
   request?: TraceStepRequest;
   response?: TraceStepResponse;
+  screenshotWithBbox?: string; // data URI with bounding box overlay
 }
 
 export interface StepTraceContentProps {
@@ -52,7 +53,7 @@ export default function StepTraceContent({
   return (
     <SpaceBetween size="l">
       {traceSteps.map((step, index) => {
-        const screenshot = step.request?.screenshot;
+        const screenshot = step.screenshotWithBbox || step.request?.screenshot;
         const action = step.response?.rawProgramBody;
         const stepNum = index + 1;
 

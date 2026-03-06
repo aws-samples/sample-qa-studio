@@ -18,28 +18,33 @@ logger.setLevel(logging.INFO)
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models
+# Pydantic models — matches actual Nova Act _calls.json structure
 # ---------------------------------------------------------------------------
 
+class TraceStepRequest(BaseModel):
+    """The request portion of a Nova Act step (contains the screenshot)."""
+    screenshot: Optional[str] = None  # base64 encoded PNG
+
+
+class TraceStepResponse(BaseModel):
+    """The response portion of a Nova Act step (contains the rawProgramBody)."""
+    rawProgramBody: Optional[str] = None
+
+
 class TraceStep(BaseModel):
-    step_num: int
-    thought: str
-    action: str
-    screenshot: str  # base64 encoded PNG
-    time_s: float
+    """A single step from a Nova Act _calls.json file."""
+    request: Optional[TraceStepRequest] = None
+    response: Optional[TraceStepResponse] = None
+    screenshotWithBbox: Optional[str] = None  # data URI with bounding box overlay
 
 
 class TraceMetadata(BaseModel):
-    session_id: str
-    act_id: str
-    num_steps_executed: int
-    start_time: float
-    end_time: float
-    prompt: str
-    time_worked_s: float
+    """Metadata from a Nova Act _calls.json file."""
+    num_steps_executed: Optional[int] = None
 
 
 class StepTraceResponse(BaseModel):
+    """Parsed response returned to the frontend."""
     trace_steps: List[TraceStep]
     metadata: TraceMetadata
 
@@ -50,7 +55,18 @@ class StepTraceResponse(BaseModel):
 
 def parse_trace_json(raw_json: str) -> StepTraceResponse:
     """
-    Parse raw JSON trace content into a validated StepTraceResponse.
+    Parse raw JSON trace content from a Nova Act _calls.json file.
+
+    The actual structure is:
+    {
+      "steps": [
+        {
+          "request": { "screenshot": "base64..." },
+          "response": { "rawProgramBody": "agentClick(...);" }
+        }
+      ],
+      "metadata": { "num_steps_executed": 2 }
+    }
 
     Args:
         raw_json: Raw JSON string from the S3 trace file.

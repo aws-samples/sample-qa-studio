@@ -27,11 +27,17 @@ from get_step_trace import (
 # ---------------------------------------------------------------------------
 
 SAMPLE_TRACE_STEP = {
-    "step_num": 1,
-    "thought": "Click the login button",
-    "action": "click",
-    "screenshot": "base64encodedpng",
-    "time_s": 1.5,
+    "request": {
+        "screenshot": "data:image/jpeg;base64,abc123",
+        "prompt": "Navigate to login page",
+        "metadata": {},
+    },
+    "response": {
+        "program": "agentClick('#login');",
+        "rawProgramBody": 'think("Click the login button");\nagentClick(\'#login\');',
+        "requestId": "req_001",
+    },
+    "screenshotWithBbox": "data:image/jpeg;base64,bbox_abc123",
 }
 
 SAMPLE_METADATA = {
@@ -41,7 +47,9 @@ SAMPLE_METADATA = {
     "start_time": 1700000000.0,
     "end_time": 1700000010.0,
     "prompt": "Navigate to login page",
+    "step_server_times_s": [],
     "time_worked_s": 10.0,
+    "human_wait_time_s": 0.0,
 }
 
 SAMPLE_TRACE_JSON = json.dumps({
@@ -100,26 +108,31 @@ def _make_step_item(sort_value, act_id=None, **extra):
 class TestTraceStep:
     def test_valid_trace_step(self):
         step = TraceStep(**SAMPLE_TRACE_STEP)
-        assert step.step_num == 1
-        assert step.thought == "Click the login button"
-        assert step.action == "click"
-        assert step.time_s == 1.5
+        assert step.request.screenshot == "data:image/jpeg;base64,abc123"
+        assert step.response.rawProgramBody == 'think("Click the login button");\nagentClick(\'#login\');'
+        assert step.screenshotWithBbox == "data:image/jpeg;base64,bbox_abc123"
 
-    def test_missing_field_raises(self):
-        with pytest.raises(Exception):
-            TraceStep(step_num=1, thought="t", action="a")
+    def test_all_optional_fields(self):
+        step = TraceStep()
+        assert step.request is None
+        assert step.response is None
+        assert step.screenshotWithBbox is None
+
+    def test_partial_fields(self):
+        step = TraceStep(request={"screenshot": "img"})
+        assert step.request.screenshot == "img"
+        assert step.response is None
+        assert step.screenshotWithBbox is None
 
 
 class TestTraceMetadata:
     def test_valid_metadata(self):
         meta = TraceMetadata(**SAMPLE_METADATA)
-        assert meta.session_id == "sess_abc"
         assert meta.num_steps_executed == 3
-        assert meta.time_worked_s == 10.0
 
-    def test_missing_field_raises(self):
-        with pytest.raises(Exception):
-            TraceMetadata(session_id="s", act_id="a")
+    def test_all_optional(self):
+        meta = TraceMetadata()
+        assert meta.num_steps_executed is None
 
 
 class TestStepTraceResponse:
@@ -129,7 +142,7 @@ class TestStepTraceResponse:
             metadata=TraceMetadata(**SAMPLE_METADATA),
         )
         assert len(resp.trace_steps) == 1
-        assert resp.metadata.act_id == "act_001"
+        assert resp.metadata.num_steps_executed == 3
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +154,7 @@ class TestParseTraceJson:
         result = parse_trace_json(SAMPLE_TRACE_JSON)
         assert isinstance(result, StepTraceResponse)
         assert len(result.trace_steps) == 1
-        assert result.metadata.session_id == "sess_abc"
+        assert result.metadata.num_steps_executed == 3
 
     def test_invalid_json_raises_value_error(self):
         with pytest.raises(ValueError, match="Invalid JSON"):
@@ -161,31 +174,42 @@ class TestParseTraceJson:
         with pytest.raises(ValueError, match="Missing required top-level fields"):
             parse_trace_json("{}")
 
-    def test_invalid_step_structure_raises(self):
+    def test_invalid_step_structure_does_not_raise(self):
+        """Extra/unknown keys are ignored by pydantic — no error."""
         data = json.dumps({
             "steps": [{"bad": "data"}],
             "metadata": SAMPLE_METADATA,
         })
-        with pytest.raises(ValueError):
-            parse_trace_json(data)
+        result = parse_trace_json(data)
+        assert len(result.trace_steps) == 1
+        assert result.trace_steps[0].request is None
 
-    def test_invalid_metadata_structure_raises(self):
+    def test_invalid_metadata_structure_does_not_raise(self):
+        """Extra/unknown keys are ignored by pydantic — no error."""
         data = json.dumps({
             "steps": [SAMPLE_TRACE_STEP],
             "metadata": {"bad": "data"},
         })
-        with pytest.raises(ValueError):
-            parse_trace_json(data)
+        result = parse_trace_json(data)
+        assert result.metadata.num_steps_executed is None
 
     def test_multiple_steps(self):
-        step2 = {**SAMPLE_TRACE_STEP, "step_num": 2, "thought": "Type password"}
+        step2 = {
+            "request": {"screenshot": "data:image/jpeg;base64,step2"},
+            "response": {"rawProgramBody": "think('step 2');"},
+            "screenshotWithBbox": "data:image/jpeg;base64,bbox_step2",
+        }
         data = json.dumps({
             "steps": [SAMPLE_TRACE_STEP, step2],
             "metadata": SAMPLE_METADATA,
         })
         result = parse_trace_json(data)
         assert len(result.trace_steps) == 2
-        assert result.trace_steps[1].step_num == 2
+        assert result.trace_steps[1].screenshotWithBbox == "data:image/jpeg;base64,bbox_step2"
+
+    def test_screenshotWithBbox_included(self):
+        result = parse_trace_json(SAMPLE_TRACE_JSON)
+        assert result.trace_steps[0].screenshotWithBbox == "data:image/jpeg;base64,bbox_abc123"
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +452,7 @@ class TestHandler:
         assert result["statusCode"] == 200
         assert "trace_steps" in body
         assert "metadata" in body
-        assert body["metadata"]["session_id"] == "sess_abc"
+        assert body["metadata"]["num_steps_executed"] == 3
 
     @patch("get_step_trace.find_trace_s3_key", return_value="uc/ex/sess/act_001_nav_calls.json")
     @patch("get_step_trace.boto3")
