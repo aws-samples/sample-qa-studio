@@ -71,7 +71,7 @@ export default function StepTraceContent({
               <div>
                 {screenshot ? (
                   <img
-                    src={`data:image/jpeg;base64,${screenshot}`}
+                    src={screenshot}
                     alt={`Screenshot for sub-step ${stepNum}`}
                     style={{ width: '100%', borderRadius: '4px', border: '1px solid #d5dbdb' }}
                   />
