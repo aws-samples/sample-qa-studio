@@ -339,7 +339,8 @@ def handler(event, context):
             
             return create_response(200, {
                 'status': 'usecase queued',
-                'usecaseId': usecase_id
+                'usecaseId': usecase_id,
+                'executionId': execution_id
             })
         
         elif trigger_type in ['Scheduled', 'OnDemandHeadless']:

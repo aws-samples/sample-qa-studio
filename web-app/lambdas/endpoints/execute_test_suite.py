@@ -817,11 +817,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 if trigger_type == 'OnDemand' and execute_usecase_arn:
                     # Invoke execute_usecase Lambda to create records AND spawn ECS task
+                    # Use OnDemandHeadless to directly spawn ECS (OnDemand sends to deprecated SQS queue)
                     # execute_usecase reads trigger_type, suite IDs from query params
                     invoke_payload = {
                         'pathParameters': {'id': usecase_id},
                         'queryStringParameters': {
-                            'trigger-type': 'OnDemand',
+                            'trigger-type': 'OnDemandHeadless',
                             'suite-execution-id': suite_execution_id,
                             'suite-id': suite_id,
                         },
