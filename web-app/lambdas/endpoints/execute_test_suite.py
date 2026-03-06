@@ -332,7 +332,7 @@ def create_suite_execution_record(
         suite_name: Name of the test suite
         suite_scope: Scope of the test suite (e.g., 'suite:smoke-tests')
         triggered_by: Identity of the user/client who triggered the execution
-        trigger_type: Always 'ci_runner' for this endpoint
+        trigger_type: Trigger type ('ci_runner', 'manual', or 'scheduled')
         overrides: Dictionary of overrides (base_url, variables, region, model_id)
         total_usecases: Total number of usecases in the suite
         created_at: ISO8601 timestamp
@@ -465,7 +465,7 @@ def create_execution_record_for_usecase(
         usecase_definition: Usecase definition dict
         suite_execution_id: Suite execution UUID
         suite_id: Test suite UUID
-        trigger_type: Always 'ci_runner'
+        trigger_type: Trigger type ('ci_runner', 'manual', or 'scheduled')
         starting_url: Starting URL (with base_url override applied)
         variables: Merged variables dictionary
         region: Execution region (with override applied)
@@ -626,14 +626,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Execute a test suite by creating suite execution and all usecase execution records.
     
-    This endpoint is designed for CI/CD runners and creates execution records with
-    overrides applied, without spawning ECS tasks (trigger_type=ci_runner).
+    This endpoint creates execution records with overrides applied,
+    without spawning ECS tasks (trigger_type=ci_runner/OnDemand).
     
     Path Parameters:
         id: Test suite UUID
     
     Request Body:
-        trigger_type: Must be "ci_runner"
+        trigger_type: One of "ci_runner", "OnDemand"
         base_url: Optional base URL override for all usecases
         variables: Optional variable overrides (key-value pairs)
         region: Optional AWS region override
@@ -668,11 +668,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return create_response(400, {'error': 'Invalid JSON in request body'})
     
     # Validate trigger_type
-    trigger_type = body.get('trigger_type')
-    if trigger_type != 'ci_runner':
+    trigger_type = body.get('trigger_type', 'OnDemand')
+    valid_trigger_types = ['ci_runner', 'OnDemand']
+    if trigger_type not in valid_trigger_types:
         return create_response(400, {
             'error': 'Invalid trigger type',
-            'message': 'trigger_type must be "ci_runner" for this endpoint'
+            'message': f'trigger_type must be one of: {", ".join(valid_trigger_types)}'
         })
     
     # Extract overrides

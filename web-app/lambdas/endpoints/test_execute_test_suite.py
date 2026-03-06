@@ -10,7 +10,7 @@ def mock_event():
     """Create a mock API Gateway event"""
     return {
         'body': json.dumps({
-            'trigger_type': 'manual'
+            'trigger_type': 'OnDemand'
         }),
         'pathParameters': {
             'suite_id': 'suite-123'
@@ -95,7 +95,7 @@ class TestExecuteTestSuite:
         assert body['suite_name'] == 'Test Suite'
         assert body['status'] == 'running'
         assert body['total_usecases'] == 2
-        assert body['trigger_type'] == 'manual'
+        assert body['trigger_type'] == 'OnDemand'
         assert len(body['invocation_results']) == 2
         
         # Verify suite execution record was created
@@ -134,7 +134,7 @@ class TestExecuteTestSuite:
         
         # Create event with scheduled trigger
         event = {
-            'body': json.dumps({'trigger_type': 'scheduled'}),
+            'body': json.dumps({'trigger_type': 'ci_runner'}),
             'pathParameters': {'suite_id': 'suite-123'},
             'requestContext': {
                 'authorizer': {
@@ -151,7 +151,7 @@ class TestExecuteTestSuite:
         # Verify
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
-        assert body['trigger_type'] == 'scheduled'
+        assert body['trigger_type'] == 'ci_runner'
     
     @patch('execute_test_suite.dynamodb')
     def test_suite_not_found(self, mock_dynamodb, mock_event):
@@ -191,7 +191,7 @@ class TestExecuteTestSuite:
     def test_missing_suite_id(self):
         """Test error when suite_id is missing"""
         event = {
-            'body': json.dumps({'trigger_type': 'manual'}),
+            'body': json.dumps({'trigger_type': 'OnDemand'}),
             'pathParameters': {},
             'requestContext': {
                 'authorizer': {
@@ -237,7 +237,7 @@ class TestExecuteTestSuite:
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/suite.write'
+                    'scope': 'api/suite.write api/executions.write'
                 }
             }
         }
@@ -246,12 +246,12 @@ class TestExecuteTestSuite:
         
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
-        assert 'Invalid trigger_type' in body['error']
+        assert 'Invalid trigger type' in body['error']
     
     def test_insufficient_scope(self):
         """Test error when user lacks required scope"""
         event = {
-            'body': json.dumps({'trigger_type': 'manual'}),
+            'body': json.dumps({'trigger_type': 'OnDemand'}),
             'pathParameters': {'suite_id': 'suite-123'},
             'requestContext': {
                 'authorizer': {
@@ -383,7 +383,7 @@ class TestExecuteTestSuite:
     @patch('execute_test_suite.os.environ.get')
     
     def test_empty_body_defaults_to_manual(self, mock_env_get, mock_dynamodb, mock_lambda, mock_suite, mock_usecases):
-        """Test that empty body defaults trigger_type to manual"""
+        """Test that empty body defaults trigger_type to OnDemand"""
         # Setup mocks
         mock_env_get.side_effect = lambda key, default=None: {
             'TABLE_NAME': 'test-table',
@@ -415,7 +415,7 @@ class TestExecuteTestSuite:
         # Verify
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
-        assert body['trigger_type'] == 'manual'
+        assert body['trigger_type'] == 'OnDemand'
     
     @patch('execute_test_suite.lambda_client')
     @patch('execute_test_suite.dynamodb')

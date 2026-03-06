@@ -491,7 +491,7 @@ export interface ScheduleConfig {
 }
 
 export interface ExecuteSuiteRequest {
-  trigger_type?: 'manual' | 'scheduled';
+  trigger_type?: 'OnDemand' | 'ci_runner';
 }
 
 export interface ExecuteSuiteResponse {
@@ -548,7 +548,7 @@ export const testSuites = {
   
   // Execution Management
   execute: (suiteId: string, data?: ExecuteSuiteRequest): Promise<ExecuteSuiteResponse> => 
-    api.post(`test-suites/${suiteId}/execute`, data || { trigger_type: 'manual' }),
+    api.post(`test-suites/${suiteId}/execute`, data || { trigger_type: 'OnDemand' }),
   
   listExecutions: (suiteId: string, params?: { limit?: number; status?: string }): Promise<{ executions: SuiteExecution[] }> => {
     const queryParams = new URLSearchParams();
