@@ -71,7 +71,7 @@ export default function StepTraceContent({
               <div>
                 {screenshot ? (
                   <img
-                    src={`data:image/png;base64,${screenshot}`}
+                    src={`data:image/jpeg;base64,${screenshot}`}
                     alt={`Screenshot for sub-step ${stepNum}`}
                     style={{ width: '100%', borderRadius: '4px', border: '1px solid #d5dbdb' }}
                   />
@@ -95,7 +95,7 @@ export default function StepTraceContent({
                   </Box>
                   <Box fontSize="body-s">
                     {action ? (
-                      <code style={{ fontSize: '12px', background: '#f2f3f3', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      <code style={{ fontSize: '12px', background: 'transparent', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {action}
                       </code>
                     ) : (
