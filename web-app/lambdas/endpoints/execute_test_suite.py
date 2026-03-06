@@ -817,17 +817,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 if trigger_type == 'OnDemand' and execute_usecase_arn:
                     # Invoke execute_usecase Lambda to create records AND spawn ECS task
+                    # execute_usecase reads trigger_type, suite IDs from query params
                     invoke_payload = {
                         'pathParameters': {'id': usecase_id},
-                        'body': json.dumps({
-                            'trigger_type': 'OnDemand',
-                            'suite_execution_id': suite_execution_id,
-                            'suite_id': suite_id,
-                            'base_url': modified_starting_url,
-                            'variables': merged_vars,
-                            'region': execution_region,
-                            'model_id': execution_model_id,
-                        }),
+                        'queryStringParameters': {
+                            'trigger-type': 'OnDemand',
+                            'suite-execution-id': suite_execution_id,
+                            'suite-id': suite_id,
+                        },
                         'requestContext': event.get('requestContext', {}),
                     }
                     
