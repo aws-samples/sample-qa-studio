@@ -1,9 +1,10 @@
 """
-Lambda function for executing test suites via CI/CD runner.
+Lambda function for executing test suites.
 
 This endpoint creates a suite execution record and execution records for ALL
-use cases in the suite, applies overrides (base_url, variables, region, model_id),
-and returns all execution IDs without spawning ECS tasks.
+use cases in the suite, applies overrides (base_url, variables, region, model_id).
+For OnDemand trigger_type, it invokes the execute_usecase Lambda to spawn ECS tasks.
+For ci_runner trigger_type, it creates execution records only (no ECS tasks).
 
 Endpoint: POST /api/test-suites/{id}/execute
 """
@@ -32,6 +33,7 @@ from variable_merge import merge_variables, validate_variables_resolved
 dynamodb = boto3.client('dynamodb')
 eventbridge = boto3.client('events')
 cloudwatch = boto3.client('cloudwatch')
+lambda_client = boto3.client('lambda')
 
 
 def log_event(event_type: str, data: Dict[str, Any]) -> None:
@@ -779,6 +781,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # 4. Loop through all usecases and create execution records
         execution_ids = []
         
+        # Get execute_usecase Lambda ARN for OnDemand invocations
+        execute_usecase_arn = os.environ.get('EXECUTE_USECASE_LAMBDA_ARN') if trigger_type == 'OnDemand' else None
+        
         for usecase_mapping in usecases:
             usecase_id = usecase_mapping['usecase_id']
             usecase_name = usecase_mapping['usecase_name']
@@ -810,20 +815,50 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 )
                 execution_model_id = model_id_override if model_id_override else usecase['model_id']
                 
-                # Create execution record
-                execution_id = create_execution_record_for_usecase(
-                    usecase_id=usecase_id,
-                    usecase_definition=usecase,
-                    suite_execution_id=suite_execution_id,
-                    suite_id=suite_id,
-                    trigger_type=trigger_type,
-                    starting_url=modified_starting_url,
-                    variables=merged_vars,
-                    region=execution_region,
-                    model_id=execution_model_id,
-                    created_at=created_at,
-                    table_name=table_name
-                )
+                if trigger_type == 'OnDemand' and execute_usecase_arn:
+                    # Invoke execute_usecase Lambda to create records AND spawn ECS task
+                    invoke_payload = {
+                        'pathParameters': {'id': usecase_id},
+                        'body': json.dumps({
+                            'trigger_type': 'OnDemand',
+                            'suite_execution_id': suite_execution_id,
+                            'suite_id': suite_id,
+                            'base_url': modified_starting_url,
+                            'variables': merged_vars,
+                            'region': execution_region,
+                            'model_id': execution_model_id,
+                        }),
+                        'requestContext': event.get('requestContext', {}),
+                    }
+                    
+                    response = lambda_client.invoke(
+                        FunctionName=execute_usecase_arn,
+                        InvocationType='RequestResponse',
+                        Payload=json.dumps(invoke_payload),
+                    )
+                    
+                    resp_payload = json.loads(response['Payload'].read().decode('utf-8'))
+                    resp_body = json.loads(resp_payload.get('body', '{}'))
+                    execution_id = resp_body.get('executionId', '')
+                    
+                    if response.get('StatusCode') != 200 or resp_payload.get('statusCode', 0) >= 400:
+                        print(f'WARNING: execute_usecase invocation failed for {usecase_id}: {resp_body}')
+                        continue
+                else:
+                    # ci_runner: create execution record only, no ECS task
+                    execution_id = create_execution_record_for_usecase(
+                        usecase_id=usecase_id,
+                        usecase_definition=usecase,
+                        suite_execution_id=suite_execution_id,
+                        suite_id=suite_id,
+                        trigger_type=trigger_type,
+                        starting_url=modified_starting_url,
+                        variables=merged_vars,
+                        region=execution_region,
+                        model_id=execution_model_id,
+                        created_at=created_at,
+                        table_name=table_name
+                    )
                 
                 execution_ids.append({
                     'usecase_id': usecase_id,

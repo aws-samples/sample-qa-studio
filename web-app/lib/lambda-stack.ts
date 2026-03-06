@@ -65,6 +65,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly listExecutionArtifactsLambda: Function
   public readonly generateSuiteArtifactUrlLambda: Function
   public readonly listSuiteArtifactsLambda: Function
+  public readonly getStepTraceLambda: Function
 
   // Variables, Hooks, Headers Lambdas
   public readonly createUsecaseVariablesLambda: Function
@@ -336,6 +337,14 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
 
     this.listSuiteArtifactsLambda = this.createPythonLambda({
       path: 'list_suite_artifacts',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
+    this.getStepTraceLambda = this.createPythonLambda({
+      path: 'get_step_trace',
       environment: {
         TABLE_NAME: props.table.tableName,
         BUCKET_NAME: props.artefactsBucket.bucketName
@@ -793,7 +802,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       memorySize: 512,
       environment: {
         TABLE_NAME: props.table.tableName,
-        DEFAULT_REGION: this.region
+        DEFAULT_REGION: this.region,
+        EXECUTE_USECASE_LAMBDA_ARN: props.executeUsecaseLambda.functionArn
       }
     });
 
@@ -928,7 +938,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.getVideoPlaybackLambda,
       this.generateSuiteArtifactUrlLambda,
       this.listSuiteArtifactsLambda,
-      this.listExecutionArtifactsLambda
+      this.listExecutionArtifactsLambda,
+      this.getStepTraceLambda
     ]
     readLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableReadPolicy))
 
@@ -1008,6 +1019,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     props.artefactsBucket.grantPut(this.generateSuiteArtifactUrlLambda)
     props.artefactsBucket.grantRead(this.listSuiteArtifactsLambda)
     props.artefactsBucket.grantRead(this.listExecutionArtifactsLambda)
+    props.artefactsBucket.grantRead(this.getStepTraceLambda)
 
     // Nova Act Permissions
     const novaActArn = `arn:aws:nova-act:${Aws.REGION}:${Aws.ACCOUNT_ID}:*`;
