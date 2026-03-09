@@ -1,7 +1,8 @@
 import { Construct } from 'constructs';
 import { CfnOutput, Duration as cdk_Duration } from 'aws-cdk-lib';
 import * as cdk from 'aws-cdk-lib';
-import { RestApi, TokenAuthorizer, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, Deployment, IdentitySource } from 'aws-cdk-lib/aws-apigateway';
+import { RestApi, TokenAuthorizer, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, Deployment, Stage, AccessLogFormat, LogGroupLogDestination, UsagePlan, IdentitySource } from 'aws-cdk-lib/aws-apigateway';
+import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { UserPool } from 'aws-cdk-lib/aws-cognito';
 import { Function } from 'aws-cdk-lib/aws-lambda';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
@@ -409,11 +410,10 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const suiteSchedule = this.addResource(testSuite, 'schedule')
     this.addMethod(suiteSchedule, HttpMethod.PUT, l.updateSuiteScheduleLambda)
 
-    // Create API Gateway deployment
+    // Create API Gateway deployment with proper stage and access logging
     this.deployment = new Deployment(this, 'ApiDeployment', {
       api: this.api,
       description: `Deployment at ${new Date().toISOString()}`,
-      stageName: props.apiDeploymentStage
     })
 
     this.routes.forEach((route: Method) => {
@@ -421,6 +421,27 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     })
 
     this.deployment.addToLogicalId(new Date().toISOString())
+
+    // Create access log group for API Gateway
+    const apiAccessLogGroup = new LogGroup(this, 'ApiAccessLogGroup', {
+      logGroupName: `/aws/apigateway/${this.cdkName('service')}-access-logs`,
+      retention: RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Create a proper Stage with access logging
+    const stage = new Stage(this, 'ApiStage', {
+      deployment: this.deployment,
+      stageName: props.apiDeploymentStage,
+      accessLogDestination: new LogGroupLogDestination(apiAccessLogGroup),
+      accessLogFormat: AccessLogFormat.jsonWithStandardFields(),
+    });
+
+    // Associate a UsagePlan with the stage
+    new UsagePlan(this, 'ApiUsagePlan', {
+      name: this.cdkName('usage-plan'),
+      apiStages: [{ api: this.api, stage }],
+    });
 
     // Construct API URL manually since deploy: false
     const apiUrl = `https://${this.api.restApiId}.execute-api.${this.region}.amazonaws.com/${props.apiDeploymentStage}/`;
