@@ -1,7 +1,7 @@
 import { Construct } from 'constructs';
 import { CfnOutput, Duration as cdk_Duration } from 'aws-cdk-lib';
 import * as cdk from 'aws-cdk-lib';
-import { RestApi, TokenAuthorizer, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, Deployment, Stage, AccessLogFormat, LogGroupLogDestination, UsagePlan, IdentitySource } from 'aws-cdk-lib/aws-apigateway';
+import { RestApi, TokenAuthorizer, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, Deployment, AccessLogFormat, IdentitySource, CfnUsagePlan } from 'aws-cdk-lib/aws-apigateway';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { UserPool } from 'aws-cdk-lib/aws-cognito';
 import { Function } from 'aws-cdk-lib/aws-lambda';
@@ -410,10 +410,11 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const suiteSchedule = this.addResource(testSuite, 'schedule')
     this.addMethod(suiteSchedule, HttpMethod.PUT, l.updateSuiteScheduleLambda)
 
-    // Create API Gateway deployment with proper stage and access logging
+    // Create API Gateway deployment with access logging
     this.deployment = new Deployment(this, 'ApiDeployment', {
       api: this.api,
       description: `Deployment at ${new Date().toISOString()}`,
+      stageName: props.apiDeploymentStage
     })
 
     this.routes.forEach((route: Method) => {
@@ -429,19 +430,22 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // Create a proper Stage with access logging
-    const stage = new Stage(this, 'ApiStage', {
-      deployment: this.deployment,
-      stageName: props.apiDeploymentStage,
-      accessLogDestination: new LogGroupLogDestination(apiAccessLogGroup),
-      accessLogFormat: AccessLogFormat.jsonWithStandardFields(),
+    // Add access logging to the inline stage via L1 override on the CfnDeployment
+    const cfnDeployment = this.deployment.node.defaultChild as cdk.CfnResource;
+    cfnDeployment.addPropertyOverride('StageDescription.AccessLogSetting', {
+      DestinationArn: apiAccessLogGroup.logGroupArn,
+      Format: AccessLogFormat.jsonWithStandardFields().toString(),
     });
 
-    // Associate a UsagePlan with the stage
-    new UsagePlan(this, 'ApiUsagePlan', {
-      name: this.cdkName('usage-plan'),
-      apiStages: [{ api: this.api, stage }],
+    // Associate a UsagePlan with the API stage via L1 to avoid creating a separate Stage resource
+    const cfnUsagePlan = new CfnUsagePlan(this, 'ApiUsagePlan', {
+      usagePlanName: this.cdkName('usage-plan'),
+      apiStages: [{
+        apiId: this.api.restApiId,
+        stage: props.apiDeploymentStage,
+      }],
     });
+    cfnUsagePlan.addDependency(cfnDeployment);
 
     // Construct API URL manually since deploy: false
     const apiUrl = `https://${this.api.restApiId}.execute-api.${this.region}.amazonaws.com/${props.apiDeploymentStage}/`;
