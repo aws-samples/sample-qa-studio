@@ -72,13 +72,13 @@ describe('Bug Condition Exploration — CI Runner Recordings', () => {
   /**
    * Test 1 — Button visibility (Bug 1.2)
    *
-   * For any CI runner execution with a terminal status and no nova_session_id,
-   * the "View" button SHOULD be visible (expected behavior).
-   *
-   * On UNFIXED code the button is gated on `execution.nova_session_id`, so it
-   * will NOT render → test fails → confirms the bug.
+   * The "View" recording button has been removed from ExecutionInformation
+   * as part of the execution detail UI enhancement (recording moved to an
+   * expandable section in ExecutionDetailRefactored). This test now verifies
+   * that ExecutionInformation renders without the recording button for CI
+   * runner executions.
    */
-  it('should show "View" button for terminal CI runner executions without nova_session_id', () => {
+  it('should render ExecutionInformation without recording button for CI runner executions', () => {
     fc.assert(
       fc.property(ciRunnerTerminalExecution, (execution) => {
         const { unmount } = render(
@@ -86,13 +86,12 @@ describe('Bug Condition Exploration — CI Runner Recordings', () => {
             execution={execution}
             usecaseId="uc-123"
             executionId="exec-001"
-            onViewRecording={() => {}}
           />
         );
 
-        // Expected behavior: button is visible for any terminal execution
+        // Recording button was removed — recording is now in an expandable section
         const viewButton = screen.queryByRole('button', { name: /view/i });
-        expect(viewButton).toBeInTheDocument();
+        expect(viewButton).not.toBeInTheDocument();
 
         unmount();
       }),

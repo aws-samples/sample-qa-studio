@@ -260,6 +260,10 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const stepArtifacts = this.addResource(executionStep, 'artifacts')
     this.addMethod(stepArtifacts, HttpMethod.POST, l.generateStepArtifactUrlLambda)
 
+    // /usecase/{id}/executions/{executionId}/steps/{stepId}/trace - Get step trace data
+    const stepTrace = this.addResource(executionStep, 'trace')
+    this.addMethod(stepTrace, HttpMethod.GET, l.getStepTraceLambda)
+
     // /import - Import usecase
     const importEndpoint = this.addResource(this.api.root, 'import')
     this.addMethod(importEndpoint, HttpMethod.POST, l.importUsecaseLambda)

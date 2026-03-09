@@ -1,147 +1,65 @@
-import React, { useState } from 'react';
-import Container from "@cloudscape-design/components/container";
-import Header from "@cloudscape-design/components/header";
-import Table from "@cloudscape-design/components/table";
-import Button from "@cloudscape-design/components/button";
-import Badge from "@cloudscape-design/components/badge";
-import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
-import StatusIndicatorCompact from '../common/StatusIndicatorCompact';
-import ValidationResult from '../common/ValidationResult';
-import { getS3FileUrl } from '../../utils/s3Utils';
+import { useState } from 'react';
+import Header from '@cloudscape-design/components/header';
+import Button from '@cloudscape-design/components/button';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StepExpandableSection from './StepExpandableSection';
 
 interface ExecutionStepsProps {
   executionSteps: any[];
   usecaseId: string;
   executionId: string;
-  onViewFile: (content: { url: string, title: string, fileType: string }) => void;
 }
 
 export default function ExecutionSteps({
   executionSteps,
   usecaseId,
   executionId,
-  onViewFile
 }: ExecutionStepsProps) {
-  const [loadingModal, setLoadingModal] = useState(false);
+  const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
 
-  const handleViewFile = async (item: any) => {
-    try {
-      setLoadingModal(true);
-      const actId = item.actId || item.act_id;
-      const { signedUrl, fileName } = await getS3FileUrl(usecaseId, executionId, actId, 'html');
-      onViewFile({
-        url: signedUrl,
-        title: `Step ${item.sort}: ${fileName}`,
-        fileType: 'html'
-      });
-    } catch (error) {
-      console.error('Failed to load HTML file:', error);
-    } finally {
-      setLoadingModal(false);
-    }
+  const handleExpandAll = () => {
+    setExpandedSteps(new Set(executionSteps.map((step) => step.sort)));
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedSteps(new Set());
+  };
+
+  const handleStepExpandChange = (stepSort: number, expanded: boolean) => {
+    setExpandedSteps((prev) => {
+      const next = new Set(prev);
+      if (expanded) {
+        next.add(stepSort);
+      } else {
+        next.delete(stepSort);
+      }
+      return next;
+    });
   };
 
   return (
-    <Container header={<Header variant="h2">Execution Steps</Header>}>
-      <Table
-        resizableColumns
-        variant="embedded"
-        columnDefinitions={[
-          {
-            id: 'sort',
-            header: 'Step',
-            cell: item => item.sort,
-            minWidth: 10,
-            width: 45,
-          },
-          {
-            id: 'status',
-            header: 'Status',
-            minWidth: 10,
-            width: 80,
-            cell: item => {
-              const status = item.status || 'pending';
-              return (
-                <StatusIndicatorCompact status={status} />
-              );
-            },
-          },
-          {
-            id: 'instruction',
-            minWidth: 10,
-            header: 'Instruction',
-            cell: item => {
-              const actId = item.actId || item.act_id;
-              return (
-                <div>
-                  <div style={{ marginBottom: '4px' }}>
-                    {item.instruction}
-                  </div>
-                  {actId && actId !== "error" && actId !== "cached" && (
-                    <div style={{ fontSize: '12px', color: '#5f6b7a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Button
-                        variant="inline-link"
-                        iconName="file-open"
-                        ariaLabel="View HTML file"
-                        onClick={() => handleViewFile(item)}
-                        loading={loadingModal}
-                      >
-                        Trace
-                      </Button>
-                      <CopyToClipboard
-                        copyButtonAriaLabel="Copy Act ID"
-                        copyErrorText="failed to copy"
-                        copySuccessText="copied"
-                        textToCopy={actId}
-                        variant="inline"
-                      />
-                    </div>
-                  )}
-                  {actId === "cached" && (
-                    <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                      <Badge color="blue">Cached</Badge>
-                    </div>
-                  )}
-                </div>
-              );
-            },
-            width: 500,
-          },
-          {
-            id: 'logs',
-            header: 'Validation',
-            cell: item => {
-              if ((item.step_type == 'validation' || item.step_type == 'assertion') && item.actual_value) {
-                return (
-                  <ValidationResult
-                    validationType={item.validation_type}
-                    validationOperator={item.validation_operator}
-                    validationValue={item.validation_value}
-                    actualValue={item.actual_value}
-                    status={item.status || 'pending'}
-                  />
-                );
-              }
-
-              if (item.step_type === 'download' && item.actual_value) {
-                return (
-                  <div style={{ fontSize: '12px', color: '#5f6b7a' }}>
-                    Downloaded: {item.actual_value}
-                  </div>
-                );
-              }
-
-              if (item.logs) {
-                return (<pre>{item.logs}</pre>)
-              }
-
-              return null;
-            },
-          },
-        ]}
-        items={executionSteps}
-        empty="No execution steps found."
-      />
-    </Container>
+    <SpaceBetween size="s">
+      <Header
+        variant="h2"
+        actions={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={handleExpandAll}>Expand All</Button>
+            <Button onClick={handleCollapseAll}>Collapse All</Button>
+          </SpaceBetween>
+        }
+      >
+        Test Journey Steps
+      </Header>
+      {executionSteps.map((step) => (
+        <StepExpandableSection
+          key={step.sort}
+          step={step}
+          expanded={expandedSteps.has(step.sort)}
+          onExpandChange={(expanded) => handleStepExpandChange(step.sort, expanded)}
+          usecaseId={usecaseId}
+          executionId={executionId}
+        />
+      ))}
+    </SpaceBetween>
   );
 }

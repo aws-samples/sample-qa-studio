@@ -79,14 +79,16 @@ describe('Preservation — Button Visibility', () => {
   });
 
   /**
-   * Property test 1 — Button visible for Nova Act terminal executions
+   * Property test 1 — Recording button removed from ExecutionInformation
    *
-   * For all executions with `nova_session_id` present AND terminal status,
-   * the "View" button is rendered. This holds on both unfixed and fixed code.
+   * The "View" recording button has been removed from ExecutionInformation
+   * as part of the execution detail UI enhancement. Recording is now in an
+   * expandable section in ExecutionDetailRefactored. This test verifies
+   * ExecutionInformation renders without a recording button.
    *
    * **Validates: Requirements 3.3**
    */
-  it('should show "View" button for Nova Act terminal executions with nova_session_id', () => {
+  it('should not show "View" button for Nova Act terminal executions (button removed)', () => {
     fc.assert(
       fc.property(novaActTerminalExecution, (execution) => {
         const { unmount } = render(
@@ -94,12 +96,12 @@ describe('Preservation — Button Visibility', () => {
             execution={execution}
             usecaseId="uc-123"
             executionId="exec-001"
-            onViewRecording={() => {}}
           />
         );
 
+        // Recording button was removed — recording is now in an expandable section
         const viewButton = screen.queryByRole('button', { name: /view/i });
-        expect(viewButton).toBeInTheDocument();
+        expect(viewButton).not.toBeInTheDocument();
 
         unmount();
       }),
@@ -110,9 +112,8 @@ describe('Preservation — Button Visibility', () => {
   /**
    * Property test 2 — Button hidden for non-terminal executions
    *
-   * For all executions with status `executing` or `pending` and no
-   * `nova_session_id`, the "View" button is NOT rendered.
-   * This holds on both unfixed and fixed code.
+   * Recording button has been removed from ExecutionInformation entirely.
+   * This test verifies no "View" button appears for non-terminal executions.
    *
    * **Validates: Requirements 3.3**
    */
@@ -124,7 +125,6 @@ describe('Preservation — Button Visibility', () => {
             execution={execution}
             usecaseId="uc-123"
             executionId="exec-001"
-            onViewRecording={() => {}}
           />
         );
 

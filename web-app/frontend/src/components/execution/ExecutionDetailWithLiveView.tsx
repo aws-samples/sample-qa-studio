@@ -9,7 +9,6 @@ interface ExecutionDetailWithLiveViewProps {
   executionId: string;
   execution: any;
   executionSteps: any[];
-  onViewFile: (content: { url: string, title: string, fileType: string }) => void;
 }
 
 // Helper function to get the current executing step or the last completed step
@@ -58,7 +57,6 @@ export default function ExecutionDetailWithLiveView({
   executionId,
   execution,
   executionSteps,
-  onViewFile
 }: ExecutionDetailWithLiveViewProps) {
   return (
     <SpaceBetween direction="vertical" size="l">
@@ -78,7 +76,6 @@ export default function ExecutionDetailWithLiveView({
           executionSteps={executionSteps}
           usecaseId={usecaseId}
           executionId={executionId}
-          onViewFile={onViewFile}
         />
       </ColumnLayout>
     </SpaceBetween>

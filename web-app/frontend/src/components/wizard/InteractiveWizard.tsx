@@ -419,10 +419,6 @@ export default function InteractiveWizard() {
             steps={acceptedSteps}
             usecaseId={session.usecaseId}
             sessionId={session.sessionId}
-            onViewFile={(content) => {
-              setFileContent(content);
-              setFileModalVisible(true);
-            }}
           />
 
           {/* Cancel Confirmation Modal */}

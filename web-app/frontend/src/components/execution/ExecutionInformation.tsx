@@ -3,14 +3,12 @@ import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
-import Button from "@cloudscape-design/components/button";
 import Link from "@cloudscape-design/components/link";
 
 interface ExecutionInformationProps {
   execution: any;
   usecaseId: string;
   executionId: string;
-  onViewRecording: () => void;
 }
 
 // Helper function to map execution status to StatusIndicator type
@@ -29,8 +27,7 @@ function getStatusType(status: string) {
 export default function ExecutionInformation({ 
   execution, 
   usecaseId, 
-  executionId, 
-  onViewRecording 
+  executionId 
 }: ExecutionInformationProps) {
 
   return (
@@ -82,18 +79,6 @@ export default function ExecutionInformation({
                 variant="inline"
               />
             ),
-          },
-          {
-            label: "Recording",
-            value: ['success', 'failed', 'error', 'stopped'].includes(execution.status) ? (
-              <Button
-                variant="inline-link"
-                iconName="play"
-                onClick={onViewRecording}
-              >
-                View
-              </Button>
-            ) : 'Not Available',
           },
           ...(execution.suite_id && execution.suite_execution_id ? [{
             label: "Suite Execution",

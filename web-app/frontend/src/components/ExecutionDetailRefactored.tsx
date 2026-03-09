@@ -8,6 +8,7 @@ import Box from "@cloudscape-design/components/box";
 import AppLayout from "@cloudscape-design/components/app-layout";
 import Grid from "@cloudscape-design/components/grid";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import { api } from '../utils/api';
 import ExecutionTimeline from './common/ExecutionTimeline';
 import Breadcrumb from './common/Breadcrumb';
@@ -64,9 +65,6 @@ export default function ExecutionDetailRefactored() {
   const [usecase, setUsecase] = useState<any>(null);
   const [executionSteps, setExecutionSteps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalContent, setModalContent] = useState<{ url: string, title: string, fileType?: string } | null>(null);
-  const [recordingModalVisible, setRecordingModalVisible] = useState(false);
   const [stopModalVisible, setStopModalVisible] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
@@ -162,15 +160,6 @@ export default function ExecutionDetailRefactored() {
     }
   }, [usecaseId, executionId, execution?.status, execution?.trigger_type]);
 
-  const handleViewContent = (content: { url: string, title: string, fileType: string }) => {
-    setModalContent(content);
-    setModalVisible(true);
-  };
-
-  const handleViewRecording = () => {
-    setRecordingModalVisible(true);
-  };
-
   const handleStopExecution = async () => {
     setStopping(true);
     setStopError(null);
@@ -241,7 +230,6 @@ export default function ExecutionDetailRefactored() {
                 execution={execution}
                 usecaseId={usecaseId}
                 executionId={executionId}
-                onViewRecording={handleViewRecording}
               />
 
               {hasVariables && (
@@ -271,7 +259,6 @@ export default function ExecutionDetailRefactored() {
             executionSteps={executionSteps}
             usecaseId={usecaseId}
             executionId={executionId}
-            onViewFile={handleViewContent}
           />
 
           <DownloadedFiles
@@ -281,6 +268,20 @@ export default function ExecutionDetailRefactored() {
             executionRegion={execution?.region}
           />
 
+          {/* Recording Expandable Section - only for terminal executions */}
+          {['success', 'failed', 'error', 'stopped'].includes(execution?.status) && (
+            <ExpandableSection
+              variant="container"
+              headerText="Recording"
+              defaultExpanded={false}
+            >
+              <RecordingPlayer
+                usecaseId={usecaseId}
+                executionId={executionId}
+              />
+            </ExpandableSection>
+          )}
+
           {/* Execution Logs (ci_runner only) */}
           {execution?.trigger_type === 'ci_runner' && (logArtifactsLoading || logDownloadUrl) && (
             <Container
@@ -289,67 +290,6 @@ export default function ExecutionDetailRefactored() {
               <LogViewer downloadUrl={logDownloadUrl} loading={logArtifactsLoading} />
             </Container>
           )}
-
-          {/* Modal for viewing files */}
-          <Modal
-            onDismiss={() => setModalVisible(false)}
-            visible={modalVisible}
-            size="max"
-            header={modalContent?.title || "View File"}
-            footer={
-              <Box float="right">
-                <SpaceBetween direction="horizontal" size="xs">
-                  <Button variant="link" onClick={() => setModalVisible(false)}>
-                    Close
-                  </Button>
-                  {modalContent?.url && (
-                    <Button
-                      variant="primary"
-                      onClick={() => window.open(modalContent.url, '_blank')}
-                      iconName="external"
-                    >
-                      Open in New Tab
-                    </Button>
-                  )}
-                </SpaceBetween>
-              </Box>
-            }
-          >
-            {modalContent?.url && (
-              <iframe
-                src={modalContent.url}
-                style={{
-                  width: '100%',
-                  height: '80vh',
-                  border: 'none',
-                  borderRadius: '4px'
-                }}
-                title={modalContent.title}
-              />
-            )}
-          </Modal>
-
-          {/* Modal for viewing recording */}
-          <Modal
-            onDismiss={() => setRecordingModalVisible(false)}
-            visible={recordingModalVisible}
-            size="max"
-            header="Session Recording"
-            footer={
-              <Box float="right">
-                <Button variant="link" onClick={() => setRecordingModalVisible(false)}>
-                  Close
-                </Button>
-              </Box>
-            }
-          >
-            {recordingModalVisible && (
-              <RecordingPlayer
-                usecaseId={usecaseId}
-                executionId={executionId}
-              />
-            )}
-          </Modal>
 
           {/* Stop Execution Confirmation Modal */}
           <Modal
