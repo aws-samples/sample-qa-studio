@@ -865,7 +865,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    props.table.grantFullAccess(this.acceptWizardStepLambda);
+    props.table.grantReadWriteData(this.acceptWizardStepLambda);
 
     this.rejectWizardStepLambda = this.createPythonLambda({
       path: 'reject_wizard_step',
@@ -874,7 +874,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    props.table.grantFullAccess(this.rejectWizardStepLambda);
+    props.table.grantReadWriteData(this.rejectWizardStepLambda);
 
     this.getScheduleLambda = this.createPythonLambda({
       path: 'get_schedule',

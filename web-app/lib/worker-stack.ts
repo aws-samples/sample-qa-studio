@@ -373,7 +373,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // TODO: Remove queue
     this.executionQueue.grantConsumeMessages(this.taskDefinition.taskRole);
     this.wizardQueue.grantConsumeMessages(this.taskDefinition.taskRole);
-    props.table.grantFullAccess(this.taskDefinition.taskRole);
+    props.table.grantReadWriteData(this.taskDefinition.taskRole);
     this.artefactsBucket.grantReadWrite(this.taskDefinition.taskRole);
     notificationQueue.grantSendMessages(this.taskDefinition.taskRole);
 
@@ -603,7 +603,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    props.table.grantFullAccess(this.executeUsecaseLambda)
+    props.table.grantReadWriteData(this.executeUsecaseLambda)
 
     // Grant scheduler role permission to invoke executeUsecaseLambda
     this.executeUsecaseLambda.grantInvoke(this.schedulerRole);
@@ -617,7 +617,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    props.table.grantFullAccess(this.stopExecutionLambda)
+    props.table.grantReadWriteData(this.stopExecutionLambda)
 
     // Grant ECS StopTask permissions to stopExecutionLambda
     this.stopExecutionLambda.addToRolePolicy(new PolicyStatement({
@@ -701,10 +701,10 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     });
 
     // Grant permissions for wizard Lambdas
-    props.table.grantFullAccess(this.startWizardLambda);
-    props.table.grantFullAccess(this.addWizardStepLambda);
-    props.table.grantFullAccess(this.terminateWizardLambda);
-    props.table.grantFullAccess(processWizardCommandLambda);
+    props.table.grantReadWriteData(this.startWizardLambda);
+    props.table.grantReadWriteData(this.addWizardStepLambda);
+    props.table.grantReadWriteData(this.terminateWizardLambda);
+    props.table.grantReadWriteData(processWizardCommandLambda);
 
     this.wizardQueue.grantSendMessages(this.startWizardLambda);
     this.wizardQueue.grantSendMessages(this.addWizardStepLambda);
@@ -778,7 +778,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    props.table.grantFullAccess(taskStateChangeLambda);
+    props.table.grantReadWriteData(taskStateChangeLambda);
 
     // EventBridge Rule to capture ECS task state changes
     const taskStateChangeRule = new Rule(this, 'TaskStateChangeRule', {
