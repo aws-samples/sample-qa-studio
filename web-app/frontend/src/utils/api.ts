@@ -395,19 +395,8 @@ export const oauthClientApi = {
 };
 
 export const scopesApi = {
-  list: (): Promise<ListScopesResponse> => {
-    // Public endpoint - no authentication required
-    return fetch(buildRestEndpoint('scopes'), {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    }).then(response => {
-      if (!response.ok) {
-        throw new Error('Failed to fetch scopes');
-      }
-      return response.json();
-    });
+  list: async (): Promise<ListScopesResponse> => {
+    return apiRequest('scopes');
   }
 };
 

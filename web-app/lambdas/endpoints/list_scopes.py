@@ -1,21 +1,26 @@
 import json
 import os
 import boto3
-from utils import create_response
+from utils import create_response, require_scopes
 
 cognito = boto3.client('cognito-idp')
 
 def handler(event, context):
     """
     List available OAuth scopes from the Cognito resource server.
-    This endpoint is public (no authentication required) to allow
-    the OAuth client creation form to display available scopes.
+    Requires api/oauth-clients.read scope.
     
     Returns:
     - 200: List of available scopes with descriptions
+    - 403: Missing required scope
     - 500: Error fetching scopes
     """
     try:
+        # Validate scope
+        user_identity, error_response = require_scopes(event, ['api/oauth-clients.read'])
+        if error_response:
+            return error_response
+
         user_pool_id = os.environ.get('USER_POOL_ID')
         resource_server_identifier = os.environ.get('RESOURCE_SERVER_IDENTIFIER', 'api')
         

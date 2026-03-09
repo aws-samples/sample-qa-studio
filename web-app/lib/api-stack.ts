@@ -326,12 +326,9 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const rotateSecret = this.addResource(oauthClient, 'rotate-secret')
     this.addMethod(rotateSecret, HttpMethod.POST, l.rotateClientSecretLambda)
 
-    // /scopes - List available OAuth scopes (public endpoint, no auth)
+    // /scopes - List available OAuth scopes
     const scopes = this.addResource(this.api.root, 'scopes')
-    const scopesMethod = scopes.addMethod(HttpMethod.GET, new LambdaIntegration(l.listScopesLambda), {
-      authorizationType: AuthorizationType.NONE
-    });
-    this.routes.push(scopesMethod)
+    this.addMethod(scopes, HttpMethod.GET, l.listScopesLambda)
 
     // /templates - Template management
     const templates = this.addResource(this.api.root, 'templates')
