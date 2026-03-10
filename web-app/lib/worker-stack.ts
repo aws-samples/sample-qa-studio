@@ -1,7 +1,7 @@
 import { Duration, RemovalPolicy, Aws } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
-import { Bucket, HttpMethods } from 'aws-cdk-lib/aws-s3';
+import { Bucket, HttpMethods, BucketEncryption, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
 import { PolicyStatement, Policy, Effect, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { CfnScheduleGroup } from 'aws-cdk-lib/aws-scheduler';
@@ -88,11 +88,23 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       emptyOnDelete: true,
       imageScanOnPush: true,
     });
+    // S3 access log bucket for artefacts
+    const artefactsLogBucket = new Bucket(this, 'artefacts-logs', {
+      bucketName: `${this.account}-${this.baseName}-artefacts-logs-${this.region}`,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      encryption: BucketEncryption.S3_MANAGED,
+      objectOwnership: ObjectOwnership.BUCKET_OWNER_PREFERRED,
+    });
+
     this.artefactsBucket = new Bucket(this, 'artefacts', {
       bucketName: `${this.account}-${this.baseName}-artefacts-${this.region}`,
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       versioned: true, // Required for cross-region replication
+      encryption: BucketEncryption.S3_MANAGED,
+      serverAccessLogsBucket: artefactsLogBucket,
+      serverAccessLogsPrefix: 'access-logs/',
       cors: [
         {
           allowedMethods: [

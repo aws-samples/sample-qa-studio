@@ -21,7 +21,7 @@ import {
   SecurityPolicyProtocol,
 } from 'aws-cdk-lib/aws-cloudfront';
 import { S3BucketOrigin, HttpOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
-import { Bucket, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
+import { Bucket, BucketEncryption, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 import * as path from 'path';
@@ -50,9 +50,21 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
   constructor(scope: Construct, id: string, props: NovaActQAStudioFrontendStackCreateProps) {
     super(scope, id, props);
 
+    // S3 bucket for CloudFront and frontend bucket access logs
+    const accessLogBucket = new Bucket(this, 'AccessLogBucket', {
+      bucketName: `${this.account}-${this.baseName}-cf-logs-${this.region}`,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      encryption: BucketEncryption.S3_MANAGED,
+      objectOwnership: ObjectOwnership.BUCKET_OWNER_PREFERRED,
+    });
+
     this.frontendBucket = new Bucket(this, 'FrontendBucket', {
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
+      encryption: BucketEncryption.S3_MANAGED,
+      serverAccessLogsBucket: accessLogBucket,
+      serverAccessLogsPrefix: 's3-access-logs/',
     });
 
     // CloudFront Function for SPA routing
@@ -96,14 +108,6 @@ function handler(event) {
       headerBehavior: CacheHeaderBehavior.allowList('Origin', 'Access-Control-Request-Headers', 'Access-Control-Request-Method'),
       queryStringBehavior: CacheQueryStringBehavior.all()
     })
-
-    // S3 bucket for CloudFront access logs
-    const accessLogBucket = new Bucket(this, 'AccessLogBucket', {
-      bucketName: `${this.account}-${this.baseName}-cf-logs-${this.region}`,
-      removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-      objectOwnership: ObjectOwnership.BUCKET_OWNER_PREFERRED,
-    });
 
     // CloudFront Distribution with S3 origin
     this.distribution = new Distribution(this, 'distribution', {
