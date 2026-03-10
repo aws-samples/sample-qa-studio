@@ -89,7 +89,9 @@ def get_jwks():
         jwks_url = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
         
         try:
-            with urllib.request.urlopen(jwks_url) as response:
+            # URL is constructed from trusted env vars (AWS_REGION, USER_POOL_ID),
+            # not user input — safe from SSRF.
+            with urllib.request.urlopen(jwks_url) as response:  # nosec B310
                 jwks_cache = json.loads(response.read().decode())
         except URLError as e:
             logger.error(f"Failed to fetch JWKS: {str(e)}")

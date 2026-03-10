@@ -51,7 +51,7 @@ class TokenResolver:
         env_client_secret = os.environ.get("OAUTH_CLIENT_SECRET")
         env_token_endpoint = os.environ.get("OAUTH_TOKEN_ENDPOINT")
         if env_client_id and env_client_secret and env_token_endpoint:
-            logger.debug("Using client credentials from environment variables")
+            logger.debug("Resolved auth via environment variables (client credentials)")  # nosec
             from qa_studio_cli.auth.client_credentials import ClientCredentialsProvider
             self._provider = ClientCredentialsProvider(
                 client_id=env_client_id,
@@ -67,7 +67,7 @@ class TokenResolver:
             and self._config.oauth_client_secret
             and self._config.oauth_token_endpoint
         ):
-            logger.debug("Using client credentials from config file")
+            logger.debug("Resolved auth via config file (client credentials)")  # nosec
             from qa_studio_cli.auth.client_credentials import ClientCredentialsProvider
             self._provider = ClientCredentialsProvider(
                 client_id=self._config.oauth_client_id,

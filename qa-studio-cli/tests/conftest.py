@@ -24,8 +24,8 @@ def tmp_qa_studio_dir(tmp_path):
 def mock_token_data():
     """Return a sample TokenData dict."""
     return {
-        "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.test-access-token",
-        "refresh_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.test-refresh-token",
+        "access_token": "test-access-token-placeholder",  # nosec: not a real token
+        "refresh_token": "test-refresh-token-placeholder",  # nosec: not a real token
         "expires_at": 1999999999,
         "token_type": "Bearer",
     }

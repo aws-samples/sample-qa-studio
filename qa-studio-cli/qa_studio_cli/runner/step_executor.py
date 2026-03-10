@@ -204,10 +204,15 @@ class StepExecutor:
                 filename = playwright_download.suggested_filename
                 self.downloads_dir.mkdir(parents=True, exist_ok=True)
                 temp_path = str(self.downloads_dir / filename)
+                # Validate URL scheme to prevent SSRF
+                from urllib.parse import urlparse
+                parsed_url = urlparse(playwright_download.url)
+                if parsed_url.scheme not in ('http', 'https'):
+                    raise ValueError(f"Unsupported URL scheme: {parsed_url.scheme}")
                 ctx = ssl.create_default_context()
                 ctx.check_hostname = False
                 ctx.verify_mode = ssl.CERT_NONE
-                with urllib.request.urlopen(playwright_download.url, context=ctx) as resp:
+                with urllib.request.urlopen(playwright_download.url, context=ctx) as resp:  # nosec B310
                     with open(temp_path, "wb") as f:
                         while chunk := resp.read(8192):
                             f.write(chunk)

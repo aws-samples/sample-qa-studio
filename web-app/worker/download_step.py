@@ -212,11 +212,17 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
                 import urllib.request
                 import ssl
                 
+                # Validate URL scheme — only allow http/https to prevent SSRF
+                from urllib.parse import urlparse
+                parsed = urlparse(download_url)
+                if parsed.scheme not in ('http', 'https'):
+                    raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
+                
                 ssl_context = ssl.create_default_context()
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_NONE
                 
-                with urllib.request.urlopen(download_url, context=ssl_context) as response:
+                with urllib.request.urlopen(download_url, context=ssl_context) as response:  # nosec B310
                     with open(temp_path, 'wb') as f:
                         bytes_downloaded = 0
                         chunk_size = 8192
