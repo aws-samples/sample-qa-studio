@@ -28,7 +28,8 @@
     "release:minor": "ts-node scripts/release.ts minor",
     "release:major": "ts-node scripts/release.ts major",
     "release:prerelease": "ts-node scripts/release.ts prerelease",
-    "version:check": "echo \"Current version: $(node -p \\\"require('./package.json').version\\\")\""
+    "version:check": "echo \"Current version: $(node -p \\\"require('./package.json').version\\\")\"",
+    "nag": "npm run build:cdk && ts-node scripts/cdk-nag-report.ts"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

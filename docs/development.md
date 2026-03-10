@@ -58,6 +58,20 @@ npm run deploy:frontend-build # Build React app
 - `npx cdk synth`: Generate CloudFormation templates
 - `npx cdk destroy --all`: Delete all stacks (⚠️ deletes all data)
 
+### Security & Compliance
+
+- `npm run nag`: Run cdk-nag AwsSolutions checks against all stacks and generate a consolidated report
+
+  This command:
+  1. Compiles the CDK TypeScript code
+  2. Runs `cdk synth` which triggers cdk-nag checks on all stacks (storage, auth, worker, lambdas, api, frontend)
+  3. Collects per-stack JSON reports from `cdk.out/`
+  4. Writes a consolidated report to `reports/cdk-nag-report.json`
+  5. Prints a summary to stdout with per-stack breakdown
+  6. Exits with code 1 if there are unsuppressed non-compliant findings
+
+  Suppressions are managed in `lib/cdk-nag-suppressions.ts`. Each suppression requires a documented reason.
+
 ### Release Commands
 
 - `npm run release:patch`: Create patch release (1.0.0 → 1.0.1)

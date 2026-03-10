@@ -53,6 +53,9 @@ web-app/.tmp-dcv-download/
 # Release artifacts
 web-app/release/
 
+# cdk-nag reports (generated)
+web-app/reports/
+
 # test cases for nova-act-qa-studio
 test-usecases/*
 
