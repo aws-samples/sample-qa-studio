@@ -1,4 +1,4 @@
-import { Duration, RemovalPolicy, Aws } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, Aws, CfnResource } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket, HttpMethods, BucketEncryption, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
@@ -319,6 +319,15 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         description: 'Security group for ECS tasks',
         allowAllOutbound: true
       });
+
+      // Suppress cfn_nag W40/W5 — worker needs unrestricted egress for browser automation and AWS API access
+      const cfnSg = this.workerSecurityGroup.node.defaultChild as CfnResource;
+      cfnSg.addMetadata('cfn_nag', {
+        rules_to_suppress: [
+          { id: 'W40', reason: 'Worker requires unrestricted egress for browser automation (Nova Act) and AWS API access' },
+          { id: 'W5', reason: 'Worker requires unrestricted egress for browser automation (Nova Act) and AWS API access' },
+        ]
+      });
     }
 
     // ECS Cluster
@@ -382,15 +391,56 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       environment: containerEnvironment
     });
 
-    // Grant permissions to task roles (must be after container is added)
-    // TODO: Remove queue
-    this.executionQueue.grantConsumeMessages(this.taskDefinition.taskRole);
-    this.wizardQueue.grantConsumeMessages(this.taskDefinition.taskRole);
-    props.table.grantReadWriteData(this.taskDefinition.taskRole);
-    this.artefactsBucket.grantReadWrite(this.taskDefinition.taskRole);
-    notificationQueue.grantSendMessages(this.taskDefinition.taskRole);
+    // Grant permissions to task roles using separate policies to keep SPCM < 25
+    // SQS permissions
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_sqs_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            'sqs:ReceiveMessage', 'sqs:DeleteMessage', 'sqs:GetQueueAttributes',
+            'sqs:GetQueueUrl', 'sqs:ChangeMessageVisibility',
+          ],
+          resources: [this.executionQueue.queueArn, this.wizardQueue.queueArn],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['sqs:SendMessage'],
+          resources: [notificationQueue.queueArn],
+        }),
+      ],
+    }));
 
-    // Grant EventBridge PutEvents permission for execution status events
+    // DynamoDB permissions
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_dynamodb_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            'dynamodb:BatchGetItem', 'dynamodb:BatchWriteItem',
+            'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem',
+            'dynamodb:DeleteItem', 'dynamodb:Query', 'dynamodb:Scan',
+          ],
+          resources: [props.table.tableArn, `${props.table.tableArn}/index/*`],
+        }),
+      ],
+    }));
+
+    // S3 permissions
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_s3_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            's3:GetObject*', 's3:GetBucket*', 's3:List*',
+            's3:PutObject*', 's3:DeleteObject*', 's3:Abort*',
+          ],
+          resources: [this.artefactsBucket.bucketArn, `${this.artefactsBucket.bucketArn}/*`],
+        }),
+      ],
+    }));
+
+    // EventBridge permissions
     this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_eventbridge_policy', {
       statements: [
         new PolicyStatement({
@@ -401,8 +451,25 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       ]
     }));
 
+    // ECR pull permissions
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_ecr_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            'ecr:BatchCheckLayerAvailability', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage',
+          ],
+          resources: [registry.repositoryArn],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['ecr:GetAuthorizationToken'],
+          resources: ['*'],
+        }),
+      ],
+    }));
+
     registry.grantPull(this.taskDefinition.executionRole!);
-    registry.grantPull(this.taskDefinition.taskRole!);
 
     // Nova Act GA Service permissions (only if enabled)
     if (config.useNovaActGa) {
