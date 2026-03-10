@@ -1,10 +1,11 @@
 import { Construct } from 'constructs';
-import { CfnOutput, Duration as cdk_Duration } from 'aws-cdk-lib';
+import { CfnOutput } from 'aws-cdk-lib';
 import * as cdk from 'aws-cdk-lib';
-import { RestApi, TokenAuthorizer, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, Deployment, AccessLogFormat, IdentitySource, CfnUsagePlan } from 'aws-cdk-lib/aws-apigateway';
+import { RestApi, TokenAuthorizer, EndpointType, LambdaIntegration, AuthorizationType, Method, Resource, IResource, IdentitySource, AccessLogFormat, LogGroupLogDestination, UsagePlan, CfnAccount } from 'aws-cdk-lib/aws-apigateway';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { UserPool } from 'aws-cdk-lib/aws-cognito';
 import { Function } from 'aws-cdk-lib/aws-lambda';
+import { Role, ServicePrincipal, ManagedPolicy } from 'aws-cdk-lib/aws-iam';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 import { NovaActQAStudioLambdaStack } from './lambda-stack';
 
@@ -47,7 +48,6 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
   public readonly api: RestApi
   public readonly authorizer: TokenAuthorizer
   public readonly authorizerLambda: Function
-  private deployment: Deployment
   private routes: Method[] = []
 
   private addMethod(resource: Resource, method: HttpMethod, lambda: Function): Method {
@@ -67,13 +67,40 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
   constructor(scope: Construct, id: string, props: NovaActQAStudioApiStackCreateProps) {
     super(scope, id, props);
 
+    // Create IAM role for API Gateway to write CloudWatch Logs
+    const apiGatewayCloudWatchRole = new Role(this, 'ApiGatewayCloudWatchRole', {
+      assumedBy: new ServicePrincipal('apigateway.amazonaws.com'),
+      managedPolicies: [
+        ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonAPIGatewayPushToCloudWatchLogs'),
+      ],
+    });
+
+    // Set the CloudWatch role at the API Gateway account level
+    const apiAccount = new CfnAccount(this, 'ApiAccount', {
+      cloudWatchRoleArn: apiGatewayCloudWatchRole.roleArn,
+    });
+
+    // Create access log group for API Gateway
+    const apiAccessLogGroup = new LogGroup(this, 'ApiAccessLogGroup', {
+      logGroupName: `/aws/apigateway/${this.cdkName('service')}-access-logs`,
+      retention: RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
     this.api = new RestApi(this, 'Api', {
       restApiName: this.cdkName('service'),
       endpointTypes: [
         EndpointType.REGIONAL
       ],
-      deploy: false  // We'll create our own deployment with custom stage name
+      deployOptions: {
+        stageName: props.apiDeploymentStage,
+        accessLogDestination: new LogGroupLogDestination(apiAccessLogGroup),
+        accessLogFormat: AccessLogFormat.jsonWithStandardFields(),
+      },
     });
+
+    // Ensure the API Gateway account settings are applied before the API stage is created
+    this.api.node.addDependency(apiAccount);
     
     // Create Lambda Authorizer
     this.authorizerLambda = this.createPythonLambda({
@@ -410,44 +437,16 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const suiteSchedule = this.addResource(testSuite, 'schedule')
     this.addMethod(suiteSchedule, HttpMethod.PUT, l.updateSuiteScheduleLambda)
 
-    // Create API Gateway deployment with access logging
-    this.deployment = new Deployment(this, 'ApiDeployment', {
-      api: this.api,
-      description: `Deployment at ${new Date().toISOString()}`,
-      stageName: props.apiDeploymentStage
-    })
-
-    this.routes.forEach((route: Method) => {
-      this.deployment.node.addDependency(route)
-    })
-
-    this.deployment.addToLogicalId(new Date().toISOString())
-
-    // Create access log group for API Gateway
-    const apiAccessLogGroup = new LogGroup(this, 'ApiAccessLogGroup', {
-      logGroupName: `/aws/apigateway/${this.cdkName('service')}-access-logs`,
-      retention: RetentionDays.ONE_MONTH,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-
-    // Add access logging to the inline stage via L1 override on the CfnDeployment
-    const cfnDeployment = this.deployment.node.defaultChild as cdk.CfnResource;
-    cfnDeployment.addPropertyOverride('StageDescription.AccessLogSetting', {
-      DestinationArn: apiAccessLogGroup.logGroupArn,
-      Format: AccessLogFormat.jsonWithStandardFields().toString(),
-    });
-
-    // Associate a UsagePlan with the API stage via L1 to avoid creating a separate Stage resource
-    const cfnUsagePlan = new CfnUsagePlan(this, 'ApiUsagePlan', {
-      usagePlanName: this.cdkName('usage-plan'),
+    // Associate a UsagePlan with the API stage
+    new UsagePlan(this, 'ApiUsagePlan', {
+      name: this.cdkName('usage-plan'),
       apiStages: [{
-        apiId: this.api.restApiId,
-        stage: props.apiDeploymentStage,
+        api: this.api,
+        stage: this.api.deploymentStage,
       }],
     });
-    cfnUsagePlan.addDependency(cfnDeployment);
 
-    // Construct API URL manually since deploy: false
+    // Construct API URL
     const apiUrl = `https://${this.api.restApiId}.execute-api.${this.region}.amazonaws.com/${props.apiDeploymentStage}/`;
     
     this.log('apigatewayDomain', apiUrl)
