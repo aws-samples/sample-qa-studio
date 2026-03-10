@@ -1041,11 +1041,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     // Note: Secrets Manager ARNs have a 6-character random suffix, so we use a wildcard pattern
     const secretsArnPattern = `arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:${props.baseName}*`;
     
-    // CreateSecret requires * for resource
+    // CreateSecret requires * for resource (ARN unknown before creation), scoped to account
     this.createUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
-      resources: ['*']
+      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
     }))
     
     this.createUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
@@ -1054,11 +1054,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [secretsArnPattern]
     }))
 
-    // ListSecrets requires * for resource
+    // ListSecrets requires * for resource (list operation), scoped to account
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:ListSecrets'],
-      resources: ['*']
+      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
     }))
     
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
@@ -1085,18 +1085,18 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [secretsArnPattern]
     }))
 
-    // ListSecrets and CreateSecret require * for resource
+    // ListSecrets and CreateSecret require * for resource, scoped to account
     this.cloneUsecaseLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:ListSecrets', 'secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
-      resources: ['*']
+      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
     }))
 
-    // ListSecrets requires * for resource
+    // ListSecrets requires * for resource, scoped to account
     this.exportUsecaseLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:ListSecrets'],
-      resources: ['*']
+      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
     }))
     
     this.exportUsecaseLambda.addToRolePolicy(new PolicyStatement({
@@ -1126,11 +1126,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: ['*']
     }))
 
-    // CreateSecret requires * for resource
+    // CreateSecret requires * for resource, scoped to account
     this.importUsecaseLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
-      resources: ['*']
+      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
     }))
     
     this.importUsecaseLambda.addToRolePolicy(new PolicyStatement({
@@ -1172,7 +1172,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
         'sns:GetSubscriptionAttributes',
         'sns:SetSubscriptionAttributes'
       ],
-      resources: ['*']
+      resources: [`arn:aws:sns:${Aws.REGION}:${Aws.ACCOUNT_ID}:*`]
     }))
 
     // Topic-level actions
@@ -1192,7 +1192,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
         'sns:SetSubscriptionAttributes',
         'sns:Unsubscribe'
       ],
-      resources: ['*']
+      resources: [`arn:aws:sns:${Aws.REGION}:${Aws.ACCOUNT_ID}:*`]
     }))
 
     // ========== Test Suite Execution Permissions ==========
@@ -1204,7 +1204,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.stopSuiteExecutionLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['ecs:StopTask'],
-      resources: ['*'],
+      resources: [`arn:aws:ecs:${Aws.REGION}:${Aws.ACCOUNT_ID}:task/*`],
       conditions: {
         'ArnEquals': {
           'ecs:cluster': props.ecsClusterArn

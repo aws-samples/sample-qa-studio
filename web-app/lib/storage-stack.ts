@@ -89,7 +89,7 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
         'backup:DeleteRecoveryPoint',
         'backup:DescribeRecoveryPoint',
       ],
-      resources: ['*'], // Use wildcard since we need to access recovery points
+      resources: [`arn:aws:backup:${this.region}:${this.account}:recovery-point:*`],
     }));
 
     // Create custom resource provider

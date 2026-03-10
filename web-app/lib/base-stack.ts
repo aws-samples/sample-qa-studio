@@ -61,7 +61,7 @@ export class NovaActQAStudioBaseStack extends Stack {
         'logs:CreateLogStream',
         'logs:PutLogEvents'
       ],
-      resources: [`arn:aws:logs:*:*:*`]
+      resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:*`]
     }));
 
     return fn
