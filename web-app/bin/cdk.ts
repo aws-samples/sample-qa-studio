@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { App, Aspects } from 'aws-cdk-lib';
+import { AwsSolutionsChecks } from 'cdk-nag';
 import * as fs from 'fs';
 import * as path from 'path';
 import { NovaActQAStudioStorageStack } from '../lib/storage-stack';
@@ -10,6 +11,7 @@ import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioLambdaStack } from '../lib/lambda-stack';
 import { loadConfig, getStackEnv } from '../lib/config';
 import { CfnNagSuppressions } from '../lib/cfn-nag-suppressions';
+import { applyCdkNagSuppressions } from '../lib/cdk-nag-suppressions';
 
 // Load and validate configuration with sane defaults
 const config = loadConfig();
@@ -124,5 +126,17 @@ new NovaActQAStudioFrontendStack(app, 'frontend', {
 
 // Apply cfn_nag suppressions for CDK-managed resources across all stacks
 Aspects.of(app).add(new CfnNagSuppressions());
+
+// Apply cdk-nag AwsSolutions checks across all stacks
+Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true, reports: true }));
+
+// Apply cdk-nag suppressions for known acceptable patterns
+applyCdkNagSuppressions(app, {
+  storageStack,
+  authStack,
+  workerStack,
+  lambdaStack,
+  apiStack,
+});
 
 app.synth();

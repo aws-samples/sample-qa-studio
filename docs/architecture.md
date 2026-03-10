@@ -377,6 +377,15 @@ sequenceDiagram
 - Referenced by secret key in test steps
 - Retrieved at execution time only
 
+### Infrastructure Compliance (cdk-nag)
+
+All CDK stacks are validated at synth time using [cdk-nag](https://github.com/cdklabs/cdk-nag) with the `AwsSolutionsChecks` rule pack. This runs automatically during every `cdk synth` and `cdk deploy`.
+
+- Rules are applied via `Aspects.of(app).add(new AwsSolutionsChecks(...))` in `bin/cdk.ts`
+- Known acceptable patterns are suppressed with documented reasons in `lib/cdk-nag-suppressions.ts`
+- Legacy cfn_nag suppressions for CDK-managed resources live in `lib/cfn-nag-suppressions.ts`
+- Any new resource that violates an AwsSolutions rule will surface as an error annotation during synth
+
 ---
 
 ## Scalability & Performance
