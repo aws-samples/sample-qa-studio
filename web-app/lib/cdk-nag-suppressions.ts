@@ -36,6 +36,11 @@ export function applyCdkNagSuppressions(_app: App, stacks: CdkNagStacks): void {
       id: 'AwsSolutions-IAM4',
       reason: 'AWS managed policies (AWSLambdaBasicExecutionRole) are used for CloudWatch Logs permissions — this is the AWS-recommended pattern.',
     },
+    {
+      id: 'AwsSolutions-IAM5',
+      appliesTo: ['Resource::*'],
+      reason: 'CDK LogRetention custom resource requires wildcard Resource because the target log group ARN is not known at synth time. This is a CDK-managed construct (aws-cdk-lib/aws-logs).',
+    },
   ];
   for (const stack of allStacks) {
     NagSuppressions.addStackSuppressions(stack, commonSuppressions);
