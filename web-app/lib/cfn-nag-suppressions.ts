@@ -45,6 +45,25 @@ export class CfnNagSuppressions implements IAspect {
           { id: 'W28', reason: 'Explicit name is intentional — used for cross-stack references and operational predictability' },
         ]);
       }
+
+      // Suppress KMS-related warnings — AWS-managed encryption is sufficient for this workload
+      const kmsReason = 'AWS-managed encryption is sufficient — CMK not required for this non-regulated workload';
+
+      if (node.cfnResourceType === 'AWS::DynamoDB::Table') {
+        this.addSuppressions(node, [{ id: 'W74', reason: kmsReason }]);
+      }
+      if (node.cfnResourceType === 'AWS::SecretsManager::Secret') {
+        this.addSuppressions(node, [{ id: 'W77', reason: kmsReason }]);
+      }
+      if (node.cfnResourceType === 'AWS::Logs::LogGroup') {
+        this.addSuppressions(node, [{ id: 'W84', reason: kmsReason }]);
+      }
+      if (node.cfnResourceType === 'AWS::SNS::Topic') {
+        this.addSuppressions(node, [{ id: 'W47', reason: kmsReason }]);
+      }
+      if (node.cfnResourceType === 'AWS::SQS::Queue') {
+        this.addSuppressions(node, [{ id: 'W48', reason: kmsReason }]);
+      }
     }
   }
 
