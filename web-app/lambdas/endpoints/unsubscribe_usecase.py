@@ -39,7 +39,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not usecase_id:
             return create_response(400, {'error': 'Usecase ID is required'})
         
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         sns_client = boto3.client('sns')

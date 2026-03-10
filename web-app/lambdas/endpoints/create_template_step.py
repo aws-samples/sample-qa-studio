@@ -40,7 +40,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except json.JSONDecodeError:
             return create_response(400, {'error': 'Invalid JSON in request body'})
         
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         

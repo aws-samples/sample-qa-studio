@@ -76,7 +76,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Listing executions for suite {suite_id} for user: {user_identity_str}, limit: {limit}, status: {status_filter}")
         
-        # Initialize DynamoDB client
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         

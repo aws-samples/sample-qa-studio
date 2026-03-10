@@ -27,7 +27,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     print(boto3.__version__)
     try:
-        # Create Nova Act client in us-east-1 (GA region)
+        # Create Amazon Nova Act client in us-east-1 (GA region)
         novaact_client = boto3.client('nova-act', region_name=NOVA_ACT_REGION)
         
         # List all available models

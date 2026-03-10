@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to update a template step in DynamoDB.
+    Lambda handler to update a template step in Amazon DynamoDB.
     
     Args:
         event: API Gateway proxy request event
@@ -36,7 +36,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Parse request body
         body = json.loads(event.get('body', '{}'))
         
-        # Initialize DynamoDB resource
+        # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         

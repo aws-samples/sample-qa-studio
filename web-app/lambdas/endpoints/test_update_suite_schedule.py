@@ -99,7 +99,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
             updated_suite['updated_at'] = '2024-01-02T00:00:00Z'
             mock_table.update_item.return_value = {'Attributes': updated_suite}
             
-            # Mock EventBridge
+            # Mock Amazon EventBridge
             mock_events = MagicMock()
             mock_boto3.client.return_value = mock_events
             
@@ -111,7 +111,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
             self.assertEqual(body['schedule_expression'], '0 2 * * *')
             self.assertEqual(body['schedule_timezone'], 'UTC')
             
-            # Verify EventBridge rule was created
+            # Verify Amazon EventBridge rule was created
             mock_events.put_rule.assert_called_once()
             mock_events.put_targets.assert_called_once()
     
@@ -147,7 +147,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
             updated_suite['schedule_enabled'] = False
             mock_table.update_item.return_value = {'Attributes': updated_suite}
             
-            # Mock EventBridge
+            # Mock Amazon EventBridge
             mock_events = MagicMock()
             mock_boto3.client.return_value = mock_events
             
@@ -157,7 +157,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
             body = json.loads(response['body'])
             self.assertEqual(body['schedule_enabled'], False)
             
-            # Verify EventBridge rule was disabled
+            # Verify Amazon EventBridge rule was disabled
             mock_events.disable_rule.assert_called_once_with(Name='test-app-suite-suite-123')
     
     def test_update_schedule_expression_only(self):
@@ -446,7 +446,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
             self.assertEqual(response['statusCode'], 200)
     
     def test_eventbridge_error_handling(self):
-        """Test that EventBridge errors are handled properly"""
+        """Test that Amazon EventBridge errors are handled properly"""
         event = {
             'pathParameters': {'suite_id': 'suite-123'},
             'body': json.dumps({
@@ -472,7 +472,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
             updated_suite['schedule_expression'] = '0 2 * * *'
             mock_table.update_item.return_value = {'Attributes': updated_suite}
             
-            # Mock EventBridge to raise error
+            # Mock Amazon EventBridge to raise error
             mock_events = MagicMock()
             mock_events.put_rule.side_effect = ClientError(
                 {'Error': {'Code': 'InternalError', 'Message': 'Service error'}},
@@ -484,7 +484,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
             
             self.assertEqual(response['statusCode'], 500)
             body = json.loads(response['body'])
-            self.assertIn('Failed to update EventBridge rule', body['error'])
+            self.assertIn('Failed to update Amazon EventBridge rule', body['error'])
     
     def test_disable_nonexistent_rule(self):
         """Test disabling a rule that doesn't exist (should succeed)"""
@@ -509,7 +509,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
             updated_suite['schedule_enabled'] = False
             mock_table.update_item.return_value = {'Attributes': updated_suite}
             
-            # Mock EventBridge to raise ResourceNotFoundException
+            # Mock Amazon EventBridge to raise ResourceNotFoundException
             mock_events = MagicMock()
             mock_events.disable_rule.side_effect = ClientError(
                 {'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Rule not found'}},
@@ -544,7 +544,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
 
 
 class TestManageEventBridgeRule(unittest.TestCase):
-    """Test EventBridge rule management function"""
+    """Test Amazon EventBridge rule management function"""
     
     def setUp(self):
         """Set up test fixtures"""
@@ -553,7 +553,7 @@ class TestManageEventBridgeRule(unittest.TestCase):
     
     @patch('update_suite_schedule.boto3.client')
     def test_enable_rule_creates_rule_and_target(self, mock_boto_client):
-        """Test enabling a rule creates EventBridge rule and target"""
+        """Test enabling a rule creates Amazon EventBridge rule and target"""
         mock_events = MagicMock()
         mock_boto_client.return_value = mock_events
         

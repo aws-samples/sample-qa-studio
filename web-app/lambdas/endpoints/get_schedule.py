@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to get a schedule for a use case from EventBridge Scheduler.
+    Lambda handler to get a schedule for a use case from Amazon EventBridge Scheduler.
     
     Args:
         event: API Gateway proxy request event
@@ -38,7 +38,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("SCHEDULER_GROUP_NAME environment variable not set")
             return create_response(500, {'error': 'Internal server error'})
         
-        # Initialize EventBridge Scheduler client
+        # Initialize Amazon EventBridge Scheduler client
         scheduler_client = boto3.client('scheduler')
         
         # Get the schedule

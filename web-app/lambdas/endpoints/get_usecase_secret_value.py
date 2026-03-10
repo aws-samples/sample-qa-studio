@@ -1,4 +1,4 @@
-"""Lambda handler to get the actual value of a specific usecase secret."""
+"""AWS Lambda handler to get the actual value of a specific usecase secret."""
 
 import logging
 from typing import Any, Dict

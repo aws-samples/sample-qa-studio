@@ -14,10 +14,10 @@ logger.setLevel(logging.INFO)
 
 def generate_secure_password(length: int = 16) -> str:
     """
-    Generate a cryptographically secure random password that meets Cognito requirements.
+    Generate a cryptographically secure random password that meets Amazon Cognito requirements.
     Generates a password with at least one uppercase, lowercase, digit, and symbol character.
     """
-    # Use symbols that are definitely accepted by Cognito
+    # Use symbols that are definitely accepted by Amazon Cognito
     symbols = "!@#$%^&*"
     
     # Include at least one of each required character type
@@ -40,7 +40,7 @@ def generate_secure_password(length: int = 16) -> str:
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to create a user in Cognito User Pool.
+    Lambda handler to create a user in Amazon Cognito user pool.
     
     Args:
         event: API Gateway proxy request event
@@ -83,13 +83,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("USER_POOL_ID environment variable not set")
             return create_response(500, {'error': 'Internal server error'})
         
-        # Initialize Cognito client
+        # Initialize Amazon Cognito client
         cognito_client = boto3.client('cognito-idp')
         
         # Generate a secure random password
         temporary_password = generate_secure_password(16)
         
-        # Create user in Cognito
+        # Create user in Amazon Cognito
         response = cognito_client.admin_create_user(
             UserPoolId=user_pool_id,
             Username=email,
@@ -98,7 +98,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 {'Name': 'email_verified', 'Value': 'false'}
             ],
             TemporaryPassword=temporary_password
-            # Don't set MessageAction - this allows Cognito to send the default welcome message
+            # Don't set MessageAction - this allows Amazon Cognito to send the default welcome message
         )
         
         user = response.get('User', {})

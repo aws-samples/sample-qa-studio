@@ -119,7 +119,7 @@ def test_property_1_scope_validation_prevents_privilege_escalation(
     mock_cognito = MagicMock()
     mock_client.return_value = mock_cognito
     
-    # Mock Cognito resource server response
+    # Mock Amazon Cognito resource server response
     mock_cognito.describe_resource_server.return_value = {
         'ResourceServer': {
             'Scopes': [
@@ -129,7 +129,7 @@ def test_property_1_scope_validation_prevents_privilege_escalation(
         }
     }
     
-    # Mock Cognito client creation
+    # Mock Amazon Cognito client creation
     mock_cognito.create_user_pool_client.return_value = {
         'UserPoolClient': {
             'ClientId': 'test-client-id',
@@ -197,7 +197,7 @@ def test_property_2_client_credentials_generation(
     mock_cognito = MagicMock()
     mock_client.return_value = mock_cognito
     
-    # Mock Cognito resource server response
+    # Mock Amazon Cognito resource server response
     mock_cognito.describe_resource_server.return_value = {
         'ResourceServer': {
             'Scopes': [
@@ -207,7 +207,7 @@ def test_property_2_client_credentials_generation(
         }
     }
     
-    # Mock Cognito client creation
+    # Mock Amazon Cognito client creation
     mock_cognito.create_user_pool_client.return_value = {
         'UserPoolClient': {
             'ClientId': 'test-client-id-123',
@@ -335,7 +335,7 @@ def test_property_3_secret_confidentiality(
         assert 'ClientSecret' not in client, f"ClientSecret found in list response for client {client.get('client_id')}"
 
 
-# Property 4: Cognito Registration
+# Property 4: Amazon Cognito Registration
 @given(
     user_scopes=user_scope_set(),
     client_name=oauth_client_name()
@@ -348,18 +348,18 @@ def test_property_4_cognito_registration(
     mock_resource, mock_client, user_scopes, client_name
 ):
     """
-    Feature: wp1d-oauth-client-management, Property 4: Cognito Registration
+    Feature: wp1d-oauth-client-management, Property 4: Amazon Cognito Registration
     
     **Validates: Requirements US1.6**
     
     For any successfully created OAuth client with client_id C,
-    querying Cognito for client C should return the client configuration.
+    querying Amazon Cognito for client C should return the client configuration.
     """
     # Setup mocks
     mock_cognito = MagicMock()
     mock_client.return_value = mock_cognito
     
-    # Mock Cognito resource server response
+    # Mock Amazon Cognito resource server response
     mock_cognito.describe_resource_server.return_value = {
         'ResourceServer': {
             'Scopes': [
@@ -413,8 +413,8 @@ def test_property_4_cognito_registration(
         body = json.loads(response['body'])
         client_id = body['client_id']
         
-        # Verify property: client should exist in our "Cognito" (mocked storage)
-        assert client_id in created_clients, f"Client {client_id} not found in Cognito after creation"
+        # Verify property: client should exist in our "Amazon Cognito" (mocked storage)
+        assert client_id in created_clients, f"Client {client_id} not found in Amazon Cognito after creation"
         
         # Verify client configuration matches
         cognito_client = created_clients[client_id]
@@ -607,7 +607,7 @@ def test_property_7_immediate_revocation(
         }
     }
     
-    # Track if client was deleted from Cognito
+    # Track if client was deleted from Amazon Cognito
     deleted_clients = []
     
     def delete_client_side_effect(UserPoolId, ClientId):
@@ -623,9 +623,9 @@ def test_property_7_immediate_revocation(
     # Execute handler
     response = delete_oauth_client.handler(event, None)
     
-    # Verify property: if deletion succeeded, client should be deleted from Cognito
+    # Verify property: if deletion succeeded, client should be deleted from Amazon Cognito
     if response['statusCode'] == 200:
-        assert client_id in deleted_clients, f"Client {client_id} was not deleted from Cognito"
+        assert client_id in deleted_clients, f"Client {client_id} was not deleted from Amazon Cognito"
         # In real implementation, this would mean immediate revocation
         # The client can no longer authenticate
 

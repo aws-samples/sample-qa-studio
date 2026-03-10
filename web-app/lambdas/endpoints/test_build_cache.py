@@ -1,7 +1,7 @@
 """
 Unit tests for Cache Builder Lambda (build_cache.py)
 
-Tests the event-driven Lambda function that builds step caches from Nova Act
+Tests the event-driven Lambda function that builds step caches from Amazon Nova Act
 responses after successful test executions.
 """
 
@@ -28,7 +28,7 @@ def mock_env_vars():
 
 @pytest.fixture
 def valid_event():
-    """Valid EventBridge event."""
+    """Valid Amazon EventBridge event."""
     return {
         'source': 'qa-studio.worker',
         'detail-type': 'usecase.execution.completed',

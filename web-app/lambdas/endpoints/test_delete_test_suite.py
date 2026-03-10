@@ -125,7 +125,7 @@ class TestDeleteTestSuite(unittest.TestCase):
         mock_table.get_item.return_value = {'Item': suite_with_schedule}
         mock_table.query.return_value = {'Items': []}
         
-        # Mock EventBridge Scheduler
+        # Mock Amazon EventBridge Scheduler
         mock_scheduler = Mock()
         mock_boto_client.return_value = mock_scheduler
         
@@ -277,7 +277,7 @@ class TestDeleteTestSuite(unittest.TestCase):
         mock_table.get_item.return_value = {'Item': suite_with_schedule}
         mock_table.query.return_value = {'Items': []}
         
-        # Mock EventBridge Scheduler to raise ResourceNotFoundException
+        # Mock Amazon EventBridge Scheduler to raise ResourceNotFoundException
         mock_scheduler = Mock()
         mock_scheduler.delete_schedule.side_effect = ClientError(
             {'Error': {'Code': 'ResourceNotFoundException'}},

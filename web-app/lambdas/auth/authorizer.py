@@ -1,6 +1,6 @@
 """
 Lambda authorizer for API Gateway that validates both user tokens and M2M tokens.
-Validates JWT tokens from Cognito User Pool with signature verification.
+Validates JWT tokens from Amazon Cognito user pool with signature verification.
 """
 import json
 import os

@@ -1,5 +1,5 @@
 """
-Lambda function to list suite-level artifacts by querying S3 directly.
+AWS Lambda function to list suite-level artifacts by querying S3 directly.
 Generates presigned download URLs for each discovered object.
 """
 import json
@@ -21,7 +21,7 @@ DEFAULT_CONTENT_TYPE = 'application/octet-stream'
 
 
 def get_s3_client():
-    """Get S3 client (lazy initialization for testing)."""
+    """Get Amazon S3 client (lazy initialization for testing)."""
     return boto3.client('s3')
 
 
@@ -44,11 +44,11 @@ def generate_presigned_download_url(
     expires_in: int = 3600,
 ) -> str:
     """
-    Generate presigned URL for S3 GetObject operation.
+    Generate presigned URL for Amazon S3 GetObject operation.
 
     Args:
-        s3_bucket: S3 bucket name
-        s3_key: S3 object key
+        s3_bucket: Amazon S3 bucket name
+        s3_key: Amazon S3 object key
         expires_in: Expiration time in seconds (default 1 hour)
 
     Returns:
@@ -95,7 +95,7 @@ def handler(event, context):
             'message': 'suiteId and executionId are required',
         })
 
-    # Get S3 bucket name from environment
+    # Get Amazon S3 bucket name from environment
     s3_bucket = os.environ.get('BUCKET_NAME')
     if not s3_bucket:
         print('ERROR: BUCKET_NAME environment variable not set')

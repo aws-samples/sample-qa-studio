@@ -65,7 +65,7 @@ def handler(event, context):
     
     try:
         if event_bus_name:
-            # Send to EventBridge (new approach)
+            # Send to Amazon EventBridge (new approach)
             eventbridge.put_events(
                 Entries=[{
                     'Source': 'wizard.commands',
@@ -74,9 +74,9 @@ def handler(event, context):
                     'EventBusName': event_bus_name
                 }]
             )
-            print(f'Terminate command sent to EventBridge for session {session_id}')
+            print(f'Terminate command sent to Amazon EventBridge for session {session_id}')
         else:
-            # Fallback to SQS (legacy approach)
+            # Fallback to Amazon SQS (legacy approach)
             queue_url = os.environ['WIZARD_QUEUE_URL']
             sqs.send_message(
                 QueueUrl=queue_url,

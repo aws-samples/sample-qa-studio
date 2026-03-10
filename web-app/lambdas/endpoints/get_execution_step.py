@@ -34,11 +34,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not step_id or not execution_id:
             return create_response(400, {'error': 'StepId and ExecutionId are required'})
         
-        # Initialize DynamoDB client
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
-        # Get execution step from DynamoDB
+        # Get execution step from Amazon DynamoDB
         response = table.get_item(
             Key={
                 'pk': f'EXECUTION_STEP#{step_id}',

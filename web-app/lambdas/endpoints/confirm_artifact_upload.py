@@ -1,5 +1,5 @@
 """
-Lambda function to confirm artifact upload completion.
+AWS Lambda function to confirm artifact upload completion.
 
 After uploading a file to S3 via presigned URL, the CI/CD runner calls this
 endpoint to update the artifact record's upload_status from 'pending' to 'uploaded'.

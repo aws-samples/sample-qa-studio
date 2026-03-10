@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to generate pre-signed S3 URLs for execution artifacts.
+    Lambda handler to generate pre-signed Amazon S3 URLs for execution artifacts.
     
     Args:
         event: API Gateway proxy request event
@@ -50,7 +50,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error(f"Invalid fileType: {file_type}. Must be 'html' or 'video'")
             return create_response(400, {'error': "fileType must be 'html' or 'video'"})
         
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
@@ -119,7 +119,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 Prefix=prefix
             )
         except ClientError as e:
-            logger.error(f"Error listing S3 objects: {str(e)}")
+            logger.error(f"Error listing Amazon S3 objects: {str(e)}")
             return create_response(500, {'error': 'Failed to list S3 objects'})
         
         # Find the file based on type

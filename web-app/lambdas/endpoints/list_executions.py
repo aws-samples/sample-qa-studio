@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to list executions for a specific use case from DynamoDB.
+    Lambda handler to list executions for a specific use case from Amazon DynamoDB.
     Accessible by both user tokens and M2M tokens.
     
     Args:
@@ -36,11 +36,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         query_params = event.get('queryStringParameters') or {}
         limit = int(query_params.get('limit', 20))
         
-        # Initialize DynamoDB resource
+        # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
-        # Query DynamoDB for all executions of this use case
+        # Query Amazon DynamoDB for all executions of this use case
         response = table.query(
             KeyConditionExpression=Key('pk').eq(f'USECASE_EXECUTION#{usecase_id}') & Key('sk').begins_with('EXECUTION#'),
             Limit=limit,

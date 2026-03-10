@@ -37,7 +37,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("UsecaseId and ExecutionId are required")
             return create_response(400, {'error': 'UsecaseId and ExecutionId are required'})
         
-        # Initialize S3 client
+        # Initialize Amazon S3 client
         s3_client = boto3.client('s3')
         bucket_name = get_bucket_name()
         
@@ -51,7 +51,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 Prefix=prefix
             )
         except ClientError as e:
-            logger.error(f"Error listing S3 objects: {str(e)}")
+            logger.error(f"Error listing Amazon S3 objects: {str(e)}")
             return create_response(500, {'error': 'Failed to list downloads'})
         
         # Build response with file information

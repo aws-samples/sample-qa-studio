@@ -35,7 +35,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not execution_id or not usecase_id:
             return create_response(400, {'error': 'Missing required parameters'})
         
-        # Initialize DynamoDB client
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         

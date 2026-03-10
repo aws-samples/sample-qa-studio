@@ -1,5 +1,5 @@
 """
-Lambda function for executing test suites.
+AWS Lambda function for executing test suites.
 
 This endpoint creates a suite execution record and execution records for ALL
 use cases in the suite, applies overrides (base_url, variables, region, model_id).
@@ -639,7 +639,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         base_url: Optional base URL override for all usecases
         variables: Optional variable overrides (key-value pairs)
         region: Optional AWS region override
-        model_id: Optional Bedrock model ID override
+        model_id: Optional Amazon Bedrock model ID override
     
     Returns:
         200: Suite execution created with all execution IDs
@@ -894,7 +894,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             table_name=table_name
         )
         
-        # 6. Publish EventBridge event
+        # 6. Publish Amazon EventBridge event
         try:
             eventbridge.put_events(
                 Entries=[{
@@ -912,7 +912,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             )
             print(f'Published suite execution created event')
         except Exception as e:
-            print(f'Error publishing EventBridge event: {str(e)}')
+            print(f'Error publishing Amazon EventBridge event: {str(e)}')
             # Don't fail the request if event publishing fails
         
         # 7. Publish CloudWatch metrics

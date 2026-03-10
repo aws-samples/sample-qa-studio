@@ -36,18 +36,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not execution_id or not usecase_id:
             return create_response(400, {'error': 'Missing execution or usecase ID'})
         
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         s3_client = boto3.client('s3')
         
-        # Delete S3 objects for this execution
+        # Delete Amazon S3 objects for this execution
         bucket_name = get_bucket_name()
         if bucket_name:
             try:
                 delete_s3_objects(s3_client, bucket_name, usecase_id, execution_id)
             except Exception as e:
-                logger.warning(f"Error deleting S3 objects: {str(e)}")
+                logger.warning(f"Error deleting Amazon S3 objects: {str(e)}")
         
         # Delete execution
         try:
@@ -94,11 +94,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
 def delete_s3_objects(s3_client: Any, bucket_name: str, usecase_id: str, execution_id: str) -> None:
     """
-    Delete all S3 objects for an execution.
+    Delete all Amazon S3 objects for an execution.
     
     Args:
         s3_client: Boto3 S3 client
-        bucket_name: S3 bucket name
+        bucket_name: Amazon S3 bucket name
         usecase_id: Usecase ID
         execution_id: Execution ID
     """
@@ -119,7 +119,7 @@ def delete_s3_objects(s3_client: Any, bucket_name: str, usecase_id: str, executi
                     Key=obj['Key']
                 )
             except ClientError as e:
-                logger.warning(f"Error deleting S3 object {obj['Key']}: {str(e)}")
+                logger.warning(f"Error deleting Amazon S3 object {obj['Key']}: {str(e)}")
     except ClientError as e:
-        logger.error(f"Error listing S3 objects: {str(e)}")
+        logger.error(f"Error listing Amazon S3 objects: {str(e)}")
         raise

@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to delete a template and all its associated items from DynamoDB.
+    Lambda handler to delete a template and all its associated items from Amazon DynamoDB.
     
     Args:
         event: API Gateway proxy request event
@@ -31,7 +31,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not template_id:
             return create_response(400, {'error': 'Missing template ID'})
         
-        # Initialize DynamoDB resource
+        # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         

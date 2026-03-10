@@ -1,5 +1,5 @@
 """
-Lambda function to clean up AWS Backup recovery points before vault deletion.
+AWS Lambda function to clean up AWS Backup recovery points before vault deletion.
 This function is triggered as a CloudFormation custom resource during stack deletion.
 """
 import json
@@ -13,7 +13,7 @@ import urllib3
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Initialize AWS clients
+# Initialize Amazon DynamoDB client
 backup_client = boto3.client('backup')
 http = urllib3.PoolManager()
 

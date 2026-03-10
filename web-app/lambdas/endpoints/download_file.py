@@ -38,11 +38,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not usecase_id or not execution_id or not file_name:
             return create_response(400, {'error': 'UsecaseId, ExecutionId, and FileName are required'})
         
-        # Initialize S3 client
+        # Initialize Amazon S3 client
         s3_client = boto3.client('s3')
         bucket_name = get_bucket_name()
         
-        # Build S3 key
+        # Build Amazon S3 key
         s3_key = f"{usecase_id}/{execution_id}/downloads/{file_name}"
         logger.info(f"S3 Key: {s3_key}")
         

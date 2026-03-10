@@ -1,5 +1,5 @@
 """
-Lambda function for updating suite execution status.
+AWS Lambda function for updating suite execution status.
 
 This endpoint allows CI/CD runners to update suite execution status
 after all use cases have completed.

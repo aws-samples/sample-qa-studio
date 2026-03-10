@@ -9,7 +9,7 @@ eventbridge = boto3.client('events')
 def handler(event, context):
     """
     Restart a wizard session by sending a restart command.
-    Supports both EventBridge (new) and SQS (legacy) approaches.
+    Supports both Amazon EventBridge (new) and Amazon SQS (legacy) approaches.
     
     Path Parameters:
     - sessionId: The wizard session ID to restart
@@ -40,7 +40,7 @@ def handler(event, context):
     
     try:
         if event_bus_name:
-            # Send to EventBridge (new approach)
+            # Send to Amazon EventBridge (new approach)
             eventbridge.put_events(
                 Entries=[{
                     'Source': 'wizard.commands',
@@ -49,9 +49,9 @@ def handler(event, context):
                     'EventBusName': event_bus_name
                 }]
             )
-            print(f'Restart command sent to EventBridge for session {session_id}')
+            print(f'Restart command sent to Amazon EventBridge for session {session_id}')
         else:
-            # Fallback to SQS (legacy approach)
+            # Fallback to Amazon SQS (legacy approach)
             queue_url = os.environ['WIZARD_QUEUE_URL']
             sqs.send_message(
                 QueueUrl=queue_url,

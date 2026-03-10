@@ -15,7 +15,7 @@ DEFAULT_SCOPES = ['api/usecases.execute']
 
 def get_valid_scopes_from_cognito(user_pool_id: str, resource_server_identifier: str = 'api') -> list[str]:
     """
-    Fetch valid OAuth scopes from Cognito resource server.
+    Fetch valid OAuth scopes from Amazon Cognito resource server.
     
     Args:
         user_pool_id: Cognito User Pool ID
@@ -40,18 +40,18 @@ def get_valid_scopes_from_cognito(user_pool_id: str, resource_server_identifier:
             for scope in scopes
         ]
         
-        logger.info(f"Fetched {len(valid_scopes)} valid scopes from Cognito: {valid_scopes}")
+        logger.info(f"Fetched {len(valid_scopes)} valid scopes from Amazon Cognito: {valid_scopes}")
         return valid_scopes
         
     except Exception as e:
-        logger.error(f"Error fetching scopes from Cognito: {str(e)}")
+        logger.error(f"Error fetching scopes from Amazon Cognito: {str(e)}")
         # Return empty list on error - validation fails gracefully
         return []
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to create an OAuth client in Cognito User Pool.
+    Lambda handler to create an OAuth client in Amazon Cognito user pool.
     Requires api/oauth-clients.write or api/admin scope.
     
     SECURITY: Users can only grant scopes they already possess to prevent privilege escalation.
@@ -92,7 +92,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("USER_POOL_ID environment variable not set")
             return create_response(500, {'error': 'Internal server error'})
         
-        # Fetch valid scopes from Cognito
+        # Fetch valid scopes from Amazon Cognito
         valid_scopes = get_valid_scopes_from_cognito(user_pool_id, resource_server_identifier)
         
         if not valid_scopes:
@@ -128,10 +128,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Creating OAuth client with scopes: {requested_scopes}")
         
-        # Initialize Cognito client
+        # Initialize Amazon Cognito client
         cognito_client = boto3.client('cognito-idp')
         
-        # Create OAuth client in Cognito User Pool
+        # Create OAuth client in Amazon Cognito user pool
         response = cognito_client.create_user_pool_client(
             UserPoolId=user_pool_id,
             ClientName=client_name,

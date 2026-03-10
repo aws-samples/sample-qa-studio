@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to list all templates from DynamoDB.
+    Lambda handler to list all templates from Amazon DynamoDB.
     
     Args:
         event: API Gateway proxy request event
@@ -26,11 +26,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if error_response:
             return error_response
         
-        # Initialize DynamoDB resource
+        # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
-        # Query DynamoDB for all templates
+        # Query Amazon DynamoDB for all templates
         response = table.query(
             KeyConditionExpression=Key('pk').eq('TEMPLATES') & Key('sk').begins_with('TEMPLATE#')
         )

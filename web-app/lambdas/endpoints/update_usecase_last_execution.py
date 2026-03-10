@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler for CloudWatch Events to update usecase with last execution info.
+    Lambda handler for Amazon CloudWatch Events to update usecase with last execution info.
     This is triggered by execution status change events.
     
     Args:
@@ -37,7 +37,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("Missing required fields in event detail")
             return
         
-        # Initialize DynamoDB client
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         

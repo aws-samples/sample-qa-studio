@@ -11,7 +11,7 @@ ecs = boto3.client('ecs')
 eventbridge = boto3.client('events')
 
 def generate_cloudwatch_logs_url(region, log_group, stream_prefix, task_id):
-    """Generate a deep link to CloudWatch Logs for a specific ECS task."""
+    """Generate a deep link to Amazon CloudWatch Logs for a specific ECS task."""
     log_stream_name = f"{stream_prefix}/container/{task_id}"
     return (
         f"https://{region}.console.aws.amazon.com/cloudwatch/home?"
@@ -41,7 +41,7 @@ def update_execution_task_info(usecase_id, execution_id, task_arn, task_id, clou
         raise
 
 def publish_execution_status_event(usecase_id, execution_id, status):
-    """Publish an execution status change event to EventBridge."""
+    """Publish an execution status change event to Amazon EventBridge."""
     try:
         event_detail = {
             'usecase_id': usecase_id,
@@ -60,7 +60,7 @@ def publish_execution_status_event(usecase_id, execution_id, status):
         )
         print(f'Published execution status event: {usecase_id}/{execution_id} -> {status}')
     except Exception as e:
-        print(f'Error publishing event to EventBridge: {str(e)}')
+        print(f'Error publishing event to Amazon EventBridge: {str(e)}')
         # Don't fail the execution if event publishing fails
 
 def update_execution_status_with_error(usecase_id, execution_id, status, error_msg):
@@ -100,7 +100,7 @@ def handler(event, context):
     
     Trigger Types:
     - OnDemand: Queues execution to SQS for worker processing
-    - Scheduled: Directly spawns ECS task (used by EventBridge Scheduler)
+    - Scheduled: Directly spawns Amazon ECS task (used by Amazon EventBridge Scheduler)
     - OnDemandHeadless: Directly spawns ECS task (used by UI for immediate execution)
     - ci_runner: Creates execution record only, no ECS task (used by CI/CD runner)
     
@@ -344,7 +344,7 @@ def handler(event, context):
             })
         
         elif trigger_type in ['Scheduled', 'OnDemandHeadless']:
-            # Start ECS task directly
+            # Start Amazon ECS task directly
             print(f'Trigger ECS: {usecase_id}, {execution_id}')
             
             # Determine the correct S3 bucket based on execution region

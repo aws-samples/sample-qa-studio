@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to get a specific user from Cognito User Pool with their groups.
+    Lambda handler to get a specific user from Amazon Cognito user pool with their groups.
     Requires api/admin scope.
     
     Args:
@@ -41,7 +41,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("USER_POOL_ID environment variable not set")
             return create_response(500, {'error': 'Internal server error'})
         
-        # Initialize Cognito client
+        # Initialize Amazon Cognito client
         cognito_client = boto3.client('cognito-idp')
         
         # Get user details

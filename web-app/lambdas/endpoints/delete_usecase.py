@@ -35,11 +35,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not usecase_id:
             return create_response(400, {'error': 'Usecase ID is required'})
         
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
-        # Delete Nova Act workflow definition if it exists
+        # Delete Amazon Nova Act workflow definition if it exists
         delete_workflow_definition(usecase_id)
         
         # Delete usecase metadata
@@ -131,7 +131,7 @@ def delete_workflow_definition(usecase_id: str):
         if len(workflow_name) > 40:
             workflow_name = workflow_name[:40]
         
-        # Create Nova Act client in us-east-1 (GA region)
+        # Create Amazon Nova Act client in us-east-1 (GA region)
         novaact_client = boto3.client('nova-act', region_name='us-east-1')
         
         # Try to delete the workflow definition

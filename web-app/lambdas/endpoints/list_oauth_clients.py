@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to list OAuth clients in Cognito User Pool.
+    Lambda handler to list OAuth clients in Amazon Cognito user pool.
     Requires api/oauth-clients.read or api/admin scope.
     
     Args:
@@ -105,7 +105,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'explicit_auth_flows': client.get('ExplicitAuthFlows', []),
                         'allowed_oauth_flows': client.get('AllowedOAuthFlows', []),
                         'allowed_oauth_scopes': client.get('AllowedOAuthScopes', []),
-                        'enabled': True  # Cognito doesn't have a disabled state, all clients are enabled
+                        'enabled': True  # Amazon Cognito doesn't have a disabled state, all clients are enabled
                     })
                 except Exception as e:
                     logger.warning(f"Failed to get details for client {client_id}: {str(e)}")

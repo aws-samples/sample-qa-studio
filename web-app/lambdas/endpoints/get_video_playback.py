@@ -1,5 +1,5 @@
 """
-Lambda function to return video playback data for a given execution.
+AWS Lambda function to return video playback data for a given execution.
 
 Inspects the execution record's trigger_type to determine the recording type:
 - Worker path (OnDemand, Scheduled, OnDemandHeadless): returns rrweb batch metadata
@@ -31,7 +31,7 @@ def get_dynamodb_client():
 
 
 def get_s3_client():
-    """Get S3 client (lazy initialization for testing)."""
+    """Get Amazon S3 client (lazy initialization for testing)."""
     return boto3.client("s3")
 
 
@@ -68,7 +68,7 @@ def get_rrweb_playback_data(
 
     Args:
         s3_client: Boto3 S3 client
-        bucket: S3 bucket name
+        bucket: Amazon S3 bucket name
         usecase_id: Usecase ID
         execution_id: Execution ID
 
@@ -143,7 +143,7 @@ def get_video_playback_data(
     Args:
         dynamodb: Boto3 DynamoDB client
         table_name: DynamoDB table name
-        bucket: S3 bucket name (fallback if artifact record lacks s3_bucket)
+        bucket: Amazon S3 bucket name (fallback if artifact record lacks s3_bucket)
         execution_id: Execution ID
 
     Returns:

@@ -81,7 +81,7 @@ def get_secret_prefix() -> str:
 
 
 def get_bucket_name() -> str:
-    """Get S3 bucket name from environment variable."""
+    """Get Amazon S3 bucket name from environment variable."""
     bucket_name = os.environ.get('BUCKET_NAME')
     if not bucket_name:
         logging.warning("environment variable 'BUCKET_NAME' missing")
@@ -101,7 +101,7 @@ def extract_user_identity(event: dict) -> dict:
     """
     Extract user identity from API Gateway event.
     Handles both user tokens (with email) and M2M tokens (client credentials).
-    Supports both Cognito authorizer and Lambda authorizer formats.
+    Supports both Amazon Cognito authorizer and Lambda authorizer formats.
     
     By default, this function REJECTS M2M tokens with a 403 error.
     Use allow_m2m_token() instead if you want to allow M2M tokens.
@@ -113,7 +113,7 @@ def extract_user_identity(event: dict) -> dict:
         Dictionary with:
         - identity: Email for user tokens, client_id for M2M tokens
         - identity_type: 'user' or 'client'
-        - sub: Cognito sub claim
+        - sub: Amazon Cognito sub claim
         - client_id: Client ID for M2M tokens (optional)
         - email: Email for user tokens (optional)
         - scopes: List of OAuth scopes for M2M tokens (optional)

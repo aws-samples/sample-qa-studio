@@ -13,7 +13,7 @@ bedrock_runtime = boto3.client('bedrock-runtime')
 
 
 def create_prompt(title, starting_url, user_journey, region):
-    """Create the prompt for Bedrock based on the user journey."""
+    """Create the prompt for Amazon Bedrock based on the user journey."""
     current_time = get_current_timestamp()
     
     # Escape quotes for JSON safety
@@ -126,12 +126,12 @@ Generate the complete, valid JSON now:'''
     return prompt
 
 def invoke_bedrock(title, starting_url, user_journey, region, model_id):
-    """Make a single call to Bedrock using the Converse API."""
+    """Make a single call to Amazon Bedrock using the Converse API."""
     start_time = time.time()
 
     # Create the prompt
     prompt = create_prompt(title, starting_url, user_journey, region)
-    print(f'Invoking Bedrock model {model_id} with prompt length: {len(prompt)}')
+    print(f'Invoking Amazon Bedrock model {model_id} with prompt length: {len(prompt)}')
 
     try:
         response = bedrock_runtime.converse(
@@ -147,27 +147,27 @@ def invoke_bedrock(title, starting_url, user_journey, region, model_id):
         )
 
         duration = time.time() - start_time
-        print(f'Bedrock model invocation completed in {duration:.2f}s')
+        print(f'Amazon Bedrock model invocation completed in {duration:.2f}s')
 
         # Extract the generated content
         content = response['output']['message']['content']
         if not content:
-            raise Exception('Invalid response format from Bedrock: no content')
+            raise Exception('Invalid response format from Amazon Bedrock: no content')
 
         generated_text = content[0].get('text', '')
         if not generated_text:
-            raise Exception('Invalid response format from Bedrock: no text')
+            raise Exception('Invalid response format from Amazon Bedrock: no text')
 
         # Clean up the generated text to extract JSON
         generated_json = extract_json(generated_text)
 
-        print(f'Successfully generated JSON from Bedrock (length: {len(generated_json)} chars)')
+        print(f'Successfully generated JSON from Amazon Bedrock (length: {len(generated_json)} chars)')
 
         return generated_json
 
     except Exception as e:
         duration = time.time() - start_time
-        print(f'Bedrock model invocation failed after {duration:.2f}s: {str(e)}')
+        print(f'Amazon Bedrock model invocation failed after {duration:.2f}s: {str(e)}')
         raise
 
 def extract_json(text):
@@ -227,7 +227,7 @@ def get_error_code(error_message):
 
 def handler(event, context):
     """
-    Generate a usecase from a user journey description using Bedrock AI.
+    Generate a usecase from a user journey description using Amazon Bedrock AI.
     
     Request Body:
     - title: Title for the usecase (required)
@@ -239,7 +239,7 @@ def handler(event, context):
     - 200: Usecase generated successfully
     - 400: Validation failed
     - 401: Authentication failed
-    - 502: Bedrock service error
+    - 502: Amazon Bedrock service error
     - 500: Internal server error
     """
     request_id = event.get('requestContext', {}).get('requestId', f'req-{int(time.time() * 1000)}')
@@ -336,19 +336,19 @@ def handler(event, context):
             'details': {'validationErrors': validation_errors}
         })
     
-    # Get Bedrock model ID
+    # Get Amazon Bedrock model ID
     model_id = os.environ.get('BEDROCK_MODEL_ID')
     if not model_id:
         return create_response(500, {
             'success': False,
             'message': 'Configuration error',
-            'error': 'Bedrock service configuration is invalid',
+            'error': 'Amazon Bedrock service configuration is invalid',
             'code': 'BEDROCK_CONFIG_ERROR'
         })
     
-    # Generate the usecase using Bedrock
+    # Generate the usecase using Amazon Bedrock
     try:
-        print(f'[INFO] [{request_id}] Calling Bedrock service to generate usecase')
+        print(f'[INFO] [{request_id}] Calling Amazon Bedrock service to generate usecase')
         generated_json = invoke_bedrock(title, starting_url, user_journey, region, model_id)
         
         # Sanitize and validate the generated JSON
@@ -381,9 +381,9 @@ def handler(event, context):
         
     except Exception as e:
         error_msg = str(e)
-        print(f'[ERROR] [{request_id}] Bedrock service call failed: {error_msg}')
+        print(f'[ERROR] [{request_id}] Amazon Bedrock service call failed: {error_msg}')
         
-        # Categorize Bedrock errors
+        # Categorize Amazon Bedrock errors
         error_code = 'BEDROCK_ERROR'
         message = 'Failed to generate test case'
         

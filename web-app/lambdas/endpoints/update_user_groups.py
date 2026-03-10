@@ -9,13 +9,13 @@ from utils import create_response, require_scopes
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Valid Cognito groups
+# Valid Amazon Cognito groups
 VALID_GROUPS = ['users', 'admins']
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to update a user's group membership in Cognito User Pool.
+    Lambda handler to update a user's group membership in Amazon Cognito user pool.
     Requires api/admin scope.
     
     Args:
@@ -63,7 +63,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("USER_POOL_ID environment variable not set")
             return create_response(500, {'error': 'Internal server error'})
         
-        # Initialize Cognito client
+        # Initialize Amazon Cognito client
         cognito_client = boto3.client('cognito-idp')
         
         # Verify user exists

@@ -18,7 +18,7 @@ from update_usecase_last_execution import handler
 
 
 def _build_event(usecase_id=None, execution_id=None, status=None, timestamp=None):
-    """Build a minimal EventBridge event."""
+    """Build a minimal Amazon EventBridge event."""
     detail = {}
     if usecase_id is not None:
         detail["usecase_id"] = usecase_id
@@ -158,7 +158,7 @@ class TestMissingFields(unittest.TestCase):
 
 
 class TestUnexpectedExceptions(unittest.TestCase):
-    """Unexpected errors must be caught — EventBridge handlers should not raise."""
+    """Unexpected errors must be caught — Amazon EventBridge handlers should not raise."""
 
     @patch("update_usecase_last_execution.boto3")
     def test_dynamodb_error_does_not_raise(self, mock_boto3):
@@ -181,7 +181,7 @@ class TestEventBridgeDetailType(unittest.TestCase):
     """Verify the DetailType fix in update_execution_status.py.
 
     The DetailType must use dots (status.changed) not hyphens (status-changed)
-    to match the CDK EventBridge rule pattern.
+    to match the CDK Amazon EventBridge rule pattern.
     """
 
     def test_detail_type_uses_dots(self):

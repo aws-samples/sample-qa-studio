@@ -27,7 +27,7 @@ def handler(event, context):
         if not user_pool_id:
             return create_response(500, {'error': 'USER_POOL_ID not configured'})
         
-        # Fetch resource server details from Cognito
+        # Fetch resource server details from Amazon Cognito
         response = cognito.describe_resource_server(
             UserPoolId=user_pool_id,
             Identifier=resource_server_identifier

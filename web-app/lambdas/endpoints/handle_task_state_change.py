@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> None:
     """
-    Lambda handler for ECS task state change events from EventBridge.
+    Lambda handler for Amazon ECS task state change events from Amazon EventBridge.
     Monitors ECS task failures and updates execution status in DynamoDB.
     
     Args:
@@ -50,7 +50,7 @@ def handler(event: Dict[str, Any], context: Any) -> None:
             logger.warning(f"Could not extract task ID from ARN: {task_arn}")
             return
         
-        # Initialize DynamoDB
+        # Initialize Amazon DynamoDB
         dynamodb_client = boto3.client('dynamodb')
         table_name = get_table_name()
         

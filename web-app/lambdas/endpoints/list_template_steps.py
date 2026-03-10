@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to list all steps for a specific template from DynamoDB.
+    Lambda handler to list all steps for a specific template from Amazon DynamoDB.
     
     Args:
         event: API Gateway proxy request event
@@ -31,11 +31,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not template_id:
             return create_response(400, {'error': 'Missing template ID'})
         
-        # Initialize DynamoDB resource
+        # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
-        # Query DynamoDB for all steps of this template
+        # Query Amazon DynamoDB for all steps of this template
         # Template steps use pk = TEMPLATE#{id} and sk starts with STEP#
         response = table.query(
             KeyConditionExpression=Key('pk').eq(f'TEMPLATE#{template_id}') & Key('sk').begins_with('STEP#')

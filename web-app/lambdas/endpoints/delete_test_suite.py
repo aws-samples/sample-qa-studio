@@ -26,7 +26,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     Validates user has write access to suite scope, deletes suite item from
     DynamoDB, queries and deletes all suite-usecase mappings, disables
-    EventBridge schedule if exists, and returns 204 No Content.
+    Amazon EventBridge schedule if exists, and returns 204 No Content.
     
     Args:
         event: API Gateway proxy request event
@@ -50,7 +50,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Deleting test suite {suite_id} for user: {user_identity.get('identity')}")
         
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
@@ -69,7 +69,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         suite = response['Item']
         
-        # Disable EventBridge schedule if exists
+        # Disable Amazon EventBridge schedule if exists
         if suite.get('schedule_enabled'):
             disable_suite_schedule(suite_id)
         
@@ -115,7 +115,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
 def disable_suite_schedule(suite_id: str) -> None:
     """
-    Disable EventBridge schedule for the test suite.
+    Disable Amazon EventBridge schedule for the test suite.
     
     Args:
         suite_id: Test suite ID (used as schedule name)
@@ -127,7 +127,7 @@ def disable_suite_schedule(suite_id: str) -> None:
             logger.warning("SCHEDULER_GROUP_NAME environment variable not set, skipping schedule deletion")
             return
         
-        # Initialize EventBridge Scheduler client
+        # Initialize Amazon EventBridge Scheduler client
         scheduler_client = boto3.client('scheduler')
         
         # Delete the schedule

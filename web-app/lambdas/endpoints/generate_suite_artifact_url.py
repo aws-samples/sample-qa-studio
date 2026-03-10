@@ -1,5 +1,5 @@
 """
-Lambda function to generate presigned S3 URLs for suite-level artifacts.
+AWS Lambda function to generate presigned Amazon S3 URLs for suite-level artifacts.
 No DynamoDB artifact record is created — artifacts are discovered via S3 ListObjectsV2.
 """
 import json
@@ -19,7 +19,7 @@ def get_dynamodb_client():
 
 
 def get_s3_client():
-    """Get S3 client (lazy initialization for testing)"""
+    """Get Amazon S3 client (lazy initialization for testing)"""
     return boto3.client('s3')
 
 
@@ -91,11 +91,11 @@ def generate_presigned_upload_url(
     expires_in: int = 3600
 ) -> str:
     """
-    Generate presigned URL for S3 PutObject operation.
+    Generate presigned URL for Amazon S3 PutObject operation.
 
     Args:
-        s3_bucket: S3 bucket name
-        s3_key: S3 object key
+        s3_bucket: Amazon S3 bucket name
+        s3_key: Amazon S3 object key
         content_type: MIME type (enforced in presigned URL)
         expires_in: Expiration time in seconds (default 1 hour)
 
@@ -205,7 +205,7 @@ def handler(event, context):
     # Generate S3 key
     s3_key = generate_s3_key(suite_id, execution_id, filename)
 
-    # Get S3 bucket name from environment
+    # Get Amazon S3 bucket name from environment
     s3_bucket = os.environ.get('BUCKET_NAME')
     if not s3_bucket:
         print('ERROR: BUCKET_NAME environment variable not set')

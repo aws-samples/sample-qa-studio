@@ -1,5 +1,5 @@
 """
-Lambda function for updating execution status.
+AWS Lambda function for updating execution status.
 
 This endpoint allows CI/CD runners to update execution status as tests progress.
 
@@ -144,7 +144,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         print(f'Updated execution {execution_id} to status: {status}')
         
-        # Publish EventBridge event for status change
+        # Publish Amazon EventBridge event for status change
         try:
             event_detail = {
                 'usecase_id': usecase_id,
@@ -166,7 +166,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             )
             print(f'Published execution status changed event')
         except Exception as e:
-            print(f'Error publishing EventBridge event: {str(e)}')
+            print(f'Error publishing Amazon EventBridge event: {str(e)}')
             # Don't fail the request if event publishing fails
         
         # Update suite execution counters for terminal statuses

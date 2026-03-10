@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to create or update use case hooks in DynamoDB.
+    Lambda handler to create or update use case hooks in Amazon DynamoDB.
     
     Args:
         event: API Gateway proxy request event
@@ -36,7 +36,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         before_script = body.get('before_script', '')
         after_script = body.get('after_script', '')
         
-        # Initialize DynamoDB resource
+        # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         

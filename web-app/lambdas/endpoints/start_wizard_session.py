@@ -97,7 +97,7 @@ def handler(event, context):
         )
         print(f'Created execution {session_id} for usecase {usecase_id}')
         
-        # Start ECS task in wizard mode
+        # Start Amazon ECS task in wizard mode
         ecs.run_task(
             cluster=os.environ['ECS_CLUSTER'],
             taskDefinition=os.environ['ECS_TASK_DEFINITION'],
@@ -125,7 +125,7 @@ def handler(event, context):
                 }]
             }
         )
-        print(f'Started ECS task for wizard session {session_id}')
+        print(f'Started Amazon ECS task for wizard session {session_id}')
         
         return create_response(201, {
             'sessionId': session_id,

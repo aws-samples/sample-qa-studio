@@ -55,7 +55,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Fetching batch {batch_id} with pagination: page={page}, pageSize={page_size}")
         
-        # Initialize S3 client
+        # Initialize Amazon S3 client
         s3_client = boto3.client('s3')
         bucket_name = get_bucket_name()
         
@@ -133,7 +133,7 @@ def find_recording_folder(s3_client, bucket: str, prefix: str) -> str:
     
     Args:
         s3_client: Boto3 S3 client
-        bucket: S3 bucket name
+        bucket: Amazon S3 bucket name
         prefix: Base prefix to search under
         
     Returns:
@@ -168,8 +168,8 @@ def load_batch_file(s3_client, bucket: str, key: str) -> List[Dict[str, Any]]:
     
     Args:
         s3_client: Boto3 S3 client
-        bucket: S3 bucket name
-        key: S3 object key
+        bucket: Amazon S3 bucket name
+        key: Amazon S3 object key
         
     Returns:
         List of event dictionaries, or None if file not found

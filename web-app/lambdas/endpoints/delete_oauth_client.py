@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to delete an OAuth client from Cognito User Pool.
+    Lambda handler to delete an OAuth client from Amazon Cognito user pool.
     Requires api/oauth-clients.write or api/admin scope.
     
     Args:
@@ -69,15 +69,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'message': 'Only OAuth clients created through the application can be deleted'
             })
         
-        # Delete OAuth client from Cognito
+        # Delete OAuth client from Amazon Cognito
         try:
             cognito_client.delete_user_pool_client(
                 UserPoolId=user_pool_id,
                 ClientId=client_id
             )
-            logger.info(f"Successfully deleted OAuth client from Cognito: {client_id}")
+            logger.info(f"Successfully deleted OAuth client from Amazon Cognito: {client_id}")
         except cognito_client.exceptions.ResourceNotFoundException:
-            logger.warning(f"OAuth client not found in Cognito: {client_id}")
+            logger.warning(f"OAuth client not found in Amazon Cognito: {client_id}")
             # Continue to delete from DynamoDB even if not in Cognito
         
         # Delete metadata from DynamoDB
@@ -94,7 +94,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Return error since metadata deletion failed
             return create_response(500, {
                 'error': 'Failed to delete OAuth client metadata',
-                'message': 'The client was deleted from Cognito but metadata cleanup failed. Please contact support.'
+                'message': 'The client was deleted from Amazon Cognito but metadata cleanup failed. Please contact support.'
             })
         
         return create_response(200, {

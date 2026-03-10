@@ -13,7 +13,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to create a schedule for a use case in EventBridge Scheduler.
+    Lambda handler to create a schedule for a use case in Amazon EventBridge Scheduler.
     
     Args:
         event: API Gateway proxy request event
@@ -50,7 +50,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("Missing required environment variables")
             return create_response(500, {'error': 'Internal server error'})
         
-        # Initialize EventBridge Scheduler client
+        # Initialize Amazon EventBridge Scheduler client
         scheduler_client = boto3.client('scheduler')
         
         # Delete existing schedule if it exists

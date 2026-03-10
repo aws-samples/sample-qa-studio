@@ -13,7 +13,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to rotate an OAuth client secret by recreating the Cognito app client.
+    Lambda handler to rotate an OAuth client secret by recreating the Amazon Cognito app client.
     Requires api/oauth-clients.write or api/admin scope.
     
     SECURITY: Only the user who created the client can rotate its secret.
@@ -89,7 +89,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error(f"Error checking client metadata: {str(e)}")
             return create_response(500, {'error': 'Failed to verify client ownership'})
         
-        # Fetch current client configuration from Cognito
+        # Fetch current client configuration from Amazon Cognito
         try:
             client_details = cognito_client.describe_user_pool_client(
                 UserPoolId=user_pool_id,
@@ -116,24 +116,24 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.info(f"Fetched configuration for client: {client_name}")
             
         except cognito_client.exceptions.ResourceNotFoundException:
-            logger.error(f"OAuth client not found in Cognito: {old_client_id}")
-            return create_response(404, {'error': 'OAuth client not found in Cognito'})
+            logger.error(f"OAuth client not found in Amazon Cognito: {old_client_id}")
+            return create_response(404, {'error': 'OAuth client not found in Amazon Cognito'})
         except Exception as e:
             logger.error(f"Error fetching client configuration: {str(e)}")
             return create_response(500, {'error': 'Failed to fetch client configuration'})
         
-        # Delete old Cognito app client
+        # Delete old Amazon Cognito app client
         try:
             cognito_client.delete_user_pool_client(
                 UserPoolId=user_pool_id,
                 ClientId=old_client_id
             )
-            logger.info(f"Deleted old OAuth client from Cognito: {old_client_id}")
+            logger.info(f"Deleted old OAuth client from Amazon Cognito: {old_client_id}")
         except Exception as e:
             logger.error(f"Error deleting old client: {str(e)}")
             return create_response(500, {'error': 'Failed to delete old client'})
         
-        # Create new Cognito app client with same settings
+        # Create new Amazon Cognito app client with same settings
         try:
             response = cognito_client.create_user_pool_client(
                 UserPoolId=user_pool_id,
@@ -157,7 +157,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             new_client_id = new_client.get('ClientId', '')
             new_client_secret = new_client.get('ClientSecret', '')
             
-            logger.info(f"Created new OAuth client in Cognito: {new_client_id}")
+            logger.info(f"Created new OAuth client in Amazon Cognito: {new_client_id}")
             
         except Exception as e:
             logger.error(f"Error creating new client: {str(e)}")

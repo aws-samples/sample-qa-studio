@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to list all use cases from DynamoDB.
+    Lambda handler to list all use cases from Amazon DynamoDB.
     
     Args:
         event: API Gateway proxy request event
@@ -28,11 +28,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if error_response:
             return error_response
         
-        # Initialize DynamoDB resource
+        # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
-        # Query DynamoDB for all use cases
+        # Query Amazon DynamoDB for all use cases
         response = table.query(
             KeyConditionExpression=Key('pk').eq('USECASES') & Key('sk').begins_with('USECASE#')
         )

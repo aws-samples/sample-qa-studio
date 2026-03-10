@@ -121,7 +121,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if not schedule_timezone:
                 return create_response(400, {'error': 'schedule_timezone cannot be empty'})
         
-        # Initialize DynamoDB client
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
@@ -168,7 +168,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         updated_suite = update_response['Attributes']
         
-        # Manage EventBridge rule
+        # Manage Amazon EventBridge rule
         try:
             manage_eventbridge_rule(
                 suite_id=suite_id,
@@ -179,7 +179,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except Exception as e:
             logger.error(f"Error managing EventBridge rule: {str(e)}", exc_info=True)
             return create_response(500, {
-                'error': 'Failed to update EventBridge rule',
+                'error': 'Failed to update Amazon EventBridge rule',
                 'message': str(e)
             })
         
@@ -202,7 +202,7 @@ def manage_eventbridge_rule(
     schedule_timezone: str = None
 ) -> None:
     """
-    Manage EventBridge rule for suite scheduling.
+    Manage Amazon EventBridge rule for suite scheduling.
     
     Creates/updates rule if schedule_enabled=True, disables if False.
     
@@ -222,7 +222,7 @@ def manage_eventbridge_rule(
     if not execute_suite_lambda_arn:
         raise ValueError('EXECUTE_SUITE_LAMBDA_ARN environment variable not set')
     
-    # Initialize EventBridge client
+    # Initialize Amazon EventBridge client
     events_client = boto3.client('events')
     
     # Rule naming convention

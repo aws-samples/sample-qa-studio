@@ -41,7 +41,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except json.JSONDecodeError:
             return create_response(400, {'error': 'Invalid JSON in request body'})
         
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         sqs_client = boto3.client('sqs')
@@ -76,7 +76,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Save step to DynamoDB
         table.put_item(Item=execution_step)
         
-        # Send command to EventBridge or SQS
+        # Send command to Amazon EventBridge or Amazon SQS
         command = {
             'action': 'execute_step',
             'sessionId': session_id,
@@ -86,7 +86,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         event_bus_name = os.environ.get('WIZARD_EVENT_BUS_NAME', '')
         
         if event_bus_name:
-            # Send to EventBridge (new approach)
+            # Send to Amazon EventBridge (new approach)
             try:
                 eventbridge_client.put_events(
                     Entries=[
@@ -98,12 +98,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         }
                     ]
                 )
-                logger.info(f"Command sent to EventBridge for session {session_id}")
+                logger.info(f"Command sent to Amazon EventBridge for session {session_id}")
             except Exception as e:
-                logger.error(f"Error sending EventBridge event: {str(e)}")
+                logger.error(f"Error sending Amazon EventBridge event: {str(e)}")
                 return create_response(500, {'error': 'Failed to send command to EventBridge'})
         else:
-            # Fallback to SQS (legacy approach)
+            # Fallback to Amazon SQS (legacy approach)
             queue_url = os.environ.get('WIZARD_QUEUE_URL', '')
             if queue_url:
                 try:

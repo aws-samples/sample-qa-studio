@@ -1,4 +1,4 @@
-"""Lambda handler for fetching and parsing JSON trace data for an execution step."""
+"""AWS Lambda handler for fetching and parsing JSON trace data for an execution step."""
 import lambda_init  # noqa: F401 — Must be first to set up Python path
 import json
 import logging
@@ -120,7 +120,7 @@ def find_trace_s3_key(
 
     Args:
         s3_client: boto3 S3 client
-        bucket: S3 bucket name
+        bucket: Amazon S3 bucket name
         usecase_id: Usecase identifier
         execution_id: Execution identifier
         session_id: Nova Act session identifier
@@ -130,7 +130,7 @@ def find_trace_s3_key(
         The full S3 key if found, otherwise None.
     """
     prefix = f"{usecase_id}/{execution_id}/{session_id}/act_{act_id}"
-    logger.info(f"Listing S3 objects with prefix={prefix} in bucket={bucket}")
+    logger.info(f"Listing Amazon S3 objects with prefix={prefix} in bucket={bucket}")
 
     try:
         response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)

@@ -56,7 +56,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
         user_sub = user_identity.get('sub', '')
         
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         secrets_client = boto3.client('secretsmanager')

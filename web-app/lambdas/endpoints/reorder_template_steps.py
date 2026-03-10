@@ -46,7 +46,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not step_orders:
             return create_response(400, {'error': 'step_orders is required'})
         
-        # Initialize DynamoDB client
+        # Initialize Amazon DynamoDB client
         dynamodb_client = boto3.client('dynamodb')
         table_name = get_table_name()
         

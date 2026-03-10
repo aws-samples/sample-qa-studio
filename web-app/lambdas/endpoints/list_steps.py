@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to list all steps for a specific use case from DynamoDB.
+    Lambda handler to list all steps for a specific use case from Amazon DynamoDB.
     
     Args:
         event: API Gateway proxy request event
@@ -31,11 +31,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not usecase_id:
             return create_response(400, {'error': 'Missing use case ID'})
         
-        # Initialize DynamoDB resource
+        # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
-        # Query DynamoDB for all steps of this use case
+        # Query Amazon DynamoDB for all steps of this use case
         response = table.query(
             KeyConditionExpression=Key('pk').eq(f'USECASE#{usecase_id}') & Key('sk').begins_with('STEP#')
         )

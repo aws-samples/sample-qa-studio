@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to update a step in DynamoDB.
+    Lambda handler to update a step in Amazon DynamoDB.
     
     Args:
         event: API Gateway proxy request event
@@ -42,7 +42,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not instruction or not step_type:
             return create_response(400, {'error': 'Instruction and step_type are required'})
         
-        # Initialize DynamoDB resource
+        # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         

@@ -42,11 +42,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Getting test suite {suite_id} for user: {user_identity.get('identity')}")
         
-        # Initialize DynamoDB client
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         
-        # Get suite from DynamoDB
+        # Get suite from Amazon DynamoDB
         response = table.get_item(
             Key={
                 'pk': get_test_suites_pk(),

@@ -1,8 +1,8 @@
 """
 Cache Builder Lambda
 
-Event-driven Lambda function that automatically builds step caches from Nova Act
-responses after successful test executions. Processes EventBridge events, fetches
+Event-driven Lambda function that automatically builds step caches from Amazon Nova Act
+responses after successful test executions. Processes Amazon EventBridge events, fetches
 Nova Act response files from S3, parses them using cache_parser module, and updates
 STEP records in DynamoDB with cached actions.
 
@@ -113,15 +113,15 @@ def get_nova_session_id(table, usecase_id: str, execution_id: str) -> Optional[s
 
 def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: str, nova_session_id: str) -> Dict[str, str]:
     """
-    List S3 act files and build act_id to s3_key mapping.
+    List Amazon S3 act files and build act_id to s3_key mapping.
 
-    Lists S3 objects with prefix {usecase_id}/{execution_id}/{nova_session_id}/act_
+    Lists Amazon S3 objects with prefix {usecase_id}/{execution_id}/{nova_session_id}/act_
     and extracts act_id from each key using regex pattern act_(.+)\\.json.
-    Handles empty results and S3 access errors gracefully with logging.
+    Handles empty results and Amazon S3 access errors gracefully with logging.
 
     Args:
         s3_client: boto3 S3 client
-        bucket: S3 bucket name
+        bucket: Amazon S3 bucket name
         usecase_id: Usecase identifier
         execution_id: Execution identifier
         nova_session_id: Nova Act session identifier
@@ -133,7 +133,7 @@ def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: st
     prefix = f'{usecase_id}/{execution_id}/{nova_session_id}/act_'
 
     try:
-        logger.info(f"Listing S3 objects with prefix={prefix} in bucket={bucket}")
+        logger.info(f"Listing Amazon S3 objects with prefix={prefix} in bucket={bucket}")
 
         response = s3_client.list_objects_v2(
             Bucket=bucket,
@@ -142,7 +142,7 @@ def discover_act_files(s3_client, bucket: str, usecase_id: str, execution_id: st
 
         # Check if any objects were found
         if 'Contents' not in response:
-            logger.warning(f"No S3 act files found for usecase={usecase_id}, execution={execution_id}, session={nova_session_id}")
+            logger.warning(f"No Amazon S3 act files found for usecase={usecase_id}, execution={execution_id}, session={nova_session_id}")
             return act_mapping
 
         # Log all files found for debugging
@@ -259,17 +259,17 @@ def filter_navigation_steps(steps: list, act_mapping: Dict[str, str]) -> list:
 
 def fetch_and_parse_act_response(s3_client, bucket: str, s3_key: str) -> Optional[List[Dict]]:
     """
-    Fetch Nova Act response from S3 and parse it into cacheable steps.
+    Fetch Nova Act response from Amazon S3 and parse it into cacheable steps.
     
-    Fetches the Nova Act response JSON from S3 using get_object, then invokes
+    Fetches the Amazon Nova Act response JSON from Amazon S3 using get_object, then invokes
     parse_nova_act_steps() from the cache_parser module to extract cacheable
     actions. Handles S3 fetch errors and parsing exceptions gracefully with
     logging.
     
     Args:
         s3_client: boto3 S3 client
-        bucket: S3 bucket name
-        s3_key: S3 object key for the act file
+        bucket: Amazon S3 bucket name
+        s3_key: Amazon S3 object key for the act file
         
     Returns:
         List of parsed cached steps, or None if fetching/parsing fails
@@ -394,7 +394,7 @@ def update_step_caches(
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler for cache building triggered by EventBridge.
+    Lambda handler for cache building triggered by Amazon EventBridge.
     
     Processes usecase.execution.completed events and builds step caches from
     Nova Act responses. Uses fire-and-forget error handling where all errors
@@ -476,7 +476,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Using table={table_name}, bucket={s3_bucket}")
         
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(table_name)
         s3_client = boto3.client('s3')
@@ -583,7 +583,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 s3_key = act_mapping.get(act_id)
                 
                 if not s3_key:
-                    logger.warning(f"No S3 key found for act_id={act_id}, step_id={step_id}, skipping step")
+                    logger.warning(f"No Amazon S3 key found for act_id={act_id}, step_id={step_id}, skipping step")
                     continue
                 
                 # Fetch and parse act response

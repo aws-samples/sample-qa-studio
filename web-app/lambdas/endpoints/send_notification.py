@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> None:
     """
-    Lambda handler for sending notifications via SNS.
+    Lambda handler for sending notifications via Amazon SNS.
     Triggered by SQS messages containing notification requests.
     
     Args:
@@ -20,7 +20,7 @@ def handler(event: Dict[str, Any], context: Any) -> None:
         context: Lambda context
     """
     try:
-        # Initialize AWS clients
+        # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         sns_client = boto3.client('sns')

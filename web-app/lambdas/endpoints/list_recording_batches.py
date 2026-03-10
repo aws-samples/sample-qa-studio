@@ -36,7 +36,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("UsecaseId and ExecutionId are required")
             return create_response(400, {'error': 'UsecaseId and ExecutionId are required'})
         
-        # Initialize S3 client
+        # Initialize Amazon S3 client
         s3_client = boto3.client('s3')
         bucket_name = get_bucket_name()
         
@@ -81,7 +81,7 @@ def find_recording_folder(s3_client, bucket: str, prefix: str) -> str:
     
     Args:
         s3_client: Boto3 S3 client
-        bucket: S3 bucket name
+        bucket: Amazon S3 bucket name
         prefix: Base prefix to search under
         
     Returns:
@@ -116,7 +116,7 @@ def load_metadata(s3_client, bucket: str, prefix: str) -> Dict[str, Any]:
     
     Args:
         s3_client: Boto3 S3 client
-        bucket: S3 bucket name
+        bucket: Amazon S3 bucket name
         prefix: Recording folder prefix
         
     Returns:
@@ -144,7 +144,7 @@ def list_batch_files(s3_client, bucket: str, prefix: str) -> list:
     
     Args:
         s3_client: Boto3 S3 client
-        bucket: S3 bucket name
+        bucket: Amazon S3 bucket name
         prefix: Recording folder prefix
         
     Returns:

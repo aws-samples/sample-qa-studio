@@ -39,7 +39,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not execution_id:
             return create_response(400, {'error': 'execution_id is required'})
         
-        # Initialize DynamoDB
+        # Initialize Amazon DynamoDB
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
         

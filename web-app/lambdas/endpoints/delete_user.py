@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to delete a user from Cognito User Pool.
+    Lambda handler to delete a user from Amazon Cognito user pool.
     
     Args:
         event: API Gateway proxy request event
@@ -42,10 +42,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("USER_POOL_ID environment variable not set")
             return create_response(500, {'error': 'Internal server error'})
         
-        # Initialize Cognito client
+        # Initialize Amazon Cognito client
         cognito_client = boto3.client('cognito-idp')
         
-        # Delete user from Cognito
+        # Delete user from Amazon Cognito
         cognito_client.admin_delete_user(
             UserPoolId=user_pool_id,
             Username=username
