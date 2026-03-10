@@ -1,4 +1,4 @@
-import { Duration, Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
+import { Duration, Stack, StackProps, CfnOutput, CfnResource } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Runtime, Architecture, Code, Function } from 'aws-cdk-lib/aws-lambda';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
@@ -60,6 +60,14 @@ export class NovaActQAStudioBaseStack extends Stack {
     fn.role?.addManagedPolicy(
       ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole')
     );
+
+    // Suppress W89 — lambdas communicate with AWS services via public endpoints, VPC not needed
+    const cfnFn = fn.node.defaultChild as CfnResource;
+    cfnFn.addMetadata('cfn_nag', {
+      rules_to_suppress: [
+        { id: 'W89', reason: 'Lambda functions do not require VPC — they communicate with AWS services via public endpoints' }
+      ]
+    });
 
     return fn
   }
