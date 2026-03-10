@@ -18,6 +18,7 @@ import {
   Function as CloudFrontFunction,
   FunctionCode,
   FunctionEventType,
+  SecurityPolicyProtocol,
 } from 'aws-cdk-lib/aws-cloudfront';
 import { S3BucketOrigin, HttpOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
@@ -119,6 +120,7 @@ function handler(event) {
         }
       },
       priceClass: PriceClass.PRICE_CLASS_100,
+      minimumProtocolVersion: SecurityPolicyProtocol.TLS_V1_2_2021,
       defaultRootObject: 'index.html',
       // No error responses needed - CloudFront Function handles SPA routing at request time
       // This allows API errors (403, 404, etc.) to pass through correctly
