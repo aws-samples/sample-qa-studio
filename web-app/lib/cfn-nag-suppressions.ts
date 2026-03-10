@@ -33,6 +33,18 @@ export class CfnNagSuppressions implements IAspect {
           ]);
         }
       }
+
+      // Suppress W28 on resources with explicit names (intentional for cross-stack references)
+      const w28Types = [
+        'AWS::DynamoDB::Table',
+        'AWS::IAM::Role',
+        'AWS::IAM::ManagedPolicy',
+      ];
+      if (w28Types.includes(node.cfnResourceType)) {
+        this.addSuppressions(node, [
+          { id: 'W28', reason: 'Explicit name is intentional — used for cross-stack references and operational predictability' },
+        ]);
+      }
     }
   }
 
