@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { App } from 'aws-cdk-lib';
+import { App, Aspects } from 'aws-cdk-lib';
 import * as fs from 'fs';
 import * as path from 'path';
 import { NovaActQAStudioStorageStack } from '../lib/storage-stack';
@@ -9,6 +9,7 @@ import { NovaActQAStudioFrontendStack } from '../lib/frontend-stack';
 import { NovaActQAStudioApiStack } from '../lib/api-stack';
 import { NovaActQAStudioLambdaStack } from '../lib/lambda-stack';
 import { loadConfig, getStackEnv } from '../lib/config';
+import { CfnNagSuppressions } from '../lib/cfn-nag-suppressions';
 
 // Load and validate configuration with sane defaults
 const config = loadConfig();
@@ -120,5 +121,8 @@ new NovaActQAStudioFrontendStack(app, 'frontend', {
   apiId: apiStack.api.restApiId,
   env: stackEnv,
 })
+
+// Apply cfn_nag suppressions for CDK-managed resources across all stacks
+Aspects.of(app).add(new CfnNagSuppressions());
 
 app.synth();
