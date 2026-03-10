@@ -12,7 +12,7 @@ import { loadConfig, getStackEnv } from '../lib/config';
 
 // Load and validate configuration with sane defaults
 const config = loadConfig();
-const { adminEmail, baseName, apiEndpoint, apiDeploymentStage, bedrockModelId } = config;
+const { adminEmail, baseName, apiEndpoint, apiDeploymentStage, bedrockModelId, lambdaConcurrency } = config;
 
 // Read version from package.json
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
@@ -31,6 +31,7 @@ if (!adminEmail) {
 const storageStack = new NovaActQAStudioStorageStack(app, 'storage', {
   stackName: `${baseName}-storage`,
   baseName,
+  lambdaConcurrency,
   env: stackEnv,
 })
 
@@ -42,6 +43,7 @@ const authStack = new NovaActQAStudioAuthStack(app, 'auth', {
   stackName: `${baseName}-auth`,
   baseName,
   adminEmail,
+  lambdaConcurrency,
   ...(oauthCallbackUrls.length > 0 && { callbackUrls: oauthCallbackUrls }),
   env: stackEnv,
 })
@@ -50,6 +52,7 @@ const authStack = new NovaActQAStudioAuthStack(app, 'auth', {
 const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   stackName: `${baseName}-worker`,
   baseName,
+  lambdaConcurrency,
   env: stackEnv,
   table: storageStack.table,
   tableReadPolicy: storageStack.tableReadPolicy,
@@ -62,6 +65,7 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
 const lambdaStack = new NovaActQAStudioLambdaStack(app, 'lambdas', {
   stackName: `${baseName}-lambdas`,
   baseName,
+  lambdaConcurrency,
   table: storageStack.table,
   userPool: authStack.userPool,
   artefactsBucket: workerStack.artefactsBucket,
@@ -80,6 +84,7 @@ const lambdaStack = new NovaActQAStudioLambdaStack(app, 'lambdas', {
 const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   stackName: `${baseName}-api`,
   baseName,
+  lambdaConcurrency,
   userPool: authStack.userPool,
   apiDeploymentStage,
   lambdaStack: lambdaStack,
@@ -111,6 +116,7 @@ new NovaActQAStudioFrontendStack(app, 'frontend', {
   stackName: `${baseName}-frontend`,
   apiEndpoint: apiEndpoint,
   baseName,
+  lambdaConcurrency,
   apiId: apiStack.api.restApiId,
   env: stackEnv,
 })

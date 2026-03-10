@@ -22,6 +22,8 @@ export interface NovaActQAStudioConfig {
   enableExtensionAuthentication?: boolean;
   /** Callback URL for CLI OAuth flow (e.g. http://localhost:19847/callback) */
   cliCallbackUrl?: string;
+  /** Reserved concurrent executions per Lambda function (default: 5) */
+  lambdaConcurrency?: number;
 }
 
 const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
@@ -36,6 +38,7 @@ const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
   createVpcEndpoints: false,
   useNovaActGa: true,
   agentCoreVPC: false,
+  lambdaConcurrency: 5,
 };
 
 /**

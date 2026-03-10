@@ -5,6 +5,7 @@ import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
 export interface NovaActQAStudioBaseStackCreateProps extends StackProps {
   baseName: string
+  lambdaConcurrency?: number
 }
 
 export interface createPythonLambdaProps {
@@ -19,6 +20,7 @@ export interface createPythonLambdaProps {
 
 export class NovaActQAStudioBaseStack extends Stack {
   protected baseName: string = ""
+  protected lambdaConcurrency: number = 5
 
   protected cdkName(name: string): string {
     return `${this.baseName}-${name.toLocaleLowerCase().replace("_", "-")}`
@@ -50,7 +52,8 @@ export class NovaActQAStudioBaseStack extends Stack {
       timeout: props.timeout || Duration.seconds(5),
       handler: props.handler || `${props.path}.handler`,
       environment: props.environment,
-      logRetention: 5
+      logRetention: 5,
+      reservedConcurrentExecutions: this.lambdaConcurrency,
     });
 
     // Explicitly add CloudWatch Logs permissions
@@ -71,5 +74,6 @@ export class NovaActQAStudioBaseStack extends Stack {
     super(scope, id, props);
 
     this.baseName = props.baseName
+    this.lambdaConcurrency = props.lambdaConcurrency ?? 5
   }
 }
