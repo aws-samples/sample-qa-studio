@@ -57,6 +57,7 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
       autoDeleteObjects: true,
       encryption: BucketEncryption.S3_MANAGED,
       objectOwnership: ObjectOwnership.BUCKET_OWNER_PREFERRED,
+      enforceSSL: true,
     });
 
     this.frontendBucket = new Bucket(this, 'FrontendBucket', {
@@ -65,6 +66,7 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
       encryption: BucketEncryption.S3_MANAGED,
       serverAccessLogsBucket: accessLogBucket,
       serverAccessLogsPrefix: 's3-access-logs/',
+      enforceSSL: true,
     });
 
     // CloudFront Function for SPA routing

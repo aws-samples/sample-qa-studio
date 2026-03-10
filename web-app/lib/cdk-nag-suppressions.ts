@@ -7,6 +7,7 @@ interface CdkNagStacks {
   workerStack: Stack;
   lambdaStack: Stack;
   apiStack: Stack;
+  frontendStack: Stack;
 }
 
 /**
@@ -20,9 +21,9 @@ interface CdkNagStacks {
  * can capture suppressed findings in the CSV/JSON reports.
  */
 export function applyCdkNagSuppressions(_app: App, stacks: CdkNagStacks): void {
-  const { storageStack, authStack, workerStack, lambdaStack, apiStack } = stacks;
+  const { storageStack, authStack, workerStack, lambdaStack, apiStack, frontendStack } = stacks;
 
-  const allStacks = [storageStack, authStack, workerStack, lambdaStack, apiStack];
+  const allStacks = [storageStack, authStack, workerStack, lambdaStack, apiStack, frontendStack];
 
   // ──────────────────────────────────────────────
   // App-wide suppressions (CDK-managed internals)
@@ -169,6 +170,36 @@ export function applyCdkNagSuppressions(_app: App, stacks: CdkNagStacks): void {
     {
       id: 'AwsSolutions-IAM5',
       reason: 'API Gateway CloudWatch role uses AWS managed policy. Lambda invoke permissions are scoped to specific function ARNs.',
+    },
+    {
+      id: 'AwsSolutions-APIG3',
+      reason: 'WAFv2 is not attached to the API Gateway stage — this is an internal tool, not a public-facing API requiring WAF protection.',
+    },
+  ]);
+
+  // ──────────────────────────────────────────────
+  // Frontend stack
+  // ──────────────────────────────────────────────
+  NagSuppressions.addStackSuppressions(frontendStack, [
+    {
+      id: 'AwsSolutions-CFR1',
+      reason: 'Geo restrictions are not required — this is an internal tool accessible from any location.',
+    },
+    {
+      id: 'AwsSolutions-CFR2',
+      reason: 'WAFv2 is not attached to the CloudFront distribution — this is an internal tool, not a public-facing site requiring WAF protection.',
+    },
+    {
+      id: 'AwsSolutions-CFR4',
+      reason: 'CloudFront distribution uses the default *.cloudfront.net viewer certificate which enforces TLSv1 minimum regardless of MinimumProtocolVersion setting. Custom domain with ACM certificate required to enforce TLSv1.2+.',
+    },
+    {
+      id: 'AwsSolutions-IAM5',
+      reason: 'CDK BucketDeployment custom resource requires wildcard S3 actions (GetBucket*, GetObject*, List*, Abort*, DeleteObject*) and wildcard resources for the CDK assets bucket and frontend bucket. This is a CDK-managed construct.',
+    },
+    {
+      id: 'AwsSolutions-L1',
+      reason: 'CDK BucketDeployment custom resource Lambda uses a CDK-managed runtime — not user-configurable.',
     },
   ]);
 }

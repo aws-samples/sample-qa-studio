@@ -115,7 +115,7 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
 })
 
 // Frontend stack must be created after API is set up
-new NovaActQAStudioFrontendStack(app, 'frontend', {
+const frontendStack = new NovaActQAStudioFrontendStack(app, 'frontend', {
   stackName: `${baseName}-frontend`,
   apiEndpoint: apiEndpoint,
   baseName,
@@ -141,6 +141,7 @@ applyCdkNagSuppressions(app, {
   workerStack,
   lambdaStack,
   apiStack,
+  frontendStack,
 });
 
 app.synth();
