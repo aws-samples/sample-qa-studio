@@ -15,25 +15,30 @@ interface CdkNagStacks {
  * Each suppression includes a reason explaining why the rule is safe to suppress.
  * Suppressions are scoped as narrowly as possible — stack-level only when the
  * pattern applies uniformly to all resources of that type in the stack.
+ *
+ * Note: `applyToNestedStacks` is intentionally `false` so that the NagReportLogger
+ * can capture suppressed findings in the CSV/JSON reports.
  */
-export function applyCdkNagSuppressions(app: App, stacks: CdkNagStacks): void {
+export function applyCdkNagSuppressions(_app: App, stacks: CdkNagStacks): void {
   const { storageStack, authStack, workerStack, lambdaStack, apiStack } = stacks;
+
+  const allStacks = [storageStack, authStack, workerStack, lambdaStack, apiStack];
 
   // ──────────────────────────────────────────────
   // App-wide suppressions (CDK-managed internals)
   // ──────────────────────────────────────────────
-  const allStacks = [storageStack, authStack, workerStack, lambdaStack, apiStack];
+  const commonSuppressions = [
+    {
+      id: 'AwsSolutions-L1',
+      reason: 'Lambda runtime is explicitly set to Python 3.13 (latest supported). CDK custom resource Lambdas use the CDK-managed runtime.',
+    },
+    {
+      id: 'AwsSolutions-IAM4',
+      reason: 'AWS managed policies (AWSLambdaBasicExecutionRole) are used for CloudWatch Logs permissions — this is the AWS-recommended pattern.',
+    },
+  ];
   for (const stack of allStacks) {
-    NagSuppressions.addStackSuppressions(stack, [
-      {
-        id: 'AwsSolutions-L1',
-        reason: 'Lambda runtime is explicitly set to Python 3.13 (latest supported). CDK custom resource Lambdas use the CDK-managed runtime.',
-      },
-      {
-        id: 'AwsSolutions-IAM4',
-        reason: 'AWS managed policies (AWSLambdaBasicExecutionRole) are used for CloudWatch Logs permissions — this is the AWS-recommended pattern.',
-      },
-    ], true);
+    NagSuppressions.addStackSuppressions(stack, commonSuppressions);
   }
 
   // ──────────────────────────────────────────────
@@ -52,7 +57,7 @@ export function applyCdkNagSuppressions(app: App, stacks: CdkNagStacks): void {
       id: 'AwsSolutions-SMG4',
       reason: 'Nova Act API key secret rotation is managed externally by the user — automatic rotation is not applicable.',
     },
-  ], true);
+  ]);
 
   // ──────────────────────────────────────────────
   // Auth stack
@@ -70,7 +75,7 @@ export function applyCdkNagSuppressions(app: App, stacks: CdkNagStacks): void {
       id: 'AwsSolutions-COG3',
       reason: 'AdvancedSecurityMode is not enabled — this is a non-regulated internal workload. Standard Cognito security features are sufficient.',
     },
-  ], true);
+  ]);
 
   // ──────────────────────────────────────────────
   // Worker stack
@@ -120,7 +125,7 @@ export function applyCdkNagSuppressions(app: App, stacks: CdkNagStacks): void {
       id: 'AwsSolutions-SNS3',
       reason: 'SNS topic does not require SSL-only — subscribers are Lambda functions within the same account.',
     },
-  ], true);
+  ]);
 
   // ──────────────────────────────────────────────
   // Lambda stack
@@ -130,7 +135,7 @@ export function applyCdkNagSuppressions(app: App, stacks: CdkNagStacks): void {
       id: 'AwsSolutions-IAM5',
       reason: 'Lambda IAM policies use scoped wildcards: S3 bucket/*, DynamoDB table/index/*, Secrets Manager scoped to account/region. Cognito actions require * resource.',
     },
-  ], true);
+  ]);
 
   // ──────────────────────────────────────────────
   // API stack
@@ -160,5 +165,5 @@ export function applyCdkNagSuppressions(app: App, stacks: CdkNagStacks): void {
       id: 'AwsSolutions-IAM5',
       reason: 'API Gateway CloudWatch role uses AWS managed policy. Lambda invoke permissions are scoped to specific function ARNs.',
     },
-  ], true);
+  ]);
 }

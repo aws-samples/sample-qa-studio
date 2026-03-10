@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { App, Aspects } from 'aws-cdk-lib';
-import { AwsSolutionsChecks } from 'cdk-nag';
+import { AwsSolutionsChecks, NagReportFormat } from 'cdk-nag';
 import * as fs from 'fs';
 import * as path from 'path';
 import { NovaActQAStudioStorageStack } from '../lib/storage-stack';
@@ -128,7 +128,11 @@ new NovaActQAStudioFrontendStack(app, 'frontend', {
 Aspects.of(app).add(new CfnNagSuppressions());
 
 // Apply cdk-nag AwsSolutions checks across all stacks
-Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true, reports: true }));
+Aspects.of(app).add(new AwsSolutionsChecks({
+  verbose: true,
+  reports: true,
+  reportFormats: [NagReportFormat.CSV, NagReportFormat.JSON],
+}));
 
 // Apply cdk-nag suppressions for known acceptable patterns
 applyCdkNagSuppressions(app, {
