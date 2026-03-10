@@ -85,7 +85,8 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     const registry = new Repository(this, 'images_repository', {
       removalPolicy: RemovalPolicy.DESTROY,
-      emptyOnDelete: true
+      emptyOnDelete: true,
+      imageScanOnPush: true,
     });
     this.artefactsBucket = new Bucket(this, 'artefacts', {
       bucketName: `${this.account}-${this.baseName}-artefacts-${this.region}`,
