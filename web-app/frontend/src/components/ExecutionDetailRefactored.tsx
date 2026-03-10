@@ -1,0 +1,336 @@
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import Header from "@cloudscape-design/components/header";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import Button from "@cloudscape-design/components/button";
+import Modal from "@cloudscape-design/components/modal";
+import Box from "@cloudscape-design/components/box";
+import AppLayout from "@cloudscape-design/components/app-layout";
+import Grid from "@cloudscape-design/components/grid";
+import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
+import { api } from '../utils/api';
+import ExecutionTimeline from './common/ExecutionTimeline';
+import Breadcrumb from './common/Breadcrumb';
+import { ExecutionInformation, ExecutionSteps, ExecutionVariables } from './execution';
+import LiveViewPanel from './execution/LiveViewPanel';
+import { RecordingPlayer } from './RecordingPlayer';
+import DownloadedFiles from './execution/DownloadedFiles';
+import LogViewer from './common/LogViewer';
+
+// Helper function to get the current executing step or the last completed step
+function getCurrentStep(steps: any[]) {
+  if (!steps || steps.length === 0) return null;
+  
+  // First, try to find a step that's currently executing
+  const executingStep = steps.find(step => step.status === 'executing');
+  if (executingStep) {
+    return {
+      sort: executingStep.sort,
+      instruction: executingStep.instruction,
+      status: executingStep.status
+    };
+  }
+  
+  // If no executing step, find the last completed step
+  const completedSteps = steps.filter(step => 
+    step.status === 'success' || step.status === 'completed'
+  );
+  
+  if (completedSteps.length > 0) {
+    const lastCompleted = completedSteps[completedSteps.length - 1];
+    return {
+      sort: lastCompleted.sort,
+      instruction: lastCompleted.instruction,
+      status: lastCompleted.status
+    };
+  }
+  
+  // If no completed steps, return the first pending step
+  const pendingStep = steps.find(step => step.status === 'pending');
+  if (pendingStep) {
+    return {
+      sort: pendingStep.sort,
+      instruction: pendingStep.instruction,
+      status: pendingStep.status
+    };
+  }
+  
+  return null;
+}
+
+export default function ExecutionDetailRefactored() {
+  const { usecaseId, executionId } = useParams();
+  const [execution, setExecution] = useState<any>(null);
+  const [usecase, setUsecase] = useState<any>(null);
+  const [executionSteps, setExecutionSteps] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stopModalVisible, setStopModalVisible] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
+  const [hasVariables, setHasVariables] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [logDownloadUrl, setLogDownloadUrl] = useState<string | null>(null);
+  const [logArtifactsLoading, setLogArtifactsLoading] = useState(true);
+
+  const fetchData = async () => {
+    setRefreshTrigger(prev => prev + 1);
+    try {
+      const [executionData, stepsData, variablesData, usecaseData] = await Promise.all([
+        api.get(`usecase/${usecaseId}/executions/${executionId}`),
+        api.get(`usecase/${usecaseId}/executions/${executionId}/steps`),
+        api.get(`usecase/${usecaseId}/executions/${executionId}/variables`).catch(() => ({ variables: [], runtime_variables: [] })),
+        api.get(`usecase/${usecaseId}`)
+      ]);
+
+      setExecution(executionData);
+      setUsecase(usecaseData);
+
+      // Sort steps by sort property and set them
+      const sortedSteps = (stepsData.steps || []).sort((a: any, b: any) => a.sort - b.sort);
+      setExecutionSteps(sortedSteps);
+
+      sortedSteps.forEach((step: any) => {
+        if (step.logs.length > 0) {
+          // step.logs = step.logs.reverse();
+        }
+      });
+
+      // Check if there are any variables
+      setHasVariables(variablesData?.variables?.length > 0 || variablesData?.runtime_variables?.length > 0);
+    } catch (error) {
+      console.error('Failed to fetch execution data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchData();
+  }, [usecaseId, executionId]);
+
+  // Polling effect for executing status
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    if (execution?.status === 'executing' || execution?.status === 'pending') {
+      intervalId = setInterval(() => {
+        fetchData();
+      }, 10000); // 10 seconds
+    }
+
+    // Cleanup interval on unmount or when status changes
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [execution?.status, usecaseId, executionId]);
+
+  // Fetch usecase execution log artifact (only for ci_runner executions)
+  useEffect(() => {
+    const fetchLogArtifact = async () => {
+      if (!usecaseId || !executionId) return;
+      try {
+        setLogArtifactsLoading(true);
+        const data = await api.get(`usecase/${usecaseId}/executions/${executionId}/artifacts`);
+        const logArtifact = (data.artifacts || []).find(
+          (a: any) => a.type === 'logs'
+        );
+        setLogDownloadUrl(logArtifact?.download_url ?? null);
+      } catch (error) {
+        // Endpoint may not exist yet — gracefully degrade
+        console.error('Failed to fetch execution artifacts:', error);
+        setLogDownloadUrl(null);
+      } finally {
+        setLogArtifactsLoading(false);
+      }
+    };
+
+    // Only fetch logs for ci_runner executions in terminal state
+    const isCiRunner = execution?.trigger_type === 'ci_runner';
+    const isTerminal = execution && execution.status !== 'executing' && execution.status !== 'pending';
+    if (isCiRunner && isTerminal) {
+      fetchLogArtifact();
+    } else if (execution) {
+      // Not a ci_runner execution — skip log fetching
+      setLogArtifactsLoading(false);
+      setLogDownloadUrl(null);
+    }
+  }, [usecaseId, executionId, execution?.status, execution?.trigger_type]);
+
+  const handleStopExecution = async () => {
+    setStopping(true);
+    setStopError(null);
+    
+    try {
+      await api.post(`usecase/${usecaseId}/executions/${executionId}/stop`, {});
+      setStopModalVisible(false);
+      fetchData(); // Refresh execution data
+    } catch (error: any) {
+      console.error('Failed to stop execution:', error);
+      setStopError(error?.message || 'Failed to stop execution. Please try again.');
+    } finally {
+      setStopping(false);
+    }
+  };
+
+  if (loading) return <div>Loading...</div>;
+  if (!execution) return <div>Execution not found</div>;
+  if (!usecaseId || !executionId) return <div>Invalid parameters</div>;
+
+  return (
+    <AppLayout
+      navigationHide
+      toolsHide
+      content={
+        <SpaceBetween direction="vertical" size="l">
+          <Breadcrumb
+            items={[
+              { text: "Home", href: "/" },
+              { text: usecase?.name || "Use Case", href: `/usecase/${usecaseId}` },
+              { text: "Execution Details" }
+            ]}
+          />
+          <Header 
+            variant="h1"
+            actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                {execution?.cloudWatchLogsUrl && (
+                  <Button
+                    iconName="external"
+                    onClick={() => window.open(execution.cloudWatchLogsUrl, '_blank')}
+                  >
+                    CloudWatch Logs
+                  </Button>
+                )}
+                {(execution?.status === 'executing' || execution?.status === 'pending') && (
+                  <Button
+                    iconName="status-stopped"
+                    onClick={() => setStopModalVisible(true)}
+                  >
+                    Stop Execution
+                  </Button>
+                )}
+              </SpaceBetween>
+            }
+          >
+            Execution Details
+          </Header>
+
+          <Grid
+            gridDefinition={[
+              { colspan: { default: 12, m: 9 } },
+              { colspan: { default: 12, m: 3 } },
+            ]}
+          >
+            <SpaceBetween direction='vertical' size='m'>
+              <ExecutionInformation
+                execution={execution}
+                usecaseId={usecaseId}
+                executionId={executionId}
+              />
+
+              {hasVariables && (
+                <ExecutionVariables
+                  usecaseId={usecaseId}
+                  executionId={executionId}
+                />
+              )}
+            </SpaceBetween>
+
+            <SpaceBetween direction='vertical' size='m'>
+              <ExecutionTimeline execution={execution} />
+            </SpaceBetween>
+          </Grid>
+
+          {/* Live View Panel - Full width above steps table */}
+          {(execution?.status === 'executing') && (
+            <LiveViewPanel
+              usecaseId={usecaseId}
+              executionId={executionId}
+              executionStatus={execution?.status}
+              currentStep={getCurrentStep(executionSteps)}
+            />
+          )}
+
+          <ExecutionSteps
+            executionSteps={executionSteps}
+            usecaseId={usecaseId}
+            executionId={executionId}
+          />
+
+          <DownloadedFiles
+            usecaseId={usecaseId}
+            executionId={executionId}
+            refreshTrigger={refreshTrigger}
+            executionRegion={execution?.region}
+          />
+
+          {/* Recording Expandable Section - only for terminal executions */}
+          {['success', 'failed', 'error', 'stopped'].includes(execution?.status) && (
+            <ExpandableSection
+              variant="container"
+              headerText="Recording"
+              defaultExpanded={false}
+            >
+              <RecordingPlayer
+                usecaseId={usecaseId}
+                executionId={executionId}
+              />
+            </ExpandableSection>
+          )}
+
+          {/* Execution Logs (ci_runner only) */}
+          {execution?.trigger_type === 'ci_runner' && (logArtifactsLoading || logDownloadUrl) && (
+            <Container
+              header={<Header variant="h2">Execution Logs</Header>}
+            >
+              <LogViewer downloadUrl={logDownloadUrl} loading={logArtifactsLoading} />
+            </Container>
+          )}
+
+          {/* Stop Execution Confirmation Modal */}
+          <Modal
+            onDismiss={() => setStopModalVisible(false)}
+            visible={stopModalVisible}
+            header="Stop Execution"
+            footer={
+              <Box float="right">
+                <SpaceBetween direction="horizontal" size="xs">
+                  <Button 
+                    variant="link" 
+                    onClick={() => setStopModalVisible(false)}
+                    disabled={stopping}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="primary"
+                    onClick={handleStopExecution}
+                    loading={stopping}
+                  >
+                    Stop Execution
+                  </Button>
+                </SpaceBetween>
+              </Box>
+            }
+          >
+            <SpaceBetween size="m">
+              {stopError && (
+                <Box color="text-status-error">
+                  {stopError}
+                </Box>
+              )}
+              <Box>
+                <p>Are you sure you want to stop this execution?</p>
+                <p>This will terminate the running ECS task and mark the execution as stopped. This action cannot be undone.</p>
+              </Box>
+            </SpaceBetween>
+          </Modal>
+        </SpaceBetween>
+      }
+    />
+  );
+}

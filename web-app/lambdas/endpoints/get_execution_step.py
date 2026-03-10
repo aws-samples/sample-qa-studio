@@ -1,0 +1,58 @@
+import logging
+from typing import Any, Dict
+import boto3
+from utils import create_response, get_table_name, DynamoDBEncoder, require_scopes, validate_path_id
+import json
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
+def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Lambda handler to get execution step details.
+    
+    Args:
+        event: API Gateway proxy request event
+        context: Lambda context
+        
+    Returns:
+        API Gateway proxy response with execution step details
+    """
+    try:
+        # Validate scope authorization
+        user_identity, error = require_scopes(event, ['api/executions.read'])
+        if error:
+            return error
+        
+        # Get parameters from path
+        step_id, error = validate_path_id(event.get('pathParameters', {}).get('stepId'), 'step ID')
+        if error:
+            return error
+        execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+        if error:
+            return error
+        
+        # Initialize Amazon DynamoDB client
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(get_table_name())
+        
+        # Get execution step from Amazon DynamoDB
+        response = table.get_item(
+            Key={
+                'pk': f'EXECUTION_STEP#{step_id}',
+                'sk': f'EXECUTION#{execution_id}'
+            }
+        )
+        
+        if 'Item' not in response:
+            return create_response(404, {'error': 'Execution step not found'})
+        
+        execution_step = response['Item']
+        
+        return create_response(200, execution_step)
+        
+    except Exception as e:
+        logger.error(f"Error getting execution step: {str(e)}", exc_info=True)
+        return create_response(500, {'error': 'Internal server error'})

@@ -1,0 +1,85 @@
+logs/*
+
+# Compiled TypeScript files
+*.js
+*.d.ts
+
+# Exceptions - keep config files
+!jest.config.js
+
+# Compiled CloudFront functions (generated from cloudfront-functions/*.ts)
+lib/cloudfront-functions/
+
+node_modules
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+
+.DS_Store
+
+worker/logs
+worker/test_logs
+worker/user_dir
+worker/user_data
+worker/__pycache__
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Lambda dependencies
+web-app/endpoints/dependencies/
+web-app/endpoints/.cache/
+web-app/lambdas/endpoints/dependencies/
+web-app/lambdas/auth/dependencies/
+web-app/lambdas/events/dependencies/
+
+web-app/frontend/.env
+web-app/frontend/src/amplifyconfiguration.json
+
+web-app/configuration.json
+
+# DCV SDK downloads
+web-app/frontend/public/dcv/*
+web-app/.tmp-dcv-download/
+
+# Release artifacts
+web-app/release/
+
+# cdk-nag reports (generated)
+web-app/reports/
+
+# test cases for nova-act-qa-studio
+test-usecases/*
+
+# Frontend build outputs (if not already covered by *.js)
+web-app/frontend/build/*
+!web-app/frontend/build/.gitkeep
+web-app/frontend/dist/
+web-app/frontend/node_modules/
+
+# CDK context (can be regenerated)
+web-app/cdk.context.json
+
+# Additional log files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+.coverage
+**/.hypothesis
+.hypothesis
+.env
+
+.pytest_cache
+.kiro/design
+.kiro/specs
+*.egg-info

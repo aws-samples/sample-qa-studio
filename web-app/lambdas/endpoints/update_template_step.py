@@ -1,0 +1,100 @@
+import json
+import logging
+from typing import Any, Dict
+import boto3
+from utils import get_table_name, create_response, require_scopes, validate_path_id
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
+def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Lambda handler to update a template step in Amazon DynamoDB.
+    
+    Args:
+        event: API Gateway proxy request event
+        context: Lambda context
+        
+    Returns:
+        API Gateway proxy response
+    """
+    try:
+        # Validate scope authorization
+        user_identity, error = require_scopes(event, ['api/templates.write'])
+        if error:
+            return error
+        
+        # Get template ID and step ID from path parameters
+        template_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+        if error:
+            return error
+
+        step_id, error = validate_path_id(event.get('pathParameters', {}).get('stepId'), 'step ID')
+        if error:
+            return error
+        
+        # Parse request body
+        body = json.loads(event.get('body', '{}'))
+        
+        # Initialize Amazon DynamoDB resource
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(get_table_name())
+        
+        # Build update expression dynamically based on provided fields
+        update_expression_parts = []
+        expression_attribute_values = {}
+        expression_attribute_names = {}
+        
+        # Map of field names to their values
+        fields = {
+            'sort': body.get('sort'),
+            'instruction': body.get('instruction'),
+            'step_type': body.get('step_type'),
+            'secret_key': body.get('secret_key', ''),
+            'capture_variable': body.get('capture_variable', ''),
+            'validation_type': body.get('validation_type', ''),
+            'validation_operator': body.get('validation_operator', ''),
+            'validation_value': body.get('validation_value', ''),
+            'assertion_variable': body.get('assertion_variable', ''),
+            'value_type': body.get('value_type', '')
+        }
+        
+        # Build update expression for all fields
+        for field_name, field_value in fields.items():
+            # Use attribute names to avoid reserved word conflicts
+            attr_name = f'#{field_name}'
+            attr_value = f':{field_name}'
+            
+            expression_attribute_names[attr_name] = field_name
+            expression_attribute_values[attr_value] = field_value
+            update_expression_parts.append(f'{attr_name} = {attr_value}')
+        
+        update_expression = 'SET ' + ', '.join(update_expression_parts)
+        
+        # Update the item
+        response = table.update_item(
+            Key={
+                'pk': f'TEMPLATE#{template_id}',
+                'sk': f'STEP#{step_id}'
+            },
+            UpdateExpression=update_expression,
+            ExpressionAttributeNames=expression_attribute_names,
+            ExpressionAttributeValues=expression_attribute_values,
+            ReturnValues='ALL_NEW'
+        )
+        
+        updated_item = response.get('Attributes', {})
+        
+        return create_response(200, {
+            'message': 'Step updated successfully',
+            'step': updated_item
+        })
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in request body: {str(e)}")
+        return create_response(400, {'error': 'Invalid JSON in request body'})
+    except Exception as e:
+        logger.error(f"Error updating template step: {str(e)}", exc_info=True)
+        return create_response(500, {'error': 'Internal server error'})

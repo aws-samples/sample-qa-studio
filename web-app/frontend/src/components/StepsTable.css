@@ -1,0 +1,9 @@
+/* Custom purple badge for download steps */
+.badge-purple {
+  background-color: #9b59b6 !important;
+  color: white !important;
+}
+
+.badge-purple::before {
+  background-color: #9b59b6 !important;
+}

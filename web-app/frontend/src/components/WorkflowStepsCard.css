@@ -1,0 +1,119 @@
+.workflow-step-card {
+  transition: all 0.2s ease;
+  border-radius: 8px;
+}
+
+.workflow-step-card-outline {
+  border-color: #42B4FF;
+}
+
+.workflow-step-card:hover {
+  border-color: #42B4FF;
+}
+
+.workflow-step-card-dragging {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  cursor: grabbing;
+  transform: scale(1.02);
+  z-index: 1000;
+}
+
+.workflow-step-card-deleting {
+  opacity: 0.5;
+  pointer-events: none;
+  filter: grayscale(50%);
+}
+
+.drag-handle {
+  cursor: grab;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.drag-handle:hover {
+  color: #0972d3;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.workflow-step-card {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Step number styling */
+.step-number {
+  min-width: 40px;
+  padding-top: 4px;
+  font-weight: bold;
+  font-size: 16px;
+  color: #0972d3;
+  user-select: none;
+  display: none;
+}
+
+/* Action button styling */
+.step-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  opacity: 0.0;
+  transition: opacity 0.2s ease;
+}
+
+.workflow-step-card:hover .step-actions {
+  opacity: 1;
+}
+
+.step-actions-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step-actions-group:last-child {
+  flex-direction: row;
+  gap: 4px;
+}
+
+.step-actions-group button {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.step-actions-divider {
+  width: 1px;
+  height: 60px;
+  background-color: #666;
+  margin: 0 8px;
+}
+
+.step-actions button {
+  transition: all 0.2s ease;
+}
+
+.step-actions button:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Content area */
+.step-content {
+  flex: 1;
+  min-width: 0;
+  /* Allow text truncation */
+}
+
+.step-instruction {
+  font-size: 14px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.step-details {
+  font-size: 12px;
+  color: #5f6b7a;
+  font-style: italic;
+  margin-top: 4px;
+}

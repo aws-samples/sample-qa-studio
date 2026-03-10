@@ -1,0 +1,50 @@
+{
+  "name": "cdk",
+  "version": "0.1.1-27",
+  "bin": {
+    "cdk": "bin/cdk.js"
+  },
+  "scripts": {
+    "build": "npm run build:cdk && npm run build:cloudfront",
+    "build:cdk": "tsc",
+    "build:cloudfront": "tsc -p cloudfront-functions/tsconfig.json",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "lambda:install-deps": "pip install -r lambdas/endpoints/requirements.txt -t lambdas/endpoints/dependencies --upgrade --platform manylinux2014_aarch64 --implementation cp --python-version 3.13 --only-binary=:all: && pip install -r lambdas/auth/requirements.txt -t lambdas/auth/dependencies --upgrade --platform manylinux2014_aarch64 --implementation cp --python-version 3.13 --only-binary=:all:",
+    "deploy:storage": "cdk deploy storage --require-approval never",
+    "deploy:auth": "cdk deploy auth --require-approval never",
+    "deploy:api": "cdk deploy api --require-approval never",
+    "deploy:frontend": "cdk deploy frontend --require-approval never",
+    "deploy:frontend-build": "cd frontend && npm run build && cd ..",
+    "deploy:worker": "cdk deploy worker --require-approval never",
+    "deploy:worker:versioned": "npm run build && cdk deploy worker --require-approval never",
+    "deploy:lambdas": "cdk deploy lambdas --require-approval never",
+    "config:write": "ts-node scripts/write-config.ts",
+    "dcv:download": "ts-node scripts/download-dcv-sdk.ts",
+    "deploy": "mkdir -p frontend/build && npm run lambda:install-deps && npm run deploy:storage && npm run deploy:auth && npm run deploy:worker && npm run deploy:lambdas && npm run deploy:api && npm run config:write && npm run dcv:download && cd frontend && npm install && cd .. && npm run deploy:frontend-build && npm run deploy:frontend",
+    "changelog": "ts-node scripts/generate-changelog.ts",
+    "release:patch": "ts-node scripts/release.ts patch",
+    "release:minor": "ts-node scripts/release.ts minor",
+    "release:major": "ts-node scripts/release.ts major",
+    "release:prerelease": "ts-node scripts/release.ts prerelease",
+    "version:check": "echo \"Current version: $(node -p \\\"require('./package.json').version\\\")\"",
+    "nag": "npm run build:cdk && ts-node scripts/cdk-nag-report.ts"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "22.7.9",
+    "aws-cdk": "^2.1110.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.6.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudformation": "^3.908.0",
+    "aws-cdk-lib": "^2.241.0",
+    "cdk-ecr-deployment": "^4.0.3",
+    "cdk-nag": "^2.37.55",
+    "constructs": "^10.0.0"
+  }
+}
