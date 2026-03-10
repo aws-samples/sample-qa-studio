@@ -21,7 +21,7 @@ import {
   SecurityPolicyProtocol,
 } from 'aws-cdk-lib/aws-cloudfront';
 import { S3BucketOrigin, HttpOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
-import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { Bucket, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 import * as path from 'path';
@@ -97,8 +97,18 @@ function handler(event) {
       queryStringBehavior: CacheQueryStringBehavior.all()
     })
 
+    // S3 bucket for CloudFront access logs
+    const accessLogBucket = new Bucket(this, 'AccessLogBucket', {
+      bucketName: `${this.account}-${this.baseName}-cf-logs-${this.region}`,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      objectOwnership: ObjectOwnership.BUCKET_OWNER_PREFERRED,
+    });
+
     // CloudFront Distribution with S3 origin
     this.distribution = new Distribution(this, 'distribution', {
+      logBucket: accessLogBucket,
+      logFilePrefix: 'cloudfront/',
       defaultBehavior: {
         origin: S3BucketOrigin.withOriginAccessControl(this.frontendBucket),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

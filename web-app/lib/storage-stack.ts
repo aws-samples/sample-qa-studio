@@ -1,6 +1,6 @@
 import { RemovalPolicy, CustomResource, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { Table, AttributeType, ProjectionType } from 'aws-cdk-lib/aws-dynamodb';
+import { Table, AttributeType, ProjectionType, BillingMode } from 'aws-cdk-lib/aws-dynamodb';
 import { BackupPlan, BackupVault, BackupPlanRule, BackupResource } from 'aws-cdk-lib/aws-backup';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
@@ -46,6 +46,8 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
         name: 'sk',
         type: AttributeType.STRING
       },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecovery: true,
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
