@@ -96,7 +96,7 @@ class TestGhostRecordPrevention(unittest.TestCase):
 
     @patch("update_usecase_last_execution.boto3")
     def test_condition_expression_is_present(self, mock_boto3):
-        """The ConditionExpression guard must always be included."""
+        """The ConditionExpression guard should be included."""
         mock_table = MagicMock()
         mock_boto3.resource.return_value.Table.return_value = mock_table
 

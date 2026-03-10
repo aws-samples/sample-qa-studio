@@ -531,7 +531,7 @@ def sanitize_and_fix_json(json_str):
     # Trim whitespace
     json_str = json_str.strip()
     
-    # Ensure it starts and ends with braces
+    # Check it starts and ends with braces
     if not json_str.startswith('{'):
         start = json_str.find('{')
         if start != -1:

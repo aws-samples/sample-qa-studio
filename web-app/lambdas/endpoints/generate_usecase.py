@@ -24,7 +24,7 @@ def create_prompt(title, starting_url, user_journey, region):
 
 DESIGN PRINCIPLES:
 - SIMPLICITY FIRST: Prefer the fewest steps possible. Each step should do exactly one thing. Shorter test cases are better — do not add steps that are not strictly necessary to cover the user journey.
-- STEP TYPE PRIORITY: Always prefer "validation" over "retrieve_value" + "assertion". Only use retrieve_value/assertion when a value must be captured and compared after a state change or reused across multiple later steps.
+- STEP TYPE PRIORITY: Prefer "validation" over "retrieve_value" + "assertion". Only use retrieve_value/assertion when a value must be captured and compared after a state change or reused across multiple later steps.
 - CLEAR TRANSITIONS: Each navigation step must describe exactly one action with an unambiguous target element. Moving between steps should be logical and precise.
 
 User Journey Details:
@@ -32,7 +32,7 @@ User Journey Details:
 - Starting URL: {starting_url}
 - Journey Description: {user_journey}
 
-Generate a JSON object that matches this EXACT schema. This JSON will be imported into a test automation system, so it must be perfectly formatted and valid:
+Generate a JSON object that matches this EXACT schema. This JSON is imported into a test automation system, so it must be perfectly formatted and valid:
 
 {{
   "exportVersion": "1.0",
@@ -83,12 +83,12 @@ CRITICAL REQUIREMENTS:
 15. Sort steps sequentially starting from 1 (no gaps or duplicates)
 16. All strings must be properly escaped for JSON
 17. Return ONLY the JSON object, no markdown, no explanations, no additional text
-18. Ensure the JSON is valid and can be parsed
-19. NEVER generate a URL step or navigation step to the starting_url. The system automatically navigates to the starting_url before step 1. Do not duplicate this.
-20. Secret steps must always focus an input field only.
+18. Verify the JSON is valid and can be parsed
+19. Do not generate a URL step or navigation step to the starting_url. The system automatically navigates to the starting_url before step 1. Do not duplicate this.
+20. Secret steps must focus an input field only.
 21. Instructions must be written as instructions. Like "click the search button" or "Return the amount of items in the basket"
 22. The FIRST step of every use case MUST be a validation step that confirms the page has fully loaded (e.g. verifying a key heading, title, or element is visible). This ensures all subsequent steps operate on a stable, fully rendered page.
-23. Every retrieve_value step MUST be followed by at least one assertion step that references the captured variable. Never generate a retrieve_value step without a corresponding assertion that uses it. If the value only needs to be checked once and not compared after a state change, use a validation step instead.
+23. Every retrieve_value step should be followed by at least one assertion step that references the captured variable. Do not generate a retrieve_value step without a corresponding assertion that uses it. If the value only needs to be checked once and not compared after a state change, use a validation step instead.
 
 Step Type Guidelines:
 - "navigation": For clicking buttons, filling forms, navigating pages. Each step should describe exactly one interaction.
@@ -96,7 +96,7 @@ Step Type Guidelines:
 - "secret": For using stored credentials (set secret_key field)
 - "retrieve_value": ONLY use when the value must be stored for later comparison after a state change or reused in multiple assertion steps. Do NOT use just to read and immediately check a value — use validation instead.
 - "assertion": ONLY use to compare a previously captured runtime variable. Requires a preceding retrieve_value step. Do NOT use as a substitute for validation.
-- "url": For navigating directly to a specific URL (instruction is the URL). NEVER use to navigate to the starting_url.
+- "url": For navigating directly to a specific URL (instruction is the URL). Do not use to navigate to the starting_url.
 - "download": For downloading a file from the page
 
 DO / DON'T Examples:

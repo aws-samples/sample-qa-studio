@@ -58,7 +58,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             '#name': 'name'
         }
         
-        # Always update these fields
+        # Update these fields
         update_expression_parts.append('#name = :name')
         update_expression_parts.append('description = :description')
         update_expression_parts.append('starting_url = :starting_url')

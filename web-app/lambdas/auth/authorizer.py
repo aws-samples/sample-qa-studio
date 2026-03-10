@@ -20,7 +20,7 @@ jwks_cache = None
 # Group-to-scope mapping for user access tokens.
 # Cognito Lite tier does not include resource server scopes in the access token's
 # scope claim for authorization code flow (user tokens). We resolve scopes from
-# cognito:groups instead, which IS always present in the access token.
+# cognito:groups instead, which is present in the access token.
 # This mapping must stay in sync with pre_token_generation.py SCOPE_MAPPINGS.
 GROUP_SCOPE_MAPPINGS = {
     'users': [

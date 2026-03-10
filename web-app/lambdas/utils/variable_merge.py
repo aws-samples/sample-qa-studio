@@ -45,7 +45,7 @@ def validate_variables_resolved(
     variables: Dict[str, str]
 ) -> None:
     """
-    Ensure all {{variable}} placeholders are resolved.
+    Verify all {{variable}} placeholders are resolved.
     
     Implementation:
     1. Convert usecase to JSON string

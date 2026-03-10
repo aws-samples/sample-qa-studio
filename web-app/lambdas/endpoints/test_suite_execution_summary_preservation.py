@@ -327,7 +327,7 @@ class TestEventBridgeEventPreservation(unittest.TestCase):
     def test_eventbridge_detail_shape_unchanged_regardless_of_suite(
         self, status: str, usecase_id: str, execution_id: str, has_suite: bool
     ):
-        """EventBridge event detail always contains usecase_id, execution_id,
+        """EventBridge event detail contains usecase_id, execution_id,
         status, timestamp — regardless of whether execution belongs to a suite.
 
         **Validates: Requirements 3.4**

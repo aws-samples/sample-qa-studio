@@ -8,7 +8,7 @@ They observe the current (unfixed) code behavior and encode it as properties:
 - No `nova_session_id` attribute is ever touched when not provided
 - Timestamps are set correctly based on status transitions
 
-These tests MUST PASS on unfixed code — they capture existing behavior.
+These tests should pass on unfixed code — they capture existing behavior.
 """
 
 import json
@@ -139,7 +139,7 @@ class TestStatusUpdatePreservation(unittest.TestCase):
             else:
                 self.assertNotIn("error_message", update_expr)
 
-            # --- nova_session_id must NEVER appear (unfixed code) ---
+            # --- nova_session_id should not appear (unfixed code) ---
             self.assertNotIn("nova_session_id", update_expr)
             self.assertNotIn(":nova_session_id", str(attr_values))
 
@@ -222,7 +222,7 @@ class TestEventBridgePreservation(unittest.TestCase):
             else:
                 self.assertNotIn("error_message", detail)
 
-            # nova_session_id must not leak into EventBridge events
+            # nova_session_id should not leak into EventBridge events
             self.assertNotIn("nova_session_id", detail)
 
 
@@ -277,7 +277,7 @@ class TestNovaSessionIdHandling(unittest.TestCase):
             )
 
     def test_patch_without_nova_session_id_does_not_add_it(self):
-        """PATCH without nova_session_id does NOT add it to the update expression.
+        """PATCH without nova_session_id does not add it to the update expression.
 
         **Validates: Requirements 3.3**
         """
@@ -305,7 +305,7 @@ class TestNovaSessionIdHandling(unittest.TestCase):
             self.assertNotIn(":nova_session_id", attr_values)
 
     def test_patch_with_empty_string_nova_session_id_does_not_add_it(self):
-        """PATCH with empty string nova_session_id does NOT add it to the update expression.
+        """PATCH with empty string nova_session_id does not add it to the update expression.
 
         **Validates: Requirements 3.3**
         """
@@ -371,7 +371,7 @@ class TestNovaSessionIdHandling(unittest.TestCase):
             )
 
     def test_nova_session_id_not_leaked_to_eventbridge(self):
-        """nova_session_id must NOT appear in the EventBridge event detail.
+        """nova_session_id should not appear in the EventBridge event detail.
 
         **Validates: Requirements 3.3**
         """
@@ -402,7 +402,7 @@ class TestSuiteCounterUpdates(unittest.TestCase):
 
     When update_execution_status is called with a terminal status (success/failed)
     for an execution that belongs to a suite (has suite_execution_id and suite_id),
-    the handler must atomically update suite execution counters.
+    the handler should atomically update suite execution counters.
     """
 
     def setUp(self):
@@ -513,7 +513,7 @@ class TestSuiteCounterUpdates(unittest.TestCase):
             self.assertNotIn("successful_usecases", update_expr)
 
     def test_non_terminal_status_with_suite_does_not_trigger_counter_update(self):
-        """Non-terminal statuses (pending, running) must NOT trigger suite counter updates.
+        """Non-terminal statuses (pending, running) should not trigger suite counter updates.
 
         **Validates: Requirements 3.1**
         """
@@ -540,7 +540,7 @@ class TestSuiteCounterUpdates(unittest.TestCase):
                 )
 
     def test_execution_without_suite_id_does_not_trigger_counter_update(self):
-        """Executions without suite_execution_id must NOT trigger suite counter updates.
+        """Executions without suite_execution_id should not trigger suite counter updates.
 
         **Validates: Requirements 3.1**
         """
@@ -567,7 +567,7 @@ class TestSuiteCounterUpdates(unittest.TestCase):
 
     def test_suite_counter_update_failure_does_not_fail_main_request(self):
         """If the suite counter update_item raises an exception, the main
-        request must still return 200.
+        request should still return 200.
 
         **Validates: Requirements 2.2**
         """
@@ -592,7 +592,7 @@ class TestSuiteCounterUpdates(unittest.TestCase):
 
             response = handler(event, None)
 
-            # Main request must still succeed
+            # Main request should still succeed
             self.assertEqual(response["statusCode"], 200)
             body = json.loads(response["body"])
             self.assertEqual(body["status"], "success")

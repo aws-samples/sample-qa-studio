@@ -127,7 +127,7 @@ def delete_workflow_definition(usecase_id: str):
         # Workflow names: 1-40 chars, a-z A-Z 0-9 - _, no spaces
         workflow_name = re.sub(r'[^a-zA-Z0-9\-_]', '-', usecase_id)
         
-        # Ensure max 40 chars
+        # Limit to max 40 chars
         if len(workflow_name) > 40:
             workflow_name = workflow_name[:40]
         

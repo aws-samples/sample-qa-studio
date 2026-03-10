@@ -7,7 +7,7 @@ These tests demonstrate the three root causes of the bug:
 2. update_suite_execution_status does not propagate to test suite summary
 3. update_test_suite_summary omits last_execution_id
 
-CRITICAL: These tests MUST FAIL on unfixed code — failure confirms the bugs exist.
+CRITICAL: These tests should fail on unfixed code — failure confirms the bugs exist.
 """
 
 import json

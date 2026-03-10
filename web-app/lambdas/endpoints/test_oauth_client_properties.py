@@ -54,7 +54,7 @@ def oauth_client_name(draw):
         min_size=1,
         max_size=100
     ))
-    # Ensure name is not just whitespace
+    # Verify name is not just whitespace
     assume(name.strip())
     return name.strip()
 
@@ -145,7 +145,7 @@ def test_property_1_scope_validation_prevents_privilege_escalation(
     mock_resource.return_value = mock_dynamodb
     mock_dynamodb.Table.return_value = mock_table
     
-    # Ensure user has oauth-clients.write scope to call the endpoint
+    # Verify user has oauth-clients.write scope to call the endpoint
     # (this is separate from the privilege escalation check)
     user_scopes_with_write = list(set(user_scopes + ['api/oauth-clients.write']))
     
@@ -226,10 +226,10 @@ def test_property_2_client_credentials_generation(
     mock_resource.return_value = mock_dynamodb
     mock_dynamodb.Table.return_value = mock_table
     
-    # Ensure user has oauth-clients.write scope
+    # Verify user has oauth-clients.write scope
     user_scopes_with_write = list(set(user_scopes + ['api/oauth-clients.write']))
     
-    # Use scopes that user has (to ensure success)
+    # Use scopes that user has (to verify success)
     requested_scopes = user_scopes_with_write[:min(3, len(user_scopes_with_write))]
     
     # Create event

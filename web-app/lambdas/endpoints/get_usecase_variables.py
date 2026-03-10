@@ -48,7 +48,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not item:
             return create_response(200, {'variables': []})
         
-        # Ensure keys are lowercase for frontend compatibility
+        # Convert keys to lowercase for frontend compatibility
         raw_variables = item.get('variables', [])
         variables = []
         for var in raw_variables:

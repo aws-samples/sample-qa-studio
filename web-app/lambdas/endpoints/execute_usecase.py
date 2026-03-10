@@ -448,7 +448,7 @@ def handler(event, context):
             })
         
         else:
-            # Should never reach here due to validation above, but keep for safety
+            # Should not reach here due to validation above, but keep for safety
             return create_response(400, {'error': f'Invalid trigger type: {trigger_type}'})
     
     except Exception as e:

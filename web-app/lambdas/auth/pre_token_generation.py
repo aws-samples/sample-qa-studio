@@ -89,7 +89,7 @@ def handler(event, context):
         
         # If still no groups, log warning but continue
         if not groups:
-            logger.warning("No groups found for user - token will have no custom scopes")
+            logger.warning("No groups found for user - token has no custom scopes")
         
         # Collect scopes from all groups (union of scopes)
         scopes = set()
@@ -106,7 +106,7 @@ def handler(event, context):
         logger.info(f"Final scope string: '{scope_string}'")
         
         # V2 format: Inject scopes into claimsAndScopeOverrideDetails
-        # Ensure response exists and is a dict
+        # Verify response exists and is a dict
         if 'response' not in event or event['response'] is None:
             event['response'] = {}
         

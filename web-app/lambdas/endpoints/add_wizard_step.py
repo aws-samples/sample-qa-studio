@@ -56,7 +56,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'pk': f'EXECUTION#{session_id}',
             'sk': f'EXECUTION_STEP#{step_id}',
             'step_id': step_id,
-            'sort': 0,  # Will be updated when accepted
+            'sort': 0,  # Updated when accepted
             'instruction': body.get('instruction', ''),
             'step_type': body.get('step_type', ''),
             'created_at': now,

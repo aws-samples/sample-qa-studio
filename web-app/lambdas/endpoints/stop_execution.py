@@ -79,7 +79,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except ClientError as e:
             # Don't fail completely - update status anyway
             # The task might already be stopped or not exist
-            logger.warning(f"Failed to stop task, but will update execution status anyway: {str(e)}")
+            logger.warning(f"Failed to stop task, but updating execution status anyway: {str(e)}")
         
         # Update execution status to stopped
         completed_at = get_current_timestamp()

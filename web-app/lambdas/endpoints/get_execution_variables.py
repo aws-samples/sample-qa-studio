@@ -54,7 +54,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             if 'Item' in usecase_response:
                 raw_variables = usecase_response['Item'].get('variables', [])
-                # Ensure keys are lowercase for frontend compatibility
+                # Convert keys to lowercase for frontend compatibility
                 variables = []
                 for var in raw_variables:
                     if isinstance(var, dict):

@@ -79,7 +79,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'created_at': now
         }
         
-        # Use transact_write_items to ensure both records are created atomically
+        # Use transact_write_items so both records are created atomically
         dynamodb_client = boto3.client('dynamodb')
         
         # Convert usecase to DynamoDB format

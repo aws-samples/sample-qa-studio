@@ -176,7 +176,7 @@ class TestPropertyBased:
     @given(st.lists(st.sampled_from(["users", "admins", "unknown"]), min_size=0, max_size=3))
     @settings(max_examples=20)
     def test_scopes_are_always_subset_of_defined_mappings(self, groups):
-        """All injected scopes must come from SCOPE_MAPPINGS."""
+        """All injected scopes should come from SCOPE_MAPPINGS."""
         event = make_event(groups=groups)
         result = handler(event, None)
 
@@ -190,7 +190,7 @@ class TestPropertyBased:
     @given(st.lists(st.sampled_from(["users", "admins", "unknown"]), min_size=0, max_size=3))
     @settings(max_examples=20)
     def test_id_and_access_token_scopes_are_consistent(self, groups):
-        """ID token scope string and access token scopesToAdd must contain the same scopes."""
+        """ID token scope string and access token scopesToAdd should contain the same scopes."""
         event = make_event(groups=groups)
         result = handler(event, None)
 

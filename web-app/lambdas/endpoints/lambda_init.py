@@ -1,7 +1,7 @@
 """
 Lambda initialization helper.
 Adds the dependencies folder to Python path if it exists.
-Import this at the top of Lambda handlers to ensure dependencies are available.
+Import this at the top of Lambda handlers so dependencies are available.
 """
 import sys
 import os

@@ -398,7 +398,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     Processes usecase.execution.completed events and builds step caches from
     Nova Act responses. Uses fire-and-forget error handling where all errors
-    are caught and logged but never raised to Lambda runtime.
+    are caught and logged but not raised to Lambda runtime.
     
     Implements step-level error isolation where individual step failures do not
     prevent processing of remaining steps. Tracks and returns statistics for

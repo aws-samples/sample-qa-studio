@@ -358,7 +358,7 @@ def handler(event, context):
             'message': 'Internal server error'
         })
     
-    # Log artifact URL generation (never log the presigned URL itself)
+    # Log artifact URL generation (do not log the presigned URL itself)
     print(json.dumps({
         'event': 'artifact_url_generated',
         'artifact_id': artifact_id,

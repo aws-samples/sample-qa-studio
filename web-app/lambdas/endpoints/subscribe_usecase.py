@@ -56,7 +56,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         logger.info(f"Created subscription record for {user_email} to usecase {usecase_id}")
         
         # Subscribe user to SNS topic and set/update filter policy
-        ensure_sns_subscription_with_filter(sns_client, table, user_email, usecase_id)
+        configure_sns_subscription_with_filter(sns_client, table, user_email, usecase_id)
         
         # Return subscription status
         return create_response(201, {
@@ -69,7 +69,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return create_response(500, {'error': 'Internal server error'})
 
 
-def ensure_sns_subscription_with_filter(sns_client, table, email: str, usecase_id: str):
+def configure_sns_subscription_with_filter(sns_client, table, email: str, usecase_id: str):
     """
     Subscribe user to SNS topic and set/update filter policy for this usecase.
     
@@ -118,7 +118,7 @@ def ensure_sns_subscription_with_filter(sns_client, table, email: str, usecase_i
             if subscription_arn and subscription_arn != 'PendingConfirmation':
                 update_filter_policy_for_user(sns_client, table, email, usecase_id)
             else:
-                logger.info(f"Subscription pending confirmation for {email} - filter policy will be updated after confirmation")
+                logger.info(f"Subscription pending confirmation for {email} - filter policy is updated after confirmation")
     
     except Exception as e:
         logger.error(f"Error ensuring SNS subscription with filter: {str(e)}", exc_info=True)

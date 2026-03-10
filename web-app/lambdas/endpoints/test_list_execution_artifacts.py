@@ -186,7 +186,7 @@ class TestListExecutionArtifacts(unittest.TestCase):
             call_kwargs['ExpressionAttributeValues'][':sk_prefix']['S'],
             'ARTIFACT#'
         )
-        # Ensure scan was NOT called
+        # Verify scan was NOT called
         mock_dynamodb.scan.assert_not_called()
 
 

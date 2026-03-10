@@ -15,12 +15,12 @@ logger.setLevel(logging.INFO)
 def generate_secure_password(length: int = 16) -> str:
     """
     Generate a cryptographically secure random password that meets Cognito requirements.
-    Ensures at least one uppercase, lowercase, digit, and symbol character.
+    Generates a password with at least one uppercase, lowercase, digit, and symbol character.
     """
     # Use symbols that are definitely accepted by Cognito
     symbols = "!@#$%^&*"
     
-    # Ensure we have at least one of each required character type
+    # Include at least one of each required character type
     password_chars = [
         secrets.choice(string.ascii_uppercase),  # At least one uppercase
         secrets.choice(string.ascii_lowercase),  # At least one lowercase

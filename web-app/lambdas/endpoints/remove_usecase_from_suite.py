@@ -96,7 +96,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Decrement total_usecases count on suite
         current_total = suite.get('total_usecases', 0)
-        new_total = max(0, current_total - 1)  # Ensure we don't go negative
+        new_total = max(0, current_total - 1)  # Prevent negative values
         now = get_current_timestamp()
         
         table.update_item(

@@ -45,7 +45,7 @@ def get_valid_scopes_from_cognito(user_pool_id: str, resource_server_identifier:
         
     except Exception as e:
         logger.error(f"Error fetching scopes from Cognito: {str(e)}")
-        # Return empty list on error - validation will fail gracefully
+        # Return empty list on error - validation fails gracefully
         return []
 
 

@@ -166,7 +166,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     
                     secrets.append({
                         'key': secret_key,
-                        'value': None,  # Never export actual secret values
+                        'value': None,  # Do not export actual secret values
                         'placeholder': f"Required: {description}"
                     })
         except Exception as e:
