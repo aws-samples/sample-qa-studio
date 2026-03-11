@@ -166,7 +166,7 @@ class TestListSuiteUsecases:
         
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
-        assert body['error'] == 'Missing suite ID'
+        assert body['error'] == 'suite ID is required'
     
     @patch('list_suite_usecases.boto3')
     def test_insufficient_scope(self, mock_boto3):

@@ -158,7 +158,7 @@ class TestRemoveUsecaseFromSuite:
         
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
-        assert body['error'] == 'Missing suite ID'
+        assert body['error'] == 'suite ID is required'
     
     @patch('remove_usecase_from_suite.boto3')
     def test_missing_usecase_id(self, mock_boto3):
@@ -180,7 +180,7 @@ class TestRemoveUsecaseFromSuite:
         
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
-        assert body['error'] == 'Missing usecase ID'
+        assert body['error'] == 'usecase ID is required'
     
     @patch('remove_usecase_from_suite.boto3')
     def test_insufficient_scope(self, mock_boto3):

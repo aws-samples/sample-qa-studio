@@ -2,7 +2,7 @@ import logging
 import json
 from typing import Any, Dict, List
 import boto3
-from utils import create_response, get_table_name, require_scopes
+from utils import create_response, get_table_name, require_scopes, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
@@ -30,10 +30,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Get template ID from path
         path_params = event.get('pathParameters', {})
-        template_id = path_params.get('id')
-        
-        if not template_id:
-            return create_response(400, {'error': 'template ID is required'})
+        template_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+        if error:
+            return error
         
         # Parse request body
         try:

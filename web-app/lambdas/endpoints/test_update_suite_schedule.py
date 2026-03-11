@@ -243,7 +243,7 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('suite_id is required', body['error'])
+        self.assertIn('suite ID is required', body['error'])
     
     def test_suite_not_found(self):
         """Test that non-existent suite returns 404"""

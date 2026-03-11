@@ -12,8 +12,8 @@ from utils import (
     create_response,
     get_table_name,
     get_current_timestamp,
-    require_scopes
-)
+    require_scopes,
+    validate_path_id)
 
 dynamodb = boto3.client('dynamodb')
 
@@ -39,11 +39,13 @@ def handler(event, context):
         return error_response
 
     # Parse path parameters
-    execution_id = event.get('pathParameters', {}).get('executionId')
-    artifact_id = event.get('pathParameters', {}).get('artifactId')
+    execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+    if error:
+        return error
 
-    if not execution_id or not artifact_id:
-        return create_response(400, {'error': 'Missing required path parameters'})
+    artifact_id, error = validate_path_id(event.get('pathParameters', {}).get('artifactId'), 'artifact ID')
+    if error:
+        return error
 
     table_name = get_table_name()
 

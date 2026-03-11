@@ -3,7 +3,7 @@ import os
 import uuid
 import boto3
 from urllib.parse import quote
-from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7, allow_m2m_token
+from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7, allow_m2m_token, validate_path_id
 
 dynamodb = boto3.client('dynamodb')
 sqs = boto3.client('sqs')
@@ -117,9 +117,13 @@ def handler(event, context):
     
     print(f"Execution requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
     
-    usecase_id = event.get('pathParameters', {}).get('id')
-    if not usecase_id:
-        return create_response(400, {'error': 'Missing usecase ID'})
+    usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+
+    
+    if error:
+
+    
+        return error
     
     query_params = event.get('queryStringParameters') or {}
     trigger_type = query_params.get('trigger-type', 'OnDemand')

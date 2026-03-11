@@ -14,8 +14,8 @@ from utils import (
     create_response,
     get_table_name,
     get_current_timestamp,
-    require_scopes
-)
+    require_scopes,
+    validate_path_id)
 from test_suite_schema import (
     get_suite_execution_pk,
     get_execution_sk
@@ -53,11 +53,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     print(f"Suite execution status update requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
 
     # Parse path parameters
-    suite_id = event.get('pathParameters', {}).get('suite_id')
-    execution_id = event.get('pathParameters', {}).get('execution_id')
+    suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')
+    if error:
+        return error
 
-    if not suite_id or not execution_id:
-        return create_response(400, {'error': 'Missing suite ID or execution ID'})
+    execution_id, error = validate_path_id(event.get('pathParameters', {}).get('execution_id'), 'execution ID')
+    if error:
+        return error
 
     # Parse request body
     try:

@@ -2,6 +2,7 @@
 import json
 import os
 import logging
+import re
 import time
 import secrets
 from decimal import Decimal
@@ -69,6 +70,23 @@ def get_table_name() -> str:
         logging.warning("environment variable 'TABLE_NAME' missing")
         return 'accept-ai'
     return table_name
+
+
+# Safe path ID: alphanumeric, hyphens, underscores, dots — max 128 chars
+_SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9\-_.]{0,127}$')
+
+
+def validate_path_id(value: str | None, name: str = 'ID') -> tuple[str | None, dict | None]:
+    """Validate a path parameter is a safe identifier.
+
+    Blocks path traversal (../, /), null bytes, and oversized inputs.
+    Returns (validated_value, None) on success or (None, error_response) on failure.
+    """
+    if not value:
+        return None, create_response(400, {'error': f'{name} is required'})
+    if not _SAFE_ID_RE.match(value):
+        return None, create_response(400, {'error': f'Invalid {name} format'})
+    return value, None
 
 
 def get_secret_prefix() -> str:
@@ -392,7 +410,6 @@ def create_response(status_code: int, body: Any, cors: bool = True) -> dict:
 
 
 # User journey validation utilities
-import re
 from urllib.parse import urlparse
 
 def validate_title(title):

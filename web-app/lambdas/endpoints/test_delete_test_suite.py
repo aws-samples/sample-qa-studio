@@ -189,7 +189,7 @@ class TestDeleteTestSuite(unittest.TestCase):
         # Verify response
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertEqual(body['error'], 'suite_id is required')
+        self.assertEqual(body['error'], 'suite ID is required')
     
     @patch.dict('os.environ', {'TABLE_NAME': 'test-table'})
     @patch('delete_test_suite.boto3.resource')

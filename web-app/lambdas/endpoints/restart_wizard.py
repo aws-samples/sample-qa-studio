@@ -1,7 +1,7 @@
 import json
 import os
 import boto3
-from utils import create_response, require_scopes
+from utils import create_response, require_scopes, validate_path_id
 
 sqs = boto3.client('sqs')
 eventbridge = boto3.client('events')
@@ -25,10 +25,13 @@ def handler(event, context):
     if error:
         return error
     
-    session_id = event.get('pathParameters', {}).get('sessionId')
+    session_id, error = validate_path_id(event.get('pathParameters', {}).get('sessionId'), 'session ID')
+
     
-    if not session_id:
-        return create_response(400, {'error': 'Missing sessionId'})
+    if error:
+
+    
+        return error
     
     # Prepare restart command
     command = {

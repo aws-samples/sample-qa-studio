@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 from uuid import uuid4
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_current_timestamp, require_scopes
+from utils import create_response, get_table_name, get_current_timestamp, require_scopes, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
@@ -34,10 +34,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Get usecase ID from path
         path_params = event.get('pathParameters', {})
-        usecase_id = path_params.get('id')
-        
-        if not usecase_id:
-            return create_response(400, {'error': 'Usecase ID is required'})
+        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+        if error:
+            return error
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')

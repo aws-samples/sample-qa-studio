@@ -17,8 +17,8 @@ from boto3.dynamodb.conditions import Key
 from utils import (
     create_response,
     get_table_name,
-    require_scopes
-)
+    require_scopes,
+    validate_path_id)
 from test_suite_schema import (
     get_test_suites_pk,
     get_suite_sk,
@@ -47,9 +47,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     try:
         # Get suite ID from path parameters
-        suite_id = event.get('pathParameters', {}).get('suite_id')
-        if not suite_id:
-            return create_response(400, {'error': 'Missing suite ID'})
+        suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')
+        if error:
+            return error
         
         # Validate scope access (requires api/suite.read or admin)
         user_identity, error_response = require_scopes(event, ['api/suite.read'])

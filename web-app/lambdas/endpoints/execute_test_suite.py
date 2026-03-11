@@ -20,8 +20,8 @@ from utils import (
     get_table_name,
     get_current_timestamp,
     generate_uuid7,
-    require_scopes
-)
+    require_scopes,
+    validate_path_id)
 from test_suite_schema import (
     get_test_suites_pk,
     get_suite_sk,
@@ -659,9 +659,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     print(f"Suite execution requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
     
     # Parse path parameters
-    suite_id = event.get('pathParameters', {}).get('suite_id')
-    if not suite_id:
-        return create_response(400, {'error': 'Missing suite ID'})
+    suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')
+    if error:
+        return error
     
     # Parse request body
     try:

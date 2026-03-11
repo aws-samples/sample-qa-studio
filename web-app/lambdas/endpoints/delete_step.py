@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict
 import boto3
-from utils import get_table_name, create_response, require_scopes
+from utils import get_table_name, create_response, require_scopes, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
@@ -26,11 +26,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return error
         
         # Get usecase ID and step ID from path parameters
-        usecase_id = event.get('pathParameters', {}).get('id')
-        step_id = event.get('pathParameters', {}).get('stepId')
-        
-        if not usecase_id or not step_id:
-            return create_response(400, {'error': 'Missing usecase ID or step ID'})
+        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+        if error:
+            return error
+
+        step_id, error = validate_path_id(event.get('pathParameters', {}).get('stepId'), 'step ID')
+        if error:
+            return error
         
         # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')

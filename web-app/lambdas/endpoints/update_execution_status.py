@@ -15,8 +15,8 @@ from utils import (
     create_response,
     get_table_name,
     get_current_timestamp,
-    require_scopes
-)
+    require_scopes,
+    validate_path_id)
 from test_suite_schema import (
     get_suite_execution_pk,
     get_execution_sk
@@ -56,11 +56,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     print(f"Execution status update requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
     
     # Parse path parameters
-    usecase_id = event.get('pathParameters', {}).get('id')
-    execution_id = event.get('pathParameters', {}).get('executionId')
-    
-    if not usecase_id or not execution_id:
-        return create_response(400, {'error': 'Missing usecase ID or execution ID'})
+    usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+    if error:
+        return error
+
+    execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+    if error:
+        return error
     
     # Parse request body
     try:

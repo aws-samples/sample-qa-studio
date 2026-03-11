@@ -408,7 +408,7 @@ class TestExecuteUsecaseValidation(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('Missing usecase ID', body['error'])
+        self.assertIn('usecase ID is required', body['error'])
     
     def test_usecase_not_found_returns_404(self):
         """Test that non-existent usecase returns 404 error"""
