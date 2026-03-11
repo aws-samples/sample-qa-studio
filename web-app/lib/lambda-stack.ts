@@ -986,6 +986,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.importTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.applyTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.removeUsecaseFromSuiteLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.removeUsecaseFromSuiteLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.applyTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
