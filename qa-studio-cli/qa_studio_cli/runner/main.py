@@ -316,7 +316,11 @@ def _run_suite_local(
         usecase = usecase_api.get_usecase(uc_id)
         steps = usecase_api.get_steps(uc_id)
         api_variables = usecase_api.get_variables(uc_id)
-        secrets = usecase_api.get_secrets(uc_id)
+        try:
+            secrets = usecase_api.get_secrets(uc_id)
+        except Exception as e:
+            logger.warning("Failed to fetch secrets for usecase %s: %s — continuing without secrets", uc_id, e)
+            secrets = []
 
         starting_url = usecase.get("starting_url", "")
         if base_url:

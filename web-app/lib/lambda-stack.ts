@@ -1054,11 +1054,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [secretsArnPattern]
     }))
 
-    // ListSecrets requires * for resource (list operation), scoped to account
+    // ListSecrets requires Resource: * (list operation cannot be scoped to specific ARNs)
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:ListSecrets'],
-      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
+      resources: ['*']
     }))
     
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
