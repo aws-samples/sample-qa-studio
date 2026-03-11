@@ -1,7 +1,7 @@
 import json
 import os
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp, require_scopes
+from utils import create_response, get_table_name, get_current_timestamp, require_scopes, validate_path_id
 
 dynamodb = boto3.client('dynamodb')
 sqs = boto3.client('sqs')
@@ -26,12 +26,12 @@ def handler(event, context):
     if error:
         return error
     
-    path_params = event.get('pathParameters', {})
-    session_id = path_params.get('sessionId')
-    usecase_id = path_params.get('usecaseId')
-    
-    if not session_id or not usecase_id:
-        return create_response(400, {'error': 'Missing sessionId or usecaseId'})
+    session_id, error = validate_path_id(event.get('pathParameters', {}).get('sessionId'), 'session ID')
+    if error:
+        return error
+    usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('usecaseId'), 'usecase ID')
+    if error:
+        return error
     
     table_name = get_table_name()
     

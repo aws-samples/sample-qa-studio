@@ -206,7 +206,7 @@ class TestExecuteTestSuite:
         
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
-        assert body['error'] == 'Missing suite ID'
+        assert body['error'] == 'suite ID is required'
     
     def test_invalid_json_body(self):
         """Test error when request body is invalid JSON"""

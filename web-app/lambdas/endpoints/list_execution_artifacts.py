@@ -8,7 +8,7 @@ import json
 import os
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, require_scopes
+from utils import create_response, get_table_name, require_scopes, validate_path_id
 
 
 def get_dynamodb_client():
@@ -73,13 +73,9 @@ def handler(event, context):
     print(f"Execution artifact list requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
 
     # Parse path parameters
-    execution_id = event.get('pathParameters', {}).get('executionId')
-
-    if not execution_id:
-        return create_response(400, {
-            'error': 'Missing required path parameters',
-            'message': 'executionId is required',
-        })
+    execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+    if error:
+        return error
 
     # Query Amazon DynamoDB for artifact records
     dynamodb = get_dynamodb_client()

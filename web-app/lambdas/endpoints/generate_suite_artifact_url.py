@@ -9,7 +9,8 @@ from botocore.exceptions import ClientError
 from utils import (
     create_response,
     get_table_name,
-    require_scopes
+    require_scopes,
+    validate_path_id
 )
 
 
@@ -150,14 +151,12 @@ def handler(event, context):
     print(f"Suite artifact URL requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
 
     # Parse path parameters
-    suite_id = event.get('pathParameters', {}).get('suite_id')
-    execution_id = event.get('pathParameters', {}).get('execution_id')
-
-    if not suite_id or not execution_id:
-        return create_response(400, {
-            'error': 'Missing required path parameters',
-            'message': 'suiteId and executionId are required'
-        })
+    suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')
+    if error:
+        return error
+    execution_id, error = validate_path_id(event.get('pathParameters', {}).get('execution_id'), 'execution ID')
+    if error:
+        return error
 
     # Parse request body
     try:

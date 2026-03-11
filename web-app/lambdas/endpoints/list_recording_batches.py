@@ -3,7 +3,7 @@ from typing import Any, Dict
 import json
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_bucket_name, require_scopes
+from utils import create_response, get_bucket_name, require_scopes, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
@@ -28,13 +28,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return error
         
         # Get parameters from path
-        path_params = event.get('pathParameters', {})
-        usecase_id = path_params.get('id')
-        execution_id = path_params.get('executionId')
-        
-        if not usecase_id or not execution_id:
-            logger.error("UsecaseId and ExecutionId are required")
-            return create_response(400, {'error': 'UsecaseId and ExecutionId are required'})
+        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+        if error:
+            return error
+        execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+        if error:
+            return error
         
         # Initialize Amazon S3 client
         s3_client = boto3.client('s3')

@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_bucket_name, require_scopes
+from utils import create_response, get_bucket_name, require_scopes, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
@@ -27,15 +27,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return error
         
         # Get parameters from path
-        path_params = event.get('pathParameters', {})
-        usecase_id = path_params.get('id')
-        execution_id = path_params.get('executionId')
+        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+        if error:
+            return error
+        execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+        if error:
+            return error
         
         logger.info(f"Listing downloads for UsecaseID: {usecase_id}, ExecutionID: {execution_id}")
-        
-        if not usecase_id or not execution_id:
-            logger.error("UsecaseId and ExecutionId are required")
-            return create_response(400, {'error': 'UsecaseId and ExecutionId are required'})
         
         # Initialize Amazon S3 client
         s3_client = boto3.client('s3')

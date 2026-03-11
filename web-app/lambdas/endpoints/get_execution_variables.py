@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, List
 import boto3
-from utils import create_response, get_table_name, require_scopes
+from utils import create_response, get_table_name, require_scopes, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
@@ -28,12 +28,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         logger.info(f"Request: {event}")
         
         # Get parameters from path
-        path_params = event.get('pathParameters', {})
-        execution_id = path_params.get('executionId')
-        usecase_id = path_params.get('id')
-        
-        if not execution_id or not usecase_id:
-            return create_response(400, {'error': 'Missing required parameters'})
+        execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+        if error:
+            return error
+        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+        if error:
+            return error
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')

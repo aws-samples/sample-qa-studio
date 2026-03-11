@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Dict
 import boto3
-from utils import get_secret_prefix, create_response, require_scopes
+from utils import get_secret_prefix, create_response, require_scopes, validate_path_id
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -23,11 +23,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if error_response:
             return error_response
 
-        usecase_id = event.get('pathParameters', {}).get('id')
+        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+        if error:
+            return error
         secret_key = event.get('pathParameters', {}).get('secret_key')
 
-        if not usecase_id:
-            return create_response(400, {'error': 'Missing use case ID'})
         if not secret_key:
             return create_response(400, {'error': 'Missing secret key'})
 

@@ -228,7 +228,7 @@ class TestGenerateStepArtifactUrl(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('Missing required path parameters', body['error'])
+        self.assertIn('step ID is required', body['error'])
     
     def test_invalid_content_type_returns_400(self):
         """Verify 400 when content type is invalid"""

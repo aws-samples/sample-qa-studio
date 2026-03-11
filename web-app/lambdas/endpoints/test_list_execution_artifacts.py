@@ -141,7 +141,7 @@ class TestListExecutionArtifacts(unittest.TestCase):
 
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('Missing required path parameters', body['error'])
+        self.assertIn('is required', body['error'])
 
     # --- test_handler_dynamodb_error_returns_500 ---
     @patch('list_execution_artifacts.get_dynamodb_client')

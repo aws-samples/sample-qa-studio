@@ -106,7 +106,7 @@ class TestGetUsecaseSecretValue(unittest.TestCase):
 
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('Missing use case ID', body['error'])
+        self.assertIn('usecase ID is required', body['error'])
 
     def test_missing_secret_key_returns_400(self):
         """Missing secret_key returns 400."""

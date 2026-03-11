@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, get_table_name, DynamoDBEncoder, require_scopes
+from utils import create_response, get_table_name, DynamoDBEncoder, require_scopes, validate_path_id
 import json
 
 # Configure logging
@@ -27,12 +27,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return error
         
         # Get parameters from path
-        path_params = event.get('pathParameters', {})
-        step_id = path_params.get('stepId')
-        execution_id = path_params.get('executionId')
-        
-        if not step_id or not execution_id:
-            return create_response(400, {'error': 'StepId and ExecutionId are required'})
+        step_id, error = validate_path_id(event.get('pathParameters', {}).get('stepId'), 'step ID')
+        if error:
+            return error
+        execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+        if error:
+            return error
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')

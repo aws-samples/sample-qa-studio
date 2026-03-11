@@ -2,7 +2,7 @@ import logging
 import json
 from typing import Any, Dict
 import boto3
-from utils import create_response, get_table_name, require_scopes
+from utils import create_response, get_table_name, require_scopes, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
@@ -20,13 +20,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return error
 
     try:
-        path_params = event.get('pathParameters', {})
-        session_id = path_params.get('sessionId')
-        step_id = path_params.get('stepId')
-        usecase_id = path_params.get('usecaseId')
-
-        if not session_id or not step_id or not usecase_id:
-            return create_response(400, {'error': 'Missing required parameters'})
+        session_id, error = validate_path_id(event.get('pathParameters', {}).get('sessionId'), 'session ID')
+        if error:
+            return error
+        step_id, error = validate_path_id(event.get('pathParameters', {}).get('stepId'), 'step ID')
+        if error:
+            return error
+        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('usecaseId'), 'usecase ID')
+        if error:
+            return error
 
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())

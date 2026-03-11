@@ -21,12 +21,8 @@ from generate_suite_artifact_url import (
 # Strategies for property-based tests
 # ---------------------------------------------------------------------------
 
-# Safe characters for IDs (alphanumeric + hyphen)
-id_strategy = st.text(
-    alphabet=st.characters(whitelist_categories=('Lu', 'Ll', 'Nd'), whitelist_characters='-'),
-    min_size=1,
-    max_size=50,
-).filter(lambda s: s.strip())
+# Valid UUID strategy for path parameter IDs
+id_strategy = st.uuids().map(str)
 
 # Filenames without path separators or null bytes
 safe_filename_strategy = st.text(

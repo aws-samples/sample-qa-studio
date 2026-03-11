@@ -522,7 +522,7 @@ class TestUpdateExecutionStepStatusErrors(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('Missing required path parameters', body['error'])
+        self.assertIn('is required', body['error'])
     
     def test_invalid_json_returns_400(self):
         """Test that invalid JSON returns 400"""

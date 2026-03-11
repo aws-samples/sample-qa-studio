@@ -22,12 +22,8 @@ from list_suite_artifacts import (
 # Strategies for property-based tests
 # ---------------------------------------------------------------------------
 
-# Safe characters for IDs (alphanumeric + hyphen)
-id_strategy = st.text(
-    alphabet=st.characters(whitelist_categories=('Lu', 'Ll', 'Nd'), whitelist_characters='-'),
-    min_size=1,
-    max_size=50,
-).filter(lambda s: s.strip())
+# Valid UUID strategy for path parameter IDs
+id_strategy = st.uuids().map(str)
 
 # Filenames with known extensions for type inference
 known_extensions = ['.txt', '.webm', '.mp4', '.json', '.png']

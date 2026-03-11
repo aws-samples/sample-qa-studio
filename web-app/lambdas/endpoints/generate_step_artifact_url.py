@@ -11,7 +11,8 @@ from utils import (
     get_table_name,
     get_current_timestamp,
     generate_uuid7,
-    require_scopes
+    require_scopes,
+    validate_path_id
 )
 
 def get_dynamodb_client():
@@ -244,15 +245,15 @@ def handler(event, context):
     print(f"Step artifact URL requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
     
     # Parse path parameters
-    usecase_id = event.get('pathParameters', {}).get('id')
-    execution_id = event.get('pathParameters', {}).get('executionId')
-    step_id = event.get('pathParameters', {}).get('stepId')
-    
-    if not usecase_id or not execution_id or not step_id:
-        return create_response(400, {
-            'error': 'Missing required path parameters',
-            'message': 'usecase_id, execution_id, and step_id are required'
-        })
+    usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+    if error:
+        return error
+    execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+    if error:
+        return error
+    step_id, error = validate_path_id(event.get('pathParameters', {}).get('stepId'), 'step ID')
+    if error:
+        return error
     
     # Parse request body
     try:

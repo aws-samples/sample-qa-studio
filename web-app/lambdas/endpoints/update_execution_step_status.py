@@ -1,6 +1,6 @@
 import json
 import boto3
-from utils import create_response, get_table_name, require_scopes
+from utils import create_response, get_table_name, require_scopes, validate_path_id
 
 dynamodb = boto3.client('dynamodb')
 
@@ -40,12 +40,15 @@ def handler(event, context):
     print(f"Step status update requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
     
     # Parse path parameters
-    usecase_id = event.get('pathParameters', {}).get('id')
-    execution_id = event.get('pathParameters', {}).get('executionId')
-    step_id = event.get('pathParameters', {}).get('stepId')
-    
-    if not usecase_id or not execution_id or not step_id:
-        return create_response(400, {'error': 'Missing required path parameters'})
+    usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+    if error:
+        return error
+    execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+    if error:
+        return error
+    step_id, error = validate_path_id(event.get('pathParameters', {}).get('stepId'), 'step ID')
+    if error:
+        return error
     
     # Parse request body
     try:

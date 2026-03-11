@@ -4,7 +4,7 @@ import gzip
 from typing import Any, Dict, List
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_bucket_name, require_scopes
+from utils import create_response, get_bucket_name, require_scopes, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
@@ -29,13 +29,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return error
         
         # Get parameters from path
+        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
+        if error:
+            return error
+        execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
+        if error:
+            return error
+        
         path_params = event.get('pathParameters', {})
-        usecase_id = path_params.get('id')
-        execution_id = path_params.get('executionId')
         batch_id = path_params.get('batchId')
         
-        if not usecase_id or not execution_id or not batch_id:
-            return create_response(400, {'error': 'UsecaseId, ExecutionId, and BatchId are required'})
+        if not batch_id:
+            return create_response(400, {'error': 'BatchId is required'})
         
         # Validate batchId format (should be 13 digit timestamp)
         if not is_valid_batch_id(batch_id):
