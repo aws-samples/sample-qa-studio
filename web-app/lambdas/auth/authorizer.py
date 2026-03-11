@@ -8,6 +8,7 @@ import logging
 from typing import Any, Dict
 import base64
 import urllib.request
+import urllib.parse
 from urllib.error import URLError
 
 # Configure logging
@@ -89,11 +90,13 @@ def get_jwks():
         jwks_url = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
         
         # Validate URL scheme to prevent SSRF via file:// or other schemes
-        if not jwks_url.startswith('https://'):
-            raise ValueError(f"JWKS URL must use HTTPS scheme, got: {jwks_url[:20]}")
+        parsed = urllib.parse.urlparse(jwks_url)
+        if parsed.scheme != 'https' or not parsed.hostname.endswith('.amazonaws.com'):
+            raise ValueError(f"JWKS URL must be an HTTPS amazonaws.com endpoint")
         
         try:
-            with urllib.request.urlopen(jwks_url) as response:  # nosec B310  # noqa: S310
+            req = urllib.request.Request(jwks_url, method='GET')  # nosemgrep: dynamic-urllib-use-detected
+            with urllib.request.urlopen(req) as response:  # nosemgrep: dynamic-urllib-use-detected
                 jwks_cache = json.loads(response.read().decode())
         except URLError as e:
             logger.error(f"Failed to fetch JWKS: {str(e)}")
