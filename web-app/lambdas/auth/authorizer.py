@@ -81,17 +81,19 @@ except ImportError:
 
 
 def get_jwks():
-    """Get JWKS from Cognito."""
+    """Get JWKS from Amazon Cognito."""
     global jwks_cache
     if jwks_cache is None:
         region = os.environ.get('AWS_REGION', 'us-east-1')
         user_pool_id = os.environ.get('USER_POOL_ID')
         jwks_url = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
         
+        # Validate URL scheme to prevent SSRF via file:// or other schemes
+        if not jwks_url.startswith('https://'):
+            raise ValueError(f"JWKS URL must use HTTPS scheme, got: {jwks_url[:20]}")
+        
         try:
-            # URL is constructed from trusted env vars (AWS_REGION, USER_POOL_ID),
-            # not user input — safe from SSRF.
-            with urllib.request.urlopen(jwks_url) as response:  # nosec B310
+            with urllib.request.urlopen(jwks_url) as response:  # nosec B310  # noqa: S310
                 jwks_cache = json.loads(response.read().decode())
         except URLError as e:
             logger.error(f"Failed to fetch JWKS: {str(e)}")
