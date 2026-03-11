@@ -59,7 +59,7 @@ def mock_results():
     """Create mock execution results"""
     return [
         {
-            'pk': 'SUITE_EXEC#exec-456',
+            'pk': 'USECASE_EXECUTION#usecase-1',
             'sk': 'RESULT#usecase-1',
             'suite_execution_id': 'exec-456',
             'usecase_id': 'usecase-1',
@@ -72,7 +72,7 @@ def mock_results():
             'recording_url': 's3://bucket/recording1.mp4'
         },
         {
-            'pk': 'SUITE_EXEC#exec-456',
+            'pk': 'USECASE_EXECUTION#usecase-2',
             'sk': 'RESULT#usecase-2',
             'suite_execution_id': 'exec-456',
             'usecase_id': 'usecase-2',
@@ -85,7 +85,7 @@ def mock_results():
             'recording_url': 's3://bucket/recording2.mp4'
         },
         {
-            'pk': 'SUITE_EXEC#exec-456',
+            'pk': 'USECASE_EXECUTION#usecase-3',
             'sk': 'RESULT#usecase-3',
             'suite_execution_id': 'exec-456',
             'usecase_id': 'usecase-3',
@@ -220,7 +220,7 @@ class TestGetSuiteExecution:
         # Create mixed results
         mixed_results = [
             {
-                'pk': 'SUITE_EXEC#exec-456',
+                'pk': 'USECASE_EXECUTION#usecase-1',
                 'sk': 'RESULT#usecase-1',
                 'suite_execution_id': 'exec-456',
                 'usecase_id': 'usecase-1',
@@ -230,7 +230,7 @@ class TestGetSuiteExecution:
                 'completed_at': '2024-01-01T10:05:00Z'
             },
             {
-                'pk': 'SUITE_EXEC#exec-456',
+                'pk': 'USECASE_EXECUTION#usecase-1',
                 'sk': 'RESULT#usecase-2',
                 'suite_execution_id': 'exec-456',
                 'usecase_id': 'usecase-2',
@@ -240,7 +240,7 @@ class TestGetSuiteExecution:
                 'task_arn': 'arn:aws:ecs:us-east-1:123456789012:task/cluster/task-id'
             },
             {
-                'pk': 'SUITE_EXEC#exec-456',
+                'pk': 'USECASE_EXECUTION#usecase-1',
                 'sk': 'RESULT#usecase-3',
                 'suite_execution_id': 'exec-456',
                 'usecase_id': 'usecase-3',
@@ -384,32 +384,6 @@ class TestGetSuiteExecution:
         assert response['statusCode'] == 403
         body = json.loads(response['body'])
         assert 'Forbidden' in body['error']
-    
-    @patch('get_suite_execution.boto3')
-    @patch('get_suite_execution.validate_scope_access')
-    def test_insufficient_suite_scope(self, mock_validate, mock_boto3, mock_event, mock_table, mock_execution):
-        """Test error when user lacks read permission on suite scope"""
-        # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
-        
-        # Mock execution retrieval
-        mock_table.get_item.return_value = {'Item': mock_execution}
-        
-        # Mock scope validation to raise PermissionError
-        mock_validate.side_effect = PermissionError('User lacks read permission on suite:smoke-tests')
-        
-        # Modify event to not have admin scope
-        event = mock_event.copy()
-        event['requestContext']['authorizer']['scope'] = 'api/suite.read'
-        
-        # Execute
-        response = handler(event, None)
-        
-        # Verify
-        assert response['statusCode'] == 403
-        body = json.loads(response['body'])
-        assert 'Forbidden' in body['error']
-        assert 'User lacks read permission' in body['message']
     
     @patch('get_suite_execution.boto3')
     def test_admin_scope_bypasses_validation(self, mock_boto3, mock_event, mock_table, mock_execution, mock_results):

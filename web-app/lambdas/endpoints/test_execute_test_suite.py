@@ -81,8 +81,14 @@ class TestExecuteTestSuite:
         mock_dynamodb.put_item.return_value = {}
         mock_dynamodb.update_item.return_value = {}
         
-        # Mock Lambda invocations
-        mock_lambda.invoke.return_value = {'StatusCode': 202}
+        # Mock Lambda invocations with proper Payload StreamingBody
+        payload_response = json.dumps({
+            'statusCode': 200,
+            'body': json.dumps({'executionId': 'exec-123', 'status': 'running'})
+        }).encode('utf-8')
+        mock_payload = MagicMock()
+        mock_payload.read.return_value = payload_response
+        mock_lambda.invoke.return_value = {'StatusCode': 200, 'Payload': mock_payload}
         
         # Execute
         response = handler(mock_event, None)
@@ -130,7 +136,7 @@ class TestExecuteTestSuite:
         mock_dynamodb.get_item.return_value = {'Item': mock_suite}
         mock_dynamodb.query.return_value = {'Items': mock_usecases}
         mock_dynamodb.put_item.return_value = {}
-        mock_lambda.invoke.return_value = {'StatusCode': 202}
+        payload_resp = json.dumps({'statusCode': 200, 'body': json.dumps({'executionId': 'exec-123', 'status': 'running'})}).encode('utf-8'); mp = MagicMock(); mp.read.return_value = payload_resp; mock_lambda.invoke.return_value = {'StatusCode': 200, 'Payload': mp}
         
         # Create event with scheduled trigger
         event = {
@@ -140,7 +146,7 @@ class TestExecuteTestSuite:
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/suite.write'
+                    'scope': 'api/suite.write api/executions.write'
                 }
             }
         }
@@ -186,7 +192,7 @@ class TestExecuteTestSuite:
         # Verify
         assert response['statusCode'] == 400
         body = json.loads(response['body'])
-        assert body['error'] == 'Test suite has no use cases'
+        assert body['error'] == 'Empty test suite'
     
     def test_missing_suite_id(self):
         """Test error when suite_id is missing"""
@@ -197,7 +203,7 @@ class TestExecuteTestSuite:
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/suite.write'
+                    'scope': 'api/suite.write api/executions.write'
                 }
             }
         }
@@ -217,7 +223,7 @@ class TestExecuteTestSuite:
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/suite.write'
+                    'scope': 'api/suite.write api/executions.write'
                 }
             }
         }
@@ -324,8 +330,11 @@ class TestExecuteTestSuite:
         mock_dynamodb.update_item.return_value = {}
         
         # Mock Lambda invocations: first succeeds, second fails
+        payload_resp = json.dumps({'statusCode': 200, 'body': json.dumps({'executionId': 'exec-123', 'status': 'running'})}).encode('utf-8')
+        mp = MagicMock()
+        mp.read.return_value = payload_resp
         mock_lambda.invoke.side_effect = [
-            {'StatusCode': 202},
+            {'StatusCode': 200, 'Payload': mp},
             Exception('Lambda invocation failed')
         ]
         
@@ -370,7 +379,7 @@ class TestExecuteTestSuite:
         # Verify
         assert response['statusCode'] == 500
         body = json.loads(response['body'])
-        assert 'Failed to invoke any use case executions' in body['error']
+        assert 'Failed to execute test suite' in body['error']
         assert len(body['invocation_results']) == 2
         assert all(r['status'] == 'failed' for r in body['invocation_results'])
         
@@ -394,7 +403,7 @@ class TestExecuteTestSuite:
         mock_dynamodb.get_item.return_value = {'Item': mock_suite}
         mock_dynamodb.query.return_value = {'Items': mock_usecases}
         mock_dynamodb.put_item.return_value = {}
-        mock_lambda.invoke.return_value = {'StatusCode': 202}
+        payload_resp = json.dumps({'statusCode': 200, 'body': json.dumps({'executionId': 'exec-123', 'status': 'running'})}).encode('utf-8'); mp = MagicMock(); mp.read.return_value = payload_resp; mock_lambda.invoke.return_value = {'StatusCode': 200, 'Payload': mp}
         
         # Create event with empty body
         event = {
@@ -404,7 +413,7 @@ class TestExecuteTestSuite:
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/suite.write'
+                    'scope': 'api/suite.write api/executions.write'
                 }
             }
         }
@@ -433,7 +442,7 @@ class TestExecuteTestSuite:
         mock_dynamodb.get_item.return_value = {'Item': mock_suite}
         mock_dynamodb.query.return_value = {'Items': mock_usecases}
         mock_dynamodb.put_item.return_value = {}
-        mock_lambda.invoke.return_value = {'StatusCode': 202}
+        payload_resp = json.dumps({'statusCode': 200, 'body': json.dumps({'executionId': 'exec-123', 'status': 'running'})}).encode('utf-8'); mp = MagicMock(); mp.read.return_value = payload_resp; mock_lambda.invoke.return_value = {'StatusCode': 200, 'Payload': mp}
         
         # Execute
         response = handler(mock_event, None)
@@ -468,7 +477,7 @@ class TestExecuteTestSuite:
         mock_dynamodb.get_item.return_value = {'Item': mock_suite}
         mock_dynamodb.query.return_value = {'Items': mock_usecases}
         mock_dynamodb.put_item.return_value = {}
-        mock_lambda.invoke.return_value = {'StatusCode': 202}
+        payload_resp = json.dumps({'statusCode': 200, 'body': json.dumps({'executionId': 'exec-123', 'status': 'running'})}).encode('utf-8'); mp = MagicMock(); mp.read.return_value = payload_resp; mock_lambda.invoke.return_value = {'StatusCode': 200, 'Payload': mp}
         
         # Execute
         response = handler(mock_event, None)

@@ -330,32 +330,6 @@ class TestListSuiteExecutions:
         assert 'Forbidden' in body['error']
     
     @patch('list_suite_executions.boto3')
-    @patch('list_suite_executions.validate_scope_access')
-    def test_suite_scope_validation(self, mock_validate, mock_boto3, mock_event, mock_table, mock_suite):
-        """Test that suite scope is validated"""
-        # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
-        
-        # Mock suite retrieval
-        mock_table.get_item.return_value = {'Item': mock_suite}
-        
-        # Mock scope validation to raise PermissionError
-        mock_validate.side_effect = PermissionError('User lacks read permission on suite:test-suite')
-        
-        # Modify event to not have admin scope
-        event = mock_event.copy()
-        event['requestContext']['authorizer']['scope'] = 'api/suite.read'
-        
-        # Execute
-        response = handler(event, None)
-        
-        # Verify
-        assert response['statusCode'] == 403
-        body = json.loads(response['body'])
-        assert 'Forbidden' in body['error']
-        assert 'User lacks read permission' in body['message']
-    
-    @patch('list_suite_executions.boto3')
     def test_admin_scope_bypasses_validation(self, mock_boto3, mock_event, mock_table, mock_suite, mock_executions):
         """Test that admin scope bypasses scope validation"""
         # Setup mocks

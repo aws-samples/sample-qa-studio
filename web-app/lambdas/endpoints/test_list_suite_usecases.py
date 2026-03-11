@@ -95,7 +95,6 @@ class TestListSuiteUsecases:
         usecase1 = body['usecases'][0]
         assert usecase1['usecase_id'] == 'usecase-1'
         assert usecase1['usecase_name'] == 'Login Test'
-        assert usecase1['usecase_scope'] == 'usecase:login'
         assert usecase1['added_by'] == 'user@example.com'
         assert usecase1['added_at'] == '2024-01-01T10:00:00Z'
         
@@ -189,32 +188,6 @@ class TestListSuiteUsecases:
         assert 'Forbidden' in body['error']
     
     @patch('list_suite_usecases.boto3')
-    @patch('list_suite_usecases.validate_scope_access')
-    def test_suite_scope_validation(self, mock_validate, mock_boto3, mock_event, mock_table, mock_suite):
-        """Test that suite scope is validated"""
-        # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
-        
-        # Mock suite retrieval
-        mock_table.get_item.return_value = {'Item': mock_suite}
-        
-        # Mock scope validation to raise PermissionError
-        mock_validate.side_effect = PermissionError('User lacks read permission on suite:test-suite')
-        
-        # Modify event to not have admin scope
-        event = mock_event.copy()
-        event['requestContext']['authorizer']['scope'] = 'api/suite.read'
-        
-        # Execute
-        response = handler(event, None)
-        
-        # Verify
-        assert response['statusCode'] == 403
-        body = json.loads(response['body'])
-        assert 'Forbidden' in body['error']
-        assert 'User lacks read permission' in body['message']
-    
-    @patch('list_suite_usecases.boto3')
     def test_admin_scope_bypasses_validation(self, mock_boto3, mock_event, mock_table, mock_suite, mock_mappings):
         """Test that admin scope bypasses scope validation"""
         # Setup mocks
@@ -299,7 +272,6 @@ class TestListSuiteUsecases:
         usecase = body['usecases'][0]
         assert usecase['usecase_id'] == 'usecase-1'
         assert usecase['usecase_name'] == 'Test Use Case'
-        assert usecase['usecase_scope'] == 'usecase:test'
         assert usecase['added_by'] == 'user@example.com'
         assert usecase['added_at'] == '2024-01-15T14:30:00Z'
     

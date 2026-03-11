@@ -361,7 +361,7 @@ class TestEventBridgeEventPreservation(unittest.TestCase):
             self.assertEqual(entry["Source"], "nova-act-qa-studio.execution")
             self.assertEqual(
                 entry["DetailType"],
-                "nova-act-qa-studio.execution.status-changed",
+                "nova-act-qa-studio.execution.status.changed",
             )
 
             detail = json.loads(entry["Detail"])

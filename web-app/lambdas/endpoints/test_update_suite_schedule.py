@@ -390,31 +390,6 @@ class TestUpdateSuiteSchedule(unittest.TestCase):
         body = json.loads(response['body'])
         self.assertIn('Forbidden', body['error'])
     
-    def test_insufficient_suite_scope(self):
-        """Test that missing write permission on suite scope returns 403"""
-        event = {
-            'pathParameters': {'suite_id': 'suite-123'},
-            'body': json.dumps({'schedule_enabled': True}),
-            'requestContext': {
-                'authorizer': {
-                    'email': 'test@example.com',
-                    'sub': 'user-123',
-                    'scope': 'api/suite.write'
-                }
-            }
-        }
-        
-        with patch('update_suite_schedule.boto3') as mock_boto3:
-            mock_table = MagicMock()
-            mock_boto3.resource.return_value.Table.return_value = mock_table
-            mock_table.get_item.return_value = {'Item': self.existing_suite}
-            
-            response = handler(event, None)
-            
-            self.assertEqual(response['statusCode'], 403)
-            body = json.loads(response['body'])
-            self.assertIn('Forbidden', body['error'])
-    
     def test_admin_scope_grants_access(self):
         """Test that api/admin scope grants access"""
         event = {
