@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.13.10-slim AS builder
+FROM python:3.13.12-slim AS builder
 
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -18,7 +18,7 @@ RUN python3 -m venv .venv && \
     .venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # Runtime stage
-FROM python:3.13.10-slim
+FROM python:3.13.12-slim
 
 ENV PYTHONUNBUFFERED=1
 ENV NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true
