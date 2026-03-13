@@ -4,7 +4,7 @@
   "usecase": {
     "name": "[QA Validation] Create Usecase with Cache Enabled",
     "description": "Test creating a usecase with step caching enabled and verify the toggle works",
-    "starting_url": "https://d3a3f5h4u5xzj7.cloudfront.net/",
+    "starting_url": "",
     "active": true,
     "executing_region": "",
     "tags": ["cache", "create", "usecase", "test"]
