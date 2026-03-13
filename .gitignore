@@ -80,3 +80,5 @@ yarn-error.log*
 .env
 
 .pytest_cache
+.kiro/design
+.kiro/specs
