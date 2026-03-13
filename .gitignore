@@ -82,3 +82,4 @@ yarn-error.log*
 .pytest_cache
 .kiro/design
 .kiro/specs
+*.egg-info
