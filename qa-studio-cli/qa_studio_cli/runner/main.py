@@ -78,6 +78,8 @@ def run_usecase(
     model_id: Optional[str] = None,
     timeout: int = 3600,
     output_format: str = "json",
+    device_arn: Optional[str] = None,
+    app_path: Optional[str] = None,
 ) -> None:
     """Execute a single use case (local-only or remote mode)."""
     try:
@@ -96,6 +98,8 @@ def run_usecase(
                 region=region,
                 model_id=model_id,
                 output_format=output_format,
+                device_arn=device_arn,
+                app_path=app_path,
             )
         else:
             _run_usecase_remote(
@@ -114,6 +118,7 @@ def run_usecase(
         sys.exit(2)
 
 
+
 def _run_usecase_local(
     usecase_id: str,
     usecase_api: UseCaseAPI,
@@ -122,6 +127,8 @@ def _run_usecase_local(
     region: Optional[str],
     model_id: Optional[str],
     output_format: str = "json",
+    device_arn: Optional[str] = None,
+    app_path: Optional[str] = None,
 ) -> None:
     """Local-only execution path: fetch data, execute locally, print result."""
     logger.info("Fetching use case: %s", usecase_id)
@@ -140,6 +147,30 @@ def _run_usecase_local(
     effective_region = region or usecase.get("executing_region", "us-east-1")
     effective_model = model_id or usecase.get("model_id", "nova-act-v1.0")
 
+    # Extract mobile config from usecase
+    mobile_config = None
+    test_platform = usecase.get("test_platform", "web")
+    if test_platform == "mobile":
+        mobile_config = {
+            "platform": usecase.get("platform", ""),
+            "app_package": usecase.get("app_package", ""),
+            "app_activity": usecase.get("app_activity", ""),
+            "bundle_id": usecase.get("bundle_id", ""),
+            "device_arn": usecase.get("device_arn", ""),
+            "app_binary_s3_path": usecase.get("app_binary_s3_path", ""),
+            "app_arn": usecase.get("app_arn", ""),
+            "device_farm_project_arn": usecase.get("device_farm_project_arn", ""),
+        }
+        logger.info("Mobile use case detected: platform=%s", mobile_config["platform"])
+
+        # Apply CLI override for device ARN
+        if device_arn:
+            mobile_config["device_arn"] = device_arn
+            logger.info("Using CLI device ARN override: %s", device_arn)
+        if app_path:
+            mobile_config["app_path"] = app_path
+            logger.info("Using CLI app path: %s", app_path)
+
     logger.info("Executing use case locally: %s", usecase_name)
     engine = ExecutionEngine()
     result = engine.execute_usecase_local(
@@ -151,6 +182,7 @@ def _run_usecase_local(
         secrets=secrets,
         region=effective_region,
         model_id=effective_model,
+        mobile_config=mobile_config,
     )
 
     if output_format == "human":
@@ -161,6 +193,7 @@ def _run_usecase_local(
     exit_code = 0 if result.get("status") == "success" else 1
     logger.info("Local execution completed with exit code: %d", exit_code)
     sys.exit(exit_code)
+
 
 
 def _run_usecase_remote(

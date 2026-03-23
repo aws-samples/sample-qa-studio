@@ -1,6 +1,6 @@
 # QA Studio Documentation
 
-Complete documentation for QA Studio - an AI-powered automated testing platform built on Amazon Nova Act.
+Complete documentation for QA Studio - an AI-powered automated testing platform built on Amazon Nova Act, supporting both web browser and mobile app testing via AWS Device Farm.
 
 ## Quick Links
 

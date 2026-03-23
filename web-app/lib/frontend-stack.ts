@@ -72,6 +72,7 @@ export class NovaActQAStudioFrontendStack extends NovaActQAStudioBaseStack {
     // CloudFront Function for SPA routing
     // Compile TypeScript to JavaScript inline during deployment
     const spaRoutingFunction = new CloudFrontFunction(this, 'SPARoutingFunction', {
+      functionName: `${props.baseName}-spa-routing`,
       code: FunctionCode.fromInline(`
 function handler(event) {
     var request = event.request;

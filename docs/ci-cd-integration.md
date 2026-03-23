@@ -158,6 +158,8 @@ qa-studio run [OPTIONS]
 | `--var` | TEXT | No | Override variable (key=value, repeatable) | - |
 | `--region` | TEXT | No | Override AWS region for browser | - |
 | `--model-id` | TEXT | No | Override Nova Act model ID | - |
+| `--device-arn` | TEXT | No | Override Device Farm device ARN for mobile tests | - |
+| `--app-path` | TEXT | No | Path to local .apk/.ipa file for mobile tests | - |
 | `--verbose` | FLAG | No | Enable verbose logging | False |
 | `--timeout` | INTEGER | No | Global timeout in seconds | 3600 |
 | `--keep-artifacts` | FLAG | No | Keep local artifact files after upload | False |
@@ -187,6 +189,17 @@ qa-studio run --usecase-id test-123 --local-only
 qa-studio run --usecase-id test-123 \
   --region us-west-2 \
   --model-id anthropic.claude-3-5-sonnet-20240620-v1:0
+
+# Run a mobile test (auto-detects platform from use case config)
+qa-studio run --usecase-id mobile-test-123
+
+# Run a mobile test with a specific device
+qa-studio run --usecase-id mobile-test-123 \
+  --device-arn arn:aws:devicefarm:us-west-2::device:ABC123
+
+# Run a mobile test with a local app binary (first-time upload to Device Farm)
+qa-studio run --usecase-id mobile-test-123 \
+  --app-path /path/to/app.ipa
 
 # Run with verbose logging
 qa-studio run --usecase-id test-123 --verbose
@@ -564,6 +577,63 @@ qa-studio run --usecase-id test-123 \
 
 ---
 
+## Mobile Testing in CI/CD
+
+The CLI supports running mobile tests on AWS Device Farm. Mobile use cases are auto-detected from the use case configuration — no special flags are required for basic usage.
+
+### Prerequisites
+
+- AWS credentials with Device Farm permissions (`devicefarm:*` in `us-west-2`)
+- A mobile use case created in QA Studio with app binary uploaded
+- The app binary must have been uploaded to Device Farm at least once (via the web UI or a previous CLI run with `--app-path`)
+
+### How It Works
+
+1. The CLI fetches the use case from the API and detects `test_platform: "mobile"`
+2. It looks for an existing Device Farm upload matching the app filename (no re-download needed)
+3. A Device Farm remote access session is provisioned on a real device
+4. Nova Act controls the device via Appium and executes the test steps
+5. After execution, the CLI requests an async recording download via the API
+6. The recording becomes available in the QA Studio UI within 5-10 minutes
+
+### App Binary Resolution
+
+The CLI resolves the app binary in this order:
+1. `--app-path` flag — local file, uploaded directly to Device Farm
+2. `app_arn` on the use case — pre-existing Device Farm upload ARN
+3. `app_binary_s3_path` on the use case — searches Device Farm for an existing upload by filename
+4. `app_binary_s3_path` + `S3_BUCKET` env var — downloads from S3 and uploads to Device Farm
+
+For CI/CD, the simplest approach is to ensure the app has been uploaded at least once (via the web UI or `--app-path`), then subsequent runs reuse the existing Device Farm upload automatically.
+
+### Example: Mobile Test in GitHub Actions
+
+```yaml
+- name: Run Mobile Tests
+  env:
+    OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+    OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+    OAUTH_TOKEN_ENDPOINT: ${{ secrets.OAUTH_TOKEN_ENDPOINT }}
+    QA_STUDIO_API_URL: ${{ secrets.QA_STUDIO_API_URL }}
+  run: |
+    # Run mobile test (auto-detects from use case config)
+    qa-studio run --usecase-id ${{ vars.MOBILE_TEST_ID }}
+
+    # Or with a fresh app binary
+    qa-studio run \
+      --usecase-id ${{ vars.MOBILE_TEST_ID }} \
+      --app-path ./build/output/app-release.apk
+```
+
+### Limitations
+
+- Device Farm session provisioning adds 1-2 minutes to execution time
+- Session recordings are available asynchronously (5-10 minutes after completion)
+- Device Farm is only available in `us-west-2`
+- Specific devices may occasionally be unavailable — prefer "Highly available" devices or use auto-selection
+
+---
+
 ## Best Practices
 
 ### Test Organization
@@ -760,6 +830,41 @@ fi
    ```bash
    pip show qa-studio-cli
    python -c "import nova_act; print(nova_act.__version__)"
+   ```
+
+### Device Farm Session Fails (Mobile)
+
+**Error**: "Device Farm session failed to reach RUNNING state" or "Unknown error with device"
+
+**Solutions**:
+1. Try a different device:
+   ```bash
+   qa-studio run --usecase-id test-123 \
+     --device-arn arn:aws:devicefarm:us-west-2::device:DIFFERENT_DEVICE
+   ```
+
+2. Let the system auto-select a device (omit `--device-arn` and clear `device_arn` on the use case)
+
+3. Verify the app binary is compatible with the selected device's OS version
+
+4. Check Device Farm service health in the AWS Console
+
+### App Not Found on Device (Mobile)
+
+**Error**: "App with bundle identifier 'com.example.app' unknown"
+
+**Solutions**:
+1. Upload the app binary:
+   ```bash
+   qa-studio run --usecase-id test-123 --app-path /path/to/app.ipa
+   ```
+
+2. Verify the app was previously uploaded to Device Farm:
+   ```bash
+   aws devicefarm list-uploads \
+     --arn <project-arn> \
+     --type IOS_APP \
+     --region us-west-2
    ```
 
 ---

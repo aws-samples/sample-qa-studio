@@ -239,24 +239,22 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not s3_key:
             return create_response(404, {"error": "Trace file not found"})
 
+        # Return a presigned URL — the frontend fetches and parses client-side.
+        # This avoids Lambda's 6 MB response limit for large trace files.
         try:
-            s3_response = s3_client.get_object(Bucket=bucket, Key=s3_key)
-            raw_json = s3_response["Body"].read().decode("utf-8")
+            presigned_url = s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": s3_key},
+                ExpiresIn=3600,
+            )
         except ClientError as exc:
-            error_code = exc.response.get("Error", {}).get("Code", "Unknown")
-            if error_code == "NoSuchKey":
-                return create_response(404, {"error": "Trace file not found"})
-            logger.error(f"S3 error fetching trace file {s3_key}: {exc}", exc_info=True)
+            logger.error(f"Failed to generate presigned URL for {s3_key}: {exc}", exc_info=True)
             return create_response(500, {"error": "Internal server error"})
 
-        # --- 4. Parse and return ---
-        try:
-            trace = parse_trace_json(raw_json)
-        except ValueError:
-            logger.warning(f"Failed to parse trace JSON from {s3_key}", exc_info=True)
-            return create_response(404, {"error": "Failed to parse trace data"})
-
-        return create_response(200, trace.model_dump())
+        return create_response(200, {
+            "presigned_url": presigned_url,
+            "s3_key": s3_key,
+        })
 
     except Exception as exc:
         logger.error(f"Unexpected error in get_step_trace: {exc}", exc_info=True)

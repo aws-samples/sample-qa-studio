@@ -130,6 +130,10 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const models = this.addResource(this.api.root, 'models')
     this.addMethod(models, HttpMethod.GET, l.listModelsLambda)
 
+    // /devices - List Device Farm devices for mobile testing
+    const devices = this.addResource(this.api.root, 'devices')
+    this.addMethod(devices, HttpMethod.GET, l.listDeviceFarmDevicesLambda)
+
     // /usecase - Create usecase
     const usecase = this.addResource(this.api.root, 'usecase')
     this.addMethod(usecase, HttpMethod.POST, l.createUsecaseLambda)
@@ -233,6 +237,10 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     // /usecase/{id}/executions/{executionId}/stop - Stop execution
     const stopExecution = this.addResource(execution, 'stop')
     this.addMethod(stopExecution, HttpMethod.POST, props.stopExecutionLambda)
+
+    // /usecase/{id}/executions/{executionId}/download-recording - Request async recording download
+    const downloadRecording = this.addResource(execution, 'download-recording')
+    this.addMethod(downloadRecording, HttpMethod.POST, l.requestRecordingDownloadLambda)
 
     // /usecase/{id}/executions/{executionId}/steps - List execution steps
     const executionSteps = this.addResource(execution, 'steps')

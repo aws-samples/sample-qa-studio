@@ -67,6 +67,8 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
   public readonly vpc: IVpc
   public readonly subnetId: string
   public readonly wizardQueue: Queue
+  public readonly recordingQueueUrl: string
+  public readonly recordingQueueArn: string
   public readonly wizardEventBus: EventBus
   public readonly agentCoreExecutionRole: Role
   public readonly schedulerRole: Role
@@ -231,6 +233,55 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     this.log('cacheBuilderRule', cacheBuilderRule.ruleName);
 
+    // Device Farm Recording Downloader — async pattern:
+    // Worker sends delayed SQS message (5 min) after mobile execution completes.
+    // Lambda picks it up and downloads the video from Device Farm → S3.
+    // Retries up to 5 times (2 min apart), then gives up via DLQ.
+    const recordingDlq = new Queue(this, 'recording_download_dlq', {
+      queueName: this.cdkName('recording-downloads-dlq'),
+      retentionPeriod: Duration.days(7),
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    const recordingQueue = new Queue(this, 'recording_download_queue', {
+      queueName: this.cdkName('recording-downloads'),
+      visibilityTimeout: Duration.minutes(3),
+      removalPolicy: RemovalPolicy.DESTROY,
+      deadLetterQueue: {
+        queue: recordingDlq,
+        maxReceiveCount: 10,
+      },
+    });
+
+    const downloadRecordingLambda = this.createPythonLambda({
+      path: 'download_device_farm_recording',
+      timeout: Duration.minutes(2),
+      memorySize: 512,
+      environment: {
+        S3_BUCKET: this.artefactsBucket.bucketName,
+        DYNAMODB_TABLE_NAME: props.table.tableName,
+      }
+    });
+
+    this.artefactsBucket.grantWrite(downloadRecordingLambda);
+    downloadRecordingLambda.role?.addManagedPolicy(props.tableWritePolicy);
+    downloadRecordingLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'devicefarm:GetRemoteAccessSession',
+        'devicefarm:ListArtifacts',
+      ],
+      resources: ['*'],
+    }));
+
+    downloadRecordingLambda.addEventSource(new SqsEventSource(recordingQueue, {
+      batchSize: 1,
+    }));
+
+    this.log('recordingQueue', recordingQueue.queueName);
+    this.recordingQueueUrl = recordingQueue.queueUrl;
+    this.recordingQueueArn = recordingQueue.queueArn;
+
     // TODO: Remove this as the local queue feature is not needed anymore
     this.executionQueue = new Queue(this, 'queue', {
       queueName: this.cdkName('workhorse'),
@@ -369,6 +420,10 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       USE_NOVA_ACT_GA: config.useNovaActGa.toString(),
       NOVA_ACT_REGION: 'us-east-1',
       NOVA_ACT_S3_BUCKET: `${this.account}-${this.baseName}-artefacts-us-east-1`,
+      // Device Farm region for mobile testing (only available in us-west-2)
+      DEVICE_FARM_REGION: 'us-west-2',
+      // SQS queue for async Device Farm recording downloads
+      RECORDING_QUEUE_URL: recordingQueue.queueUrl,
     };
 
     // Add VPC environment variables if agentCoreVPC is enabled
@@ -390,6 +445,10 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }),
       environment: containerEnvironment
     });
+
+    // Grant the ECS task role permission to send messages to the recording queue
+    // (moved here because taskDefinition is created later in the stack)
+    recordingQueue.grantSendMessages(this.taskDefinition.taskRole!);
 
     // Grant permissions to task roles using separate policies to keep SPCM < 25
     // SQS permissions
@@ -599,6 +658,30 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
           ]
         })
       ]
+    }));
+
+    // Device Farm permissions for mobile testing (Device Farm is only available in us-west-2)
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_device_farm', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            'devicefarm:CreateRemoteAccessSession',
+            'devicefarm:GetRemoteAccessSession',
+            'devicefarm:StopRemoteAccessSession',
+            'devicefarm:DeleteRemoteAccessSession',
+            'devicefarm:ListProjects',
+            'devicefarm:CreateProject',
+            'devicefarm:ListDevices',
+            'devicefarm:GetDevice',
+            'devicefarm:CreateUpload',
+            'devicefarm:GetUpload',
+            'devicefarm:ListUploads',
+            'devicefarm:ListArtifacts',
+          ],
+          resources: ['*'],
+        }),
+      ],
     }));
 
     this.schedulerGroup = new CfnScheduleGroup(this, 'schedule_group', {

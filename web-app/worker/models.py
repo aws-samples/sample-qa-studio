@@ -21,6 +21,16 @@ class Execution:
     suite_execution_id: Optional[str] = None
     suite_id: Optional[str] = None
     enable_cache: bool = False
+    test_platform: Optional[str] = None
+    platform: Optional[str] = None
+    app_identifier: Optional[str] = None
+    app_binary_s3_path: Optional[str] = None
+    app_arn: Optional[str] = None
+    device_farm_project_arn: Optional[str] = None
+    device_arn: Optional[str] = None
+    device_farm_session_arn: Optional[str] = None
+    device_name: Optional[str] = None
+    device_os_version: Optional[str] = None
 
 @dataclass
 class ExecutionStep:
@@ -58,3 +68,17 @@ class ExecutionHeaders:
     sk: str
     headers: Dict[str, str]
     created_at: str
+
+
+from pydantic import BaseModel
+
+
+class MobileAppConfig(BaseModel):
+    platform: str  # "ANDROID" or "IOS"
+    app_package: Optional[str] = None  # Android only
+    app_activity: Optional[str] = None  # Android only
+    bundle_id: Optional[str] = None  # iOS only
+    app_binary_path: Optional[str] = None  # Local path to downloaded binary
+    app_arn: Optional[str] = None  # Device Farm app ARN
+    device_farm_project_arn: Optional[str] = None
+    device_arn: Optional[str] = None

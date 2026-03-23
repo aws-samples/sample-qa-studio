@@ -80,6 +80,8 @@ const lambdaStack = new NovaActQAStudioLambdaStack(app, 'lambdas', {
   notificationTopicArn: workerStack.notificationTopicArn,
   executeUsecaseLambda: workerStack.executeUsecaseLambda,
   ecsClusterArn: workerStack.cluster.clusterArn,
+  recordingQueueUrl: workerStack.recordingQueueUrl,
+  recordingQueueArn: workerStack.recordingQueueArn,
   env: stackEnv,
 })
 

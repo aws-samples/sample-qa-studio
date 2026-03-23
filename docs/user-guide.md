@@ -6,6 +6,7 @@ This guide walks you through every feature of the QA Studio web interface.
 
 - [Getting Started](#getting-started)
 - [Use Cases](#use-cases)
+- [Mobile Testing](#mobile-testing)
 - [Viewing Execution Results](#viewing-execution-results)
 - [Test Suites](#test-suites)
 - [Templates](#templates)
@@ -66,7 +67,7 @@ You can:
 Click **Create Use Case** to see six creation options:
 
 #### Interactive Wizard
-Build your test step-by-step with a live browser. You enter a step, watch it execute in real time, and accept it when it looks right. This is the most hands-on way to build a test.
+Build your test step-by-step with a live browser. This option is only available for web tests. You enter a step, watch it execute in real time, and accept it when it looks right.
 
 1. Enter a name, description, and the starting URL of the website you want to test.
 2. Select a browser region (where the remote browser runs).
@@ -76,23 +77,23 @@ Build your test step-by-step with a live browser. You enter a step, watch it exe
 6. Repeat until your test is complete, then finish the wizard.
 
 #### Create Blank
-Start from scratch. You provide a name, starting URL, and description, then manually add steps afterward.
+Start from scratch. Choose between **Web** or **Mobile** as the test platform. For web tests, provide a starting URL. For mobile tests, select the mobile platform (Android or iOS), provide app identifiers, choose a Device Farm device, and upload your app binary. Then manually add steps afterward.
 
 #### Start from Template
 Pick a pre-built template from the template library. Templates come with predefined steps and variables that you can customize for your specific scenario.
 
 #### Create from User Journey
-Describe what you want to test in plain English, and AI generates the test steps for you. For example:
+Describe what you want to test in plain English, and AI generates the test steps for you. You can choose between Web and Mobile platforms. For example:
 
 > "Log in to the application, navigate to the settings page, change the display name, and verify the change was saved."
 
-You provide a title, starting URL, and your description. The system generates a complete use case that you can review and edit before saving.
+You provide a title, starting URL (for web) or app identifiers (for mobile), and your description. The system generates a complete use case that you can review and edit before saving.
 
 #### Clone from Use Case
-Duplicate an existing use case. Useful when you want a variation of a test you've already built.
+Duplicate an existing use case, including all mobile configuration if applicable. Useful when you want a variation of a test you've already built.
 
 #### Import Use Case
-Upload a previously exported JSON file to recreate a use case. Useful for sharing tests between environments or team members.
+Upload a previously exported JSON file to recreate a use case, including mobile configuration. Useful for sharing tests between environments or team members. Note that app binaries are not included in exports and must be re-uploaded after import.
 
 ### Inside a Use Case
 
@@ -152,7 +153,64 @@ Set up scripts that run before or after test execution:
 
 ### Exporting a Use Case
 
-From the use case detail page, you can export the use case as a JSON file. This file contains all steps, configuration, and metadata (secrets are excluded for security). Use this to share tests with colleagues or back them up.
+From the use case detail page, you can export the use case as a JSON file. This file contains all steps, configuration, mobile settings, and metadata (secrets and app binaries are excluded for security). Use this to share tests with colleagues or back them up.
+
+---
+
+## Mobile Testing
+
+QA Studio supports testing mobile applications on real devices via AWS Device Farm. Mobile tests use the same step-based approach as web tests, but run on physical Android or iOS devices instead of a browser.
+
+### Prerequisites
+
+- An app binary (`.apk` for Android, `.ipa` for iOS) uploaded through the use case configuration
+- AWS Device Farm access (Device Farm operates in `us-west-2` regardless of your deployment region)
+
+### Creating a Mobile Use Case
+
+1. Click **Create Use Case** and choose **Create Blank** or **Create from User Journey**.
+2. Select **Mobile** as the test platform.
+3. Choose the mobile platform: **Android** or **iOS**.
+4. For Android, provide the **App package** (e.g., `com.example.myapp`) and **App activity** (e.g., `com.example.myapp.MainActivity`). For iOS, provide the **Bundle ID** (e.g., `com.example.myapp`).
+5. Optionally select a specific **Device** from the dropdown. Devices are filtered by platform and show availability status. If left empty, the system auto-selects the newest available device.
+6. Upload your app binary (`.apk` or `.ipa`).
+7. Add test steps as you would for a web test.
+
+### Device Selection
+
+The device picker shows all Device Farm devices with remote access enabled, filtered by your selected platform. Each device shows:
+- Device name and OS version
+- Manufacturer and form factor
+- Availability status (prefer "Highly available" devices for reliability)
+
+You can search/filter the device list by typing in the dropdown.
+
+### Running Mobile Tests
+
+Mobile tests run the same way as web tests — click **Execute** or trigger via schedule/CLI. The key differences:
+- No live browser view is available during execution (Device Farm doesn't support embeddable live streams)
+- Session provisioning takes 1-2 minutes as Device Farm allocates a physical device
+- The session recording is downloaded asynchronously after the test completes (typically available within 5-10 minutes)
+
+### Mobile Recordings
+
+Device Farm automatically records the device screen during test execution. After the session finalizes, the recording is downloaded and made available in the execution details under **Recording**. This process is asynchronous — the recording may not appear immediately after the test completes.
+
+### Writing Steps for Mobile Tests
+
+Mobile test steps use the same natural language format as web tests. Nova Act controls the device through Appium, so you can reference UI elements the same way:
+
+- "Tap the Login button"
+- "Enter 'JFK' in the search field"
+- "Scroll down and select the first result"
+- "Close any pop-up dialogs"
+
+### Limitations
+
+- The Interactive Wizard is not available for mobile tests (it requires a live browser session)
+- Step caching is not supported for mobile tests
+- Live view during execution is not available
+- Device Farm session provisioning can occasionally time out if the selected device is unavailable
 
 ---
 
@@ -169,7 +227,7 @@ When you click on an execution from the history, you'll see a detailed results p
 A visual timeline showing when the execution moved through each phase (pending, executing, completed/failed).
 
 ### Live View
-If a test is currently running, a live view panel appears showing the browser session in real time. You can watch the AI navigate your application as it follows each step.
+If a web test is currently running, a live view panel appears showing the browser session in real time. You can watch the AI navigate your application as it follows each step. Live view is not available for mobile tests.
 
 ### Step Results
 A detailed breakdown of each step showing:
@@ -181,7 +239,7 @@ A detailed breakdown of each step showing:
 Click on screenshots or log files to view them in a full-screen modal.
 
 ### Session Recording
-Click **View Recording** to watch a video replay of the entire browser session. The recording player lets you scrub through the session to see exactly what happened at each point.
+Click **View Recording** to watch a video replay of the entire session. For web tests, the recording is available immediately. For mobile tests, the Device Farm recording is downloaded asynchronously and typically becomes available within 5-10 minutes after the test completes.
 
 ### Downloaded Files
 Any files downloaded during the test execution are listed here with links to download them.

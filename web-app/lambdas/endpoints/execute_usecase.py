@@ -179,6 +179,31 @@ def handler(event, context):
             'model_id': {'S': model_id}
         }
         
+        # Copy mobile config fields from usecase to execution record
+        test_platform = usecase.get('test_platform', {}).get('S', 'web')
+        execution_item['test_platform'] = {'S': test_platform}
+
+        if test_platform == 'mobile':
+            # Copy platform (e.g., "ANDROID", "IOS") if present
+            usecase_platform = usecase.get('platform', {}).get('S', '')
+            if usecase_platform:
+                execution_item['platform'] = {'S': usecase_platform}
+
+            # Build app_identifier: Android = "app_package/app_activity", iOS = "bundle_id"
+            app_package = usecase.get('app_package', {}).get('S', '')
+            app_activity = usecase.get('app_activity', {}).get('S', '')
+            bundle_id = usecase.get('bundle_id', {}).get('S', '')
+            if usecase_platform == 'ANDROID' and app_package and app_activity:
+                execution_item['app_identifier'] = {'S': f'{app_package}/{app_activity}'}
+            elif usecase_platform == 'IOS' and bundle_id:
+                execution_item['app_identifier'] = {'S': bundle_id}
+
+            # Copy optional mobile fields if present
+            for field in ['app_binary_s3_path', 'app_arn', 'device_farm_project_arn', 'device_arn']:
+                val = usecase.get(field, {}).get('S', '')
+                if val:
+                    execution_item[field] = {'S': val}
+
         # Propagate enable_cache from usecase to execution record
         enable_cache_val = usecase.get('enable_cache', {}).get('BOOL', False)
         if enable_cache_val:
@@ -328,6 +353,15 @@ def handler(event, context):
         except Exception as e:
             print(f'Error copying headers: {str(e)}')
         
+        # Mobile pre-validation: require app binary reference before execution
+        if test_platform == 'mobile':
+            app_binary_s3_path = usecase.get('app_binary_s3_path', {}).get('S', '')
+            app_arn = usecase.get('app_arn', {}).get('S', '')
+            if not app_binary_s3_path and not app_arn:
+                return create_response(400, {
+                    'error': 'Mobile usecase requires either app_binary_s3_path or app_arn to be set before execution'
+                })
+
         # Handle different trigger types
         if trigger_type == 'OnDemand':
             # Send message to SQS queue
@@ -361,6 +395,39 @@ def handler(event, context):
             
             # Create ECS task
             try:
+                # Build ECS container environment overrides
+                container_env = [
+                    {'name': 'AWS_REGION', 'value': os.environ['AWS_REGION']},
+                    {'name': 'CACHE_ACTION_DELAY_MS', 'value': '1000'},
+                    {'name': 'EXECUTION_ID', 'value': execution_id},
+                    {'name': 'USECASE_ID', 'value': usecase_id},
+                    {'name': 'DYNAMODB_TABLE_NAME', 'value': table_name},
+                    {'name': 'S3_BUCKET', 'value': s3_bucket},
+                    {'name': 'S3_BUCKET_PREFIX', 'value': s3_bucket_prefix},
+                    {'name': 'USER_AGENT', 'value': os.environ.get('USER_AGENT', '')},
+                    {'name': 'BEDROCK_EXECUTION_ROLE', 'value': os.environ['BEDROCK_EXECUTION_ROLE']},
+                    {'name': 'NOVA_ACT_API_KEY_NAME', 'value': os.environ['NOVA_ACT_API_KEY_NAME']},
+                    {'name': 'SECRETS_PREFIX', 'value': os.environ['SECRETS_PREFIX']}
+                ]
+
+                # Add mobile config as ECS environment overrides
+                if test_platform == 'mobile':
+                    container_env.append({'name': 'DEVICE_FARM_REGION', 'value': 'us-west-2'})
+                    mobile_env_fields = {
+                        'test_platform': test_platform,
+                        'platform': usecase.get('platform', {}).get('S', ''),
+                        'app_package': usecase.get('app_package', {}).get('S', ''),
+                        'app_activity': usecase.get('app_activity', {}).get('S', ''),
+                        'bundle_id': usecase.get('bundle_id', {}).get('S', ''),
+                        'app_binary_s3_path': usecase.get('app_binary_s3_path', {}).get('S', ''),
+                        'app_arn': usecase.get('app_arn', {}).get('S', ''),
+                        'device_farm_project_arn': usecase.get('device_farm_project_arn', {}).get('S', ''),
+                        'device_arn': usecase.get('device_arn', {}).get('S', ''),
+                    }
+                    for env_name, env_value in mobile_env_fields.items():
+                        if env_value:
+                            container_env.append({'name': env_name.upper(), 'value': env_value})
+
                 task_result = ecs.run_task(
                     cluster=os.environ['ECS_CLUSTER'],
                     taskDefinition=os.environ['ECS_TASK_DEFINITION'],
@@ -375,19 +442,7 @@ def handler(event, context):
                     overrides={
                         'containerOverrides': [{
                             'name': 'container',
-                            'environment': [
-                                {'name': 'AWS_REGION', 'value': os.environ['AWS_REGION']},
-                                {'name': 'CACHE_ACTION_DELAY_MS', 'value': '1000'},
-                                {'name': 'EXECUTION_ID', 'value': execution_id},
-                                {'name': 'USECASE_ID', 'value': usecase_id},
-                                {'name': 'DYNAMODB_TABLE_NAME', 'value': table_name},
-                                {'name': 'S3_BUCKET', 'value': s3_bucket},
-                                {'name': 'S3_BUCKET_PREFIX', 'value': s3_bucket_prefix},
-                                {'name': 'USER_AGENT', 'value': os.environ.get('USER_AGENT', '')},
-                                {'name': 'BEDROCK_EXECUTION_ROLE', 'value': os.environ['BEDROCK_EXECUTION_ROLE']},
-                                {'name': 'NOVA_ACT_API_KEY_NAME', 'value': os.environ['NOVA_ACT_API_KEY_NAME']},
-                                {'name': 'SECRETS_PREFIX', 'value': os.environ['SECRETS_PREFIX']}
-                            ]
+                            'environment': container_env
                         }]
                     }
                 )

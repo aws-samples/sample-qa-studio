@@ -9,10 +9,95 @@ from utils import create_response, get_table_name, get_bucket_name
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# Valid file extensions per mobile platform
+PLATFORM_EXTENSIONS = {
+    'ANDROID': '.apk',
+    'IOS': '.ipa',
+}
+
+
+def _handle_app_binary(body: dict) -> Dict[str, Any]:
+    """
+    Handle app_binary file type: validate inputs, generate a pre-signed PUT URL,
+    and store the S3 path on the Usecase DynamoDB record.
+    """
+    usecase_id = body.get('usecaseId', '')
+    platform = body.get('platform', '')
+    filename = body.get('filename', '')
+
+    # Validate required fields
+    if not usecase_id:
+        return create_response(400, {'error': 'usecaseId is required for app_binary uploads'})
+    if not platform:
+        return create_response(400, {'error': 'platform is required for app_binary uploads'})
+    if not filename:
+        return create_response(400, {'error': 'filename is required for app_binary uploads'})
+
+    # Validate platform value
+    if platform not in PLATFORM_EXTENSIONS:
+        return create_response(400, {
+            'error': f'platform must be "ANDROID" or "IOS", got "{platform}"'
+        })
+
+    # Validate file extension matches platform
+    expected_ext = PLATFORM_EXTENSIONS[platform]
+    if not filename.lower().endswith(expected_ext):
+        return create_response(400, {
+            'error': f'File extension mismatch: {platform} requires {expected_ext} files, got "{filename}"'
+        })
+
+    # Build S3 key and generate pre-signed PUT URL
+    s3_key = f"{usecase_id}/app_binary/{filename}"
+    bucket_name = get_bucket_name()
+    s3_client = boto3.client('s3', config=boto3.session.Config(signature_version='s3v4'))
+
+    try:
+        signed_url = s3_client.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': bucket_name,
+                'Key': s3_key,
+            },
+            ExpiresIn=3600,  # 1 hour expiration
+        )
+    except ClientError as e:
+        logger.error(f"Error generating pre-signed PUT URL: {str(e)}")
+        return create_response(500, {'error': 'Failed to generate upload URL'})
+
+    # Store app_binary_s3_path on the Usecase DynamoDB record
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(get_table_name())
+        table.update_item(
+            Key={
+                'pk': 'USECASES',
+                'sk': f'USECASE#{usecase_id}',
+            },
+            UpdateExpression='SET #abs = :s3path',
+            ExpressionAttributeNames={
+                '#abs': 'app_binary_s3_path',
+            },
+            ExpressionAttributeValues={
+                ':s3path': s3_key,
+            },
+        )
+    except ClientError as e:
+        logger.error(f"Error updating Usecase with app_binary_s3_path: {str(e)}")
+        return create_response(500, {'error': 'Failed to store app binary path'})
+
+    logger.info(f"Generated app_binary upload URL for usecase {usecase_id}, key={s3_key}")
+
+    return create_response(200, {
+        'signedUrl': signed_url,
+        'fileName': filename,
+        's3Key': s3_key,
+    })
+
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to generate pre-signed Amazon S3 URLs for execution artifacts.
+    Lambda handler to generate pre-signed Amazon S3 URLs for execution artifacts
+    and app binary uploads.
     
     Args:
         event: API Gateway proxy request event
@@ -28,10 +113,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except json.JSONDecodeError:
             return create_response(400, {'error': 'Invalid JSON in request body'})
         
+        file_type = body.get('fileType', 'html')
+
+        # Validate fileType
+        if file_type not in ['html', 'video', 'app_binary']:
+            logger.error(f"Invalid fileType: {file_type}. Must be 'html', 'video', or 'app_binary'")
+            return create_response(400, {'error': "fileType must be 'html', 'video', or 'app_binary'"})
+
+        # Handle app_binary uploads (separate flow — no execution needed)
+        if file_type == 'app_binary':
+            return _handle_app_binary(body)
+
+        # --- Existing artifact download flow (html / video) ---
         usecase_id = body.get('usecaseId', '')
         execution_id = body.get('executionId', '')
         act_id = body.get('actId', '')
-        file_type = body.get('fileType', 'html')
         
         logger.info(f"UsecaseID: {usecase_id}, ExecutionID: {execution_id}, ActID: {act_id}")
         
@@ -44,11 +140,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if file_type == 'html' and not act_id:
             logger.error("ActId is required for HTML files")
             return create_response(400, {'error': 'ActId is required for HTML files'})
-        
-        # Validate fileType
-        if file_type not in ['html', 'video']:
-            logger.error(f"Invalid fileType: {file_type}. Must be 'html' or 'video'")
-            return create_response(400, {'error': "fileType must be 'html' or 'video'"})
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')

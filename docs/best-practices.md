@@ -443,6 +443,35 @@ Test 2: Login with pre-existing test account
 
 ---
 
+## Mobile Testing Best Practices
+
+### Device Selection
+
+- **Prefer "Highly available" devices**: These have better uptime and faster session provisioning.
+- **Use auto-selection for CI/CD**: Let Device Farm pick the newest available device rather than pinning to a specific one, which may become unavailable.
+- **Pin devices for reproducibility**: When debugging a specific issue, pin to the exact device and OS version to get consistent results.
+
+### App Binary Management
+
+- **Upload once, reuse many times**: Device Farm retains uploaded binaries. The CLI and worker automatically reuse existing uploads by filename.
+- **Use consistent filenames**: The upload lookup matches by filename. If you change the binary, keep the same filename so it gets reused (or use `force_upload` to replace it).
+- **Version your binaries**: Include version numbers in filenames (e.g., `myapp-v2.1.0.ipa`) when you need to test specific versions side by side.
+
+### Writing Mobile Test Steps
+
+- **Be explicit about UI elements**: Mobile apps have less text than web pages. Reference buttons by their visible label, not position.
+- **Handle pop-ups early**: iOS notification permissions and Android system dialogs appear on first launch. Add a "Close any pop-ups" step at the beginning.
+- **Allow time for animations**: Mobile apps often have transitions. If a step fails intermittently, the app may still be animating.
+- **Keep steps focused**: One action per step works better on mobile than compound instructions.
+
+### Cost Optimization
+
+- **Device Farm charges per minute**: Minimize session time by keeping tests focused and steps efficient.
+- **Reuse app uploads**: Avoid re-uploading the same binary on every run.
+- **Use auto-select**: Auto-selected devices are typically more available, reducing failed session provisioning attempts.
+
+---
+
 ## Common Pitfalls
 
 ### Avoid These Mistakes

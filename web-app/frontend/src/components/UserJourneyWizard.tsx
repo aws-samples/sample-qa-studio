@@ -23,6 +23,12 @@ import LoadingBar from "@cloudscape-design/chat-components/loading-bar";
 import Select, { SelectProps } from "@cloudscape-design/components/select";
 import LiveRegion from "@cloudscape-design/components/live-region";
 import { regionOptions, findRegionOptions } from './../utils/browser_regions'
+import RadioGroup from "@cloudscape-design/components/radio-group";
+
+const platformOptions: SelectProps.Options = [
+  { label: 'Android', value: 'ANDROID' },
+  { label: 'iOS', value: 'IOS' },
+];
 
 interface UserJourneyWizardProps {
   onUsecaseCreated?: (usecaseId: string) => void;
@@ -67,6 +73,16 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
     validationWarnings: {},
     importSuccess: null
   });
+
+  const [testPlatform, setTestPlatform] = useState<string>('web');
+  const [mobilePlatform, setMobilePlatform] = useState<SelectProps.Option | null>(null);
+  const [appPackage, setAppPackage] = useState('');
+  const [appActivity, setAppActivity] = useState('');
+  const [bundleId, setBundleId] = useState('');
+
+  const isMobile = testPlatform === 'mobile';
+  const isAndroid = mobilePlatform?.value === 'ANDROID';
+  const isIOS = mobilePlatform?.value === 'IOS';
 
 
   const validateForm = (): boolean => {
@@ -140,8 +156,21 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
 
     setState(prev => ({ ...prev, isImporting: true, error: null }));
 
+    // Merge mobile platform fields into the generated usecase
+    const usecaseToImport = { ...state.generatedUsecase };
+    if (isMobile) {
+      usecaseToImport.usecase = {
+        ...usecaseToImport.usecase,
+        test_platform: 'mobile',
+        platform: mobilePlatform?.value || '',
+        ...(isAndroid ? { app_package: appPackage, app_activity: appActivity } : {}),
+        ...(isIOS ? { bundle_id: bundleId } : {}),
+        starting_url: '',
+      };
+    }
+
     const result = await executeWithRetry(
-      () => exportImportApi.importUsecase(state.generatedUsecase),
+      () => exportImportApi.importUsecase(usecaseToImport),
       { maxRetries: 2 }
     );
 
@@ -389,7 +418,54 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
             invalid={!!state.validationErrors.title}
           />
         </FormField>
-        
+
+        {/* Platform selector */}
+        <FormField label="Test platform">
+          <RadioGroup
+            value={testPlatform}
+            onChange={({ detail }) => {
+              setTestPlatform(detail.value);
+              setMobilePlatform(null);
+            }}
+            items={[
+              { value: 'web', label: 'Web' },
+              { value: 'mobile', label: 'Mobile' },
+            ]}
+          />
+        </FormField>
+
+        {isMobile && (
+          <SpaceBetween direction="vertical" size="l">
+            <Alert type="info">
+              Device Farm operations run in us-west-2. You can upload the app binary after the use case is created.
+            </Alert>
+            <FormField label="Mobile platform">
+              <Select
+                selectedOption={mobilePlatform}
+                onChange={({ detail }) => setMobilePlatform(detail.selectedOption)}
+                options={platformOptions}
+                placeholder="Select platform"
+              />
+            </FormField>
+            {isAndroid && (
+              <>
+                <FormField label="App package" description="e.g. com.example.myapp">
+                  <Input value={appPackage} onChange={({ detail }) => setAppPackage(detail.value)} placeholder="com.example.myapp" />
+                </FormField>
+                <FormField label="App activity" description="e.g. com.example.myapp.MainActivity">
+                  <Input value={appActivity} onChange={({ detail }) => setAppActivity(detail.value)} placeholder="com.example.myapp.MainActivity" />
+                </FormField>
+              </>
+            )}
+            {isIOS && (
+              <FormField label="Bundle ID" description="e.g. com.example.myapp">
+                <Input value={bundleId} onChange={({ detail }) => setBundleId(detail.value)} placeholder="com.example.myapp" />
+              </FormField>
+            )}
+          </SpaceBetween>
+        )}
+
+        {!isMobile && (
         <FormField
           label={
             <SpaceBetween direction="horizontal" size="xs" alignItems="center">
@@ -422,6 +498,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
             invalid={!!state.validationErrors.startingUrl}
           />
         </FormField>
+        )}
 
         <FormField
           label={

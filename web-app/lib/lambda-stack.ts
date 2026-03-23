@@ -20,6 +20,8 @@ interface NovaActQAStudioLambdaStackCreateProps extends NovaActQAStudioBaseStack
   notificationTopicArn: string
   executeUsecaseLambda: Function
   ecsClusterArn: string
+  recordingQueueUrl: string
+  recordingQueueArn: string
 }
 
 /**
@@ -109,6 +111,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
 
   // Utility Lambdas
   public readonly listModelsLambda: Function
+  public readonly listDeviceFarmDevicesLambda: Function
+  public readonly requestRecordingDownloadLambda: Function
 
   // Notification Lambdas (API-facing only)
   public readonly subscribeUsecaseLambda: Function
@@ -523,6 +527,14 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
 
     // Utility Lambdas
     this.listModelsLambda = this.createPythonLambda({ path: 'list_models' })
+    this.listDeviceFarmDevicesLambda = this.createPythonLambda({ path: 'list_device_farm_devices' })
+
+    this.requestRecordingDownloadLambda = this.createPythonLambda({
+      path: 'request_recording_download',
+      environment: {
+        RECORDING_QUEUE_URL: props.recordingQueueUrl,
+      }
+    })
 
     // Notification Lambdas (API-facing only)
     this.getUsecaseSubscriptionLambda = this.createPythonLambda({
@@ -856,7 +868,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     });
 
     this.generateS3UrlLambda.role?.addManagedPolicy(props.tableReadPolicy)
-    props.artefactsBucket.grantRead(this.generateS3UrlLambda)
+    this.generateS3UrlLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    props.artefactsBucket.grantReadWrite(this.generateS3UrlLambda)
 
     this.acceptWizardStepLambda = this.createPythonLambda({
       path: 'accept_wizard_step',
@@ -1035,6 +1048,20 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       effect: Effect.ALLOW,
       actions: ['nova-act:ListModels'],
       resources: ['*']
+    }))
+
+    // Device Farm ListDevices permission (Device Farm only in us-west-2)
+    this.listDeviceFarmDevicesLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['devicefarm:ListDevices'],
+      resources: ['*']
+    }))
+
+    // Recording download request — SQS send permission (scoped to recording queue)
+    this.requestRecordingDownloadLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['sqs:SendMessage'],
+      resources: [props.recordingQueueArn]
     }))
 
     // Secrets Manager Permissions

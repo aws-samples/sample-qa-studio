@@ -18,6 +18,8 @@ import click
 )
 @click.option("--region", default=None, help="Override AWS region for browser")
 @click.option("--model-id", default=None, help="Override Nova Act model ID")
+@click.option("--device-arn", default=None, help="Override Device Farm device ARN for mobile tests")
+@click.option("--app-path", default=None, help="Path to local .apk/.ipa file for mobile tests (uploads to Device Farm)")
 @click.option("--verbose", is_flag=True, help="Enable verbose logging")
 @click.option(
     "--timeout", type=int, default=3600, help="Global timeout in seconds",
@@ -40,6 +42,8 @@ def run(
     variables: tuple,
     region: str,
     model_id: str,
+    device_arn: str,
+    app_path: str,
     verbose: bool,
     timeout: int,
     keep_artifacts: bool,
@@ -88,6 +92,8 @@ def run(
             model_id=model_id,
             timeout=timeout,
             output_format=output_format,
+            device_arn=device_arn,
+            app_path=app_path,
         )
     else:
         run_runner(

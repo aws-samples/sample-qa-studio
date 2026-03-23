@@ -251,15 +251,20 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         execution_record = response["Item"]
         trigger_type = execution_record.get("trigger_type", {}).get("S", "")
+        test_platform = execution_record.get("test_platform", {}).get("S", "web")
 
-        # Classify playback type
-        try:
-            playback_type = classify_playback_type(trigger_type)
-        except ValueError:
-            return create_response(400, {
-                "error": "Unsupported trigger type",
-                "message": f"trigger_type '{trigger_type}' is not supported",
-            })
+        # Mobile executions always use video playback (Device Farm mp4)
+        if test_platform == "mobile":
+            playback_type = "video"
+        else:
+            # Classify playback type based on trigger_type
+            try:
+                playback_type = classify_playback_type(trigger_type)
+            except ValueError:
+                return create_response(400, {
+                    "error": "Unsupported trigger type",
+                    "message": f"trigger_type '{trigger_type}' is not supported",
+                })
 
         # Build response based on playback type
         if playback_type == "rrweb":
