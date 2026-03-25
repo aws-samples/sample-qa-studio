@@ -229,6 +229,12 @@ Contributions are welcome! Please review the following before contributing:
 
 This project is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file for details.
 
+Copyright 2010-2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+either express or implied. See the License for the specific language governing permissions and
+limitations under the License.
+
 ---
 
 **Built with Amazon Nova Act** - AI-powered browser automation for reliable, maintainable web application testing.
