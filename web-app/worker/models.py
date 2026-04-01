@@ -51,6 +51,7 @@ class ExecutionStep:
     value_type: str
     assertion_variable: str
     enable_advanced_click_types: bool = False
+    value_source: str = ''
     cached_steps: Optional[str] = None
     cache_last_updated: Optional[str] = None
 
