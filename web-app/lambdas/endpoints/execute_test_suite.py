@@ -239,7 +239,16 @@ def get_usecase_definition(usecase_id: str, table_name: str) -> Dict[str, Any]:
         'starting_url': item.get('starting_url', {}).get('S', ''),
         'executing_region': item.get('executing_region', {}).get('S', ''),
         'model_id': item.get('model_id', {}).get('S', ''),
-        'enable_cache': item.get('enable_cache', {}).get('BOOL', False)
+        'enable_cache': item.get('enable_cache', {}).get('BOOL', False),
+        'test_platform': item.get('test_platform', {}).get('S', 'web'),
+        'platform': item.get('platform', {}).get('S', ''),
+        'app_package': item.get('app_package', {}).get('S', ''),
+        'app_activity': item.get('app_activity', {}).get('S', ''),
+        'bundle_id': item.get('bundle_id', {}).get('S', ''),
+        'app_binary_s3_path': item.get('app_binary_s3_path', {}).get('S', ''),
+        'app_arn': item.get('app_arn', {}).get('S', ''),
+        'device_farm_project_arn': item.get('device_farm_project_arn', {}).get('S', ''),
+        'device_arn': item.get('device_arn', {}).get('S', ''),
     }
 
 
@@ -499,6 +508,30 @@ def create_execution_record_for_usecase(
     # Propagate enable_cache from usecase to execution record
     if usecase_definition.get('enable_cache', False):
         execution_item['enable_cache'] = {'BOOL': True}
+    
+    # Copy mobile config fields from usecase to execution record
+    test_platform = usecase_definition.get('test_platform', 'web')
+    execution_item['test_platform'] = {'S': test_platform}
+
+    if test_platform == 'mobile':
+        platform_val = usecase_definition.get('platform', '')
+        if platform_val:
+            execution_item['platform'] = {'S': platform_val}
+
+        # Build app_identifier
+        app_package = usecase_definition.get('app_package', '')
+        app_activity = usecase_definition.get('app_activity', '')
+        bundle_id = usecase_definition.get('bundle_id', '')
+        if platform_val == 'ANDROID' and app_package and app_activity:
+            execution_item['app_identifier'] = {'S': f'{app_package}/{app_activity}'}
+        elif platform_val == 'IOS' and bundle_id:
+            execution_item['app_identifier'] = {'S': bundle_id}
+
+        # Copy optional mobile fields if present
+        for field in ['app_binary_s3_path', 'app_arn', 'device_farm_project_arn', 'device_arn']:
+            val = usecase_definition.get(field, '')
+            if val:
+                execution_item[field] = {'S': val}
     
     dynamodb.put_item(
         TableName=table_name,

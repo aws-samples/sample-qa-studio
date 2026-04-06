@@ -106,6 +106,27 @@ class StepExecutor:
             return StepResult(success=False, act_id=act_id, logs=str(e))
 
     def _execute_retrieve_value(self, step: dict) -> StepResult:
+        # Programmatic URL extraction — bypasses vision model
+        if step.get("value_source") == "url":
+            import re
+            try:
+                current_url = self.nova.page.url
+                pattern = step.get("instruction", "").strip()
+                if pattern:
+                    match = re.search(pattern, current_url)
+                    if match and match.groups():
+                        value = match.group(1)
+                    elif match:
+                        value = match.group(0)
+                    else:
+                        return StepResult(success=False, act_id="url_extract",
+                                          logs=f"Regex '{pattern}' did not match URL: {current_url}")
+                else:
+                    value = current_url
+                return StepResult(success=True, act_id="url_extract", actual_value=value)
+            except Exception as e:
+                return StepResult(success=False, act_id="url_extract", logs=str(e))
+
         value_type = step.get("value_type", "string")
         instruction = step.get("instruction", "")
         schema = self._schema_for_type(value_type)

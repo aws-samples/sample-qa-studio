@@ -101,6 +101,10 @@ export default function WizardSetup() {
 
           <Container>
             <SpaceBetween direction="vertical" size="l">
+              <Alert type="info">
+                The Interactive Wizard uses a live browser session and is only available for web tests. For mobile tests, use "Create Blank" or "Create from User Journey".
+              </Alert>
+
               <FormField
                 label="Use Case Name"
                 description="A descriptive name for your use case"

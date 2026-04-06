@@ -200,8 +200,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'starting_url': usecase.get('starting_url', ''),
             'active': usecase.get('active', False),
             'executing_region': usecase.get('executing_region', ''),
-            'tags': list(usecase.get('tags', [])) if usecase.get('tags') else []
+            'tags': list(usecase.get('tags', [])) if usecase.get('tags') else [],
+            'model_id': usecase.get('model_id', ''),
+            'test_platform': usecase.get('test_platform', 'web'),
         }
+
+        # Add mobile-specific fields if present
+        mobile_fields = ['platform', 'app_package', 'app_activity', 'bundle_id', 'device_arn']
+        for field in mobile_fields:
+            val = usecase.get(field, '')
+            if val:
+                usecase_export[field] = val
         
         # Create export data
         export_data = {

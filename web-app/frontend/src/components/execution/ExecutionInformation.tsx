@@ -4,6 +4,8 @@ import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import Link from "@cloudscape-design/components/link";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
+import { RecordingPlayer } from '../RecordingPlayer';
 
 interface ExecutionInformationProps {
   execution: any;
@@ -90,6 +92,12 @@ export default function ExecutionInformation({
           }] : []),
         ]}
       />
+      {/* Recording inline — shown for terminal executions */}
+      {['success', 'failed', 'error', 'stopped'].includes(execution.status) && (
+        <ExpandableSection headerText="Recording" defaultExpanded={false}>
+          <RecordingPlayer usecaseId={usecaseId} executionId={executionId} />
+        </ExpandableSection>
+      )}
     </Container>
   );
 }

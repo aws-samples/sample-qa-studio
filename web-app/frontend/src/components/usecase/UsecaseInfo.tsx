@@ -113,14 +113,38 @@ export default function UsecaseInfo({ usecaseId }: UsecaseInfoProps) {
               label: "Execution Region",
               value: usecase.executing_region,
             },
-            {
-              label: "Starting URL",
-              value: (
-                <Link external href={usecase.starting_url}>
-                  {usecase.starting_url}
-                </Link>
-              ),
-            },
+            ...(usecase.test_platform === 'mobile' ? [
+              {
+                label: "Test Platform",
+                value: <Badge color="blue">Mobile</Badge>,
+              },
+              {
+                label: "Mobile Platform",
+                value: usecase.platform || '-',
+              },
+              ...(usecase.platform === 'ANDROID' ? [
+                { label: "App Package", value: usecase.app_package || '-' },
+                { label: "App Activity", value: usecase.app_activity || '-' },
+              ] : []),
+              ...(usecase.platform === 'IOS' ? [
+                { label: "Bundle ID", value: usecase.bundle_id || '-' },
+              ] : []),
+              {
+                label: "App Binary",
+                value: usecase.app_binary_s3_path
+                  ? usecase.app_binary_s3_path.split('/').pop()
+                  : <Badge color="red">Not uploaded</Badge>,
+              },
+            ] : [
+              {
+                label: "Starting URL",
+                value: (
+                  <Link external href={usecase.starting_url}>
+                    {usecase.starting_url}
+                  </Link>
+                ),
+              },
+            ]),
             {
               label: "Created",
               value: new Date(usecase.created_at).toLocaleDateString(),

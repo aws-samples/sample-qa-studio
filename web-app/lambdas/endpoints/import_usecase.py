@@ -78,8 +78,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'active': usecase_data.get('active', False),
             'executing_region': usecase_data.get('executing_region', ''),
             'tags': usecase_tags,
-            'created_at': now
+            'created_at': now,
+            'test_platform': usecase_data.get('test_platform', 'web'),
         }
+
+        # Add mobile-specific fields if present
+        mobile_fields = ['platform', 'app_package', 'app_activity', 'bundle_id', 'device_arn', 'model_id']
+        for field in mobile_fields:
+            val = usecase_data.get(field, '')
+            if val:
+                new_usecase[field] = val
         
         # Save usecase
         table.put_item(Item=new_usecase)

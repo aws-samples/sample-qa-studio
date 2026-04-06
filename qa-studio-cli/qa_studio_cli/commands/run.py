@@ -16,13 +16,10 @@ import click
     "--var", "variables", multiple=True,
     help="Override variable (key=value, repeatable)",
 )
-@click.option(
-    "--header", "headers", multiple=True,
-    help="Set HTTP header (key=value, repeatable, each key allowed once)",
-)
 @click.option("--region", default=None, help="Override AWS region for browser")
 @click.option("--model-id", default=None, help="Override Nova Act model ID")
-@click.option("--user-agent", default=None, help="Override browser User-Agent string")
+@click.option("--device-arn", default=None, help="Override Device Farm device ARN for mobile tests")
+@click.option("--app-path", default=None, help="Path to local .apk/.ipa file for mobile tests (uploads to Device Farm)")
 @click.option("--verbose", is_flag=True, help="Enable verbose logging")
 @click.option(
     "--timeout", type=int, default=3600, help="Global timeout in seconds",
@@ -43,10 +40,10 @@ def run(
     token_file: str,
     base_url: str,
     variables: tuple,
-    headers: tuple,
     region: str,
     model_id: str,
-    user_agent: str,
+    device_arn: str,
+    app_path: str,
     verbose: bool,
     timeout: int,
     keep_artifacts: bool,
@@ -68,20 +65,6 @@ def run(
             )
         key, value = var.split("=", 1)
         parsed_vars[key] = value
-
-    # Parse headers from key=value format (each key allowed once)
-    parsed_headers: dict[str, str] = {}
-    for header in headers:
-        if "=" not in header:
-            raise click.BadParameter(
-                f"Header must be in key=value format: {header}"
-            )
-        key, value = header.split("=", 1)
-        if key in parsed_headers:
-            raise click.BadParameter(
-                f"Duplicate header key: {key}"
-            )
-        parsed_headers[key] = value
 
     # Lazy import gate — runner extras required
     try:
@@ -105,12 +88,12 @@ def run(
             token_file=token_file,
             base_url=base_url,
             variables=parsed_vars,
-            headers=parsed_headers,
             region=region,
             model_id=model_id,
-            user_agent=user_agent,
             timeout=timeout,
             output_format=output_format,
+            device_arn=device_arn,
+            app_path=app_path,
         )
     else:
         run_runner(
@@ -118,10 +101,8 @@ def run(
             local_only=local_only,
             base_url=base_url,
             variables=parsed_vars,
-            headers=parsed_headers,
             region=region,
             model_id=model_id,
-            user_agent=user_agent,
             timeout=timeout,
             keep_artifacts=keep_artifacts,
             token_file=token_file,

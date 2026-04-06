@@ -19,7 +19,7 @@ const creationOptions: CreationOption[] = [
   {
     id: 'wizard',
     title: 'Interactive Wizard',
-    description: 'Build your use case step-by-step with live browser feedback. Add steps, see them execute in real-time, and accept when ready.',
+    description: 'Build your use case step-by-step with live browser feedback. Add steps, see them execute in real-time, and accept when ready. Web tests only.',
     icon: 'status-in-progress',
     route: '/create/wizard/setup'
   },

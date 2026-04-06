@@ -54,6 +54,34 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         default_region = os.environ.get('DEFAULT_REGION', 'us-east-1')
         executing_region = body.get('executing_region', default_region) or default_region  # Handle empty string too
         
+        # Extract mobile fields
+        test_platform = body.get('test_platform', '') or 'web'  # Default to "web" when absent or empty
+        platform = body.get('platform', '')
+        app_package = body.get('app_package', '')
+        app_activity = body.get('app_activity', '')
+        bundle_id = body.get('bundle_id', '')
+        device_farm_project_arn = body.get('device_farm_project_arn', '')
+        device_arn = body.get('device_arn', '')
+        
+        # Mobile-specific validation
+        if test_platform == 'mobile':
+            if platform not in ('ANDROID', 'IOS'):
+                return create_response(400, {'error': 'platform must be "ANDROID" or "IOS" when test_platform is "mobile"'})
+            
+            if platform == 'ANDROID':
+                if not app_package:
+                    return create_response(400, {'error': 'app_package is required when platform is "ANDROID"'})
+                if not app_activity:
+                    return create_response(400, {'error': 'app_activity is required when platform is "ANDROID"'})
+            
+            if platform == 'IOS':
+                if not bundle_id:
+                    return create_response(400, {'error': 'bundle_id is required when platform is "IOS"'})
+
+            # Validate device_arn format if provided
+            if device_arn and not device_arn.startswith('arn:aws:devicefarm:'):
+                return create_response(400, {'error': 'Invalid device_arn format — must be a Device Farm device ARN'})
+        
         # Create usecase
         usecase = {
             'pk': 'USECASES',
@@ -67,8 +95,22 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'created_at': now,
             'executing_region': executing_region,
             'model_id': model_id,
-            'enable_cache': body.get('enableCache', False)
+            'enable_cache': body.get('enableCache', False),
+            'test_platform': test_platform,
         }
+        
+        # Store mobile config fields only when non-empty
+        mobile_fields = {
+            'platform': platform,
+            'app_package': app_package,
+            'app_activity': app_activity,
+            'bundle_id': bundle_id,
+            'device_farm_project_arn': device_farm_project_arn,
+            'device_arn': device_arn,
+        }
+        for field_name, field_value in mobile_fields.items():
+            if field_value:
+                usecase[field_name] = field_value
         
         # Create created_by record
         created_by_record = {

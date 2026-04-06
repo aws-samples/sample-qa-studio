@@ -10,6 +10,7 @@
     "eu-central-1"
   ],
   "defaultRegion": "us-east-1",
+  "deviceFarmRegion": "us-west-2",
   "useNovaActGa": true,
   "vpcId": null,
   "workerSecurityGroupId": null,

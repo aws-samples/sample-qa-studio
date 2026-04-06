@@ -8,13 +8,12 @@ import Box from "@cloudscape-design/components/box";
 import AppLayout from "@cloudscape-design/components/app-layout";
 import Grid from "@cloudscape-design/components/grid";
 import Container from "@cloudscape-design/components/container";
-import ExpandableSection from "@cloudscape-design/components/expandable-section";
+import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import { api } from '../utils/api';
 import ExecutionTimeline from './common/ExecutionTimeline';
 import Breadcrumb from './common/Breadcrumb';
 import { ExecutionInformation, ExecutionSteps, ExecutionVariables } from './execution';
 import LiveViewPanel from './execution/LiveViewPanel';
-import { RecordingPlayer } from './RecordingPlayer';
 import DownloadedFiles from './execution/DownloadedFiles';
 import LogViewer from './common/LogViewer';
 
@@ -232,6 +231,28 @@ export default function ExecutionDetailRefactored() {
                 executionId={executionId}
               />
 
+              {execution?.test_platform === 'mobile' && (
+                <Container header={<Header variant="h2">Device Farm Details</Header>}>
+                  <KeyValuePairs
+                    columns={2}
+                    items={[
+                      {
+                        label: "Session ARN",
+                        value: execution.device_farm_session_arn || '-',
+                      },
+                      {
+                        label: "Device name",
+                        value: execution.device_name || '-',
+                      },
+                      {
+                        label: "OS version",
+                        value: execution.device_os_version || '-',
+                      },
+                    ]}
+                  />
+                </Container>
+              )}
+
               {hasVariables && (
                 <ExecutionVariables
                   usecaseId={usecaseId}
@@ -245,8 +266,8 @@ export default function ExecutionDetailRefactored() {
             </SpaceBetween>
           </Grid>
 
-          {/* Live View Panel - Full width above steps table */}
-          {(execution?.status === 'executing') && (
+          {/* Live View Panel - Full width above steps table (web only, not available for mobile/Device Farm) */}
+          {(execution?.status === 'executing') && execution?.test_platform !== 'mobile' && (
             <LiveViewPanel
               usecaseId={usecaseId}
               executionId={executionId}
@@ -267,20 +288,6 @@ export default function ExecutionDetailRefactored() {
             refreshTrigger={refreshTrigger}
             executionRegion={execution?.region}
           />
-
-          {/* Recording Expandable Section - only for terminal executions */}
-          {['success', 'failed', 'error', 'stopped'].includes(execution?.status) && (
-            <ExpandableSection
-              variant="container"
-              headerText="Recording"
-              defaultExpanded={false}
-            >
-              <RecordingPlayer
-                usecaseId={usecaseId}
-                executionId={executionId}
-              />
-            </ExpandableSection>
-          )}
 
           {/* Execution Logs (ci_runner only) */}
           {execution?.trigger_type === 'ci_runner' && (logArtifactsLoading || logDownloadUrl) && (

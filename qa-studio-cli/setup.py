@@ -18,6 +18,8 @@ setup(
             "boto3>=1.34.0",
             "tenacity>=8.2.0",
             "playwright",
+            "Appium-Python-Client>=4.0.0",
+            "requests>=2.32.0",
         ],
     },
     python_requires=">=3.11",

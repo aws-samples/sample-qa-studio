@@ -13,6 +13,7 @@ import Link from "@cloudscape-design/components/link";
 import Spinner from "@cloudscape-design/components/spinner";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Checkbox from "@cloudscape-design/components/checkbox";
+import Alert from "@cloudscape-design/components/alert";
 import { api } from '../../utils/api';
 
 interface StepFormModalProps {
@@ -93,6 +94,7 @@ export default function StepFormModal({
   const [saving, setSaving] = useState(false);
   const [captureVariable, setCaptureVariable] = useState('');
   const [valueType, setValueType] = useState('string');
+  const [valueSource, setValueSource] = useState('screen');
   const [assertionVariable, setAssertionVariable] = useState('');
   const [booleanInputMode, setBooleanInputMode] = useState('true');
   const [updatingFromTemplate, setUpdatingFromTemplate] = useState(false);
@@ -124,6 +126,7 @@ export default function StepFormModal({
       setValidationValue(step.validation_value || '');
       setCaptureVariable(step.capture_variable || '');
       setValueType(step.value_type || 'string');
+      setValueSource(step.value_source || 'screen');
       setAssertionVariable(step.assertion_variable || '');
       setEnableAdvancedClickTypes(step.enable_advanced_click_types || false);
       // Initialize boolean input mode based on existing value
@@ -144,6 +147,7 @@ export default function StepFormModal({
       setValidationValue('');
       setCaptureVariable('');
       setValueType('string');
+      setValueSource('screen');
       setAssertionVariable('');
       setBooleanInputMode('true');
       setEnableAdvancedClickTypes(false);
@@ -332,6 +336,7 @@ export default function StepFormModal({
       } else if (stepType === 'retrieve_value') {
         stepData.capture_variable = captureVariable.trim();
         stepData.value_type = valueType;
+        stepData.value_source = valueSource;
       } else if (stepType === 'assertion') {
         stepData.assertion_variable = assertionVariable.trim();
         stepData.validation_type = validationType;
@@ -592,6 +597,28 @@ export default function StepFormModal({
 
         {stepType === 'retrieve_value' && (
           <>
+            <FormField
+              stretch
+              label="Value Source"
+              description="Where to read the value from"
+            >
+              <Select
+                selectedOption={{ label: valueSource === 'url' ? 'Page URL' : 'Screen (AI vision)', value: valueSource }}
+                onChange={({ detail }) => setValueSource(detail.selectedOption?.value || 'screen')}
+                options={[
+                  { label: 'Screen (AI vision)', value: 'screen', description: 'Nova Act reads the value from the page visually' },
+                  { label: 'Page URL', value: 'url', description: 'Extract from the current page URL using an optional regex pattern' },
+                ]}
+              />
+            </FormField>
+
+            {valueSource === 'url' && (
+              <Alert type="info">
+                The instruction field becomes a regex pattern. Use a capture group to extract a substring
+                (e.g., <code>confirmationId=([A-Z0-9]+)</code>). Leave empty to capture the full URL.
+              </Alert>
+            )}
+
             <FormField
               stretch
               label="Variable Name"

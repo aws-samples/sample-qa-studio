@@ -12,7 +12,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from nova_act import NovaAct, Workflow
 
@@ -45,144 +45,256 @@ class ExecutionEngine:
     # Local-only execution (no remote state management)
     # ------------------------------------------------------------------
 
-    def execute_usecase_local(
-        self,
-        usecase_id: str,
-        usecase_name: str,
-        starting_url: str,
-        steps: List[Dict[str, Any]],
-        variables: Dict[str, str],
-        secrets: list,
-        headers: Dict[str, str],
-        region: str,
-        model_id: str,
-        user_agent: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """Execute use case locally without remote state management."""
-        from qa_studio_cli.models.execution import (
-            LocalExecutionResult, StepResultDetail, ArtifactPaths,
+    
+        def execute_usecase_local(
+            self,
+            usecase_id: str,
+            usecase_name: str,
+            starting_url: str,
+            steps: List[Dict[str, Any]],
+            variables: Dict[str, str],
+            secrets: list,
+            region: str,
+            model_id: str,
+            mobile_config: Dict[str, Any] | None = None,
+        ) -> Dict[str, Any]:
+            """Execute use case locally without remote state management."""
+            from qa_studio_cli.models.execution import (
+                LocalExecutionResult, StepResultDetail, ArtifactPaths,
+            )
+
+            start_time = datetime.utcnow()
+            artifacts_dir = Path("/tmp/qa-studio-artifacts") / usecase_id
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            logs_dir = str(artifacts_dir / "nova_act_logs")
+            os.makedirs(logs_dir, exist_ok=True)
+
+            log_path = artifacts_dir / "logs.txt"
+            file_handler = logging.FileHandler(log_path)
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            ))
+            logging.getLogger().addHandler(file_handler)
+
+            step_results: List[StepResultDetail] = []
+            overall_status = "success"
+            video_path = None
+
+            try:
+                headless = os.getenv("HEADLESS", "true").lower() != "false"
+                nova_kwargs: Dict[str, Any] = {
+                    "headless": headless,
+                    "logs_directory": logs_dir,
+                    "record_video": True,
+                }
+
+                # Build mobile actuator if this is a mobile use case
+                actuator = None
+                if mobile_config:
+                    actuator, effective_starting_page = self._build_mobile_actuator(mobile_config)
+                    nova_kwargs["actuator"] = actuator
+                    nova_kwargs["starting_page"] = effective_starting_page
+                    nova_kwargs["ignore_screen_dims_check"] = True
+                    nova_kwargs["ignore_https_errors"] = True
+                else:
+                    nova_kwargs["starting_page"] = starting_url
+
+                wf_manager = WorkflowManager()
+                workflow_name = wf_manager.ensure_workflow(usecase_id)
+
+                with Workflow(
+                    workflow_definition_name=workflow_name,
+                    model_id=model_id or "nova-act-v1.0",
+                    boto_session_kwargs={"region_name": region or "us-east-1"},
+                ) as workflow:
+                    nova_kwargs["workflow"] = workflow
+
+                    with NovaAct(**nova_kwargs) as nova:
+                        secrets_dict = {s.get("key", s.get("secret_key", "")): s for s in secrets}
+
+                        def _local_secret_resolver(uc_id: str, secret_key: str):
+                            secret = secrets_dict.get(secret_key)
+                            return secret.get("value") if secret else None
+
+                        executor = StepExecutor(nova, secrets_resolver=_local_secret_resolver)
+                        runtime_variables: Dict[str, str] = {}
+
+                        for step in steps:
+                            step_id = step.get("step_id", step.get("sk", ""))
+                            sort_order = step.get("sort", 0)
+                            step_start = datetime.utcnow()
+
+                            instruction = self._resolve_variables(
+                                step.get("instruction", ""), variables, runtime_variables,
+                            )
+                            resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id}
+
+                            logger.info("[local] Executing step %d: %s", sort_order, instruction)
+                            step_result: StepResult = executor.execute(resolved_step, variables, runtime_variables)
+
+                            step_duration = (datetime.utcnow() - step_start).total_seconds()
+                            step_status = "success" if step_result.success else "failed"
+
+                            step_results.append(StepResultDetail(
+                                step_id=step_id,
+                                step_type=step.get("step_type", ""),
+                                instruction=instruction,
+                                status=step_status,
+                                duration=step_duration,
+                                error=sanitize_error_message(step_result.logs) if not step_result.success and step_result.logs else None,
+                            ))
+
+                            if (
+                                step_result.success
+                                and step.get("step_type") == "retrieve_value"
+                                and step.get("capture_variable")
+                                and step_result.actual_value
+                            ):
+                                runtime_variables[step["capture_variable"]] = step_result.actual_value
+
+                            if not step_result.success:
+                                overall_status = "failed"
+                                logger.error("[local] Step %d failed: %s", sort_order, sanitize_error_message(step_result.logs))
+                                break
+
+                logs_path = Path(logs_dir)
+                for f in logs_path.rglob("*"):
+                    if f.suffix.lower() in (".webm", ".mp4") and f.is_file():
+                        video_path = str(f)
+                        break
+
+            except Exception as e:
+                overall_status = "failed"
+                logger.error("[local] Execution failed: %s", sanitize_error_message(str(e)))
+            finally:
+                file_handler.close()
+                logging.getLogger().removeHandler(file_handler)
+
+            duration = (datetime.utcnow() - start_time).total_seconds()
+
+            result = LocalExecutionResult(
+                status=overall_status,
+                usecase_id=usecase_id,
+                usecase_name=usecase_name,
+                duration=duration,
+                steps=step_results,
+                artifacts=ArtifactPaths(
+                    video=video_path,
+                    logs=str(log_path) if log_path.exists() else None,
+                ),
+            )
+            return result.model_dump(by_alias=True)
+
+    def _build_mobile_actuator(self, mobile_config: Dict[str, Any]) -> tuple:
+        """Build a DeviceFarmActuator from mobile config fields.
+
+        Returns:
+            Tuple of (actuator, starting_page_url)
+        """
+        import tempfile
+        import boto3 as _boto3
+
+        from nova_act_mobile.actuation.device_farm_actuator import DeviceFarmActuator
+        from nova_act_mobile.actuation.mobile_actuator import MobileActuator
+        from nova_act_mobile.app import MobileAppConfig
+        from nova_act_mobile.device_farm import DeviceFarmUploadConfig
+
+        platform_str = mobile_config.get("platform", "").upper()
+
+        # Build MobileAppConfig
+        if platform_str == "ANDROID":
+            app_config = MobileAppConfig.for_android(
+                app_package=mobile_config["app_package"],
+                app_activity=mobile_config["app_activity"],
+            )
+        elif platform_str == "IOS":
+            app_config = MobileAppConfig.for_ios(
+                bundle_id=mobile_config["bundle_id"],
+            )
+        else:
+            raise ValueError(f"Unsupported mobile platform: {platform_str}")
+
+        # Resolve app binary: prefer app_path (local file) > app_arn > Device Farm lookup > S3 download
+        upload_config = None
+        app_path = mobile_config.get("app_path", "")
+        app_arn = mobile_config.get("app_arn", "")
+        app_binary_s3_path = mobile_config.get("app_binary_s3_path", "")
+
+        if app_path:
+            # Local file provided via --app-path — upload directly to Device Farm
+            if not os.path.isfile(app_path):
+                raise ValueError(f"App binary not found: {app_path}")
+            filename = os.path.basename(app_path)
+            logger.info("Using local app binary: %s", app_path)
+            upload_config = DeviceFarmUploadConfig(
+                app_name=filename,
+                app_path=app_path,
+            )
+        elif app_arn:
+            # App already uploaded to Device Farm — use the ARN directly
+            logger.info("Using existing Device Farm app ARN: %s", app_arn[:80])
+            upload_config = DeviceFarmUploadConfig(app_name="app", app_arn=app_arn)
+        elif app_binary_s3_path:
+            # Try to find an existing Device Farm upload by filename before downloading
+            from nova_act_mobile.device_farm import DeviceFarmClient as DFClient
+
+            filename = os.path.basename(app_binary_s3_path)
+            # Ensure filename has the right extension
+            if not filename.endswith((".apk", ".ipa")):
+                ext = ".ipa" if platform_str == "IOS" else ".apk"
+                filename = f"{filename}{ext}"
+
+            df_client = DFClient()
+            project_arn = mobile_config.get("device_farm_project_arn", "") or None
+            resolved_project_arn = df_client.get_project_arn(project_arn)
+            upload_type = app_config.platform.device_farm_upload_type
+
+            existing_arn = df_client.find_existing_upload(
+                project_arn=resolved_project_arn,
+                upload_name=filename,
+                upload_type=upload_type,
+            )
+
+            if existing_arn:
+                logger.info("Found existing Device Farm upload for %s: %s", filename, existing_arn[:80])
+                upload_config = DeviceFarmUploadConfig(app_name=filename, app_arn=existing_arn)
+            else:
+                # No existing upload — need to download from S3 and upload to Device Farm
+                s3_bucket = os.environ.get("S3_BUCKET", "")
+                if not s3_bucket:
+                    raise ValueError(
+                        f"App binary '{filename}' not found in Device Farm and S3_BUCKET "
+                        "environment variable is not set. Either run the test from the web UI first "
+                        "(to upload the binary to Device Farm), or set S3_BUCKET to download it."
+                    )
+                tmp_dir = tempfile.mkdtemp(prefix="qa_studio_mobile_")
+                local_path = os.path.join(tmp_dir, filename)
+                logger.info("Downloading app binary from s3://%s/%s", s3_bucket, app_binary_s3_path)
+                s3_client = _boto3.client("s3")
+                s3_client.download_file(s3_bucket, app_binary_s3_path, local_path)
+                upload_config = DeviceFarmUploadConfig(
+                    app_name=filename,
+                    app_path=local_path,
+                )
+
+        # Build actuator
+        device_arn = mobile_config.get("device_arn", "") or None
+        project_arn = mobile_config.get("device_farm_project_arn", "") or None
+
+        actuator = DeviceFarmActuator(
+            app_config=app_config,
+            upload_config=upload_config,
+            project_arn=project_arn,
+            device_arn=device_arn,
         )
 
-        start_time = datetime.utcnow()
-        artifacts_dir = Path.home() / ".qa-studio" / "artifacts" / usecase_id
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-        logs_dir = str(artifacts_dir / "nova_act_logs")
-        os.makedirs(logs_dir, exist_ok=True)
+        starting_page = MobileActuator.app_url(app_config.app_identifier)
+        logger.info("Mobile actuator built: platform=%s, starting_page=%s", platform_str, starting_page)
 
-        log_path = artifacts_dir / "logs.txt"
-        file_handler = logging.FileHandler(log_path)
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        ))
-        logging.getLogger().addHandler(file_handler)
+        return actuator, starting_page
 
-        step_results: List[StepResultDetail] = []
-        overall_status = "success"
-        video_path = None
 
-        try:
-            headless = os.getenv("HEADLESS", "true").lower() != "false"
-            nova_kwargs: Dict[str, Any] = {
-                "starting_page": starting_url,
-                "headless": headless,
-                "logs_directory": logs_dir,
-                "record_video": True,
-            }
-            if user_agent:
-                nova_kwargs["user_agent"] = user_agent
-
-            wf_manager = WorkflowManager()
-            workflow_name = wf_manager.ensure_workflow(usecase_id)
-
-            with Workflow(
-                workflow_definition_name=workflow_name,
-                model_id=model_id or "nova-act-v1.0",
-                boto_session_kwargs={"region_name": region or "us-east-1"},
-            ) as workflow:
-                nova_kwargs["workflow"] = workflow
-
-                with NovaAct(**nova_kwargs) as nova:
-                    # Set custom HTTP headers if provided
-                    if headers:
-                        logger.info("Setting %d custom HTTP header(s)", len(headers))
-                        nova.page.set_extra_http_headers(headers)
-                        nova.go_to_url(starting_url)
-
-                    secrets_dict = {s.get("key", s.get("secret_key", "")): s for s in secrets}
-
-                    def _local_secret_resolver(uc_id: str, secret_key: str):
-                        secret = secrets_dict.get(secret_key)
-                        return secret.get("value") if secret else None
-
-                    executor = StepExecutor(nova, secrets_resolver=_local_secret_resolver)
-                    runtime_variables: Dict[str, str] = {}
-
-                    for step in steps:
-                        step_id = step.get("step_id", step.get("sk", ""))
-                        sort_order = step.get("sort", 0)
-                        step_start = datetime.utcnow()
-
-                        instruction = self._resolve_variables(
-                            step.get("instruction", ""), variables, runtime_variables,
-                        )
-                        resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id}
-
-                        logger.info("[local] Executing step %d: %s", sort_order, instruction)
-                        step_result: StepResult = executor.execute(resolved_step, variables, runtime_variables)
-
-                        step_duration = (datetime.utcnow() - step_start).total_seconds()
-                        step_status = "success" if step_result.success else "failed"
-
-                        step_results.append(StepResultDetail(
-                            step_id=step_id,
-                            step_type=step.get("step_type", ""),
-                            instruction=instruction,
-                            status=step_status,
-                            duration=step_duration,
-                            error=sanitize_error_message(step_result.logs) if not step_result.success and step_result.logs else None,
-                        ))
-
-                        if (
-                            step_result.success
-                            and step.get("step_type") == "retrieve_value"
-                            and step.get("capture_variable")
-                            and step_result.actual_value
-                        ):
-                            runtime_variables[step["capture_variable"]] = step_result.actual_value
-
-                        if not step_result.success:
-                            overall_status = "failed"
-                            logger.error("[local] Step %d failed: %s", sort_order, sanitize_error_message(step_result.logs))
-                            break
-
-            logs_path = Path(logs_dir)
-            for f in logs_path.rglob("*"):
-                if f.suffix.lower() in (".webm", ".mp4") and f.is_file():
-                    video_path = str(f)
-                    break
-
-        except Exception as e:
-            overall_status = "failed"
-            logger.error("[local] Execution failed: %s", sanitize_error_message(str(e)))
-        finally:
-            file_handler.close()
-            logging.getLogger().removeHandler(file_handler)
-
-        duration = (datetime.utcnow() - start_time).total_seconds()
-
-        result = LocalExecutionResult(
-            status=overall_status,
-            usecase_id=usecase_id,
-            usecase_name=usecase_name,
-            duration=duration,
-            steps=step_results,
-            artifacts=ArtifactPaths(
-                video=video_path,
-                logs=str(log_path) if log_path.exists() else None,
-            ),
-        )
-        return result.model_dump(by_alias=True)
 
     # ------------------------------------------------------------------
     # Async orchestration
@@ -254,6 +366,25 @@ class ExecutionEngine:
 
             status_label = "PASSED" if result["success"] else "FAILED"
             logger.info("[%s] Completed: %s (%.1fs)", usecase_name, status_label, duration)
+
+            # Request async recording download for mobile executions
+            if execution_details.get("test_platform") == "mobile":
+                try:
+                    session_arn = execution_details.get("device_farm_session_arn", "")
+                    # Also check if the actuator stored it
+                    if not session_arn:
+                        session_arn = result.get("device_farm_session_arn", "")
+                    if session_arn:
+                        await self.execution_api.request_recording_download(
+                            usecase_id=usecase_id,
+                            execution_id=execution_id,
+                            session_arn=session_arn,
+                        )
+                        logger.info("[%s] Recording download requested", usecase_name)
+                    else:
+                        logger.warning("[%s] No Device Farm session ARN — cannot request recording", usecase_name)
+                except Exception as rec_err:
+                    logger.warning("[%s] Failed to request recording download: %s", usecase_name, rec_err)
 
             return {
                 "execution_id": execution_id,
@@ -335,7 +466,7 @@ class ExecutionEngine:
         artifact_capture: ArtifactCapture,
         artifact_uploader: ArtifactUploader,
     ) -> Dict[str, Any]:
-        """Execute test steps using real Nova Act GA Service with a local browser."""
+        """Execute test steps using real Nova Act GA Service."""
         starting_url = execution_details.get("starting_url", "")
         steps = execution_details.get("steps", [])
         variables = execution_details.get("variables", {})
@@ -348,11 +479,45 @@ class ExecutionEngine:
 
         headless = os.getenv("HEADLESS", "true").lower() != "false"
         nova_kwargs: Dict[str, Any] = {
-            "starting_page": starting_url,
             "headless": headless,
             "logs_directory": logs_dir,
             "record_video": True,
         }
+
+        test_platform = execution_details.get("test_platform", "web")
+        is_mobile = test_platform == "mobile"
+
+        if is_mobile:
+            # Parse app_identifier: Android = "package/activity", iOS = "bundle_id"
+            app_identifier = execution_details.get("app_identifier", "")
+            platform_val = execution_details.get("platform", "")
+            app_package = ""
+            app_activity = ""
+            bundle_id = ""
+            if platform_val == "ANDROID" and "/" in app_identifier:
+                parts = app_identifier.split("/", 1)
+                app_package = parts[0]
+                app_activity = parts[1]
+            elif platform_val == "IOS":
+                bundle_id = app_identifier
+
+            mobile_config = {
+                "platform": platform_val,
+                "app_package": app_package,
+                "app_activity": app_activity,
+                "bundle_id": bundle_id,
+                "device_arn": execution_details.get("device_arn", ""),
+                "app_binary_s3_path": execution_details.get("app_binary_s3_path", ""),
+                "app_arn": execution_details.get("app_arn", ""),
+                "device_farm_project_arn": execution_details.get("device_farm_project_arn", ""),
+            }
+            actuator, effective_starting_page = self._build_mobile_actuator(mobile_config)
+            nova_kwargs["actuator"] = actuator
+            nova_kwargs["starting_page"] = effective_starting_page
+            nova_kwargs["ignore_screen_dims_check"] = True
+            nova_kwargs["ignore_https_errors"] = True
+        else:
+            nova_kwargs["starting_page"] = starting_url
 
         region = os.getenv("AWS_REGION", "us-east-1")
         wf_manager = WorkflowManager()
@@ -365,11 +530,18 @@ class ExecutionEngine:
             boto_session_kwargs={"region_name": region},
         ) as workflow:
             nova_kwargs["workflow"] = workflow
-            return self._run_steps_with_nova(
+            result = self._run_steps_with_nova(
                 nova_kwargs, steps, variables, headers,
                 starting_url, usecase_id, execution_id,
                 artifact_capture, artifact_uploader, logs_dir,
+                is_mobile=is_mobile,
             )
+
+            # Capture Device Farm session ARN for recording download
+            if is_mobile and hasattr(actuator, 'stopped_session_arn') and actuator.stopped_session_arn:
+                result["device_farm_session_arn"] = actuator.stopped_session_arn
+
+            return result
 
     def _run_steps_with_nova(
         self,
@@ -383,6 +555,7 @@ class ExecutionEngine:
         artifact_capture: ArtifactCapture,
         artifact_uploader: ArtifactUploader,
         logs_dir: str,
+        is_mobile: bool = False,
     ) -> Dict[str, Any]:
         """Open NovaAct context and execute steps sequentially."""
         suite_id = self.suite_execution_id or "standalone"
@@ -404,7 +577,8 @@ class ExecutionEngine:
             except Exception as e:
                 logger.warning("Failed to capture Nova Act session ID: %s", sanitize_error_message(str(e)))
 
-            if headers:
+            # Headers and URL navigation are browser-only
+            if headers and not is_mobile:
                 parsed_headers = {
                     k: self._resolve_variables(v, variables, {})
                     for k, v in headers.items()
@@ -446,20 +620,22 @@ class ExecutionEngine:
                 except Exception as e:
                     logger.warning("Failed to update step status: %s", sanitize_error_message(str(e)))
 
-                try:
-                    screenshot_path = artifact_capture.capture_step_screenshot(
-                        nova.page, execution_step_id, sort_order,
-                    )
-                    if screenshot_path:
-                        step_artifacts = artifact_capture.get_step_artifacts(execution_step_id)
-                        self._run_async(
-                            artifact_uploader.upload_step_artifacts(
-                                usecase_id=usecase_id, execution_id=execution_id,
-                                step_id=execution_step_id, artifacts=step_artifacts,
-                            )
+                # Screenshots via nova.page are browser-only
+                if not is_mobile:
+                    try:
+                        screenshot_path = artifact_capture.capture_step_screenshot(
+                            nova.page, execution_step_id, sort_order,
                         )
-                except Exception as e:
-                    logger.warning("Failed to capture/upload step screenshot: %s", sanitize_error_message(str(e)))
+                        if screenshot_path:
+                            step_artifacts = artifact_capture.get_step_artifacts(execution_step_id)
+                            self._run_async(
+                                artifact_uploader.upload_step_artifacts(
+                                    usecase_id=usecase_id, execution_id=execution_id,
+                                    step_id=execution_step_id, artifacts=step_artifacts,
+                                )
+                            )
+                    except Exception as e:
+                        logger.warning("Failed to capture/upload step screenshot: %s", sanitize_error_message(str(e)))
 
                 if (
                     step_result.success
@@ -481,6 +657,7 @@ class ExecutionEngine:
         self._upload_trace_logs(logs_dir, usecase_id, execution_id, artifact_uploader)
         return result
 
+
     def _upload_trace_logs(
         self, logs_dir: str, usecase_id: str, execution_id: str,
         artifact_uploader: ArtifactUploader,
@@ -495,7 +672,9 @@ class ExecutionEngine:
         logger.info("Found %d Nova Act trace file(s) to upload", len(all_files))
         for trace_file in all_files:
             relative_path = str(trace_file.relative_to(logs_path))
-            artifact_type = "recording" if trace_file.suffix.lower() in (".webm", ".mp4") else "trace"
+            is_video = trace_file.suffix.lower() in (".webm", ".mp4")
+            is_session_recording = is_video and trace_file.name.startswith("session_video")
+            artifact_type = "recording" if is_session_recording else "trace"
             try:
                 self._run_async(
                     artifact_uploader._upload_execution_artifact(
