@@ -86,7 +86,11 @@ Update the admin email (required for receiving your login credentials):
 
 > `adminEmail` is the only required configuration option. See [Configuration →](docs/configuration.md) for the full property reference, VPC setup, and advanced options.
 
+> ⚠️ If you set a `baseName` in your configuration, make sure it is globally unique. Cognito user pool domain names are derived from this value and must be unique across all AWS accounts. Duplicate names will cause deployment failures.
+
 #### 3. Deploy to AWS:
+
+> ⚠️ The deployment must be executed from an ARM64 environment (e.g., an ARM-based EC2 instance, Apple Silicon Mac, or Graviton-based Cloud9). Deploying from an x86/amd64 environment will cause build failures.
 
 ```bash
 npm run deploy

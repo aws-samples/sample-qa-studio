@@ -47,6 +47,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         tags = body.get('tags', [])
         enable_cache = body.get('enableCache')
         
+        # Mobile fields
+        test_platform = body.get('test_platform', '')
+        platform = body.get('platform', '')
+        app_package = body.get('app_package', '')
+        app_activity = body.get('app_activity', '')
+        bundle_id = body.get('bundle_id', '')
+        
         # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
@@ -80,6 +87,31 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if enable_cache is not None:
             update_expression_parts.append('enable_cache = :enable_cache')
             expression_attribute_values[':enable_cache'] = enable_cache
+        
+        # Update mobile fields if provided
+        if test_platform:
+            update_expression_parts.append('test_platform = :test_platform')
+            expression_attribute_values[':test_platform'] = test_platform
+        
+        if platform:
+            update_expression_parts.append('platform = :platform')
+            expression_attribute_values[':platform'] = platform
+        
+        mobile_optional_fields = {
+            'app_package': app_package,
+            'app_activity': app_activity,
+            'bundle_id': bundle_id,
+            'device_arn': body.get('device_arn', ''),
+        }
+
+        # Validate device_arn format if provided
+        device_arn_value = mobile_optional_fields.get('device_arn', '')
+        if device_arn_value and not device_arn_value.startswith('arn:aws:devicefarm:'):
+            return create_response(400, {'error': 'Invalid device_arn format — must be a Device Farm device ARN'})
+        for field_name, field_value in mobile_optional_fields.items():
+            if field_value:
+                update_expression_parts.append(f'{field_name} = :{field_name}')
+                expression_attribute_values[f':{field_name}'] = field_value
         
         # Only update tags if provided and not empty (DynamoDB String Sets cannot be empty)
         if tags:

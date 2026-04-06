@@ -30,6 +30,7 @@ interface Usecase {
   last_execution_id?: string;
   last_execution_status?: string;
   last_execution_time?: string;
+  test_platform?: string;
 }
 
 // Helper function to format time ago
@@ -347,6 +348,17 @@ export default function HomeScreen() {
                 )}
               </div>
             )
+          },
+          {
+            id: 'test_platform',
+            header: 'Platform',
+            width: 100,
+            cell: item => {
+              const platform = item.test_platform || 'web';
+              return platform === 'mobile'
+                ? <Badge color="blue">Mobile</Badge>
+                : <Badge color="grey">Web</Badge>;
+            }
           },
           { 
             id: 'last_execution_status', 

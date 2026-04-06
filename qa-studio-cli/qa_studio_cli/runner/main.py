@@ -74,12 +74,12 @@ def run_usecase(
     token_file: Optional[str] = None,
     base_url: Optional[str] = None,
     variables: Optional[Dict[str, str]] = None,
-    headers: Optional[Dict[str, str]] = None,
     region: Optional[str] = None,
     model_id: Optional[str] = None,
-    user_agent: Optional[str] = None,
     timeout: int = 3600,
     output_format: str = "json",
+    device_arn: Optional[str] = None,
+    app_path: Optional[str] = None,
 ) -> None:
     """Execute a single use case (local-only or remote mode)."""
     try:
@@ -95,11 +95,11 @@ def run_usecase(
                 usecase_api=usecase_api,
                 base_url=base_url,
                 variables=variables or {},
-                headers=headers or {},
                 region=region,
                 model_id=model_id,
-                user_agent=user_agent,
                 output_format=output_format,
+                device_arn=device_arn,
+                app_path=app_path,
             )
         else:
             _run_usecase_remote(
@@ -108,10 +108,8 @@ def run_usecase(
                 api_client=api_client,
                 base_url=base_url,
                 variables=variables or {},
-                headers=headers or {},
                 region=region,
                 model_id=model_id,
-                user_agent=user_agent,
                 output_format=output_format,
             )
     except Exception as e:
@@ -120,16 +118,17 @@ def run_usecase(
         sys.exit(2)
 
 
+
 def _run_usecase_local(
     usecase_id: str,
     usecase_api: UseCaseAPI,
     base_url: Optional[str],
     variables: Dict[str, str],
-    headers: Dict[str, str],
     region: Optional[str],
     model_id: Optional[str],
-    user_agent: Optional[str] = None,
     output_format: str = "json",
+    device_arn: Optional[str] = None,
+    app_path: Optional[str] = None,
 ) -> None:
     """Local-only execution path: fetch data, execute locally, print result."""
     logger.info("Fetching use case: %s", usecase_id)
@@ -148,6 +147,30 @@ def _run_usecase_local(
     effective_region = region or usecase.get("executing_region", "us-east-1")
     effective_model = model_id or usecase.get("model_id", "nova-act-v1.0")
 
+    # Extract mobile config from usecase
+    mobile_config = None
+    test_platform = usecase.get("test_platform", "web")
+    if test_platform == "mobile":
+        mobile_config = {
+            "platform": usecase.get("platform", ""),
+            "app_package": usecase.get("app_package", ""),
+            "app_activity": usecase.get("app_activity", ""),
+            "bundle_id": usecase.get("bundle_id", ""),
+            "device_arn": usecase.get("device_arn", ""),
+            "app_binary_s3_path": usecase.get("app_binary_s3_path", ""),
+            "app_arn": usecase.get("app_arn", ""),
+            "device_farm_project_arn": usecase.get("device_farm_project_arn", ""),
+        }
+        logger.info("Mobile use case detected: platform=%s", mobile_config["platform"])
+
+        # Apply CLI override for device ARN
+        if device_arn:
+            mobile_config["device_arn"] = device_arn
+            logger.info("Using CLI device ARN override: %s", device_arn)
+        if app_path:
+            mobile_config["app_path"] = app_path
+            logger.info("Using CLI app path: %s", app_path)
+
     logger.info("Executing use case locally: %s", usecase_name)
     engine = ExecutionEngine()
     result = engine.execute_usecase_local(
@@ -157,10 +180,9 @@ def _run_usecase_local(
         steps=steps,
         variables=merged_variables,
         secrets=secrets,
-        headers=headers,
         region=effective_region,
         model_id=effective_model,
-        user_agent=user_agent,
+        mobile_config=mobile_config,
     )
 
     if output_format == "human":
@@ -173,16 +195,15 @@ def _run_usecase_local(
     sys.exit(exit_code)
 
 
+
 def _run_usecase_remote(
     usecase_id: str,
     usecase_api: UseCaseAPI,
     api_client: ApiClient,
     base_url: Optional[str],
     variables: Dict[str, str],
-    headers: Dict[str, str],
     region: Optional[str],
     model_id: Optional[str],
-    user_agent: Optional[str] = None,
     output_format: str = "json",
 ) -> None:
     """Remote execution path: create execution record, execute with tracking."""
@@ -240,10 +261,8 @@ def run_runner(
     local_only: bool = False,
     base_url: Optional[str] = None,
     variables: Optional[Dict[str, str]] = None,
-    headers: Optional[Dict[str, str]] = None,
     region: Optional[str] = None,
     model_id: Optional[str] = None,
-    user_agent: Optional[str] = None,
     timeout: int = 3600,
     keep_artifacts: bool = False,
     token_file: Optional[str] = None,
@@ -251,7 +270,6 @@ def run_runner(
 ) -> None:
     """Main runner execution logic for suite mode."""
     variables = variables or {}
-    headers = headers or {}
 
     try:
         logger.info("Loading configuration...")
@@ -273,10 +291,8 @@ def run_runner(
                 usecase_api=usecase_api,
                 base_url=base_url,
                 variables=variables,
-                headers=headers,
                 region=region,
                 model_id=model_id,
-                user_agent=user_agent,
                 output_format=output_format,
             )
         else:
@@ -305,10 +321,8 @@ def _run_suite_local(
     usecase_api: UseCaseAPI,
     base_url: Optional[str],
     variables: Dict[str, str],
-    headers: Dict[str, str],
     region: Optional[str],
     model_id: Optional[str],
-    user_agent: Optional[str] = None,
     output_format: str = "json",
 ) -> None:
     """Local-only suite execution."""
@@ -356,10 +370,8 @@ def _run_suite_local(
             steps=steps,
             variables=merged_variables,
             secrets=secrets,
-            headers=headers,
             region=effective_region,
             model_id=effective_model,
-            user_agent=user_agent,
         )
         results.append(result)
 
