@@ -17,6 +17,7 @@ from browser import start_browser, create_browser, delete_browser
 from dynamodb_client import DynamoDBClient
 from template_parser import TemplateParser
 from secrets_client import SecretsClient
+from mobile_actuator import create_mobile_session, cleanup_mobile_session
 from validation_step import execute_validation_step
 from secret_step import execute_secret_step
 from navigation_step import execute_navigation_step
@@ -25,6 +26,15 @@ from assertion_step import execute_assertion_step
 from url_step import execute_url_step
 from download_step import execute_download_step
 from event_emitter import emit_execution_completed_event
+
+# MobileActuator is only available in the Docker image with nova_act_mobile
+try:
+    from nova_act_mobile.actuation.mobile_actuator import MobileActuator
+except ImportError as e:
+    import traceback
+    print(f"WARNING: Failed to import nova_act_mobile: {e}")
+    traceback.print_exc()
+    MobileActuator = None
 
 # Configure logging
 logging.basicConfig(
@@ -144,93 +154,270 @@ def main_batch():
         return False
         
     # Execute workflow
-    try:
-        logger.info("Initializing NovaAct context manager...")
-        # Create browser with network configuration (VPC settings from CDK stack environment variables or PUBLIC mode)
-        browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/recording/", execution.region)
-        browser = start_browser(browser_id, execution_id, execution.region)
-        ws_url, headers = browser.generate_ws_headers()
-        live_view_url = browser.generate_live_view_url()
-        print(live_view_url)
-        
-        # Store live view URL in DynamoDB
-        db_client.create_live_view(execution_id, live_view_url)
+    # Determine execution path based on test_platform
+    test_platform = getattr(execution, 'test_platform', None) or os.getenv('TEST_PLATFORM', 'web')
+    is_mobile = test_platform.lower() == 'mobile'
 
-        if use_ga_service:
-            # Nova Act GA Service
-            logger.info(f"Using Nova Act GA service in {NOVA_ACT_REGION}")
-            workflow_name = ensure_workflow_definition(usecase_id)
+    if is_mobile:
+        # ── Mobile Device Farm path ──
+        actuator = None
+        try:
+            logger.info("Using mobile Device Farm execution path")
+
+            if MobileActuator is None:
+                raise ImportError("nova_act_mobile is not installed. Cannot run mobile executions.")
+
+            # Create Device Farm actuator
+            actuator, session_metadata = create_mobile_session(execution)
+            logger.info(f"Mobile session created: {session_metadata}")
+
+            # Store session ARN on execution record (best-effort before NovaAct starts)
+            if session_metadata.get('device_farm_session_arn'):
+                db_client.update_execution_mobile_metadata(
+                    usecase_id, execution_id,
+                    device_farm_session_arn=session_metadata['device_farm_session_arn'],
+                )
+
+            # Derive app_url from the app identifier
+            app_identifier = execution.app_identifier or os.getenv('APP_IDENTIFIER', '')
+            starting_page = MobileActuator.app_url(app_identifier)
+            logger.info(f"Mobile starting_page: {starting_page}")
+
+            if use_ga_service:
+                workflow_name = ensure_workflow_definition(usecase_id)
+                model_id = getattr(execution, 'model_id', None) or 'nova-act-v1.0'
+                logger.info(f"Using Nova Act GA service (mobile) with model: {model_id}")
+
+                with Workflow(
+                    workflow_definition_name=workflow_name,
+                    model_id=model_id,
+                    boto_session_kwargs={"region_name": NOVA_ACT_REGION},
+                ) as workflow:
+                    with NovaAct(
+                        actuator=actuator,
+                        starting_page=starting_page,
+                        workflow=workflow,
+                        headless=True,
+                        logs_directory=execution_logs_dir,
+                        stop_hooks=[s3_writer],
+                        ignore_https_errors=True,
+                        ignore_screen_dims_check=True,
+                        record_video=True,
+                    ) as nova:
+                        all_success = _execute_steps(
+                            nova, execution, execution_headers, template_parser,
+                            usecase_id, execution_id, s3_bucket_name, db_client, steps,
+                        )
+            else:
+                logger.info("Using Nova Act Preview API (mobile)")
+                with NovaAct(
+                    actuator=actuator,
+                    starting_page=starting_page,
+                    headless=True,
+                    logs_directory=execution_logs_dir,
+                    stop_hooks=[s3_writer],
+                    nova_act_api_key=nova_api_key,
+                    ignore_https_errors=True,
+                    ignore_screen_dims_check=True,
+                    record_video=True,
+                ) as nova:
+                    all_success = _execute_steps(
+                        nova, execution, execution_headers, template_parser,
+                        usecase_id, execution_id, s3_bucket_name, db_client, steps,
+                    )
+
+            # Store device metadata on completion
+            try:
+                # session_result is cleared after stop(), use stopped_session_arn
+                stopped_arn = getattr(actuator, 'stopped_session_arn', None)
+                if stopped_arn:
+                    db_client.update_execution_mobile_metadata(
+                        usecase_id, execution_id,
+                        device_farm_session_arn=stopped_arn,
+                    )
+            except Exception as meta_err:
+                logger.warning(f"Failed to store device metadata: {meta_err}")
+
+            # Best-effort: upload mobile recording to S3
+            try:
+                import glob
+                recording_patterns = [
+                    os.path.join(execution_logs_dir, '**', '*.mp4'),
+                    os.path.join(execution_logs_dir, '**', '*.webm'),
+                    os.path.join(execution_logs_dir, '*.mp4'),
+                    os.path.join(execution_logs_dir, '*.webm'),
+                ]
+                for pattern in recording_patterns:
+                    for video_file in glob.glob(pattern, recursive=True):
+                        s3_client = boto3.client('s3', region_name=region_name)
+                        video_filename = os.path.basename(video_file)
+                        # Upload to the recording path the frontend expects
+                        nova_session_id = getattr(execution, 'nova_session_id', '') or execution_id
+                        recording_key = f"{usecase_id}/{execution_id}/recording/{nova_session_id}/{video_filename}"
+                        with open(video_file, 'rb') as f:
+                            s3_client.put_object(
+                                Bucket=s3_bucket_name,
+                                Key=recording_key,
+                                Body=f,
+                                ContentType='video/mp4' if video_file.endswith('.mp4') else 'video/webm',
+                            )
+                        logger.info(f"Uploaded mobile recording to s3://{s3_bucket_name}/{recording_key}")
+            except Exception as rec_err:
+                logger.warning(f"Failed to upload mobile recording: {rec_err}")
+
+            # Best-effort: upload Device Farm session logs as an artifact
+            try:
+                session_logs = getattr(actuator, 'session_logs', None)
+                if session_logs:
+                    s3_client = boto3.client('s3', region_name=region_name)
+                    log_key = f"{usecase_id}/{execution_id}/device_farm_session_logs.txt"
+                    s3_client.put_object(
+                        Bucket=s3_bucket_name,
+                        Key=log_key,
+                        Body=session_logs if isinstance(session_logs, (bytes, str)) else str(session_logs),
+                        ContentType='text/plain',
+                    )
+                    logger.info(f"Uploaded Device Farm session logs to s3://{s3_bucket_name}/{log_key}")
+            except Exception as log_err:
+                logger.warning(f"Failed to upload Device Farm session logs: {log_err}")
+
+        except Exception as mobile_error:
+            logger.error(f"Mobile execution failed: {mobile_error}")
+            all_success = False
+
+            # Check for 5-minute timeout on session start
+            error_msg = str(mobile_error)
+            if 'timeout' in error_msg.lower() or 'RUNNING' in error_msg:
+                logger.error("Device Farm session timed out waiting for RUNNING state")
+                error_msg = f"Device Farm session failed to reach RUNNING state within 5 minutes: {error_msg}"
+
+            try:
+                completed_at = get_time()
+                db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=completed_at)
+                db_client.update_suite_execution_counters(execution_id, usecase_id, "failed")
+                emit_execution_completed_event(usecase_id, execution_id, "failed", region_name)
+            except Exception as db_error:
+                logger.error(f"Failed to update execution status after mobile error: {db_error}")
+
+            return False
+
+        finally:
+            # Always clean up the Device Farm session
+            cleanup_mobile_session(actuator)
+
+            # Enqueue async video download (5 min delay for Device Farm to finalize)
+            try:
+                stopped_arn = getattr(actuator, 'stopped_session_arn', None)
+                recording_queue_url = os.getenv('RECORDING_QUEUE_URL')
+                if stopped_arn and recording_queue_url:
+                    import json as _json
+                    sqs_client = boto3.client('sqs', region_name=region_name)
+                    nova_session_id = getattr(execution, 'nova_session_id', '') or execution_id
+                    sqs_client.send_message(
+                        QueueUrl=recording_queue_url,
+                        MessageBody=_json.dumps({
+                            'session_arn': stopped_arn,
+                            'usecase_id': usecase_id,
+                            'execution_id': execution_id,
+                            'nova_session_id': nova_session_id,
+                        }),
+                        DelaySeconds=300,
+                    )
+                    logger.info(f"Enqueued recording download for session {stopped_arn} (5 min delay)")
+                elif not recording_queue_url:
+                    logger.debug("RECORDING_QUEUE_URL not set, skipping recording enqueue")
+            except Exception as enqueue_err:
+                logger.warning(f"Failed to enqueue recording download: {enqueue_err}")
+
+    else:
+        # ── Web AgentCore Browser path (existing logic, unchanged) ──
+        try:
+            logger.info("Initializing NovaAct context manager...")
+            # Create browser with network configuration (VPC settings from CDK stack environment variables or PUBLIC mode)
+            browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/recording/", execution.region)
+            browser = start_browser(browser_id, execution_id, execution.region)
+            ws_url, headers = browser.generate_ws_headers()
+            live_view_url = browser.generate_live_view_url()
+            print(live_view_url)
             
-            # Get model_id from execution, default to nova-act-v1.0
-            model_id = getattr(execution, 'model_id', None) or 'nova-act-v1.0'
-            logger.info(f"Using model: {model_id}")
-            
-            with Workflow(
-                workflow_definition_name=workflow_name,
-                model_id=model_id,
-                boto_session_kwargs={
-                    "region_name": NOVA_ACT_REGION
-                }
-            ) as workflow:
+            # Store live view URL in DynamoDB
+            db_client.create_live_view(execution_id, live_view_url)
+
+            if use_ga_service:
+                # Nova Act GA Service
+                logger.info(f"Using Nova Act GA service in {NOVA_ACT_REGION}")
+                workflow_name = ensure_workflow_definition(usecase_id)
+                
+                # Get model_id from execution, default to nova-act-v1.0
+                model_id = getattr(execution, 'model_id', None) or 'nova-act-v1.0'
+                logger.info(f"Using model: {model_id}")
+                
+                with Workflow(
+                    workflow_definition_name=workflow_name,
+                    model_id=model_id,
+                    boto_session_kwargs={
+                        "region_name": NOVA_ACT_REGION
+                    }
+                ) as workflow:
+                    with NovaAct(
+                        cdp_endpoint_url=ws_url,
+                        cdp_headers=headers,
+                        starting_page=execution.starting_url,
+                        workflow=workflow,
+                        headless=True,
+                        logs_directory=execution_logs_dir,
+                        ignore_https_errors=True,
+                        chrome_channel="chromium",
+                        stop_hooks=[s3_writer]
+                        #user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
+                    ) as nova:
+                            all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
+            else:
+                # Nova Act Preview API
+                logger.info("Using Nova Act Preview API")
+                
                 with NovaAct(
                     cdp_endpoint_url=ws_url,
                     cdp_headers=headers,
                     starting_page=execution.starting_url,
-                    workflow=workflow,
                     headless=True,
                     logs_directory=execution_logs_dir,
                     ignore_https_errors=True,
                     chrome_channel="chromium",
-                    stop_hooks=[s3_writer]
+                    stop_hooks=[s3_writer],
+                    nova_act_api_key=nova_api_key
                     #user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
                 ) as nova:
-                        all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
-        else:
-            # Nova Act Preview API
-            logger.info("Using Nova Act Preview API")
-            
-            with NovaAct(
-                cdp_endpoint_url=ws_url,
-                cdp_headers=headers,
-                starting_page=execution.starting_url,
-                headless=True,
-                logs_directory=execution_logs_dir,
-                ignore_https_errors=True,
-                chrome_channel="chromium",
-                stop_hooks=[s3_writer],
-                nova_act_api_key=nova_api_key
-                #user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
-            ) as nova:
-                all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
-    
-    except Exception as nova_error:
-        logger.error(f"Nova Act execution failed: {nova_error}")
-        all_success = False
-        # Ensure execution status is updated on Nova Act failures
-        try:
-            completed_at = get_time()
-            db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=completed_at)
-            # Update suite execution counters if part of a suite
-            db_client.update_suite_execution_counters(execution_id, usecase_id, "failed")
-            
-            # Emit event after failed execution
-            emit_execution_completed_event(usecase_id, execution_id, "failed", region_name)
-        except Exception as db_error:
-            logger.error(f"Failed to update execution status after Nova Act error: {str(db_error)}")
+                    all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
         
-        # Clean up live view URL on error
-        try:
-            db_client.delete_live_view(execution_id)
-        except Exception as cleanup_error:
-            logger.error(f"Failed to cleanup live view URL: {str(cleanup_error)}")
+        except Exception as nova_error:
+            logger.error(f"Nova Act execution failed: {nova_error}")
+            all_success = False
+            # Ensure execution status is updated on Nova Act failures
+            try:
+                completed_at = get_time()
+                db_client.update_execution_status(usecase_id, execution_id, "failed", completed_at=completed_at)
+                # Update suite execution counters if part of a suite
+                db_client.update_suite_execution_counters(execution_id, usecase_id, "failed")
+                
+                # Emit event after failed execution
+                emit_execution_completed_event(usecase_id, execution_id, "failed", region_name)
+            except Exception as db_error:
+                logger.error(f"Failed to update execution status after Nova Act error: {str(db_error)}")
+            
+            # Clean up live view URL on error
+            try:
+                db_client.delete_live_view(execution_id)
+            except Exception as cleanup_error:
+                logger.error(f"Failed to cleanup live view URL: {str(cleanup_error)}")
+            
+            return False
         
-        return False
-    
-    browser.stop()
-    delete_browser(browser_id, execution.region)
-    
-    # Clean up live view URL
-    db_client.delete_live_view(execution_id)
+        browser.stop()
+        delete_browser(browser_id, execution.region)
+        
+        # Clean up live view URL
+        db_client.delete_live_view(execution_id)
     
     # Update execution status to completed
     if not all_success:

@@ -143,3 +143,21 @@ class ExecutionAPI:
             return response.get("value")
         except Exception:
             return None
+
+    async def request_recording_download(
+        self,
+        usecase_id: str,
+        execution_id: str,
+        session_arn: str,
+        nova_session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Request async Device Farm recording download via the Studio API."""
+        payload: Dict[str, Any] = {"session_arn": session_arn}
+        if nova_session_id:
+            payload["nova_session_id"] = nova_session_id
+        return await asyncio.to_thread(
+            self.client.post,
+            f"/api/usecase/{usecase_id}/executions/{execution_id}/download-recording",
+            json_body=payload,
+        )
+

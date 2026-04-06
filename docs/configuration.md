@@ -27,6 +27,7 @@ cp configuration.json.sample configuration.json
 | `apiGatewayUrl` | string | No | — | Full API Gateway URL for local development proxy |
 | `enableExtensionAuthentication` | boolean | No | — | Enable Kiro extension OAuth callback authentication |
 | `cliCallbackUrl` | string | No | — | Callback URL for CLI OAuth flow (e.g. `"http://localhost:19847/callback"`) |
+| `deviceFarmRegion` | string | No | `"us-west-2"` | AWS region for Device Farm mobile testing. Device Farm is only available in `us-west-2`. |
 
 ## Minimal Example
 
@@ -51,7 +52,8 @@ cp configuration.json.sample configuration.json
   "useNovaActGa": true,
   "lambdaConcurrency": 5,
   "enableExtensionAuthentication": true,
-  "cliCallbackUrl": "http://localhost:19847/callback"
+  "cliCallbackUrl": "http://localhost:19847/callback",
+  "deviceFarmRegion": "us-west-2"
 }
 ```
 
@@ -70,3 +72,35 @@ To deploy into an existing VPC:
 ```
 
 When `vpcId` is set, CDK uses explicit account/region from your AWS environment. The security group must allow outbound HTTPS (443) for AWS API access.
+
+
+## Mobile Testing (Device Farm)
+
+Mobile testing uses AWS Device Farm to run tests on real Android and iOS devices. Device Farm is only available in `us-west-2`, regardless of where QA Studio is deployed.
+
+### IAM Requirements
+
+The ECS worker task role and the recording download Lambda require the following Device Farm permissions:
+
+- `devicefarm:CreateRemoteAccessSession`
+- `devicefarm:GetRemoteAccessSession`
+- `devicefarm:StopRemoteAccessSession`
+- `devicefarm:DeleteRemoteAccessSession`
+- `devicefarm:ListProjects`
+- `devicefarm:CreateProject`
+- `devicefarm:ListDevices`
+- `devicefarm:GetDevice`
+- `devicefarm:CreateUpload`
+- `devicefarm:GetUpload`
+- `devicefarm:ListUploads`
+- `devicefarm:ListArtifacts`
+
+These permissions are automatically configured by the CDK worker stack.
+
+### How It Works
+
+1. The user creates a mobile use case with platform, app identifiers, and an app binary
+2. When executed, the worker provisions a Device Farm remote access session on a real device
+3. The app binary is uploaded to Device Farm (or reused from a previous upload)
+4. Nova Act controls the device via Appium through the Device Farm endpoint
+5. After execution, the session recording is downloaded asynchronously via an SQS-triggered Lambda

@@ -304,6 +304,28 @@ export const modelsApi = {
   },
 }
 
+// Device Farm Devices API
+export interface DeviceFarmDevice {
+  arn: string;
+  name: string;
+  platform: string;
+  os: string;
+  formFactor: string;
+  manufacturer: string;
+  modelId: string;
+}
+
+export interface ListDevicesResponse {
+  devices: DeviceFarmDevice[];
+}
+
+export const devicesApi = {
+  list: async (platform?: string): Promise<ListDevicesResponse> => {
+    const query = platform ? `?platform=${platform}` : '';
+    return api.get(`devices${query}`);
+  },
+}
+
 // User Management API
 export interface User {
   username: string;

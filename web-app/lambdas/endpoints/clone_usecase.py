@@ -86,9 +86,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'starting_url': source_usecase.get('starting_url', ''),
             'active': source_usecase.get('active', False),
             'region': source_usecase.get('region', ''),
+            'executing_region': source_usecase.get('executing_region', ''),
             'tags': source_usecase.get('tags', []),
-            'created_at': now
+            'created_at': now,
+            'test_platform': source_usecase.get('test_platform', 'web'),
         }
+
+        # Copy mobile-specific fields if present
+        for field in ['platform', 'app_package', 'app_activity', 'bundle_id',
+                       'device_arn', 'model_id', 'enable_cache',
+                       'app_binary_s3_path', 'app_arn', 'device_farm_project_arn']:
+            val = source_usecase.get(field)
+            if val:
+                new_usecase[field] = val
         
         # Save new usecase
         table.put_item(Item=new_usecase)

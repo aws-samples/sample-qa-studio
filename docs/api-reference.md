@@ -26,6 +26,9 @@ Nova Act QA Studio provides a RESTful API for managing test automation workflows
   - [Update Execution Step Status](#update-execution-step-status)
   - [Generate Execution Artifact Presigned URL](#generate-execution-artifact-presigned-url)
   - [Generate Step Artifact Presigned URL](#generate-step-artifact-presigned-url)
+  - [Request Recording Download](#request-recording-download)
+- [Device Farm Endpoints](#device-farm-endpoints)
+  - [List Devices](#list-devices)
 - [Test Suite Endpoints](#test-suite-endpoints)
   - [Execute Test Suite](#execute-test-suite)
 - [OAuth Client Management](#oauth-client-management)
@@ -190,6 +193,12 @@ Create a new test usecase with optional step caching enabled.
 - `description` (string, optional) - Usecase description
 - `steps` (array, required) - List of test steps
 - `enableCache` (boolean, optional, default: false) - Enable step caching for navigation steps
+- `test_platform` (string, optional, default: "web") - Test platform: `"web"` or `"mobile"`
+- `platform` (string, optional) - Mobile platform: `"ANDROID"` or `"IOS"` (required when test_platform is "mobile")
+- `app_package` (string, optional) - Android app package name (e.g., `"com.example.myapp"`)
+- `app_activity` (string, optional) - Android app activity (e.g., `"com.example.myapp.MainActivity"`)
+- `bundle_id` (string, optional) - iOS bundle identifier (e.g., `"com.example.myapp"`)
+- `device_arn` (string, optional) - Device Farm device ARN (auto-selects newest device if omitted)
 
 **Response (201 Created)**:
 ```json
@@ -980,6 +989,100 @@ const uploadResponse = await fetch(data.upload_url, {
 });
 
 console.log(`Upload status: ${uploadResponse.status}`);
+```
+
+---
+
+### Request Recording Download
+
+Request an asynchronous download of the Device Farm session recording for a mobile execution. The recording is downloaded from Device Farm and uploaded to S3 after a 5-minute delay (to allow Device Farm to finalize the session).
+
+**Endpoint**: `POST /usecase/{id}/executions/{executionId}/download-recording`
+
+**Path Parameters**:
+- `id` (string, required) - Usecase ID
+- `executionId` (string, required) - Execution ID
+
+**Required Scopes**: `api/executions.write` or `api/admin`
+
+**Request Body**:
+```json
+{
+  "session_arn": "arn:aws:devicefarm:us-west-2:123456789:session:project-id/session-id/00000",
+  "nova_session_id": "019d1234-5678-abcd-ef01-234567890abc"
+}
+```
+
+**Request Body Fields**:
+- `session_arn` (string, required) - Device Farm remote access session ARN
+- `nova_session_id` (string, optional) - Nova Act session ID (defaults to execution ID)
+
+**Response (200 OK)**:
+```json
+{
+  "message": "Recording download requested",
+  "delay_seconds": 300
+}
+```
+
+**Example (cURL)**:
+```bash
+curl -X POST \
+  'https://api.example.com/api/usecase/usecase-123/executions/execution-456/download-recording' \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "session_arn": "arn:aws:devicefarm:us-west-2:123456789:session:project-id/session-id/00000"
+  }'
+```
+
+---
+
+## Device Farm Endpoints
+
+### List Devices
+
+List available AWS Device Farm devices for mobile testing. Returns devices with remote access enabled, filtered by platform.
+
+**Endpoint**: `GET /devices`
+
+**Query Parameters**:
+- `platform` (string, optional) - Filter by platform: `"ANDROID"` or `"IOS"`
+
+**Required Scopes**: `api/usecases.read` or `api/admin`
+
+**Response (200 OK)**:
+```json
+{
+  "devices": [
+    {
+      "arn": "arn:aws:devicefarm:us-west-2::device:ABC123",
+      "name": "Apple iPhone 15",
+      "platform": "IOS",
+      "os": "18.0",
+      "formFactor": "PHONE",
+      "manufacturer": "Apple",
+      "modelId": "iPhone15",
+      "availability": "HIGHLY_AVAILABLE"
+    }
+  ]
+}
+```
+
+**Response Fields**:
+- `arn` - Device Farm device ARN (use this as `device_arn` when creating a usecase)
+- `name` - Device display name
+- `platform` - `"ANDROID"` or `"IOS"`
+- `os` - Operating system version
+- `formFactor` - `"PHONE"` or `"TABLET"`
+- `manufacturer` - Device manufacturer
+- `availability` - `"HIGHLY_AVAILABLE"`, `"AVAILABLE"`, or `"BUSY"`
+
+**Example (cURL)**:
+```bash
+curl -X GET \
+  'https://api.example.com/api/devices?platform=IOS' \
+  -H 'Authorization: Bearer <token>'
 ```
 
 ---

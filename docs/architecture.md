@@ -7,6 +7,7 @@ QA Studio is a serverless web application for AI-powered automated testing built
 **Key Capabilities**:
 - Natural language test creation and management
 - AI-powered browser automation with Amazon Nova Act
+- Mobile app testing on real devices via AWS Device Farm
 - Interactive test wizard with live browser preview
 - Test suite organization and execution
 - Comprehensive artifact capture (videos, screenshots, logs, traces)
@@ -47,6 +48,9 @@ graph TB
             SQS[SQS Queue<br/>Execution Queue]
             ECS[ECS Fargate<br/>Worker Tasks]
             NovaAct[Nova Act SDK<br/>+ Playwright]
+            DeviceFarm[AWS Device Farm<br/>Mobile Devices]
+            RecordingQueue[SQS Queue<br/>Recording Downloads]
+            RecordingLambda[Lambda<br/>download_recording]
         end
         
         subgraph "Data Layer"
@@ -84,8 +88,15 @@ graph TB
     ECS --> NovaAct
     ECS --> DynamoDB
     ECS --> S3
+    ECS -->|Mobile tests| DeviceFarm
+    ECS -->|Enqueue recording| RecordingQueue
+    RecordingQueue --> RecordingLambda
+    RecordingLambda -->|Download video| DeviceFarm
+    RecordingLambda -->|Upload video| S3
+    RecordingLambda --> DynamoDB
     
     CLI -->|Local Execution| NovaAct
+    CLI -->|Mobile tests| DeviceFarm
     
     style WebUI fill:#e1f5ff
     style CLI fill:#e1f5ff
@@ -258,7 +269,8 @@ sequenceDiagram
 **Key Features**:
 - Browser-based OAuth authentication
 - Test and suite management commands
-- Local test execution with Nova Act
+- Local test execution with Nova Act (web and mobile)
+- Mobile test execution via AWS Device Farm
 - Configuration management
 - Kiro IDE integration
 
@@ -277,16 +289,17 @@ sequenceDiagram
 - `/steps` - Test step management
 - `/suites` - Test suite management
 - `/executions` - Execution management and triggering
+- `/devices` - Device Farm device listing
 - `/oauth-clients` - OAuth client management
 - `/artifacts` - Artifact URL generation
 
 ### Test Execution (ECS Workers)
 
-**Technology**: Amazon ECS with Fargate, Python 3.11, Nova Act SDK, Playwright
+**Technology**: Amazon ECS with Fargate, Python 3.11, Nova Act SDK, Playwright, Appium (mobile)
 
 **Trigger**: SQS messages from execute_usecase or execute_test_suite Lambdas
 
-**Execution Flow**:
+**Execution Flow (Web)**:
 1. Receive execution message from SQS
 2. Fetch test steps from DynamoDB
 3. Initialize Nova Act with Bedrock AgentCore Browser
@@ -294,6 +307,23 @@ sequenceDiagram
 5. Upload artifacts to S3 via presigned URLs
 6. Update execution status in DynamoDB
 7. Emit EventBridge event for downstream processing
+
+**Execution Flow (Mobile)**:
+1. Receive execution message from SQS
+2. Fetch test steps from DynamoDB
+3. Provision a Device Farm remote access session (uploads app binary if needed)
+4. Connect to the device via Appium through the Device Farm endpoint
+5. Initialize Nova Act with [`DeviceFarmActuator`](https://github.com/amazon-agi-labs/nova-act-samples/blob/main/examples/actuation/mobile/nova_act_mobile/actuation/device_farm_actuator.py)
+6. Execute each step with `nova.act(instruction)`
+7. Stop the Device Farm session and enqueue a delayed SQS message for recording download
+8. Update execution status in DynamoDB
+9. Emit EventBridge event for downstream processing
+
+**Recording Download (Mobile)**:
+- After the worker stops the Device Farm session, it sends a delayed SQS message (5 min) to the recording download queue
+- A Lambda (`download_device_farm_recording`) picks up the message after the delay
+- The Lambda waits for the session to reach a terminal state, downloads the video artifact from Device Farm, uploads it to S3, and creates a DynamoDB artifact record
+- If the session hasn't finalized yet, the Lambda raises an error and SQS retries after the visibility timeout (3 min), up to 10 retries
 
 **Event Emission**:
 - After execution completes (success or failure), the worker emits a `usecase.execution.completed` event to EventBridge
@@ -303,8 +333,8 @@ sequenceDiagram
 
 **Artifacts Generated**:
 - Screenshots (PNG)
-- Videos (MP4)
-- Action traces (JSON)
+- Videos (MP4) — from AgentCore Browser (web) or Device Farm (mobile)
+- Action traces (JSON and HTML)
 - Execution logs (text)
 
 ### Data Storage
@@ -461,9 +491,9 @@ All CDK stacks are validated at synth time using [cdk-nag](https://github.com/cd
 
 ## Future Enhancements
 
-- Step caching for faster test execution
 - Test result analytics and trends
-- Scheduled test execution
 - Slack/email notifications
 - Test result comparison
 - Performance testing support
+- Android emulator support for local mobile testing
+- Device Farm session live streaming

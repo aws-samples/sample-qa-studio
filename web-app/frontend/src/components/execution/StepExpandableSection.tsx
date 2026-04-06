@@ -42,7 +42,17 @@ export default function StepExpandableSection({
         const data = await api.get(
           `usecase/${usecaseId}/executions/${executionId}/steps/${step.sort}/trace`
         );
-        setTraceData(data.trace_steps || []);
+
+        if (data.presigned_url) {
+          // Fetch trace JSON directly from S3 via presigned URL
+          const s3Response = await fetch(data.presigned_url);
+          if (!s3Response.ok) throw new Error('Failed to fetch trace from S3');
+          const traceJson = await s3Response.json();
+          setTraceData(traceJson.steps || []);
+        } else {
+          // Legacy inline response
+          setTraceData(data.trace_steps || []);
+        }
       } catch (err: any) {
         setError(err?.message || 'Failed to load trace data');
       } finally {

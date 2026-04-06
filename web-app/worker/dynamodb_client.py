@@ -50,7 +50,17 @@ class DynamoDBClient:
                 region=item.get('executing_region', 'us-east-1'),
                 suite_execution_id=item.get('suite_execution_id'),
                 suite_id=item.get('suite_id'),
-                enable_cache=item.get('enable_cache', False)
+                enable_cache=item.get('enable_cache', False),
+                test_platform=item.get('test_platform'),
+                platform=item.get('platform'),
+                app_identifier=item.get('app_identifier'),
+                app_binary_s3_path=item.get('app_binary_s3_path'),
+                app_arn=item.get('app_arn'),
+                device_farm_project_arn=item.get('device_farm_project_arn'),
+                device_arn=item.get('device_arn'),
+                device_farm_session_arn=item.get('device_farm_session_arn'),
+                device_name=item.get('device_name'),
+                device_os_version=item.get('device_os_version'),
             )
             
         except ClientError as e:
@@ -88,6 +98,7 @@ class DynamoDBClient:
                         value_type=item.get('value_type', ''),
                         assertion_variable=item.get('assertion_variable', ''),
                         enable_advanced_click_types=item.get('enable_advanced_click_types', False),
+                        value_source=item.get('value_source', ''),
                         cached_steps=item.get('cached_steps', None),
                         cache_last_updated=item.get('cache_last_updated', None)
                     )
@@ -248,6 +259,54 @@ class DynamoDBClient:
             logger.error(f"Error updating execution {execution_id} session_id for usecase {usecase_id}: {e}")
             return False
     
+    def update_execution_mobile_metadata(self, usecase_id: str, execution_id: str,
+                                         device_farm_session_arn: str = None,
+                                         device_name: str = None,
+                                         device_os_version: str = None) -> bool:
+        """Update execution with Device Farm session metadata in DynamoDB"""
+        try:
+            update_parts = []
+            expr_names = {}
+            expr_values = {}
+
+            if device_farm_session_arn is not None:
+                update_parts.append("device_farm_session_arn = :session_arn")
+                expr_values[":session_arn"] = device_farm_session_arn
+
+            if device_name is not None:
+                update_parts.append("#device_name = :device_name")
+                expr_names["#device_name"] = "device_name"
+                expr_values[":device_name"] = device_name
+
+            if device_os_version is not None:
+                update_parts.append("device_os_version = :device_os_version")
+                expr_values[":device_os_version"] = device_os_version
+
+            if not update_parts:
+                return True
+
+            update_expression = "SET " + ", ".join(update_parts)
+
+            update_kwargs = {
+                'Key': {
+                    'pk': f'USECASE_EXECUTION#{usecase_id}',
+                    'sk': f'EXECUTION#{execution_id}'
+                },
+                'UpdateExpression': update_expression,
+                'ExpressionAttributeValues': expr_values,
+            }
+            if expr_names:
+                update_kwargs['ExpressionAttributeNames'] = expr_names
+
+            self.table.update_item(**update_kwargs)
+
+            logger.info(f"Updated execution {execution_id} mobile metadata for usecase {usecase_id}")
+            return True
+
+        except ClientError as e:
+            logger.error(f"Error updating execution {execution_id} mobile metadata: {e}")
+            return False
+
     def update_execution_step_status(self, execution_id: str, step_id: str, 
                                    act_id: str, status: str, logs: str = '', actual_value: str = '') -> bool:
         """Update execution step with ActID and status in DynamoDB"""
@@ -492,7 +551,8 @@ class DynamoDBClient:
                 capture_variable=item.get('capture_variable', ''),
                 value_type=item.get('value_type', ''),
                 assertion_variable=item.get('assertion_variable', ''),
-                enable_advanced_click_types=item.get('enable_advanced_click_types', False)
+                enable_advanced_click_types=item.get('enable_advanced_click_types', False),
+                value_source=item.get('value_source', ''),
             )
         except ClientError as e:
             logger.error(f"Error getting execution step {step_id}: {e}")
@@ -530,7 +590,8 @@ class DynamoDBClient:
                     capture_variable=item.get('capture_variable', ''),
                     value_type=item.get('value_type', ''),
                     assertion_variable=item.get('assertion_variable', ''),
-                    enable_advanced_click_types=item.get('enable_advanced_click_types', False)
+                    enable_advanced_click_types=item.get('enable_advanced_click_types', False),
+                    value_source=item.get('value_source', ''),
                 )
                 steps.append(step)
             

@@ -332,6 +332,66 @@ This guide helps you diagnose and resolve common issues when using QA Studio.
 
 ---
 
+## Mobile Testing Issues
+
+### Device Farm Session Fails to Start
+
+**Symptoms**:
+- "Session failed to reach RUNNING state after 300 seconds"
+- "Unknown error with device"
+
+**Solutions**:
+
+1. **Try a different device**: Some devices may be temporarily unavailable. Use auto-selection (leave device_arn empty) or pick a device marked "Highly available" in the device picker.
+
+2. **Check Device Farm service status**: Visit the AWS Console → Device Farm → us-west-2 to verify the service is operational.
+
+3. **Verify app binary compatibility**: Ensure the `.ipa`/`.apk` is compatible with the selected device's OS version. Older devices may not support newer app formats.
+
+### App Not Found on Device
+
+**Symptoms**:
+- "App with bundle identifier 'com.example.app' unknown"
+- App fails to launch after session starts
+
+**Solutions**:
+
+1. **Verify app binary was uploaded**: Check that the use case has an app binary uploaded via the web UI, or use `--app-path` with the CLI.
+
+2. **Check app identifiers**: Ensure `app_package`/`app_activity` (Android) or `bundle_id` (iOS) match exactly what's in the app binary.
+
+3. **Re-upload the binary**: The Device Farm upload may have expired. Upload a fresh copy via the web UI or CLI.
+
+### Session Recording Not Available
+
+**Symptoms**:
+- "Failed to load recording" in the UI
+- Recording section shows error after test completes
+
+**Solutions**:
+
+1. **Wait 5-10 minutes**: Device Farm recordings are downloaded asynchronously. The recording Lambda retries every 3 minutes for up to 30 minutes.
+
+2. **Check the recording download Lambda logs**: In CloudWatch, look for the `download_device_farm_recording` Lambda to see if it's retrying or encountered an error.
+
+3. **Verify IAM permissions**: The recording Lambda needs `devicefarm:ListArtifacts` and `devicefarm:GetRemoteAccessSession` permissions.
+
+### iOS Typing Fails
+
+**Symptoms**:
+- "iOS mobile: type fallback failed"
+- Text input doesn't work on iOS devices
+
+**Solutions**:
+
+1. **Retry the test**: This can be a transient Appium/XCUITest issue.
+
+2. **Simplify the step instruction**: Instead of "Type 'JFK' in the search field", try "Tap the search field and enter JFK".
+
+3. **Check the device OS version**: Some XCUITest commands behave differently across iOS versions.
+
+---
+
 ## Performance Issues
 
 ### Slow Test Execution

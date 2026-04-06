@@ -64,7 +64,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'capture_variable': body.get('capture_variable'),
             'assertion_variable': body.get('assertion_variable'),
             'value_type': body.get('value_type'),
-            'enable_advanced_click_types': body.get('enable_advanced_click_types')
+            'enable_advanced_click_types': body.get('enable_advanced_click_types'),
+            'value_source': body.get('value_source'),
         }
         
         for field_name, field_value in optional_fields.items():

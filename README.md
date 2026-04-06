@@ -11,7 +11,7 @@ QA Studio is a complete testing solution that combines:
 
 Tests are written as plain English instructions (e.g., "Click the Login button", "Verify the dashboard loads"), making test creation accessible to both technical and non-technical team members.
 
-> **Note:** This reference solution is provided for demonstration purposes. Ensure it meets your organization's operational requirements before production use.
+> **Note:** This reference solution is provided for demonstration purposes. Ensure it meets your organization's operational and security requirements before production use.
 
 
 

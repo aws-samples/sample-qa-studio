@@ -14,6 +14,39 @@ def execute_retrieve_value_step(nova: NovaAct, step: ExecutionStep):
     logs = ''
     retrieved_value = ''
 
+    # Programmatic URL extraction — bypasses vision model entirely
+    if getattr(step, 'value_source', '') == 'url':
+        import re
+        try:
+            current_url = nova.page.url
+            logger.info(f"Extracting from URL: {current_url}")
+            pattern = step.instruction.strip() if step.instruction else None
+            if pattern:
+                match = re.search(pattern, current_url)
+                if match and match.groups():
+                    retrieved_value = match.group(1)
+                elif match:
+                    retrieved_value = match.group(0)
+                else:
+                    success = False
+                    logs = f"Regex pattern '{pattern}' did not match URL: {current_url}"
+            else:
+                retrieved_value = current_url
+            logger.info(f"URL extraction result: {retrieved_value}")
+        except Exception as e:
+            success = False
+            logs = f"URL extraction failed: {str(e)}"
+
+        from types import SimpleNamespace
+        result = SimpleNamespace()
+        result.metadata = SimpleNamespace()
+        result.metadata.act_id = "url_extract"
+        result.parsed_response = retrieved_value
+
+        status = "success" if success else "error"
+        logger.info(f"Step: {step.sort} Type: retrieve_value Source: url Status: {status} Retrieved: {retrieved_value}")
+        return result, success, logs, retrieved_value
+
     try:
         schema = STRING_SCHEMA
         if hasattr(step, 'value_type') and step.value_type:
