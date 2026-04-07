@@ -1,0 +1,76 @@
+stages:
+  - deploy
+  - cleanup
+
+.deploy_template: &deploy_template
+  image: amazonlinux:2023
+  stage: deploy
+  before_script:
+    - yum install -y zip aws-cli
+  script:
+    - cd $CI_PROJECT_DIR
+    - zip -r /tmp/source.zip .
+    - aws s3 cp /tmp/source.zip s3://qa-studio-code-build-source/source/$CI_COMMIT_SHA.zip
+    - |
+      BUILD_ID=$(aws codebuild start-build \
+        --project-name $CODEBUILD_PROJECT \
+        --source-type-override S3 \
+        --source-location-override qa-studio-code-build-source/source/$CI_COMMIT_SHA.zip \
+        --environment-variables-override \
+          "name=BRANCH_NAME,value=$CI_COMMIT_REF_NAME,type=PLAINTEXT" \
+          "name=ENVIRONMENT,value=$DEPLOY_ENV,type=PLAINTEXT" \
+        --region us-east-1 \
+        --query 'build.id' --output text)
+    - echo "CodeBuild started - $BUILD_ID"
+    - echo "View build at https://console.aws.amazon.com/codesuite/codebuild/projects/$CODEBUILD_PROJECT/build/$BUILD_ID"
+
+# Manual deploy to dev — available on any branch
+deploy-dev:
+  <<: *deploy_template
+  variables:
+    CODEBUILD_PROJECT: qa-studio-deploy-dev
+    DEPLOY_ENV: dev
+  when: manual
+  environment:
+    name: dev/$CI_COMMIT_REF_SLUG
+
+# Auto deploy to prod — triggers on merge to main
+deploy-prod:
+  <<: *deploy_template
+  variables:
+    CODEBUILD_PROJECT: qa-studio-deploy-prod
+    DEPLOY_ENV: production
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      when: always
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  environment:
+    name: production
+
+# Cleanup branch stack — triggers when branch is deleted (after MR merge)
+cleanup-branch:
+  image: amazonlinux:2023
+  stage: cleanup
+  before_script:
+    - yum install -y aws-cli
+  script:
+    - BASENAME="qs-$(echo $CI_COMMIT_REF_NAME | sed 's/[\/]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-20)"
+    - echo "Destroying stacks for baseName $BASENAME"
+    - |
+      BUILD_ID=$(aws codebuild start-build \
+        --project-name qa-studio-cleanup \
+        --environment-variables-override \
+          "name=BASENAME,value=$BASENAME,type=PLAINTEXT" \
+        --region us-east-1 \
+        --query 'build.id' --output text)
+    - echo "Cleanup started - $BUILD_ID"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == null
+      when: never
+    - if: $CI_COMMIT_BRANCH != "main"
+      when: manual
+      allow_failure: true
+  environment:
+    name: dev/$CI_COMMIT_REF_SLUG
+    action: stop
