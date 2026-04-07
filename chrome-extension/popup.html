@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nova Act Recorder</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header with Recording Controls -->
+    <header id="header">
+      <h1><img src="icons/nova-act-light.svg" alt="" width="20" height="20" style="vertical-align: text-bottom; margin-right: 6px;">Nova Act Recorder</h1>
+      <div id="recording-controls">
+        <button id="btn-toggle-recording" aria-label="Start Recording">
+          <span class="btn-icon">▶</span>
+          <span class="btn-label">Start Recording</span>
+        </button>
+        <span id="recording-status" class="status-badge hidden" aria-live="polite">Recording…</span>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav id="tab-nav" role="tablist" aria-label="Extension panels">
+      <button class="tab-btn active" data-tab="tab-actions" role="tab" aria-selected="true" aria-controls="tab-actions">Actions</button>
+      <button class="tab-btn" data-tab="tab-export" role="tab" aria-selected="false" aria-controls="tab-export">Export</button>
+      <button class="tab-btn" data-tab="tab-replay" role="tab" aria-selected="false" aria-controls="tab-replay">Replay</button>
+      <button class="tab-btn" data-tab="tab-sessions" role="tab" aria-selected="false" aria-controls="tab-sessions">Sessions</button>
+    </nav>
+
+    <!-- Tab: Action Log -->
+    <section id="tab-actions" class="tab-panel active" role="tabpanel">
+      <div id="action-log-header">
+        <h2>Action Log</h2>
+        <div id="action-log-toolbar">
+          <button id="btn-save-session" class="btn-small btn-with-icon" title="Save current session"><span class="btn-svg" id="btn-save-icon"></span>Save</button>
+          <button id="btn-add-intent" class="btn-small btn-with-icon" title="Add Intent Prompt"><span class="btn-svg" id="btn-add-icon"></span>Add Intent</button>
+          <button id="btn-clear-all" class="btn-small btn-danger btn-with-icon hidden" aria-label="Clear all actions"><span class="btn-svg" id="btn-clear-icon"></span>Clear All</button>
+        </div>
+      </div>
+      <ol id="action-list" aria-label="Recorded actions"></ol>
+      <p id="empty-log-msg" class="empty-msg">No actions recorded yet. Click "Start Recording" to begin.<br><span class="hint-text">Copy (Ctrl+C) will generate act_get() to extract text to a var, Paste (Ctrl+V) will generate act(type {var})</span></p>
+    </section>
+
+    <!-- Modal: Intent Prompt Input -->
+    <div id="intent-modal" class="modal hidden" role="dialog" aria-label="Enter intent prompt">
+      <div class="modal-content">
+        <h3 id="intent-modal-title">Add Intent Prompt</h3>
+        <textarea id="intent-text-input" placeholder="Describe the high-level intent..." rows="3"></textarea>
+        <div class="modal-actions">
+          <button id="btn-intent-cancel" class="btn-small">Cancel</button>
+          <button id="btn-intent-confirm" class="btn-small btn-primary">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Assertion Input -->
+    <div id="assertion-modal" class="modal hidden" role="dialog" aria-label="Add assertion">
+      <div class="modal-content">
+        <h3>Add Assertion</h3>
+        <textarea id="assertion-text-input" placeholder="e.g., the confirmation dialog should be visible" rows="2"></textarea>
+        <div class="modal-actions">
+          <button id="btn-assertion-cancel" class="btn-small">Cancel</button>
+          <button id="btn-assertion-confirm" class="btn-small btn-primary">Add Assertion</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Export Panel -->
+    <section id="tab-export" class="tab-panel" role="tabpanel">
+      <h2>Export Python Script</h2>
+      <div class="export-buttons">
+        <button id="btn-export" class="btn-primary">Export Script</button>
+        <button id="btn-export-zip" class="btn-primary">Export ZIP</button>
+      </div>
+      <div id="export-output-wrapper" class="hidden">
+        <textarea id="export-output" readonly aria-label="Generated Python script"></textarea>
+        <div class="export-actions">
+          <button id="btn-copy" class="btn-primary">Copy to Clipboard</button>
+          <span id="copy-confirmation" class="confirmation hidden" aria-live="polite">Copied!</span>
+        </div>
+      </div>
+      <div id="zip-status" class="hidden" aria-live="polite"></div>
+    </section>
+
+    <!-- Tab: Replay Panel -->
+    <section id="tab-replay" class="tab-panel" role="tabpanel">
+      <h2>Run on Nova Act Playground</h2>
+      <p style="font-size: 12px; color: #5f6b7a; margin-bottom: 10px;">Opens the Nova Act Playground and injects your recorded script into the editor.</p>
+      <div id="replay-controls" style="margin-top: 10px;">
+        <button id="btn-run" class="btn-primary">Run on Playground</button>
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 8px; cursor: pointer;">
+          <input type="checkbox" id="chk-new-playground"> Launch new playground tab
+        </label>
+      </div>
+      <div id="replay-summary" class="hidden" aria-live="polite"></div>
+    </section>
+
+    <!-- Tab: Session History -->
+    <section id="tab-sessions" class="tab-panel" role="tabpanel">
+      <h2>Saved Sessions</h2>
+      <p class="sessions-note">Sessions are stored in Chrome's local storage cache. They may be lost if Chrome's cache or browsing data is cleared. To save storage space, screenshots are not persisted with sessions — to export with screenshots, use Export ZIP from the current recording before saving or loading a different session.</p>
+      <ul id="session-list" aria-label="Saved recording sessions"></ul>
+      <p id="empty-sessions-msg" class="empty-msg">No saved sessions.</p>
+    </section>
+
+  </div>
+  <script src="types.js"></script>
+  <script src="lib/jszip.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

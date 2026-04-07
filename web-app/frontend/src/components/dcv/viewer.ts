@@ -12,6 +12,8 @@ type connection = {
   requestResolution: Function;
   setDisplayScale: Function;
   disconnect: Function;
+  captureClipboardEvents: Function;
+  syncClipboards: Function;
 }
 
 export class LiveViewer {
@@ -34,11 +36,9 @@ export class LiveViewer {
   }
   httpExtraSearchParamsCallBack(method: string, url:string, body: string, returnType: string) {
     const parsedUrl = new URL(this.presignedUrl);
-    const params = parsedUrl.searchParams;
-    console.log('[Viewer] Returning auth params:', params.toString());
-    return params;
+    return parsedUrl.searchParams;
   }
-  
+
   displayLayoutCallback(_callback: Function, serverWidth: number, serverHeight: number, heads: [] = []) {
     console.log(`[Viewer] Display layout callback`);
     if (this.connection) {
@@ -46,43 +46,36 @@ export class LiveViewer {
       if (this.desiredWidth > 0 && this.desiredHeight > 0 && (this.currentWidth !== this.desiredWidth || this.currentHeight !== this.desiredHeight)) {
         console.log(`[Viewer] Requesting display layout change from ${this.currentWidth}x${this.currentHeight} to ${this.desiredWidth}x${this.desiredHeight}`);
 
-        const display = document.getElementById(this.containerId);
+        // Request a fixed resolution for the remote browser viewport
+        const SERVER_WIDTH = 1480;
+        const SERVER_HEIGHT = 860;
+
         this.connection
-          .requestDisplayLayout([
-            {
-              name: 'Main Display',
-              rect: {
-                x: 0,
-                y: 0,
-                width: this.desiredWidth,
-                height: this.desiredHeight,
-              },
-              primary: true,
-            },
-          ])
+          .requestResolution(SERVER_WIDTH, SERVER_HEIGHT)
           .then(() => {
             if(!this.connection) {
               return
             }
-            
-            this.connection
-              .requestResolution(1480, 860)
-              .then(() => {
-                console.log(`[Viewer] Resolution successfully set to 1480x860`);
-                const scale = getScaleToFit(1480, 860, this.desiredWidth, this.desiredHeight);
-                this.connection.setDisplayScale(scale).then(() => {
-                  console.log(`[Viewer] Scale successfully set to ${scale}`);
+            console.log(`[Viewer] Resolution set to ${SERVER_WIDTH}x${SERVER_HEIGHT}`);
 
-                  const canvas = document.getElementById(this.containerId).querySelector('canvas');
-                  canvas.style.transformOrigin = `top left`;
-                  canvas.style.transform = `scale(${scale})`;
-                  this.currentWidth = this.desiredWidth;
-                  this.currentHeight = this.desiredHeight;
-                });
-              })
-              .catch((err: any) => {
-                console.error('Failed to set resolution:', err);
-              });
+            // Scale the container to fit within the desired viewport using CSS transform.
+            // DCV SDK's setDisplayScale is NOT used — it causes double-scaling.
+            // CSS transform on the container works because DCV SDK uses
+            // getBoundingClientRect() for coordinate mapping, which accounts for transforms.
+            const scale = getScaleToFit(SERVER_WIDTH, SERVER_HEIGHT, this.desiredWidth, this.desiredHeight);
+            console.log(`[Viewer] Applying CSS scale ${scale} to fit into ${this.desiredWidth}x${this.desiredHeight}`);
+
+            const container = document.getElementById(this.containerId);
+            if (container) {
+              container.style.transformOrigin = 'top left';
+              container.style.transform = `scale(${scale})`;
+            }
+
+            this.currentWidth = this.desiredWidth;
+            this.currentHeight = this.desiredHeight;
+          })
+          .catch((err: any) => {
+            console.error('Failed to set resolution:', err);
           });
       }
     }
@@ -144,11 +137,13 @@ export class LiveViewer {
       authToken: authToken,
       divId: this.containerId,
       baseUrl: `${window.location.origin}/dcv/`,
+      clipboardAutoSync: true,
       callbacks: {
         firstFrame: () => {
           console.log('[Viewer] First frame received!');
           resolve(this.connection);
         },
+        clipboardEvent: () => {},
         error: (error: any) => {
           console.error('[Viewer] Connection error:', error);
           reject(error);
@@ -161,11 +156,17 @@ export class LiveViewer {
     console.log('[Viewer] Connect options:', connectOptions);
     dcv
       .connect(connectOptions)
-      .then((connection) => {
+      .then((connection: connection) => {
         console.log('[Viewer] Connection established:', connection);
         this.connection = connection;
+        // Enable clipboard event capture so copy/paste keyboard shortcuts
+        // are intercepted by the SDK and clipboard data is synced between
+        // the local machine and the remote DCV session.
+        if (connection.captureClipboardEvents) {
+          connection.captureClipboardEvents(true);
+        }
       })
-      .catch((error) => {
+      .catch((error: any) => {
         console.error('[Viewer] Connect failed:', error);
         reject(error);
       });

@@ -6,6 +6,7 @@ Maintains a persistent browser session and executes steps on demand via SQS comm
 
 import os
 import logging
+import base64
 import boto3
 import json
 import time
@@ -24,6 +25,8 @@ from retrieve_value_step import execute_retrieve_value_step
 from assertion_step import execute_assertion_step
 from url_step import execute_url_step
 from download_step import execute_download_step
+from extension_helper import setup_extension
+from recording_controller import RecordingController
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +36,49 @@ logger = logging.getLogger(__name__)
 
 INACTIVITY_TIMEOUT = 30 * 60  # 30 minutes in seconds
 from nova_act_workflow import ensure_workflow_definition, NOVA_ACT_REGION
+
+
+def upload_recording_screenshots(s3_client, s3_bucket_name, usecase_id, session_id, result):
+    """Upload screenshots to S3 and add manifest metadata to the recording envelope.
+
+    Args:
+        s3_client: Boto3 S3 client.
+        s3_bucket_name: S3 bucket name.
+        usecase_id: Use case ID.
+        session_id: Session ID.
+        result: Recording stop result dict (must have 'data' and 'screenshots' keys).
+    """
+    screenshots = result.get('screenshots', {})
+    if not screenshots:
+        return
+
+    screenshot_manifest = {}
+    for action_id, data_url in screenshots.items():
+        try:
+            base64_data = data_url.split(',', 1)[1] if ',' in data_url else data_url
+            ss_key = f"{usecase_id}/{session_id}/screenshots/{action_id}.jpg"
+            s3_client.put_object(
+                Bucket=s3_bucket_name,
+                Key=ss_key,
+                Body=base64.b64decode(base64_data),
+                ContentType='image/jpeg'
+            )
+            screenshot_manifest[action_id] = ss_key
+        except Exception as ss_err:
+            logger.warning(f"Failed to upload screenshot {action_id}: {ss_err}")
+
+    if screenshot_manifest:
+        manifest_key = f"{usecase_id}/{session_id}/screenshot_manifest.json"
+        s3_client.put_object(
+            Bucket=s3_bucket_name,
+            Key=manifest_key,
+            Body=json.dumps(screenshot_manifest),
+            ContentType='application/json'
+        )
+        result['data']['screenshot_manifest_key'] = manifest_key
+        result['data']['screenshot_s3_prefix'] = f"{usecase_id}/{session_id}/screenshots/"
+        logger.info(f"Uploaded {len(screenshot_manifest)} screenshots to S3")
+
 
 def execute_single_step(nova, step, template_parser, usecase_id, execution_id, s3_bucket_name, db_client):
     """Execute a single step and return results"""
@@ -182,6 +228,14 @@ def main():
             s3_prefix=f"{usecase_id}/{session_id}/"
         )
         
+        # Build extensions config for AgentCore browser
+        extensions = None
+        extension_bucket = os.getenv('EXTENSION_S3_BUCKET', s3_bucket_name)
+        extension_prefix = os.getenv('EXTENSION_S3_PREFIX', 'extensions/nova-act-recorder.zip')
+        if extension_prefix:
+            extensions = [{"location": {"s3": {"bucket": extension_bucket, "prefix": extension_prefix}}}]
+            logger.info(f"Browser extensions configured: bucket={extension_bucket}, prefix={extension_prefix}")
+
         # Create browser
         logger.info("Creating browser session...")
         browser_id = create_browser(
@@ -191,7 +245,7 @@ def main():
             f"{usecase_id}/{session_id}/recording/",
             execution.region
         )
-        browser = start_browser(browser_id, session_id, execution.region)
+        browser = start_browser(browser_id, session_id, execution.region, extensions=extensions)
         ws_url, headers = browser.generate_ws_headers()
         live_view_url = browser.generate_live_view_url()
         
@@ -229,7 +283,7 @@ def main():
                     stop_hooks=[s3_writer],
                     user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
                 ) as nova:
-                    
+
                     # Set custom HTTP headers if configured
                     if execution_headers and execution_headers.headers:
                         logger.info(f"Setting {len(execution_headers.headers)} custom HTTP headers")
@@ -239,42 +293,57 @@ def main():
                             parsed_headers[header_name] = parsed_value
                         nova.page.set_extra_http_headers(parsed_headers)
                         nova.go_to_url(execution.starting_url)
-                    
+
                     logger.info("NovaAct initialized successfully")
-                    
+
+                    # Verify and enable the NovaActRecorder extension
+                    recording_controller = None
+                    if extensions:
+                        ext_status = setup_extension(nova)
+                        logger.info(f"Extension setup complete: installed={ext_status['installed']}, "
+                                    f"id={ext_status.get('extension_id')}")
+                        if ext_status.get('installed') and ext_status.get('extension_id'):
+                            recording_controller = RecordingController(nova, ext_status['extension_id'])
+                            recording_controller.setup()
+                            logger.info("RecordingController initialized")
+
                     # Get session ID and update execution
                     session_id_nova = nova.get_session_id()
                     logger.info(f"Nova Act session ID: {session_id_nova}")
                     db_client.update_execution_session_id(usecase_id, session_id, session_id_nova)
-                    
+
                     # Update last activity
                     last_activity = time.time()
                     db_client.update_execution_last_activity(usecase_id, session_id, get_time())
-                    
+
                     # Main command loop
                     logger.info("Entering command loop...")
                     use_eventbridge = os.getenv('USE_EVENTBRIDGE_COMMANDS', 'true').lower() == 'true'
                     logger.info(f"Command mode: {'EventBridge/DynamoDB' if use_eventbridge else 'SQS'}")
-                    
+
                     while True:
                         # Check for inactivity timeout
                         if time.time() - last_activity > INACTIVITY_TIMEOUT:
                             logger.info("Inactivity timeout reached, terminating session")
                             db_client.update_execution_status(usecase_id, session_id, "timeout", completed_at=get_time())
                             break
-                        
+
+                        # Flush any new recording actions to DynamoDB
+                        if recording_controller:
+                            recording_controller.flush_to_db(db_client, usecase_id, session_id)
+
                         try:
                             command = None
-                            
+
                             if use_eventbridge:
                                 # Poll DynamoDB for commands (EventBridge mode)
                                 commands = db_client.poll_wizard_commands(session_id, limit=1)
-                                
+
                                 if not commands:
                                     # No commands, sleep briefly and continue
-                                    time.sleep(1)
+                                    time.sleep(0.5)
                                     continue
-                                
+
                                 command_record = commands[0]
                                 command = {
                                     'action': command_record.get('action'),
@@ -282,17 +351,17 @@ def main():
                                     'stepId': command_record.get('stepId') or command_record.get('step_id'),
                                     'step_id': command_record.get('stepId') or command_record.get('step_id')  # For compatibility
                                 }
-                                
+
                                 logger.info(f"Received command from DynamoDB for session {session_id}")
                                 logger.info(f"Command details: {json.dumps(command, indent=2)}")
                                 logger.info(f"Full command record: {json.dumps(command_record, indent=2, default=str)}")
-                                
+
                                 # Delete command from DynamoDB after reading
                                 db_client.delete_wizard_command(session_id, command_record['sk'])
-                                
+
                                 last_activity = time.time()
                                 db_client.update_execution_last_activity(usecase_id, session_id, get_time())
-                                
+
                             else:
                                 # Poll SQS for commands (legacy mode)
                                 response = sqs_client.receive_message(
@@ -301,61 +370,63 @@ def main():
                                     WaitTimeSeconds=20,
                                     MessageAttributeNames=['All']
                                 )
-                                
+
                                 if 'Messages' not in response:
                                     continue
-                                
+
                                 message = response['Messages'][0]
                                 command = json.loads(message['Body'])
                                 command_session_id = command.get('session_id') or command.get('SessionID')
-                                
+
                                 # Validate this message is for our session
                                 if command_session_id != session_id:
                                     logger.warning(f"Ignoring command for different session: {command_session_id} (ours: {session_id})")
                                     continue
-                                
+
                                 logger.info(f"Received command from SQS for session {session_id}")
                                 logger.info(f"Command details: {json.dumps(command, indent=2)}")
-                                
+
                                 # Delete message from queue
                                 sqs_client.delete_message(
                                     QueueUrl=wizard_queue_url,
                                     ReceiptHandle=message['ReceiptHandle']
                                 )
-                                
+
                                 last_activity = time.time()
                                 db_client.update_execution_last_activity(usecase_id, session_id, get_time())
-                            
+
                             # Process command (unified for both modes)
                             if not command:
                                 continue
-                            
+
                             logger.info(f"Processing command: {command['action']}")
-                            
+
                             if command['action'] == 'execute_step':
                                 # Get step from DynamoDB
                                 step_id = command['step_id']
                                 step = db_client.get_execution_step(session_id, step_id)
-                                
+
                                 if step:
                                     act_id, status, success, logs, actual_value = execute_single_step(
                                         nova, step, template_parser, usecase_id, session_id, s3_bucket_name, db_client
                                     )
-                                    
+
                                     # Update step status
                                     db_client.update_execution_step_status(
                                         session_id, step_id, act_id, status, logs, actual_value
                                     )
                                 else:
                                     logger.error(f"Step {step_id} not found")
-                            
+
                             elif command['action'] == 'restart':
                                 logger.info("Restarting wizard session...")
+                                if recording_controller:
+                                    recording_controller.detach()
                                 # Close current browser
                                 nova.close()
                                 browser.stop()
                                 delete_browser(browser_id, execution.region)
-                                
+
                                 # Create new browser
                                 browser_id = create_browser(
                                     template_parser.get_all_variables()['UniqueID'],
@@ -364,11 +435,11 @@ def main():
                                     f"{usecase_id}/{session_id}/recording/",
                                     execution.region
                                 )
-                                browser = start_browser(browser_id, session_id, execution.region)
+                                browser = start_browser(browser_id, session_id, execution.region, extensions=extensions)
                                 ws_url, headers = browser.generate_ws_headers()
                                 live_view_url = browser.generate_live_view_url()
                                 db_client.create_live_view(session_id, live_view_url)
-                                
+
                                 # Reinitialize NovaAct (Preview API mode)
                                 nova = NovaAct(
                                     cdp_endpoint_url=ws_url,
@@ -383,7 +454,18 @@ def main():
                                     user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
                                 )
                                 nova.__enter__()
-                                
+
+                                # Verify extension after restart
+                                if extensions:
+                                    ext_status = setup_extension(nova)
+                                    logger.info(f"Extension setup after restart: installed={ext_status['installed']}")
+                                    if ext_status.get('installed') and ext_status.get('extension_id'):
+                                        recording_controller = RecordingController(nova, ext_status['extension_id'])
+                                        recording_controller.setup()
+                                        logger.info("RecordingController re-initialized after restart")
+                                    else:
+                                        recording_controller = None
+
                                 # Replay accepted steps
                                 accepted_steps = db_client.get_accepted_execution_steps(session_id)
                                 logger.info(f"Replaying {len(accepted_steps)} accepted steps")
@@ -398,6 +480,57 @@ def main():
                                 
                                 logger.info("Restart complete")
                             
+                            elif command['action'] == 'recording_start':
+                                logger.info("Processing recording_start command")
+                                try:
+                                    if not recording_controller:
+                                        raise RuntimeError("RecordingController not initialized - extension may not be loaded")
+                                    result = recording_controller.start_recording()
+                                    if result.get('success'):
+                                        db_client.update_recording_status(usecase_id, session_id, "recording")
+                                        logger.info("Recording started and status updated")
+                                    else:
+                                        error_msg = result.get('error', 'Unknown error starting recording')
+                                        db_client.update_recording_status(usecase_id, session_id, "error", error=error_msg)
+                                        logger.error(f"Recording start failed: {error_msg}")
+                                except Exception as rec_err:
+                                    error_msg = f"Recording start error: {rec_err}"
+                                    logger.error(error_msg)
+                                    db_client.update_recording_status(usecase_id, session_id, "error", error=str(rec_err))
+
+                            elif command['action'] == 'recording_stop':
+                                logger.info("Processing recording_stop command")
+                                try:
+                                    if not recording_controller:
+                                        raise RuntimeError("RecordingController not initialized - extension may not be loaded")
+                                    result = recording_controller.stop_recording()
+                                    if result.get('success') and result.get('data'):
+                                        # Upload screenshots to S3 and add metadata to envelope
+                                        s3_client = boto3.client('s3')
+                                        upload_recording_screenshots(s3_client, s3_bucket_name, usecase_id, session_id, result)
+
+                                        recording_json = json.dumps(result['data'])
+                                        s3_key = f"{usecase_id}/{session_id}/recording_data.json"
+                                        s3_client.put_object(
+                                            Bucket=s3_bucket_name,
+                                            Key=s3_key,
+                                            Body=recording_json,
+                                            ContentType='application/json'
+                                        )
+                                        db_client.update_recording_status(
+                                            usecase_id, session_id, "completed",
+                                            recording_s3_key=s3_key
+                                        )
+                                        logger.info(f"Recording stopped, data uploaded to S3 at {s3_key}")
+                                    else:
+                                        error_msg = result.get('error', 'Unknown error stopping recording')
+                                        db_client.update_recording_status(usecase_id, session_id, "error", error=error_msg)
+                                        logger.error(f"Recording stop failed: {error_msg}")
+                                except Exception as rec_err:
+                                    error_msg = f"Recording stop error: {rec_err}"
+                                    logger.error(error_msg)
+                                    db_client.update_recording_status(usecase_id, session_id, "error", error=str(rec_err))
+
                             elif command['action'] == 'terminate':
                                 logger.info("Terminating wizard session - starting graceful shutdown")
                                 
@@ -454,7 +587,7 @@ def main():
                 nova_act_api_key=nova_api_key,
                 user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
             ) as nova:
-                    
+
                     # Set custom HTTP headers if configured
                     if execution_headers and execution_headers.headers:
                         logger.info(f"Setting {len(execution_headers.headers)} custom HTTP headers")
@@ -464,9 +597,20 @@ def main():
                             parsed_headers[header_name] = parsed_value
                         nova.page.set_extra_http_headers(parsed_headers)
                         nova.go_to_url(execution.starting_url)
-                    
+
                     logger.info("NovaAct initialized successfully")
-                    
+
+                    # Verify and enable the NovaActRecorder extension
+                    recording_controller = None
+                    if extensions:
+                        ext_status = setup_extension(nova)
+                        logger.info(f"Extension setup complete: installed={ext_status['installed']}, "
+                                    f"id={ext_status.get('extension_id')}")
+                        if ext_status.get('installed') and ext_status.get('extension_id'):
+                            recording_controller = RecordingController(nova, ext_status['extension_id'])
+                            recording_controller.setup()
+                            logger.info("RecordingController initialized")
+
                     # Get session ID and update execution
                     session_id_nova = nova.get_session_id()
                     logger.info(f"Nova Act session ID: {session_id_nova}")
@@ -487,7 +631,11 @@ def main():
                             logger.info("Inactivity timeout reached, terminating session")
                             db_client.update_execution_status(usecase_id, session_id, "timeout", completed_at=get_time())
                             break
-                        
+
+                        # Flush any new recording actions to DynamoDB
+                        if recording_controller:
+                            recording_controller.flush_to_db(db_client, usecase_id, session_id)
+
                         try:
                             command = None
                             
@@ -497,7 +645,7 @@ def main():
                                 
                                 if not commands:
                                     # No commands, sleep briefly and continue
-                                    time.sleep(1)
+                                    time.sleep(0.5)
                                     continue
                                 
                                 command_record = commands[0]
@@ -576,6 +724,8 @@ def main():
                             
                             elif command['action'] == 'restart':
                                 logger.info("Restarting wizard session...")
+                                if recording_controller:
+                                    recording_controller.detach()
                                 # Close current browser
                                 nova.close()
                                 browser.stop()
@@ -589,11 +739,11 @@ def main():
                                     f"{usecase_id}/{session_id}/recording/",
                                     execution.region
                                 )
-                                browser = start_browser(browser_id, session_id, execution.region)
+                                browser = start_browser(browser_id, session_id, execution.region, extensions=extensions)
                                 ws_url, headers = browser.generate_ws_headers()
                                 live_view_url = browser.generate_live_view_url()
                                 db_client.create_live_view(session_id, live_view_url)
-                                
+
                                 # Reinitialize NovaAct (Preview API mode)
                                 nova = NovaAct(
                                     cdp_endpoint_url=ws_url,
@@ -608,11 +758,22 @@ def main():
                                     user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
                                 )
                                 nova.__enter__()
-                                
+
+                                # Verify extension after restart
+                                if extensions:
+                                    ext_status = setup_extension(nova)
+                                    logger.info(f"Extension setup after restart: installed={ext_status['installed']}")
+                                    if ext_status.get('installed') and ext_status.get('extension_id'):
+                                        recording_controller = RecordingController(nova, ext_status['extension_id'])
+                                        recording_controller.setup()
+                                        logger.info("RecordingController re-initialized after restart")
+                                    else:
+                                        recording_controller = None
+
                                 # Replay accepted steps
                                 accepted_steps = db_client.get_accepted_execution_steps(session_id)
                                 logger.info(f"Replaying {len(accepted_steps)} accepted steps")
-                                
+
                                 for step in accepted_steps:
                                     act_id, status, success, logs, actual_value = execute_single_step(
                                         nova, step, template_parser, usecase_id, session_id, s3_bucket_name, db_client
@@ -620,9 +781,60 @@ def main():
                                     if not success:
                                         logger.error(f"Failed to replay step {step.sort}")
                                         break
-                                
+
                                 logger.info("Restart complete")
-                            
+
+                            elif command['action'] == 'recording_start':
+                                logger.info("Processing recording_start command")
+                                try:
+                                    if not recording_controller:
+                                        raise RuntimeError("RecordingController not initialized - extension may not be loaded")
+                                    result = recording_controller.start_recording()
+                                    if result.get('success'):
+                                        db_client.update_recording_status(usecase_id, session_id, "recording")
+                                        logger.info("Recording started and status updated")
+                                    else:
+                                        error_msg = result.get('error', 'Unknown error starting recording')
+                                        db_client.update_recording_status(usecase_id, session_id, "error", error=error_msg)
+                                        logger.error(f"Recording start failed: {error_msg}")
+                                except Exception as rec_err:
+                                    error_msg = f"Recording start error: {rec_err}"
+                                    logger.error(error_msg)
+                                    db_client.update_recording_status(usecase_id, session_id, "error", error=str(rec_err))
+
+                            elif command['action'] == 'recording_stop':
+                                logger.info("Processing recording_stop command")
+                                try:
+                                    if not recording_controller:
+                                        raise RuntimeError("RecordingController not initialized - extension may not be loaded")
+                                    result = recording_controller.stop_recording()
+                                    if result.get('success') and result.get('data'):
+                                        # Upload screenshots to S3 and add metadata to envelope
+                                        s3_client = boto3.client('s3')
+                                        upload_recording_screenshots(s3_client, s3_bucket_name, usecase_id, session_id, result)
+
+                                        recording_json = json.dumps(result['data'])
+                                        s3_key = f"{usecase_id}/{session_id}/recording_data.json"
+                                        s3_client.put_object(
+                                            Bucket=s3_bucket_name,
+                                            Key=s3_key,
+                                            Body=recording_json,
+                                            ContentType='application/json'
+                                        )
+                                        db_client.update_recording_status(
+                                            usecase_id, session_id, "completed",
+                                            recording_s3_key=s3_key
+                                        )
+                                        logger.info(f"Recording stopped, data uploaded to S3 at {s3_key}")
+                                    else:
+                                        error_msg = result.get('error', 'Unknown error stopping recording')
+                                        db_client.update_recording_status(usecase_id, session_id, "error", error=error_msg)
+                                        logger.error(f"Recording stop failed: {error_msg}")
+                                except Exception as rec_err:
+                                    error_msg = f"Recording stop error: {rec_err}"
+                                    logger.error(error_msg)
+                                    db_client.update_recording_status(usecase_id, session_id, "error", error=str(rec_err))
+
                             elif command['action'] == 'terminate':
                                 logger.info("Terminating wizard session - starting graceful shutdown")
                                 

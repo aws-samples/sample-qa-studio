@@ -37,6 +37,8 @@ Tests are written as plain English instructions (e.g., "Click the Login button",
 
 ## Architecture
 
+![QA Studio Architecture](docs/architecture.png)
+
 QA Studio is built on AWS serverless architecture:
 
 - **Frontend**: React application with AWS Cloudscape Design System (CloudFront + S3)
@@ -91,7 +93,7 @@ Deploy the full QA Studio platform to AWS:
 ```bash
 # Clone and install dependencies
 git clone <repository-url>
-cd sample-nova-act-qa-studio/web-app
+cd sample-qa-studio/web-app
 npm install
 
 # Configure (set your admin email)
@@ -123,7 +125,7 @@ Install the command-line tool for local development and test management:
 
 **Installation**:
 ```bash
-cd sample-nova-act-qa-studio
+cd sample-qa-studio
 
 # Install CLI tool
 pip install -e ./qa-studio-cli

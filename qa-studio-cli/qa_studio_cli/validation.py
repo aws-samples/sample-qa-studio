@@ -31,20 +31,6 @@ def validate_journey_description(journey: str) -> tuple[bool, list[str]]:
     if len(words) < 10:
         errors.append(f"User journey should contain at least 10 words (currently {len(words)})")
     
-    # Action words validation
-    action_words = [
-        'click', 'enter', 'navigate', 'select', 'submit', 'verify',
-        'check', 'fill', 'choose', 'confirm', 'type', 'press', 'scroll', 'hover'
-    ]
-    journey_lower = journey.lower()
-    has_actions = any(action in journey_lower for action in action_words)
-    
-    if not has_actions:
-        errors.append(
-            f"User journey should include specific actions. "
-            f"Use words like: {', '.join(action_words[:5])}, etc."
-        )
-    
     return len(errors) == 0, errors
 
 

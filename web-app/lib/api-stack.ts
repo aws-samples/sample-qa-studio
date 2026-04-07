@@ -42,6 +42,8 @@ interface NovaActQAStudioApiStackCreateProps extends NovaActQAStudioBaseStackCre
   rejectWizardStepLambda: Function
   restartWizardLambda: Function
   terminateWizardLambda: Function
+  sendRecordingCommandLambda: Function
+  getRecordingDataLambda: Function
 }
 
 export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
@@ -50,8 +52,10 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
   public readonly authorizerLambda: Function
   private routes: Method[] = []
 
-  private addMethod(resource: Resource, method: HttpMethod, lambda: Function): Method {
-    const resourceMethod = resource.addMethod(method, new LambdaIntegration(lambda), {
+  private addMethod(resource: Resource, method: HttpMethod, lambda: Function, options?: { timeout?: cdk.Duration }): Method {
+    const resourceMethod = resource.addMethod(method, new LambdaIntegration(lambda, {
+      timeout: options?.timeout,
+    }), {
       authorizer: this.authorizer,
       authorizationType: AuthorizationType.CUSTOM
     });
@@ -306,7 +310,14 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
 
     // /generate-usecase - Generate usecase with AI
     const generateUsecase = this.addResource(this.api.root, 'generate-usecase')
-    this.addMethod(generateUsecase, HttpMethod.POST, l.generateUsecaseLambda)
+    // Bedrock calls via generate-usecase can take up to 120s for complex user journeys.
+    // The default API Gateway integration timeout is 29s. To support longer responses,
+    // increase the quota (see README step 3) then update to: cdk.Duration.seconds(120)
+    this.addMethod(generateUsecase, HttpMethod.POST, l.generateUsecaseLambda,
+      {
+        timeout: cdk.Duration.seconds(29)
+      }
+    )
 
     // /generate-s3-url - Generate S3 presigned URL
     const generateS3Url = this.addResource(this.api.root, 'generate-s3-url')
@@ -337,6 +348,14 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const wizardTerminate = this.addResource(wizardSession, 'terminate')
     const wizardTerminateUsecase = this.addResource(wizardTerminate, '{usecaseId}')
     this.addMethod(wizardTerminateUsecase, HttpMethod.POST, props.terminateWizardLambda)
+
+    // /wizard/{sessionId}/command - Send recording commands
+    const wizardCommand = this.addResource(wizardSession, 'command')
+    this.addMethod(wizardCommand, HttpMethod.POST, props.sendRecordingCommandLambda)
+
+    // /wizard/{sessionId}/recording - Get recording data
+    const wizardRecording = this.addResource(wizardSession, 'recording')
+    this.addMethod(wizardRecording, HttpMethod.GET, props.getRecordingDataLambda)
 
     // /users - User management
     const users = this.addResource(this.api.root, 'users')

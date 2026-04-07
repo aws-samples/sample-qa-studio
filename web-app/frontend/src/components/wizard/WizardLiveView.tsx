@@ -178,20 +178,6 @@ export default function WizardLiveView({
               </div>
             )}
             
-            {/* Transparent overlay to prevent user interaction */}
-            <div 
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                backgroundColor: 'transparent',
-                zIndex: 1000,
-                cursor: 'not-allowed'
-              }}
-              title="Browser is being controlled automatically. Interaction is disabled."
-            />
           </div>
         </div>
       )}

@@ -53,7 +53,7 @@ function formatTimeAgo(timestamp: string): string {
 function getStatusType(status: string) {
   switch (status) {
     case 'success': return 'success';
-    case 'error': 
+    case 'error':
     case 'failed': return 'error';
     case 'executing': return 'in-progress';
     case 'pending': return 'pending';
@@ -72,7 +72,9 @@ export default function HomeScreen() {
   const [batchExecuting, setBatchExecuting] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [flashbarItems, setFlashbarItems] = useState<any[]>([]);
-  
+  const [sortingColumn, setSortingColumn] = useState<any>({ sortingField: 'name' });
+  const [sortingDescending, setSortingDescending] = useState(false);
+
   // Get filter text from URL parameter
   const filteringText = searchParams.get('search') || '';
 
@@ -137,13 +139,13 @@ export default function HomeScreen() {
     });
 
     const results = await Promise.all(executionPromises);
-    
+
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;
 
     // Show results
     const resultItems = [];
-    
+
     if (successCount > 0) {
       resultItems.push({
         type: 'success' as const,
@@ -158,7 +160,7 @@ export default function HomeScreen() {
         .filter(r => !r.success)
         .map(r => r.usecaseName)
         .join(', ');
-      
+
       resultItems.push({
         type: 'error' as const,
         content: `Failed to start execution for ${failureCount} use case(s): ${failedUsecases}`,
@@ -214,13 +216,13 @@ export default function HomeScreen() {
     });
 
     const results = await Promise.all(deletePromises);
-    
+
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;
 
     // Show results
     const resultItems = [];
-    
+
     if (successCount > 0) {
       resultItems.push({
         type: 'success' as const,
@@ -235,7 +237,7 @@ export default function HomeScreen() {
         .filter(r => !r.success)
         .map(r => r.usecaseName)
         .join(', ');
-      
+
       resultItems.push({
         type: 'error' as const,
         content: `Failed to delete ${failureCount} use case(s): ${failedUsecases}`,
@@ -247,7 +249,7 @@ export default function HomeScreen() {
     setFlashbarItems(resultItems);
     setSelectedItems([]);
     setBatchDeleting(false);
-    
+
     // Refresh the list
     try {
       const data = await api.get('usecases');
@@ -272,21 +274,46 @@ export default function HomeScreen() {
   // Filter usecases based on search text
   const filteredUsecases = usecases.filter(usecase => {
     if (!filteringText) return true;
-    
+
     const searchText = filteringText.toLowerCase();
     const nameMatch = usecase.name?.toLowerCase().includes(searchText) || false;
     const descriptionMatch = usecase.description?.toLowerCase().includes(searchText) || false;
     const tagsMatch = usecase.tags?.some(tag => tag?.toLowerCase().includes(searchText)) || false;
     const statusMatch = usecase.last_execution_status?.toLowerCase().includes(searchText) || false;
-    
+
     return nameMatch || descriptionMatch || tagsMatch || statusMatch;
+  });
+
+  // Sort filtered usecases
+  const sortedUsecases = [...filteredUsecases].sort((a, b) => {
+    const field = sortingColumn?.sortingField;
+    if (!field) return 0;
+
+    let cmp = 0;
+    switch (field) {
+      case 'name':
+        cmp = (a.name || '').localeCompare(b.name || '');
+        break;
+      case 'last_execution_status':
+        cmp = (a.last_execution_status || '').localeCompare(b.last_execution_status || '');
+        break;
+      case 'last_execution_time':
+        cmp = (a.last_execution_time || '').localeCompare(b.last_execution_time || '');
+        break;
+      case 'active':
+        cmp = (a.active === b.active) ? 0 : a.active ? -1 : 1;
+        break;
+      default:
+        cmp = 0;
+    }
+    return sortingDescending ? -cmp : cmp;
   });
 
   return (
     <SpaceBetween direction="vertical" size="l">
       <Flashbar items={flashbarItems} />
-      
-      <Header 
+
+      <Header
         variant="h1"
         actions={
           <SpaceBetween direction="horizontal" size="xs">
@@ -332,9 +359,10 @@ export default function HomeScreen() {
       </Header>
       <Table
         columnDefinitions={[
-          { 
-            id: 'name', 
+          {
+            id: 'name',
             header: 'Name',
+            sortingField: 'name',
             minWidth: 450,
             cell: item => (
               <div>
@@ -360,15 +388,16 @@ export default function HomeScreen() {
                 : <Badge color="grey">Web</Badge>;
             }
           },
-          { 
-            id: 'last_execution_status', 
-            header: 'Last Status', 
+          {
+            id: 'last_execution_status',
+            header: 'Last Status',
+            sortingField: 'last_execution_status',
             width: 120,
             cell: item => {
               if (!item.last_execution_status) {
                 return <StatusIndicator type="stopped">Never run</StatusIndicator>;
               }
-              
+
               return (
                 <StatusIndicator type={getStatusType(item.last_execution_status)}>
                   {item.last_execution_status}
@@ -376,18 +405,19 @@ export default function HomeScreen() {
               );
             }
           },
-          { 
-            id: 'last_execution_time', 
-            header: 'Last Execution', 
+          {
+            id: 'last_execution_time',
+            header: 'Last Execution',
+            sortingField: 'last_execution_time',
             width: 120,
             cell: item => {
               if (!item.last_execution_time) {
                 return '-';
               }
-              
+
               const timeAgo = formatTimeAgo(item.last_execution_time);
               const fullDate = new Date(item.last_execution_time).toLocaleString();
-              
+
               return (
                 <span title={fullDate} style={{ fontSize: '0.9em' }}>
                   {timeAgo}
@@ -395,10 +425,11 @@ export default function HomeScreen() {
               );
             }
           },
-          { 
-            id: 'active', 
+          {
+            id: 'active',
             header: 'Active',
-            width: 100, 
+            sortingField: 'active',
+            width: 100,
             cell: item => item.active ? (
               <Badge color="green">Active</Badge>
             ) : (
@@ -406,11 +437,17 @@ export default function HomeScreen() {
             )
           }
         ]}
-        items={filteredUsecases}
+        sortingColumn={sortingColumn}
+        sortingDescending={sortingDescending}
+        onSortingChange={({ detail }) => {
+          setSortingColumn(detail.sortingColumn);
+          setSortingDescending(detail.isDescending ?? false);
+        }}
+        items={sortedUsecases}
         loading={loading}
         loadingText="Loading use cases..."
         empty={
-          filteringText 
+          filteringText
             ? `No use cases match "${filteringText}"`
             : "No use cases found"
         }

@@ -126,8 +126,12 @@ function handler(event) {
       },
       additionalBehaviors: {
         [`${props.apiEndpoint}/*`]: {
+          // CloudFront origin response timeout defaults to 30s. Bedrock calls via
+          // generate-usecase can take up to 120s. To support longer responses, increase
+          // the quota (see README step 3) then update to: readTimeout: Duration.seconds(120)
           origin: new HttpOrigin(`${ props.apiId }.execute-api.${ this.region }.amazonaws.com`, {
-            protocolPolicy: OriginProtocolPolicy.HTTPS_ONLY
+            protocolPolicy: OriginProtocolPolicy.HTTPS_ONLY,
+            readTimeout: Duration.seconds(30),
           }),
           viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           allowedMethods: AllowedMethods.ALLOW_ALL,

@@ -83,3 +83,5 @@ yarn-error.log*
 .kiro/design
 .kiro/specs
 *.egg-info
+
+nova-act-recorder.zip

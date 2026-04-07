@@ -520,6 +520,82 @@ class DynamoDBClient:
             logger.error(f"Error updating last activity for execution {execution_id}: {e}")
             return False
 
+    def update_recording_status(self, usecase_id: str, execution_id: str, status: str,
+                                recording_s3_key: str = None, error: str = None) -> bool:
+        """Update recording status and optionally recording S3 key/error on the execution record.
+
+        Args:
+            usecase_id: The usecase ID.
+            execution_id: The execution/session ID.
+            status: Recording status ('idle', 'recording', 'completed', 'error').
+            recording_s3_key: S3 object key where recording data is stored (optional).
+            error: Error message if recording failed (optional).
+
+        Returns:
+            True if update succeeded, False otherwise.
+        """
+        try:
+            update_expression = "SET #rs = :rs"
+            expression_attribute_names = {"#rs": "recording_status"}
+            expression_attribute_values = {":rs": status}
+
+            if recording_s3_key is not None:
+                update_expression += ", recording_s3_key = :rd"
+                expression_attribute_values[":rd"] = recording_s3_key
+
+            if error is not None:
+                update_expression += ", recording_error = :re"
+                expression_attribute_values[":re"] = error
+
+            self.table.update_item(
+                Key={
+                    'pk': f'USECASE_EXECUTION#{usecase_id}',
+                    'sk': f'EXECUTION#{execution_id}'
+                },
+                UpdateExpression=update_expression,
+                ExpressionAttributeNames=expression_attribute_names,
+                ExpressionAttributeValues=expression_attribute_values
+            )
+
+            logger.info(f"Updated recording status to '{status}' for execution {execution_id}")
+            return True
+
+        except ClientError as e:
+            logger.error(f"Error updating recording status for execution {execution_id}: {e}")
+            return False
+
+    def get_recording_data(self, usecase_id: str, execution_id: str) -> dict:
+        """Retrieve recording_status, recording_s3_key, and recording_error fields from the execution record.
+
+        Args:
+            usecase_id: The usecase ID.
+            execution_id: The execution/session ID.
+
+        Returns:
+            dict with 'recording_status', 'recording_s3_key', and 'recording_error' keys (values may be None).
+        """
+        try:
+            response = self.table.get_item(
+                Key={
+                    'pk': f'USECASE_EXECUTION#{usecase_id}',
+                    'sk': f'EXECUTION#{execution_id}'
+                },
+                ProjectionExpression="recording_status, recording_s3_key, recording_error"
+            )
+
+            item = response.get('Item', {})
+            return {
+                'recording_status': item.get('recording_status'),
+                'recording_s3_key': item.get('recording_s3_key'),
+                'recording_error': item.get('recording_error')
+            }
+
+        except ClientError as e:
+            logger.error(f"Error getting recording data for execution {execution_id}: {e}")
+            return {'recording_status': None, 'recording_s3_key': None, 'recording_error': None}
+
+
+
     def get_execution_step(self, execution_id: str, step_id: str) -> Optional[ExecutionStep]:
         """Get a single execution step by ID"""
         try:
