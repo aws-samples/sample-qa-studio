@@ -8,24 +8,39 @@ export interface RemoteBrowserProps {
 export const RemoteBrowser = (props: RemoteBrowserProps) => {
   const [liveStreamUrl, setLiveStreamUrl] = useState('');
   const [viewer, setViewer] = useState<LiveViewer | undefined>(undefined);
-  const [size, setSize] = useState({ width: 1480, height: 860 });
-  const containerRef = useRef<HTMLDivElement>(null);
-  
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     setLiveStreamUrl(props.presignedUrl)
-    console.log(props.presignedUrl)
   }, [])
 
   useEffect(() => {
-    if (containerRef.current) {
-      const rect = containerRef.current?.getBoundingClientRect();
-      // setSize({ width: rect.width, height: rect.height });
+    if (!wrapperRef.current) return;
+
+    // Observe the fixed-size wrapper (not the DCV container which expands to canvas size).
+    // The wrapper inherits the viewport dimensions from WizardLiveView (e.g. 600px height).
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setSize({ width, height });
+        }
+      }
+    });
+    observer.observe(wrapperRef.current);
+
+    const rect = wrapperRef.current.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      setSize({ width: rect.width, height: rect.height });
     }
-  }, [containerRef.current]);
+
+    return () => observer.disconnect();
+  }, [wrapperRef.current]);
 
   useEffect(() => {
     (async () => {
-      console.log('Setting up live stream viewer...');
       try {
         const viewer = new LiveViewer(liveStreamUrl);
         setViewer(viewer);
@@ -41,10 +56,12 @@ export const RemoteBrowser = (props: RemoteBrowserProps) => {
       viewer.setDisplaySize(size.width, size.height);
     }
   }, [JSON.stringify(size), viewer]);
-  
+
   return (
-    <div ref={containerRef} className="RemoteBrowserContainer">
-      <div id="dcv-display"></div>
+    <div ref={wrapperRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+      <div className="RemoteBrowserContainer">
+        <div id="dcv-display"></div>
+      </div>
     </div>
   );
 };

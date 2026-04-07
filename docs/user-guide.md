@@ -89,6 +89,8 @@ Describe what you want to test in plain English, and AI generates the test steps
 
 You provide a title, starting URL (for web) or app identifiers (for mobile), and your description. The system generates a complete use case that you can review and edit before saving.
 
+Optionally, you can start a browser recording session to capture your interactions with the target application. The recording is sent alongside your text description to produce more accurate test steps. During recording, you can use Ctrl+C to extract a value into a variable and Ctrl+V to paste it elsewhere — the generated test case will automatically include the correct `retrieve_value` and variable-referencing steps. See [Prompting Best Practices](prompting-best-practices.md#browser-recording-with-variable-capture) for details.
+
 #### Clone from Use Case
 Duplicate an existing use case, including all mobile configuration if applicable. Useful when you want a variation of a test you've already built.
 

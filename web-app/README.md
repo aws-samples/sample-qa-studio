@@ -56,7 +56,7 @@ Serverless architecture on AWS:
 - AWS CLI configured with appropriate permissions: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
 - Node.js 18+ and npm: https://nodejs.org/en/download
 - Python 3.11+: https://www.python.org/downloads/
-- Docker or Podman
+- Docker, OrbStack, or Podman
 
 ### Setup
 
@@ -64,7 +64,7 @@ Serverless architecture on AWS:
 
 ```bash
 git clone git@github.com:amazon-agi-labs/solution-nova-act-qa-studio.git
-cd solution-nova-act-qa-studio
+cd solution-nova-act-qa-studio/web-app
 npm install
 ```
 
@@ -86,9 +86,67 @@ Update the admin email (required for receiving your login credentials):
 
 > `adminEmail` is the only required configuration option. See [Configuration →](docs/configuration.md) for the full property reference, VPC setup, and advanced options.
 
+> The default Bedrock model for AI test generation is `us.amazon.nova-2-lite-v1:0`. You can change this by setting `bedrockModelId` in your configuration. Any Bedrock model that supports the Converse API with tool use can be used. See [Configuration → Bedrock Model Selection](docs/configuration.md#bedrock-model-selection) for details.
+
 > ⚠️ If you set a `baseName` in your configuration, make sure it is globally unique. Cognito user pool domain names are derived from this value and must be unique across all AWS accounts. Duplicate names will cause deployment failures.
 
-#### 3. Deploy to AWS:
+#### 3. (Recommended) Increase service quotas for longer AI generation responses:
+
+The generate-usecase endpoint calls Amazon Bedrock to create test steps from natural language descriptions. These calls can take up to 2 minutes for complex user journeys. Without the quota increases below, the deployment works fine but generation requests that exceed the default timeouts (29s for API Gateway, 30s for CloudFront) will return a timeout error.
+
+```bash
+# API Gateway: increase integration timeout from 29s to 120s (quota code L-E5AE38E3)
+aws service-quotas request-service-quota-increase \
+  --service-code apigateway \
+  --quota-code L-E5AE38E3 \
+  --desired-value 120000
+
+# CloudFront: increase origin response timeout from 30s to 120s (quota code L-AECE9FA7)
+aws service-quotas request-service-quota-increase \
+  --service-code cloudfront \
+  --quota-code L-AECE9FA7 \
+  --desired-value 120
+```
+
+> These requests may auto-approve within seconds or require manual review depending on your account. Check status with:
+> ```bash
+> aws service-quotas list-requested-service-quota-change-history-by-quota \
+>   --service-code apigateway --quota-code L-E5AE38E3 \
+>   --query "RequestedQuotas[0].Status" --output text
+>
+> aws service-quotas list-requested-service-quota-change-history-by-quota \
+>   --service-code cloudfront --quota-code L-AECE9FA7 \
+>   --query "RequestedQuotas[0].Status" --output text
+> ```
+
+Once both quotas are granted, update the CDK code to use the higher timeouts. The relevant locations have comments pointing here:
+
+- `lib/api-stack.ts` — API Gateway integration timeout for `/generate-usecase`
+- `lib/lambda-stack.ts` — Lambda function timeout for `generate_usecase`
+- `lib/frontend-stack.ts` — CloudFront origin `readTimeout`
+
+#### 4. Ensure Docker is running:
+
+The deployment builds container images, so Docker (or Podman) must be running before you deploy.
+
+```bash
+docker info
+```
+
+If Docker is not running, start it:
+
+```bash
+# macOS (Docker Desktop)
+open -a Docker
+
+# macOS (OrbStack)
+open -a OrbStack
+
+# Linux
+sudo systemctl start docker
+```
+
+#### 5. Deploy to AWS:
 
 > ⚠️ The deployment must be executed from an ARM64 environment (e.g., an ARM-based EC2 instance, Apple Silicon Mac, or Graviton-based Cloud9). Deploying from an x86/amd64 environment will cause build failures.
 
@@ -100,7 +158,7 @@ This builds all Lambda functions, deploys all infrastructure stacks, builds and 
 
 > Take note of the `frontend.CloudFrontDistributionDomain` CloudFormation output. This is the URL for the web application.
 
-#### 4. Access the application:
+#### 6. Access the application:
    - Check your email for a temporary password from no-reply@verificationemail.com
    - Open the CloudFront distribution URL from the deployment output
    - Sign in with your admin email and temporary password

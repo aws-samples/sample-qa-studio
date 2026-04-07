@@ -233,7 +233,7 @@ qa-studio run --suite-id suite-456 --var env=staging --var user=testuser
 qa-studio run --usecase-id test-123 --local-only
 
 # Run with custom region and model
-qa-studio run --usecase-id test-123 --region us-west-2 --model-id anthropic.claude-3-5-sonnet-20240620-v1:0
+qa-studio run --usecase-id test-123 --region us-west-2 --model-id us.amazon.nova-2-lite-v1:0
 
 # Run with custom HTTP headers
 qa-studio run --usecase-id test-123 --header "X-Api-Key=my-key" --header "X-Custom-Header=value"

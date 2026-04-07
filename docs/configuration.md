@@ -16,7 +16,7 @@ cp configuration.json.sample configuration.json
 | `apiDeploymentStage` | string | No | `"api"` | API Gateway deployment stage name |
 | `enabledRegions` | string[] | No | `["us-east-1", "us-west-2", "ap-southeast-2", "eu-central-1"]` | AWS regions enabled for S3 replication |
 | `defaultRegion` | string | No | `"us-east-1"` | Default AWS region (must be in `enabledRegions`) |
-| `bedrockModelId` | string | No | `"us.anthropic.claude-3-5-sonnet-20241022-v2:0"` | Bedrock model ID for AI-powered test generation |
+| `bedrockModelId` | string | No | `"us.amazon.nova-2-lite-v1:0"` | Bedrock model ID for AI-powered test generation. See [Bedrock Model Selection](#bedrock-model-selection). |
 | `vpcId` | string \| null | No | `null` | Existing VPC ID to deploy into (e.g. `"vpc-abc123"`) |
 | `workerSecurityGroupId` | string \| null | No | `null` | Existing security group for ECS workers (e.g. `"sg-abc123"`) |
 | `createVpcEndpoints` | boolean | No | `false` | Create VPC endpoints for AWS services when using existing VPC |
@@ -46,7 +46,7 @@ cp configuration.json.sample configuration.json
   "baseName": "qa-studio",
   "apiEndpoint": "api",
   "apiDeploymentStage": "api",
-  "bedrockModelId": "eu.anthropic.claude-sonnet-4-6",
+  "bedrockModelId": "us.amazon.nova-2-lite-v1:0",
   "enabledRegions": ["eu-central-1"],
   "defaultRegion": "eu-central-1",
   "useNovaActGa": true,
@@ -56,6 +56,22 @@ cp configuration.json.sample configuration.json
   "deviceFarmRegion": "us-west-2"
 }
 ```
+
+## Bedrock Model Selection
+
+The `bedrockModelId` setting controls which Amazon Bedrock model is used by the "Create from User Journey" wizard to generate test steps from natural language descriptions. The default is `us.amazon.nova-2-lite-v1:0` (Amazon Nova 2 Lite).
+
+Any Bedrock model that supports the [Converse API](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html) with tool use can be used. The model must be enabled in your AWS account and available in your deployment region.
+
+To change the model, set `bedrockModelId` in your `configuration.json`:
+
+```json
+{
+  "bedrockModelId": "us.amazon.nova-2-lite-v1:0"
+}
+```
+
+For Nova 2 models, extended thinking is automatically enabled with low reasoning effort to improve generation quality.
 
 ## VPC Configuration
 

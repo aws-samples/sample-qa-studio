@@ -1,6 +1,7 @@
 {
   "adminEmail": "your-email@example.com",
   "baseName": "qa-studio",
+  "bedrockModelId": "us.amazon.nova-2-lite-v1:0",
   "apiEndpoint": "api",
   "apiDeploymentStage": "api",
   "enabledRegions": [

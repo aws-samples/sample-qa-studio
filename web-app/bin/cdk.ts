@@ -82,6 +82,7 @@ const lambdaStack = new NovaActQAStudioLambdaStack(app, 'lambdas', {
   ecsClusterArn: workerStack.cluster.clusterArn,
   recordingQueueUrl: workerStack.recordingQueueUrl,
   recordingQueueArn: workerStack.recordingQueueArn,
+  wizardEventBusName: workerStack.wizardEventBus.eventBusName,
   env: stackEnv,
 })
 
@@ -113,6 +114,8 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   rejectWizardStepLambda: lambdaStack.rejectWizardStepLambda,
   restartWizardLambda: workerStack.restartWizardLambda,
   terminateWizardLambda: workerStack.terminateWizardLambda,
+  sendRecordingCommandLambda: lambdaStack.sendRecordingCommandLambda,
+  getRecordingDataLambda: lambdaStack.getRecordingDataLambda,
   env: stackEnv,
 })
 

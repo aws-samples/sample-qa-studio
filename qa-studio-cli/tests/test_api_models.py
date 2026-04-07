@@ -68,14 +68,14 @@ class TestUsecaseModel:
             "tags": ["smoke"],
             "createdAt": "2024-01-01T00:00:00Z",
             "executingRegion": "us-east-1",
-            "modelId": "anthropic.claude-v2",
+            "modelId": "us.amazon.nova-2-lite-v1:0",
         }
         model = UsecaseModel(**data)
         assert model.id == "uc-123"
         assert model.name == "Login Test"
         assert model.starting_url == "https://example.com"
         assert model.executing_region == "us-east-1"
-        assert model.model_id == "anthropic.claude-v2"
+        assert model.model_id == "us.amazon.nova-2-lite-v1:0"
         assert model.active is True
         assert model.tags == ["smoke"]
 
@@ -85,7 +85,7 @@ class TestUsecaseModel:
             "name": "Signup Test",
             "starting_url": "https://example.com/signup",
             "executing_region": "eu-west-1",
-            "model_id": "anthropic.claude-v3",
+            "model_id": "us.amazon.nova-2-lite-v1:0",
         }
         model = UsecaseModel(**data)
         assert model.id == "uc-456"

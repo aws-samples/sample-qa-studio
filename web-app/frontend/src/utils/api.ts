@@ -126,12 +126,67 @@ export const hooksApi = {
   create: (usecaseId: string, hooks: { before_script: string, after_script: string }) => api.post(`usecase/${usecaseId}/hooks`, hooks),
 };
 
+// Recording data interfaces (matching stripped NovaActRecorder extension output)
+export interface Assertion {
+  id: string;
+  text: string;
+  captureScreenshot: boolean;
+}
+
+export interface ActionEntry {
+  id: string;
+  type: 'click' | 'dblclick' | 'contextmenu' | 'type' | 'paste' | 'change' | 'pointer' | 'scroll' | 'navigation' | 'tab_switch' | 'intent' | 'extract_variable';
+  prompt: string;
+  url: string;
+  timestamp: number;
+  isIntent: boolean;
+  assertions: Assertion[];
+  variableName?: string;
+  selectedText?: string;
+  sourceVariableName?: string;
+}
+
+export interface RecordingSession {
+  id: string;
+  startedAt: number;
+  stoppedAt?: number;
+  tabId: number;
+  startingUrl: string;
+  name?: string;
+  actions: ActionEntry[];
+}
+
+export interface RecordingData {
+  type: string;
+  version: string;
+  data: {
+    session: RecordingSession;
+    event_count: number;
+    duration_seconds?: number;
+  };
+  captured_at: string;
+  screenshot_manifest_key?: string;
+  screenshot_s3_prefix?: string;
+}
+
+export interface RecordingCommandResponse {
+  status: 'command_sent';
+  commandId: string;
+}
+
+export interface RecordingDataResponse {
+  status: 'available' | 'not_available' | 'error';
+  recording_data: RecordingData | null;
+  error?: string | null;
+}
+
 // User Journey Wizard API interfaces
 export interface GenerateUsecaseRequest {
   title: string;
   starting_url: string;
   userJourney: string;
   region: string;
+  recording_data?: RecordingData;
 }
 
 export interface GenerateUsecaseResponse {
@@ -178,8 +233,8 @@ export const wizardApi = {
       throw errorManager.createError('validation', 'Starting URL is required');
     }
 
-    if (!request.userJourney?.trim()) {
-      throw errorManager.createError('validation', 'User journey description is required');
+    if (!request.userJourney?.trim() && !request.recording_data) {
+      throw errorManager.createError('validation', 'User journey description is required when no recording data is provided');
     }
 
     if (!request.region?.trim()) {
@@ -199,14 +254,17 @@ export const wizardApi = {
       throw errorManager.createError('validation', 'Title must be 200 characters or less');
     }
 
-    if (request.userJourney.length < 50) {
-      throw errorManager.createError('validation',
-        'User journey description must be at least 50 characters');
-    }
+    // Only validate user journey length if it's actually provided
+    if (request.userJourney?.trim()) {
+      if (request.userJourney.length < 50) {
+        throw errorManager.createError('validation',
+          'User journey description must be at least 50 characters');
+      }
 
-    if (request.userJourney.length > 2000) {
-      throw errorManager.createError('validation',
-        'User journey description must be 2000 characters or less');
+      if (request.userJourney.length > 2000) {
+        throw errorManager.createError('validation',
+          'User journey description must be 2000 characters or less');
+      }
     }
 
     try {
@@ -243,7 +301,26 @@ export const wizardApi = {
         { details: (error as Error).message }
       );
     }
-  }
+  },
+
+  sendRecordingCommand: async (
+    sessionId: string,
+    action: 'recording_start' | 'recording_stop'
+  ): Promise<RecordingCommandResponse> => {
+    return apiRequest(`wizard/${encodeURIComponent(sessionId)}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
+  },
+
+  getRecordingData: async (
+    sessionId: string,
+    usecaseId: string
+  ): Promise<RecordingDataResponse> => {
+    return apiRequest(
+      `wizard/${encodeURIComponent(sessionId)}/recording?usecaseId=${encodeURIComponent(usecaseId)}`
+    );
+  },
 };
 
 export const exportImportApi = {
