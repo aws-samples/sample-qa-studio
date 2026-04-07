@@ -188,7 +188,7 @@ qa-studio run --usecase-id test-123 --local-only
 # Run with custom region and model
 qa-studio run --usecase-id test-123 \
   --region us-west-2 \
-  --model-id anthropic.claude-3-5-sonnet-20240620-v1:0
+  --model-id us.amazon.nova-2-lite-v1:0
 
 # Run a mobile test (auto-detects platform from use case config)
 qa-studio run --usecase-id mobile-test-123

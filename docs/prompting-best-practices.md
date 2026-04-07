@@ -36,6 +36,23 @@ The "Create from User Journey" wizard generates test steps automatically from a 
 
 To understand how the wizard interprets your input and what rules it follows when generating steps, see the [wizard system prompt](../lambdas/endpoints/generate_usecase.py) in the `create_prompt` function.
 
+### Browser Recording with Variable Capture
+
+When you use the optional browser recording feature, the recorded interaction sequence is included as supplementary context alongside your text description. The recording captures each action you performed (clicks, typing, navigation) and annotates variable operations automatically:
+
+- **Extract variable** (Ctrl+C in the recorder): Highlighted text is captured with a variable name. The prompt annotates these as `[captures → {{var_1}}, value: "..."]` and instructs the model to generate a `retrieve_value` step with the corresponding `capture_variable`.
+- **Paste variable** (Ctrl+V in the recorder): Pasting a previously extracted variable is annotated as `[uses → {{var_1}}]`. The model generates a step that references the variable using `{{VariableName}}` syntax. This is typically a `navigation` step (e.g., "type {{var_1}} into the search field"), but the model uses its judgment when the UI requires a different interaction — for example, selecting a value from a date picker or dropdown rather than typing directly.
+
+This means you can extract a value on one page (e.g., a product price), navigate elsewhere, and use it in a form field — the generated test case will automatically include the correct `retrieve_value` and variable-referencing steps without manual editing.
+
+The model can also proactively generate additional `retrieve_value` steps beyond what you explicitly recorded, when it identifies values in the journey that benefit from capture and reuse (e.g., a generated ID or a computed total that needs verification after a state change).
+
+When variable actions are present in the recording, the prompt also includes explicit mapping instructions that tell the model to:
+1. Map each `extract_variable` to a `retrieve_value` step
+2. Map each `paste` with a source variable to a step using `{{VariableName}}`, adapting the interaction to the UI context
+3. Ensure every captured variable is used in at least one later step
+4. Keep captured variables separate from the static `variables` array (captured variables are runtime-resolved)
+
 ## Quick Reference
 
 | Principle | Rule of Thumb |

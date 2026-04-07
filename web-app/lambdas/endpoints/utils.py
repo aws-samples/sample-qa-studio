@@ -515,15 +515,6 @@ def validate_user_journey(journey):
         errors.append('User journey description should contain more detailed steps')
         return '', errors
     
-    # Check for action words
-    action_words = ['click', 'enter', 'navigate', 'select', 'submit', 'verify', 
-                   'check', 'fill', 'choose', 'confirm', 'type', 'press', 'scroll', 'hover']
-    has_actions = any(action in sanitized.lower() for action in action_words)
-    
-    if not has_actions:
-        errors.append('User journey should include specific actions (click, enter, navigate, etc.)')
-        return '', errors
-    
     return sanitized, errors
 
 def contains_xss(text):

@@ -1,0 +1,751 @@
+/* Nova Act Recorder - Dark Theme (matching QA Studio) */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 100%;
+  min-height: 100vh;
+  max-height: none;
+  font-family: 'Open Sans', 'Helvetica Neue', Roboto, Arial, sans-serif;
+  font-size: 14px;
+  color: #ebebf0;
+  background: #161d26;
+  overflow-y: auto;
+}
+
+/* ─── Header ─── */
+
+#header {
+  padding: 12px 16px 10px;
+  background: #161d26;
+  border-bottom: 1px solid #2d3a4d;
+}
+
+#header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+#recording-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#btn-toggle-recording {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #42b4ff;
+  color: #161d26;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#btn-toggle-recording:hover {
+  background: #69c5ff;
+}
+
+#btn-toggle-recording.recording {
+  background: #d91515;
+  color: #fff;
+}
+
+#btn-toggle-recording.recording:hover {
+  background: #ff4444;
+}
+
+.status-badge {
+  font-size: 12px;
+  color: #ff6b6b;
+  font-weight: 700;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ─── Tab Navigation ─── */
+
+#tab-nav {
+  display: flex;
+  background: #161d26;
+  border-bottom: 2px solid #2d3a4d;
+  padding: 0 12px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 4px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: none;
+  font-size: 14px;
+  font-weight: 400;
+  color: #5f6b7a;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -2px;
+}
+
+.tab-btn:hover {
+  color: #dedee3;
+}
+
+.tab-btn.active {
+  color: #42b4ff;
+  border-bottom-color: #42b4ff;
+  font-weight: 700;
+}
+
+/* ─── Tab Panels ─── */
+
+.tab-panel {
+  display: none;
+  padding: 16px;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.tab-panel h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: #ffffff;
+  letter-spacing: -0.005em;
+}
+
+/* ─── Action Log ─── */
+
+#action-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+#action-list {
+  list-style: none;
+  max-height: none;
+  overflow-y: auto;
+  border: 1px solid #2d3a4d;
+  border-radius: 16px;
+  background: #232b37;
+}
+
+#action-list:empty {
+  display: none;
+}
+
+.empty-msg {
+  color: #5f6b7a;
+  font-style: italic;
+  text-align: center;
+  padding: 24px 16px;
+}
+
+.hint-text {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #5f6b7a;
+  font-style: normal;
+}
+
+/* ─── Action Entry ─── */
+
+.action-entry {
+  padding: 10px 12px;
+  border-bottom: 1px solid #2d3a4d;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: grab;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.action-entry:last-child {
+  border-bottom: none;
+}
+
+.action-entry:hover {
+  background: #1e2733;
+}
+
+.action-entry.dragging {
+  opacity: 0.4;
+  background: #1a2a3a;
+}
+
+.action-entry.drag-over {
+  border-top: 2px solid #42b4ff;
+}
+
+.action-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: #5f6b7a;
+}
+
+.action-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.action-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.action-index {
+  font-size: 12px;
+  color: #5f6b7a;
+  margin-right: 4px;
+}
+
+.action-prompt {
+  font-size: 14px;
+  color: #dedee3;
+  word-break: break-word;
+  cursor: text;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.action-prompt:hover {
+  border-color: #2d3a4d;
+}
+
+.action-prompt.editing {
+  border-color: #42b4ff;
+  background: #1a2a3a;
+  color: #ebebf0;
+  outline: none;
+}
+
+.action-controls {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.action-entry:hover .action-controls {
+  opacity: 1;
+}
+
+.btn-icon-only {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 3px;
+  border-radius: 4px;
+  line-height: 1;
+  color: #5f6b7a;
+}
+
+.btn-icon-only svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.btn-icon-only:hover {
+  background: #2d3a4d;
+}
+
+.btn-icon-only.btn-delete:hover {
+  background: #3a1a1a;
+  color: #ff6b6b;
+}
+
+/* ─── Visual Distinction: Extract Variable Steps ─── */
+
+.action-entry.extract-variable {
+  background: #1a2a3a;
+  border-left: 3px solid #42b4ff;
+}
+
+.action-entry.extract-variable:hover {
+  background: #1e3044;
+}
+
+.variable-badge {
+  font-size: 11px;
+  background: #42b4ff;
+  color: #161d26;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+  font-family: Monaco, Menlo, Consolas, 'Courier Prime', Courier, 'Courier New', monospace;
+}
+
+.variable-badge.variable-ref {
+  background: #9b59b6;
+  color: #fff;
+}
+
+/* ─── Visual Distinction: Intent Prompts ─── */
+
+.action-entry.intent {
+  background: #2a1f3a;
+  border-left: 3px solid #9b59b6;
+}
+
+.action-entry.intent:hover {
+  background: #332647;
+}
+
+/* ─── Visual Distinction: Assertions ─── */
+
+.assertion-list {
+  margin-top: 4px;
+  padding-left: 30px;
+}
+
+.assertion-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin-top: 4px;
+  background: #1a2e1a;
+  border-left: 2px solid #037f0c;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #dedee3;
+}
+
+.assertion-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+  color: #037f0c;
+}
+
+.assertion-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.assertion-result-fail .assertion-icon {
+  color: #ff6b6b;
+}
+
+.assertion-text {
+  flex: 1;
+  word-break: break-word;
+}
+
+.assertion-result-pass {
+  background: #1a2e1a;
+  border-left-color: #037f0c;
+}
+
+.assertion-result-fail {
+  background: #3a1a1a;
+  border-left-color: #d91515;
+}
+
+/* ─── Buttons ─── */
+
+button {
+  cursor: pointer;
+  padding: 6px 14px;
+  border: 2px solid #42b4ff;
+  border-radius: 8px;
+  background: transparent;
+  color: #42b4ff;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.15s, color 0.15s;
+}
+
+button:hover {
+  background: #1a2a3a;
+  color: #69c5ff;
+  border-color: #69c5ff;
+}
+
+.btn-primary {
+  background: #42b4ff;
+  color: #161d26;
+  border-color: #42b4ff;
+}
+
+.btn-primary:hover {
+  background: #69c5ff;
+  color: #161d26;
+  border-color: #69c5ff;
+}
+
+.btn-danger {
+  background: transparent;
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+.btn-danger:hover {
+  background: #3a1a1a;
+  color: #ff8888;
+  border-color: #ff8888;
+}
+
+.btn-small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.btn-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-svg {
+  display: flex;
+  width: 12px;
+  height: 12px;
+}
+
+.btn-svg svg {
+  width: 12px;
+  height: 12px;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+}
+
+.btn-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ─── Export Panel ─── */
+
+.export-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+#zip-status {
+  margin-top: 8px;
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #1a2e1a;
+  color: #037f0c;
+  font-weight: 700;
+}
+
+#zip-status.error {
+  background: #1a2a3a;
+  color: #5f6b7a;
+}
+
+#export-output {
+  width: 100%;
+  height: 420px;
+  margin-top: 8px;
+  font-family: Monaco, Menlo, Consolas, 'Courier Prime', Courier, 'Courier New', monospace;
+  font-size: 12px;
+  padding: 10px;
+  border: 1px solid #2d3a4d;
+  border-radius: 8px;
+  resize: vertical;
+  background: #0d1117;
+  color: #dedee3;
+}
+
+.export-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.confirmation {
+  font-size: 12px;
+  color: #037f0c;
+  font-weight: 700;
+}
+
+/* ─── Replay Panel ─── */
+
+#replay-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+#replay-summary {
+  margin-top: 10px;
+  padding: 10px;
+  background: #232b37;
+  border: 1px solid #2d3a4d;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+/* ─── Session History ─── */
+
+#session-list {
+  list-style: none;
+}
+
+.session-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #2d3a4d;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: #232b37;
+}
+
+.session-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-url {
+  font-size: 12px;
+  color: #dedee3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-meta {
+  font-size: 12px;
+  color: #5f6b7a;
+  margin-top: 2px;
+}
+
+.session-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sessions-note {
+  font-size: 12px;
+  color: #879596;
+  background: #1a2a3a;
+  border: 1px solid #2d3a4d;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+/* ─── Scrollbar ─── */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2d3a4d;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5f6b7a;
+}
+
+/* ─── Action Log Toolbar ─── */
+
+#action-log-toolbar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* ─── Modal Overlay ─── */
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal.hidden {
+  display: none !important;
+}
+
+.modal-content {
+  background: #232b37;
+  border: 1px solid #2d3a4d;
+  border-radius: 16px;
+  padding: 20px;
+  width: 340px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.modal-content h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: #ffffff;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.error-text {
+  color: #ff6b6b;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* ─── Intent Prompt Input ─── */
+
+#intent-text-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #2d3a4d;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  background: #161d26;
+  color: #ebebf0;
+  transition: border-color 0.15s;
+}
+
+#intent-text-input:focus {
+  border-color: #42b4ff;
+  outline: none;
+  box-shadow: 0 0 0 1px #42b4ff;
+}
+
+/* ─── Assertion Input ─── */
+
+#assertion-text-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #2d3a4d;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  background: #161d26;
+  color: #ebebf0;
+  transition: border-color 0.15s;
+}
+
+#assertion-text-input:focus {
+  border-color: #42b4ff;
+  outline: none;
+  box-shadow: 0 0 0 1px #42b4ff;
+}
+
+/* ─── Action Menu (context menu per action) ─── */
+
+.action-menu {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.action-menu .btn-icon-only {
+  font-size: 12px;
+  padding: 2px 3px;
+}
+
+/* ─── Assertion inline edit/delete ─── */
+
+.assertion-controls {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.assertion-item:hover .assertion-controls {
+  opacity: 1;
+}
+
+.assertion-controls .btn-icon-only {
+  font-size: 11px;
+  padding: 1px 3px;
+}
+
+/* ─── Expand button for collapsed intents ─── */
+
+.btn-expand {
+  font-size: 12px;
+  padding: 2px 8px;
+  margin-top: 4px;
+  background: #2a1f3a;
+  border-color: #9b59b6;
+  color: #9b59b6;
+}
+
+.btn-expand:hover {
+  background: #332647;
+  color: #b87dd8;
+  border-color: #b87dd8;
+}
+
+.collapsed-count {
+  font-size: 12px;
+  color: #5f6b7a;
+  margin-left: 4px;
+}

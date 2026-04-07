@@ -19,8 +19,3 @@
 }
 
 /* Let DCV SDK handle canvas sizing naturally */
-[data-dcv-container] #dcv-display canvas {
-  max-width: 100% !important;
-  max-height: 100% !important;
-  object-fit: contain !important;
-}

@@ -546,7 +546,7 @@ class TestSuiteRunCommand:
                 "--var", "USER=admin",
                 "--var", "PASS=secret",
                 "--region", "eu-west-1",
-                "--model-id", "anthropic.claude-v3",
+                "--model-id", "us.amazon.nova-2-lite-v1:0",
             ],
         )
 
@@ -556,7 +556,7 @@ class TestSuiteRunCommand:
         overrides = call_body["overrides"]
         assert overrides["base_url"] == "https://staging.example.com"
         assert overrides["region"] == "eu-west-1"
-        assert overrides["model_id"] == "anthropic.claude-v3"
+        assert overrides["model_id"] == "us.amazon.nova-2-lite-v1:0"
         assert overrides["variables"]["USER"] == "admin"
         assert overrides["variables"]["PASS"] == "secret"
 

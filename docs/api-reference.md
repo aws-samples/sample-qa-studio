@@ -1110,7 +1110,7 @@ Create a suite execution record and execution records for all usecases in a test
     "api_key": "secret123"
   },
   "region": "us-east-1",
-  "model_id": "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+  "model_id": "us.amazon.nova-2-lite-v1:0"
 }
 ```
 
@@ -1198,7 +1198,7 @@ curl -X POST \
       "api_key": "prod_key_123"
     },
     "region": "us-west-2",
-    "model_id": "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+    "model_id": "us.amazon.nova-2-lite-v1:0"
   }'
 ```
 
@@ -1220,7 +1220,7 @@ response = requests.post(
             'api_key': 'prod_key_123'
         },
         'region': 'us-west-2',
-        'model_id': 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+        'model_id': 'us.amazon.nova-2-lite-v1:0'
     }
 )
 
@@ -1250,7 +1250,7 @@ const response = await fetch(
         api_key: 'prod_key_123'
       },
       region: 'us-west-2',
-      model_id: 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+      model_id: 'us.amazon.nova-2-lite-v1:0'
     })
   }
 );

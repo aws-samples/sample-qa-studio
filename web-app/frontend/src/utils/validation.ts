@@ -336,16 +336,6 @@ export const WIZARD_FIELD_CONFIGS: Record<string, FieldValidationConfig> = {
           return 'User journey should contain more detailed steps';
         }
         
-        // Check for action words that indicate a good user journey
-        const actionWords = ['click', 'enter', 'navigate', 'select', 'submit', 'verify', 'check', 'fill', 'choose', 'confirm'];
-        const hasActions = actionWords.some(word => 
-          value.toLowerCase().includes(word)
-        );
-        
-        if (!hasActions) {
-          return 'User journey should include specific actions (click, enter, navigate, etc.)';
-        }
-        
         return null;
       }
     },

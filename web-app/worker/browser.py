@@ -195,12 +195,14 @@ def delete_browser(browser_id: str, region: str):
   )
 
 
-def start_browser(browser_id: str, execution_id: str, region: str):
+def start_browser(browser_id: str, execution_id: str, region: str, extensions: list = None):
   browser_client = BrowserClient(region)
-  session_id = browser_client.start(
-    identifier=browser_id,
-    name=execution_id
-    # session_timeout_seconds=100 #  The timeout for the session in seconds. Default to 3600.
-  )
+  start_kwargs = {
+    'identifier': browser_id,
+    'name': execution_id,
+  }
+  if extensions:
+    start_kwargs['extensions'] = extensions
+  session_id = browser_client.start(**start_kwargs)
 
   return browser_client

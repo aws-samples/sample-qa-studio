@@ -3,6 +3,6 @@ nova-act==3.1.157.0
 Appium-Python-Client~=4.0.0
 pydantic-settings~=2.13.0
 requests~=2.32.5
-bedrock_agentcore==1.0.5
+bedrock_agentcore>=1.4.0
 pytest>=7.0.0
 mypy-boto3-devicefarm

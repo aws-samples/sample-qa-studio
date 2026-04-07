@@ -22,6 +22,7 @@ interface NovaActQAStudioLambdaStackCreateProps extends NovaActQAStudioBaseStack
   ecsClusterArn: string
   recordingQueueUrl: string
   recordingQueueArn: string
+  wizardEventBusName: string
 }
 
 /**
@@ -156,6 +157,10 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly getScheduleLambda: Function
   public readonly deleteScheduleLambda: Function
 
+  // Browser Recording Lambdas
+  public readonly sendRecordingCommandLambda: Function
+  public readonly getRecordingDataLambda: Function
+
   constructor(scope: Construct, id: string, props: NovaActQAStudioLambdaStackCreateProps) {
     super(scope, id, props);
 
@@ -218,10 +223,15 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.generateUsecaseLambda = this.createPythonLambda({
       memorySize: 512,
       path: 'generate_usecase',
-      timeout: cdk.Duration.seconds(60),
+      // Bedrock calls can take up to 120s for complex user journeys. The Lambda timeout
+      // should match the API Gateway integration timeout. Default APIGW integration timeout
+      // is 29s. If you increase the APIGW quota (see README step 3), update this to:
+      // cdk.Duration.seconds(120)
+      timeout: cdk.Duration.seconds(29),
       environment: {
         TABLE_NAME: props.table.tableName,
-        BEDROCK_MODEL_ID: props.bedrockModelId || 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
+        BEDROCK_MODEL_ID: props.bedrockModelId,
+        BUCKET_NAME: props.artefactsBucket.bucketName
       }
     })
 
@@ -919,6 +929,24 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       ]
     }));
 
+    // ========== Browser Recording Lambdas ==========
+
+    this.sendRecordingCommandLambda = this.createPythonLambda({
+      path: 'send_recording_command',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        WIZARD_EVENT_BUS_NAME: props.wizardEventBusName,
+      }
+    });
+
+    this.getRecordingDataLambda = this.createPythonLambda({
+      path: 'get_recording_data',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName,
+      }
+    });
+
     // ========== IAM Permissions ==========
 
     // Table Read Permissions
@@ -952,7 +980,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.generateSuiteArtifactUrlLambda,
       this.listSuiteArtifactsLambda,
       this.listExecutionArtifactsLambda,
-      this.getStepTraceLambda
+      this.getStepTraceLambda,
+      this.getRecordingDataLambda
     ]
     readLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableReadPolicy))
 
@@ -978,7 +1007,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.updateSuiteScheduleLambda,
       this.executeTestSuiteLambda,
       this.stopSuiteExecutionLambda,
-      this.updateSuiteExecutionStatusLambda
+      this.updateSuiteExecutionStatusLambda,
+      this.sendRecordingCommandLambda
     ]
     writeLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableWritePolicy))
 
@@ -998,7 +1028,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.importTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.importTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.applyTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
-    this.removeUsecaseFromSuiteLambda.role?.addManagedPolicy(props.tableFullAccessPolicy)
+    this.removeUsecaseFromSuiteLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.applyTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
@@ -1033,6 +1063,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     props.artefactsBucket.grantRead(this.listSuiteArtifactsLambda)
     props.artefactsBucket.grantRead(this.listExecutionArtifactsLambda)
     props.artefactsBucket.grantRead(this.getStepTraceLambda)
+    props.artefactsBucket.grantRead(this.getRecordingDataLambda)
+    props.artefactsBucket.grantRead(this.generateUsecaseLambda)
 
     // Nova Act Permissions
     const novaActArn = `arn:aws:nova-act:${Aws.REGION}:${Aws.ACCOUNT_ID}:*`;
@@ -1081,11 +1113,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [secretsArnPattern]
     }))
 
-    // ListSecrets requires Resource: * (list operation cannot be scoped to specific ARNs)
+    // ListSecrets requires * for resource (list operation), scoped to account
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:ListSecrets'],
-      resources: ['*']
+      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
     }))
     
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
@@ -1144,6 +1176,13 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       effect: Effect.ALLOW,
       actions: ['events:PutEvents'],
       resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/default`]
+    }))
+
+    // EventBridge permissions for send_recording_command Lambda (wizard event bus)
+    this.sendRecordingCommandLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/${props.wizardEventBusName}`]
     }))
 
     // CloudWatch metrics permissions for execute_test_suite Lambda
