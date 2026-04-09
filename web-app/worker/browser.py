@@ -20,7 +20,7 @@ def _create_client(region: str):
   return control_client
 
 
-def create_browser(unique_id: str, execution_id: str, artefact_bucket: str, artefact_prefix: str, region: str):
+def create_browser(unique_id: str, execution_id: str, artefact_bucket: str, artefact_prefix: str, region: str, browser_policy_s3_path: str = None):
   # Validate VPC configuration from environment variables
   is_valid, validation_message = validate_vpc_configuration()
   if not is_valid:
@@ -95,6 +95,21 @@ def create_browser(unique_id: str, execution_id: str, artefact_bucket: str, arte
   logger.info("Browser configuration:")
   logger.info(f"  Name: {browser_config['name']}")
   logger.info(f"  Network Mode: {browser_config['networkConfiguration']['networkMode']}")
+
+  # Add enterprise policies if a browser policy file is configured
+  if browser_policy_s3_path:
+    browser_config['enterprisePolicies'] = [
+      {
+        'type': 'MANAGED',
+        'location': {
+          's3': {
+            'bucket': artefact_bucket,
+            'prefix': browser_policy_s3_path
+          }
+        }
+      }
+    ]
+    logger.info(f"  Enterprise Policy: s3://{artefact_bucket}/{browser_policy_s3_path}")
   if agent_core_vpc:
     logger.info(f"  VPC ID: {vpc_id}")
     logger.info(f"  Subnet IDs: {browser_config['networkConfiguration']['vpcConfig']['subnets']}")

@@ -31,6 +31,7 @@ class Execution:
     device_farm_session_arn: Optional[str] = None
     device_name: Optional[str] = None
     device_os_version: Optional[str] = None
+    browser_policy_s3_path: Optional[str] = None
 
 @dataclass
 class ExecutionStep:

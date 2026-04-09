@@ -61,6 +61,7 @@ class DynamoDBClient:
                 device_farm_session_arn=item.get('device_farm_session_arn'),
                 device_name=item.get('device_name'),
                 device_os_version=item.get('device_os_version'),
+                browser_policy_s3_path=item.get('browser_policy_s3_path'),
             )
             
         except ClientError as e:
