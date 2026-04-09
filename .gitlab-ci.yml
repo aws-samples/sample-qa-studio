@@ -3,7 +3,7 @@ stages:
   - cleanup
 
 .deploy_template: &deploy_template
-  image: amazonlinux:2023
+  image: public.ecr.aws/amazonlinux/amazonlinux:2023
   stage: deploy
   before_script:
     - yum install -y zip aws-cli
@@ -50,7 +50,7 @@ deploy-prod:
 
 # Cleanup branch stack — triggers when branch is deleted (after MR merge)
 cleanup-branch:
-  image: amazonlinux:2023
+  image: public.ecr.aws/amazonlinux/amazonlinux:2023
   stage: cleanup
   before_script:
     - yum install -y aws-cli
