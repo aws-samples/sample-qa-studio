@@ -25,6 +25,7 @@ from retrieve_value_step import execute_retrieve_value_step
 from assertion_step import execute_assertion_step
 from url_step import execute_url_step
 from download_step import execute_download_step
+from os_action_step import execute_os_action_step
 from event_emitter import emit_execution_completed_event
 
 # MobileActuator is only available in the Docker image with nova_act_mobile
@@ -334,7 +335,7 @@ def main_batch():
         try:
             logger.info("Initializing NovaAct context manager...")
             # Create browser with network configuration (VPC settings from CDK stack environment variables or PUBLIC mode)
-            browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/recording/", execution.region)
+            browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/recording/", execution.region, browser_policy_s3_path=getattr(execution, 'browser_policy_s3_path', None))
             browser = start_browser(browser_id, execution_id, execution.region)
             ws_url, headers = browser.generate_ws_headers()
             live_view_url = browser.generate_live_view_url()
@@ -496,6 +497,8 @@ def _execute_steps(nova, execution, execution_headers, template_parser, usecase_
                             result, success, logs = execute_url_step(nova, parsed_step)
                         case 'download':
                             result, success, logs, actual_value = execute_download_step(nova, parsed_step, usecase_id, execution_id, s3_bucket_name)
+                        case 'os_action':
+                            result, success, logs = execute_os_action_step(nova, parsed_step, execution.region)
                         case _:
                             result, success, logs = execute_navigation_step(nova, parsed_step, execution.enable_cache)
 

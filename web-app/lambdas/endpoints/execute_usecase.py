@@ -208,6 +208,11 @@ def handler(event, context):
         enable_cache_val = usecase.get('enable_cache', {}).get('BOOL', False)
         if enable_cache_val:
             execution_item['enable_cache'] = {'BOOL': True}
+
+        # Copy browser policy path if configured
+        browser_policy_s3_path = usecase.get('browser_policy_s3_path', {}).get('S', '')
+        if browser_policy_s3_path:
+            execution_item['browser_policy_s3_path'] = {'S': browser_policy_s3_path}
         
         # Add suite_execution_id and suite_id if this is part of a suite execution
         if suite_execution_id:
