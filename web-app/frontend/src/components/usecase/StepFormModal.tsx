@@ -34,7 +34,8 @@ const STEP_TYPE_OPTIONS = [
   { label: 'Validation', value: 'validation' },
   { label: 'Retrieve Value', value: 'retrieve_value' },
   { label: 'Assertion', value: 'assertion' },
-  { label: 'Download', value: 'download' }
+  { label: 'Download', value: 'download' },
+  { label: 'OS Action', value: 'os_action' }
 ];
 
 const VALIDATION_TYPE_OPTIONS = [
@@ -456,7 +457,8 @@ export default function StepFormModal({
                     stepType === 'secret' ? 'Describe the action with the secret' :
                       stepType === 'validation' ? 'Describe the validation to perform' :
                         stepType === 'download' ? 'Click the download button' :
-                          'Describe what to retrieve (e.g., "Get the product price")'
+                          stepType === 'os_action' ? 'e.g., press escape, press tab enter, shortcut ctrl a, click 100 200' :
+                            'Describe what to retrieve (e.g., "Get the product price")'
               }
               rows={3}
             />
