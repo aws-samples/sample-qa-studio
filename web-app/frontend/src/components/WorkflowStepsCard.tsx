@@ -148,6 +148,8 @@ function SortableStepCard({
         return <Badge color="severity-medium">Goto</Badge>;
       case 'download':
         return <Badge className="badge-purple">Download</Badge>;
+      case 'os_action':
+        return <Badge color="severity-medium">OS Action</Badge>;
       case 'navigation':
       default:
         return <Badge>Navigation</Badge>;

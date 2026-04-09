@@ -65,7 +65,8 @@ export default function UsecasePreview({ usecase, onImport, onRegenerate, isImpo
       url: { color: 'severity-medium' as const, label: 'Goto' },
       validation: { color: 'green' as const, label: 'Validation' },
       secret: { color: 'red' as const, label: 'Secret' },
-      retrieve_value: { color: 'grey' as const, label: 'Retrieve Value' }
+      retrieve_value: { color: 'grey' as const, label: 'Retrieve Value' },
+      os_action: { color: 'severity-medium' as const, label: 'OS Action' }
     };
 
     const config = typeConfig[stepType as keyof typeof typeConfig] || { color: 'grey' as const, label: stepType };
