@@ -650,7 +650,6 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             "bedrock-agentcore:UpdateBrowserStream",
             "bedrock-agentcore:ConnectBrowserAutomationStream",
             "bedrock-agentcore:ConnectBrowserLiveViewStream",
-            "bedrock-agentcore:InvokeBrowser",
           ],
           resources: [
             `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser/*`,
