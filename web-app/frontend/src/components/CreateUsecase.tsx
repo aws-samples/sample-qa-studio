@@ -184,8 +184,8 @@ export default function CreateUsecase() {
         }
       }
 
-      // Upload browser policy after usecase creation if file selected
-      if (policyFiles.length > 0 && result?.id) {
+      // Upload browser policy after usecase creation if file selected (web tests only)
+      if (!isMobile && policyFiles.length > 0 && result?.id) {
         const uploaded = await uploadBrowserPolicy(result.id, policyFiles[0]);
         if (!uploaded) {
           console.warn('Usecase created but browser policy upload failed');
@@ -405,6 +405,7 @@ export default function CreateUsecase() {
             />
           </FormField>
 
+          {!isMobile && (
           <FormField
             label="Browser policy (optional)"
             description="Upload a Chromium enterprise policy JSON file to control browser behavior (e.g., auto-dismiss permission dialogs)"
@@ -441,6 +442,8 @@ export default function CreateUsecase() {
               )}
             </SpaceBetween>
           </FormField>
+          </FormField>
+          )}
 
           <FormField>
             <Checkbox
