@@ -442,7 +442,6 @@ export default function CreateUsecase() {
               )}
             </SpaceBetween>
           </FormField>
-          </FormField>
           )}
 
           <FormField>
