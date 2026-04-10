@@ -249,6 +249,7 @@ def get_usecase_definition(usecase_id: str, table_name: str) -> Dict[str, Any]:
         'app_arn': item.get('app_arn', {}).get('S', ''),
         'device_farm_project_arn': item.get('device_farm_project_arn', {}).get('S', ''),
         'device_arn': item.get('device_arn', {}).get('S', ''),
+        'browser_policy_s3_path': item.get('browser_policy_s3_path', {}).get('S', ''),
     }
 
 
@@ -508,6 +509,11 @@ def create_execution_record_for_usecase(
     # Propagate enable_cache from usecase to execution record
     if usecase_definition.get('enable_cache', False):
         execution_item['enable_cache'] = {'BOOL': True}
+
+    # Copy browser policy path if configured
+    browser_policy_s3_path = usecase_definition.get('browser_policy_s3_path', '')
+    if browser_policy_s3_path:
+        execution_item['browser_policy_s3_path'] = {'S': browser_policy_s3_path}
     
     # Copy mobile config fields from usecase to execution record
     test_platform = usecase_definition.get('test_platform', 'web')

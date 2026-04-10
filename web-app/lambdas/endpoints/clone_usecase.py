@@ -95,7 +95,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Copy mobile-specific fields if present
         for field in ['platform', 'app_package', 'app_activity', 'bundle_id',
                        'device_arn', 'model_id', 'enable_cache',
-                       'app_binary_s3_path', 'app_arn', 'device_farm_project_arn']:
+                       'app_binary_s3_path', 'app_arn', 'device_farm_project_arn',
+                       'browser_policy_s3_path']:
             val = source_usecase.get(field)
             if val:
                 new_usecase[field] = val

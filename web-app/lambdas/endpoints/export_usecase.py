@@ -206,7 +206,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
         # Add mobile-specific fields if present
-        mobile_fields = ['platform', 'app_package', 'app_activity', 'bundle_id', 'device_arn']
+        mobile_fields = ['platform', 'app_package', 'app_activity', 'bundle_id', 'device_arn', 'browser_policy_s3_path']
         for field in mobile_fields:
             val = usecase.get(field, '')
             if val:
