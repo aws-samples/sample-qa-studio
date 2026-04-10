@@ -157,8 +157,8 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
       }
     }
 
-    // Upload browser policy if a new file was selected
-    if (policyFiles.length > 0) {
+    // Upload browser policy if a new file was selected (web tests only)
+    if (!isMobile && policyFiles.length > 0) {
       const uploaded = await uploadBrowserPolicy(policyFiles[0]);
       if (!uploaded) {
         return; // Don't save if upload failed
@@ -333,6 +333,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
         </>
       )}
 
+      {!isMobile && (
       <FormField
         label="Browser policy"
         description={
@@ -373,6 +374,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
           )}
         </SpaceBetween>
       </FormField>
+      )}
 
       <FormField label="Region">
         <Select
