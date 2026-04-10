@@ -53,7 +53,7 @@ export class NovaActQAStudioBaseStack extends Stack {
       handler: props.handler || `${props.path}.handler`,
       environment: props.environment,
       logRetention: 5,
-      reservedConcurrentExecutions: this.lambdaConcurrency,
+      reservedConcurrentExecutions: this.lambdaConcurrency || undefined,
     });
 
     // Attach AWSLambdaBasicExecutionRole for CloudWatch Logs permissions
