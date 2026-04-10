@@ -149,9 +149,6 @@ export default function StepsTable({
       case 'download':
         typeBadge = <Badge className="step badge-purple">Download</Badge>;
         break;
-      case 'os_action':
-        typeBadge = <Badge color="severity-medium" className="step">OS Action</Badge>;
-        break;
       case 'navigation':
       default:
         typeBadge = <Badge className="step">Navigation</Badge>;

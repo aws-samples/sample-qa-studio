@@ -51,6 +51,11 @@ export default function CreateUsecase() {
   const [selectedDevice, setSelectedDevice] = useState<SelectProps.Option | null>(null);
   const [devicesLoading, setDevicesLoading] = useState(false);
 
+  // Browser policy state
+  const [policyFiles, setPolicyFiles] = useState<File[]>([]);
+  const [policyUploadStatus, setPolicyUploadStatus] = useState<'none' | 'uploading' | 'success' | 'error'>('none');
+  const [policyUploadError, setPolicyUploadError] = useState('');
+
   // Set default model once models are loaded
   React.useEffect(() => {
     if (!modelsLoading && !selectedModel) {
@@ -115,6 +120,30 @@ export default function CreateUsecase() {
     }
   };
 
+  const uploadBrowserPolicy = async (usecaseId: string, file: File): Promise<boolean> => {
+    setPolicyUploadStatus('uploading');
+    setPolicyUploadError('');
+    try {
+      const result = await api.post('generate-s3-url', {
+        fileType: 'browser_policy',
+        usecaseId,
+        filename: file.name,
+      });
+      await fetch(result.signedUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      setPolicyUploadStatus('success');
+      return true;
+    } catch (error) {
+      console.error('Failed to upload browser policy:', error);
+      setPolicyUploadStatus('error');
+      setPolicyUploadError((error as Error).message || 'Upload failed');
+      return false;
+    }
+  };
+
   const handleSubmit = async () => {
     setLoading(true);
     try {
@@ -151,8 +180,15 @@ export default function CreateUsecase() {
       if (isMobile && appBinaryFiles.length > 0 && result?.id) {
         const uploaded = await uploadAppBinary(result.id, appBinaryFiles[0]);
         if (!uploaded) {
-          // Usecase created but upload failed — navigate anyway, user can re-upload
           console.warn('Usecase created but app binary upload failed');
+        }
+      }
+
+      // Upload browser policy after usecase creation if file selected
+      if (policyFiles.length > 0 && result?.id) {
+        const uploaded = await uploadBrowserPolicy(result.id, policyFiles[0]);
+        if (!uploaded) {
+          console.warn('Usecase created but browser policy upload failed');
         }
       }
 
@@ -367,6 +403,43 @@ export default function CreateUsecase() {
               onChange={({ detail }) => setTags(detail.value)}
               placeholder="Enter tags separated by commas"
             />
+          </FormField>
+
+          <FormField
+            label="Browser policy (optional)"
+            description="Upload a Chromium enterprise policy JSON file to control browser behavior (e.g., auto-dismiss permission dialogs)"
+          >
+            <SpaceBetween direction="vertical" size="xs">
+              <FileUpload
+                onChange={({ detail }) => {
+                  setPolicyFiles(detail.value);
+                  setPolicyUploadStatus('none');
+                  setPolicyUploadError('');
+                }}
+                value={policyFiles}
+                i18nStrings={{
+                  uploadButtonText: () => 'Choose file',
+                  dropzoneText: () => 'Drop file to upload',
+                  removeFileAriaLabel: (e) => `Remove file ${e + 1}`,
+                  limitShowFewer: 'Show fewer files',
+                  limitShowMore: 'Show more files',
+                  errorIconAriaLabel: 'Error',
+                }}
+                accept=".json"
+                constraintText="Accepted format: .json (Chromium enterprise policy)"
+                showFileSize
+                showFileLastModified
+              />
+              {policyUploadStatus === 'uploading' && (
+                <StatusIndicator type="loading">Uploading browser policy...</StatusIndicator>
+              )}
+              {policyUploadStatus === 'success' && (
+                <StatusIndicator type="success">Browser policy uploaded</StatusIndicator>
+              )}
+              {policyUploadStatus === 'error' && (
+                <StatusIndicator type="error">{policyUploadError || 'Upload failed'}</StatusIndicator>
+              )}
+            </SpaceBetween>
           </FormField>
 
           <FormField>
