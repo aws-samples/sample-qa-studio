@@ -1,9 +1,10 @@
 stages:
   - deploy
+  - test
   - cleanup
 
 .deploy_template: &deploy_template
-  image: amazonlinux:2023
+  image: public.ecr.aws/amazonlinux/amazonlinux:2023
   stage: deploy
   before_script:
     - yum install -y zip aws-cli
@@ -48,9 +49,31 @@ deploy-prod:
   environment:
     name: production
 
+# Manual integration tests — available on any branch
+run-integration-tests:
+  image: public.ecr.aws/amazonlinux/amazonlinux:2023
+  stage: test
+  before_script:
+    - yum install -y aws-cli
+  script:
+    - |
+      BUILD_ID=$(aws codebuild start-build \
+        --project-name qa-studio-integration-tests \
+        --environment-variables-override \
+          "name=BRANCH_NAME,value=$CI_COMMIT_REF_NAME,type=PLAINTEXT" \
+          "name=SOURCE_SHA,value=$CI_COMMIT_SHA,type=PLAINTEXT" \
+          "name=ADMIN_EMAIL,value=$TEST_ADMIN_EMAIL,type=PLAINTEXT" \
+          "name=ADMIN_PASSWORD,value=$TEST_ADMIN_PASSWORD,type=PLAINTEXT" \
+        --region us-east-1 \
+        --query 'build.id' --output text)
+    - echo "Integration tests started - $BUILD_ID"
+    - echo "View at https://console.aws.amazon.com/codesuite/codebuild/projects/qa-studio-integration-tests/build/$BUILD_ID"
+  when: manual
+  allow_failure: true
+
 # Cleanup branch stack — triggers when branch is deleted (after MR merge)
 cleanup-branch:
-  image: amazonlinux:2023
+  image: public.ecr.aws/amazonlinux/amazonlinux:2023
   stage: cleanup
   before_script:
     - yum install -y aws-cli

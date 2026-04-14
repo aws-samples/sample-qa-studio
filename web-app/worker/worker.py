@@ -334,7 +334,7 @@ def main_batch():
         try:
             logger.info("Initializing NovaAct context manager...")
             # Create browser with network configuration (VPC settings from CDK stack environment variables or PUBLIC mode)
-            browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/recording/", execution.region)
+            browser_id = create_browser(template_parser.get_all_variables()['UniqueID'], execution_id, s3_bucket_name, f"{usecase_id}/{execution_id}/recording/", execution.region, browser_policy_s3_path=getattr(execution, 'browser_policy_s3_path', None))
             browser = start_browser(browser_id, execution_id, execution.region)
             ws_url, headers = browser.generate_ws_headers()
             live_view_url = browser.generate_live_view_url()

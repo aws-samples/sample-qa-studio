@@ -456,7 +456,7 @@ export default function StepFormModal({
                     stepType === 'secret' ? 'Describe the action with the secret' :
                       stepType === 'validation' ? 'Describe the validation to perform' :
                         stepType === 'download' ? 'Click the download button' :
-                          'Describe what to retrieve (e.g., "Get the product price")'
+                            'Describe what to retrieve (e.g., "Get the product price")'
               }
               rows={3}
             />

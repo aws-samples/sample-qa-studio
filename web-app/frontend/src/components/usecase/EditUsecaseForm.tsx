@@ -58,6 +58,11 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
   const isAndroid = mobilePlatform?.value === 'ANDROID';
   const isIOS = mobilePlatform?.value === 'IOS';
 
+  // Browser policy state
+  const [policyFiles, setPolicyFiles] = useState<File[]>([]);
+  const [policyUploadStatus, setPolicyUploadStatus] = useState<'none' | 'uploading' | 'success' | 'error'>('none');
+  const [policyUploadError, setPolicyUploadError] = useState('');
+
   // Fetch Device Farm devices when mobile platform is set
   React.useEffect(() => {
     if (!isMobile || !mobilePlatform?.value) {
@@ -119,10 +124,42 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
     }
   };
 
+  const uploadBrowserPolicy = async (file: File): Promise<boolean> => {
+    setPolicyUploadStatus('uploading');
+    setPolicyUploadError('');
+    try {
+      const result = await api.post('generate-s3-url', {
+        fileType: 'browser_policy',
+        usecaseId: usecase.id,
+        filename: file.name,
+      });
+      await fetch(result.signedUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      setPolicyUploadStatus('success');
+      return true;
+    } catch (error) {
+      console.error('Failed to upload browser policy:', error);
+      setPolicyUploadStatus('error');
+      setPolicyUploadError((error as Error).message || 'Upload failed');
+      return false;
+    }
+  };
+
   const handleSave = async () => {
     // Upload app binary first if a new file was selected
     if (isMobile && appBinaryFiles.length > 0) {
       const uploaded = await uploadAppBinary(appBinaryFiles[0]);
+      if (!uploaded) {
+        return; // Don't save if upload failed
+      }
+    }
+
+    // Upload browser policy if a new file was selected (web tests only)
+    if (!isMobile && policyFiles.length > 0) {
+      const uploaded = await uploadBrowserPolicy(policyFiles[0]);
       if (!uploaded) {
         return; // Don't save if upload failed
       }
@@ -294,6 +331,49 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
             </SpaceBetween>
           </FormField>
         </>
+      )}
+
+      {!isMobile && (
+      <FormField
+        label="Browser policy"
+        description={
+          usecase.browser_policy_s3_path
+            ? `Current: ${usecase.browser_policy_s3_path.split('/').pop()} — upload a new file to replace`
+            : 'Optional: Upload a Chromium enterprise policy JSON file to control browser behavior (e.g., auto-dismiss permission dialogs)'
+        }
+      >
+        <SpaceBetween direction="vertical" size="xs">
+          <FileUpload
+            onChange={({ detail }) => {
+              setPolicyFiles(detail.value);
+              setPolicyUploadStatus('none');
+              setPolicyUploadError('');
+            }}
+            value={policyFiles}
+            i18nStrings={{
+              uploadButtonText: () => usecase.browser_policy_s3_path ? 'Replace policy' : 'Choose file',
+              dropzoneText: () => 'Drop file to upload',
+              removeFileAriaLabel: (e) => `Remove file ${e + 1}`,
+              limitShowFewer: 'Show fewer files',
+              limitShowMore: 'Show more files',
+              errorIconAriaLabel: 'Error',
+            }}
+            accept=".json"
+            constraintText="Accepted format: .json (Chromium enterprise policy)"
+            showFileSize
+            showFileLastModified
+          />
+          {policyUploadStatus === 'uploading' && (
+            <StatusIndicator type="loading">Uploading browser policy...</StatusIndicator>
+          )}
+          {policyUploadStatus === 'success' && (
+            <StatusIndicator type="success">Browser policy uploaded</StatusIndicator>
+          )}
+          {policyUploadStatus === 'error' && (
+            <StatusIndicator type="error">{policyUploadError || 'Upload failed'}</StatusIndicator>
+          )}
+        </SpaceBetween>
+      </FormField>
       )}
 
       <FormField label="Region">

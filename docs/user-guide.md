@@ -77,7 +77,7 @@ Build your test step-by-step with a live browser. This option is only available 
 6. Repeat until your test is complete, then finish the wizard.
 
 #### Create Blank
-Start from scratch. Choose between **Web** or **Mobile** as the test platform. For web tests, provide a starting URL. For mobile tests, select the mobile platform (Android or iOS), provide app identifiers, choose a Device Farm device, and upload your app binary. Then manually add steps afterward.
+Start from scratch. Choose between **Web** or **Mobile** as the test platform. For web tests, provide a starting URL. For mobile tests, select the mobile platform (Android or iOS), provide app identifiers, choose a Device Farm device, and upload your app binary. Optionally upload a browser policy to control permission dialogs. Then manually add steps afterward.
 
 #### Start from Template
 Pick a pre-built template from the template library. Templates come with predefined steps and variables that you can customize for your specific scenario.
@@ -152,6 +152,30 @@ Configure custom HTTP headers that should be sent with requests during test exec
 Set up scripts that run before or after test execution:
 - **Before script**: Runs before the test starts (e.g., set up test data)
 - **After script**: Runs after the test completes (e.g., clean up resources)
+
+#### Browser Policy
+Upload a Chromium enterprise policy JSON file to control browser behavior during test execution. This is useful for automatically handling permission dialogs (geolocation, notifications, camera access, local network access, etc.) that would otherwise block test execution.
+
+To configure a browser policy:
+1. Create a JSON file following the [Chrome Enterprise Policy List](https://chromeenterprise.google/policies/)
+2. Upload it via the **Browser policy** section in the use case settings
+3. The policy is applied as a managed Chromium enterprise policy when the AgentCore browser is created for each execution
+
+Common policy values:
+- `1` = Allow without prompting
+- `2` = Block without prompting
+
+Example policy that blocks all permission dialogs:
+```json
+{
+  "DefaultGeolocationSetting": 2,
+  "DefaultNotificationsSetting": 2,
+  "DefaultWebBluetoothGuardSetting": 2,
+  "InsecurePrivateNetworkRequestsAllowed": true
+}
+```
+
+> **Note:** Browser policies only apply to web tests running on AgentCore Browser. They do not apply to mobile tests or CLI local execution.
 
 ### Exporting a Use Case
 

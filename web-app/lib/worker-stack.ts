@@ -717,6 +717,8 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
           effect: Effect.ALLOW,
           actions: [
             "s3:PutObject",
+            "s3:GetObject",
+            "s3:GetObjectVersion",
             "s3:ListMultipartUploadParts",
             "s3:AbortMultipartUpload"
           ],
