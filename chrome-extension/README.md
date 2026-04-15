@@ -19,7 +19,7 @@ A Chrome browser extension that records your browser interactions and converts t
 
 1. Clone or download this repository:
    ```bash
-   git clone https://github.com/amazon-agi-labs/solution-nova-act-qa-studio
+   git clone https://github.com/aws-samples/sample-qa-studio.git
    cd chrome-extension
    ```
 
