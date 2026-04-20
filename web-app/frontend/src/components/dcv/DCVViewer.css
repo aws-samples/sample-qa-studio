@@ -1,0 +1,29 @@
+/* DCV elements need a concrete pixel size matching the server resolution
+   requested in viewer.ts (SERVER_WIDTH=1480, SERVER_HEIGHT=860).
+   The CSS transform in viewer.ts then scales this down to fit the
+   visible container (e.g. 600px). Without explicit dimensions the
+   DCV canvas collapses and the stream is cut off. */
+
+.RemoteBrowserContainer {
+  width: 1480px;
+  height: 860px;
+}
+
+#dcv-display {
+  width: 1480px;
+  height: 860px;
+}
+
+/* Inside a [data-dcv-container] wrapper, position absolutely so the
+   CSS transform applied by viewer.ts can scale the canvas to fit. */
+[data-dcv-container] .RemoteBrowserContainer {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+}
+
+[data-dcv-container] #dcv-display {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+}

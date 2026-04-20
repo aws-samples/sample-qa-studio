@@ -26,6 +26,7 @@ export interface ExecutionModel {
   executingAt: string;
   triggerType: string;
   novaActSessionId: string;
+  cloudwatch_logs_url?: string;
 }
 
 export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {

@@ -196,10 +196,10 @@ export default function ExecutionDetailRefactored() {
             variant="h1"
             actions={
               <SpaceBetween direction="horizontal" size="xs">
-                {execution?.cloudWatchLogsUrl && (
+                {execution?.cloudwatch_logs_url && (
                   <Button
                     iconName="external"
-                    onClick={() => window.open(execution.cloudWatchLogsUrl, '_blank')}
+                    onClick={() => window.open(execution.cloudwatch_logs_url, '_blank')}
                   >
                     CloudWatch Logs
                   </Button>
