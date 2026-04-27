@@ -72,11 +72,39 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
         )
         
+        mapping_items = mappings_response.get('Items', [])
+        
+        # Resolve current usecase names from canonical records via BatchGetItem
+        canonical_lookup: Dict[str, Dict] = {}
+        if mapping_items:
+            usecase_ids = [item['usecase_id'] for item in mapping_items]
+            table_name = get_table_name()
+            
+            # Process in batches of 25 (DynamoDB BatchGetItem limit)
+            for i in range(0, len(usecase_ids), 25):
+                batch_ids = usecase_ids[i:i + 25]
+                keys = [
+                    {'pk': 'USECASES', 'sk': f'USECASE#{uid}'}
+                    for uid in batch_ids
+                ]
+                
+                request_items = {table_name: {'Keys': keys}}
+                while request_items:
+                    batch_response = dynamodb.batch_get_item(RequestItems=request_items)
+                    
+                    for record in batch_response.get('Responses', {}).get(table_name, []):
+                        canonical_lookup[record['id']] = record
+                    
+                    # Handle UnprocessedKeys with retry
+                    request_items = batch_response.get('UnprocessedKeys', {})
+        
         usecases = []
-        for item in mappings_response.get('Items', []):
+        for item in mapping_items:
+            usecase_id = item.get('usecase_id')
+            canonical = canonical_lookup.get(usecase_id)
             usecase_obj = {
-                'usecase_id': item.get('usecase_id'),
-                'usecase_name': item.get('usecase_name'),
+                'usecase_id': usecase_id,
+                'usecase_name': canonical['name'] if canonical else item.get('usecase_name', ''),
                 'added_by': item.get('added_by'),
                 'added_at': item.get('added_at')
             }
