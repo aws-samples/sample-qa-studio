@@ -29,12 +29,42 @@ interface StepFormModalProps {
 
 const STEP_TYPE_OPTIONS = [
   { label: 'Navigation', value: 'navigation' },
-  { label: 'URL', value: 'url' },
+  { label: 'Browser', value: 'browser' },
+  { label: 'Transform', value: 'transform' },
   { label: 'Secret', value: 'secret' },
   { label: 'Validation', value: 'validation' },
   { label: 'Retrieve Value', value: 'retrieve_value' },
   { label: 'Assertion', value: 'assertion' },
   { label: 'Download', value: 'download' }
+];
+
+const BROWSER_ACTION_OPTIONS = [
+  { label: 'Reload', value: 'reload' },
+  { label: 'Back', value: 'back' },
+  { label: 'Forward', value: 'forward' },
+  { label: 'Navigate to URL', value: 'navigate' }
+];
+
+const TRANSFORM_OPERATION_OPTIONS = [
+  { label: 'Math Expression', value: 'math', description: 'Evaluate arithmetic: {{ price }} * 1.2' },
+  { label: 'Round', value: 'round', description: 'Round a number to N digits' },
+  { label: 'Floor', value: 'floor', description: 'Round down to nearest integer' },
+  { label: 'Ceil', value: 'ceil', description: 'Round up to nearest integer' },
+  { label: 'Abs', value: 'abs', description: 'Absolute value' },
+  { label: 'Min', value: 'min', description: 'Minimum of a list of values' },
+  { label: 'Max', value: 'max', description: 'Maximum of a list of values' },
+  { label: 'Concat', value: 'concat', description: 'Concatenate strings' },
+  { label: 'Upper', value: 'upper', description: 'Convert to uppercase' },
+  { label: 'Lower', value: 'lower', description: 'Convert to lowercase' },
+  { label: 'Trim', value: 'trim', description: 'Remove leading/trailing whitespace' },
+  { label: 'Replace', value: 'replace', description: 'Replace occurrences in a string' },
+  { label: 'Substring', value: 'substring', description: 'Extract part of a string' },
+  { label: 'Length', value: 'length', description: 'Get string length' },
+  { label: 'To Number', value: 'to_number', description: 'Convert string to number' },
+  { label: 'To String', value: 'to_string', description: 'Convert to string' },
+  { label: 'To Integer', value: 'to_int', description: 'Convert to integer' },
+  { label: 'Regex Extract', value: 'regex_extract', description: 'Extract with a regex pattern' },
+  { label: 'Format', value: 'format', description: 'Format a template string' }
 ];
 
 const VALIDATION_TYPE_OPTIONS = [
@@ -98,6 +128,24 @@ export default function StepFormModal({
   const [assertionVariable, setAssertionVariable] = useState('');
   const [booleanInputMode, setBooleanInputMode] = useState('true');
   const [updatingFromTemplate, setUpdatingFromTemplate] = useState(false);
+  // Browser step state
+  const [browserAction, setBrowserAction] = useState('reload');
+  const [browserHardReload, setBrowserHardReload] = useState(false);
+  const [browserNavigateUrl, setBrowserNavigateUrl] = useState('');
+  // Transform step state
+  const [transformOperation, setTransformOperation] = useState('math');
+  const [transformExpression, setTransformExpression] = useState('');
+  const [transformValue, setTransformValue] = useState('');
+  const [transformOld, setTransformOld] = useState('');
+  const [transformNew, setTransformNew] = useState('');
+  const [transformStart, setTransformStart] = useState('0');
+  const [transformEnd, setTransformEnd] = useState('');
+  const [transformPattern, setTransformPattern] = useState('');
+  const [transformGroup, setTransformGroup] = useState('0');
+  const [transformDigits, setTransformDigits] = useState('0');
+  const [transformTemplate, setTransformTemplate] = useState('');
+  const [transformFormatArgs, setTransformFormatArgs] = useState('');
+  const [transformValues, setTransformValues] = useState('');
   const [templateStep, setTemplateStep] = useState<any>(null);
   const [loadingTemplateStep, setLoadingTemplateStep] = useState(false);
   const [templateDifferences, setTemplateDifferences] = useState<Array<{field: string, current: any, template: any}>>([]);
@@ -106,11 +154,11 @@ export default function StepFormModal({
   // Get available runtime variables from existing retrieve_value steps
   const getAvailableRuntimeVariables = () => {
     return existingSteps
-      .filter(step => step.step_type === 'retrieve_value' && step.capture_variable)
+      .filter(step => (step.step_type === 'retrieve_value' || step.step_type === 'transform') && step.capture_variable)
       .map(step => ({
         label: step.capture_variable,
         value: step.capture_variable,
-        description: `From step ${step.sort}: ${step.instruction}`
+        description: `From step ${step.sort}: ${step.instruction || step.transform_operation || ''}`
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
   };
@@ -129,6 +177,34 @@ export default function StepFormModal({
       setValueSource(step.value_source || 'screen');
       setAssertionVariable(step.assertion_variable || '');
       setEnableAdvancedClickTypes(step.enable_advanced_click_types || false);
+      // Initialize browser step fields
+      if (step.browser_action) setBrowserAction(step.browser_action);
+      if (step.browser_args) {
+        try {
+          const args = JSON.parse(step.browser_args);
+          setBrowserHardReload(args.hard || false);
+          setBrowserNavigateUrl(args.url || '');
+        } catch {}
+      }
+      // Initialize transform step fields
+      if (step.transform_operation) setTransformOperation(step.transform_operation);
+      if (step.transform_args) {
+        try {
+          const args = JSON.parse(step.transform_args);
+          setTransformExpression(args.expression || '');
+          setTransformValue(args.value != null ? String(args.value) : '');
+          setTransformOld(args.old || '');
+          setTransformNew(args.new || '');
+          setTransformStart(args.start != null ? String(args.start) : '0');
+          setTransformEnd(args.end != null ? String(args.end) : '');
+          setTransformPattern(args.pattern || '');
+          setTransformGroup(args.group != null ? String(args.group) : '0');
+          setTransformDigits(args.digits != null ? String(args.digits) : '0');
+          setTransformTemplate(args.template || '');
+          setTransformFormatArgs((args.args || []).join(', '));
+          setTransformValues((args.values || []).join(', '));
+        } catch {}
+      }
       // Initialize boolean input mode based on existing value
       if (step.validation_value && (step.validation_value === 'true' || step.validation_value === 'false')) {
         setBooleanInputMode(step.validation_value);
@@ -151,6 +227,22 @@ export default function StepFormModal({
       setAssertionVariable('');
       setBooleanInputMode('true');
       setEnableAdvancedClickTypes(false);
+      setBrowserAction('reload');
+      setBrowserHardReload(false);
+      setBrowserNavigateUrl('');
+      setTransformOperation('math');
+      setTransformExpression('');
+      setTransformValue('');
+      setTransformOld('');
+      setTransformNew('');
+      setTransformStart('0');
+      setTransformEnd('');
+      setTransformPattern('');
+      setTransformGroup('0');
+      setTransformDigits('0');
+      setTransformTemplate('');
+      setTransformFormatArgs('');
+      setTransformValues('');
     }
   }, [step]);
 
@@ -302,8 +394,32 @@ export default function StepFormModal({
     setTemplateDifferences(diffs);
   };
 
+  const buildTransformArgs = (): Record<string, any> => {
+    switch (transformOperation) {
+      case 'math': return { expression: transformExpression.trim() };
+      case 'round': return { value: transformValue.trim(), digits: parseInt(transformDigits) || 0 };
+      case 'floor': case 'ceil': case 'abs':
+      case 'upper': case 'lower': case 'trim': case 'length':
+      case 'to_number': case 'to_string': case 'to_int':
+        return { value: transformValue.trim() };
+      case 'replace': return { value: transformValue.trim(), old: transformOld, new: transformNew };
+      case 'substring': {
+        const args: any = { value: transformValue.trim(), start: parseInt(transformStart) || 0 };
+        if (transformEnd.trim()) args.end = parseInt(transformEnd);
+        return args;
+      }
+      case 'regex_extract': return { value: transformValue.trim(), pattern: transformPattern, group: parseInt(transformGroup) || 0 };
+      case 'format': return { template: transformTemplate.trim(), args: transformFormatArgs.split(',').map(s => s.trim()).filter(Boolean) };
+      case 'concat': return { values: transformValues.split(',').map(s => s.trim()) };
+      case 'min': case 'max': return { values: transformValues.split(',').map(s => s.trim()) };
+      default: return {};
+    }
+  };
+
   const handleSubmit = async () => {
-    if (stepType !== 'assertion' && !instruction.trim()) return;
+    if (stepType === 'browser' && browserAction === 'navigate' && !browserNavigateUrl.trim()) return;
+    if (stepType === 'transform' && !captureVariable.trim()) return;
+    if (stepType !== 'assertion' && stepType !== 'browser' && stepType !== 'transform' && !instruction.trim()) return;
     if (stepType === 'secret' && !selectedSecret) return;
     if (stepType === 'validation' && validationType === 'string' && !validationValue.trim()) return;
     if (stepType === 'validation' && validationType === 'number' && !validationValue.trim()) return;
@@ -317,7 +433,10 @@ export default function StepFormModal({
     setSaving(true);
     try {
       const stepData: any = {
-        instruction: stepType === 'assertion' ? (instruction.trim() || 'Assertion step') : instruction.trim(),
+        instruction: stepType === 'assertion' ? (instruction.trim() || 'Assertion step')
+          : stepType === 'browser' ? (instruction.trim() || `Browser ${browserAction}`)
+          : stepType === 'transform' ? (instruction.trim() || `Transform ${transformOperation}`)
+          : instruction.trim(),
         step_type: stepType
       };
 
@@ -326,7 +445,17 @@ export default function StepFormModal({
         stepData.enable_advanced_click_types = enableAdvancedClickTypes;
       }
 
-      if (stepType === 'secret') {
+      if (stepType === 'browser') {
+        stepData.browser_action = browserAction;
+        const args: any = {};
+        if (browserAction === 'reload' && browserHardReload) args.hard = true;
+        if (browserAction === 'navigate') args.url = browserNavigateUrl.trim();
+        stepData.browser_args = JSON.stringify(args);
+      } else if (stepType === 'transform') {
+        stepData.transform_operation = transformOperation;
+        stepData.capture_variable = captureVariable.trim();
+        stepData.transform_args = JSON.stringify(buildTransformArgs());
+      } else if (stepType === 'secret') {
         stepData.secret_key = selectedSecret;
       } else if (stepType === 'validation') {
         stepData.validation_type = validationType;
@@ -345,7 +474,7 @@ export default function StepFormModal({
       }
 
       // Ensure other step types don't have these fields
-      if (stepType !== 'retrieve_value') {
+      if (stepType !== 'retrieve_value' && stepType !== 'transform') {
         stepData.capture_variable = '';
         stepData.value_type = '';
       }
@@ -360,6 +489,22 @@ export default function StepFormModal({
   };
 
   const isFormValid = () => {
+    if (stepType === 'browser') {
+      if (browserAction === 'navigate' && !browserNavigateUrl.trim()) return false;
+      return true;
+    }
+    if (stepType === 'transform') {
+      if (!captureVariable.trim()) return false;
+      if (transformOperation === 'math' && !transformExpression.trim()) return false;
+      if (['floor', 'ceil', 'abs', 'upper', 'lower', 'trim', 'length', 'to_number', 'to_string', 'to_int'].includes(transformOperation) && !transformValue.trim()) return false;
+      if (transformOperation === 'round' && !transformValue.trim()) return false;
+      if (transformOperation === 'replace' && !transformValue.trim()) return false;
+      if (transformOperation === 'substring' && !transformValue.trim()) return false;
+      if (transformOperation === 'regex_extract' && (!transformValue.trim() || !transformPattern.trim())) return false;
+      if (transformOperation === 'format' && !transformTemplate.trim()) return false;
+      if (['concat', 'min', 'max'].includes(transformOperation) && !transformValues.trim()) return false;
+      return true;
+    }
     if (stepType !== 'assertion' && !instruction.trim()) return false;
     if (stepType === 'secret' && !selectedSecret) return false;
     if (stepType === 'validation' && validationType === 'string' && !validationValue.trim()) return false;
@@ -430,11 +575,11 @@ export default function StepFormModal({
               setCaptureVariable('');
               setValueType('string');
             }}
-            options={STEP_TYPE_OPTIONS}
+            options={step?.step_type === 'url' ? [...STEP_TYPE_OPTIONS, { label: 'URL (deprecated — use Browser → Navigate)', value: 'url' }] : STEP_TYPE_OPTIONS}
           />
         </FormField>
 
-        {stepType !== 'assertion' && (
+        {stepType !== 'assertion' && stepType !== 'browser' && stepType !== 'transform' && (
           <FormField
             stretch
             label="Instruction"
@@ -470,6 +615,141 @@ export default function StepFormModal({
           >
             Enable advanced click types (double-click, right-click)
           </Checkbox>
+        )}
+
+        {stepType === 'browser' && (
+          <>
+            <FormField label="Browser Action" stretch>
+              <Select
+                selectedOption={BROWSER_ACTION_OPTIONS.find(opt => opt.value === browserAction) || null}
+                onChange={({ detail }) => setBrowserAction(detail.selectedOption?.value || 'reload')}
+                options={BROWSER_ACTION_OPTIONS}
+              />
+            </FormField>
+            {browserAction === 'reload' && (
+              <Checkbox
+                checked={browserHardReload}
+                onChange={({ detail }) => setBrowserHardReload(detail.checked)}
+              >
+                Hard reload (bypass cache)
+              </Checkbox>
+            )}
+            {browserAction === 'navigate' && (
+              <FormField label="URL" stretch description="Enter the URL to navigate to">
+                <Input
+                  value={browserNavigateUrl}
+                  onChange={({ detail }) => setBrowserNavigateUrl(detail.value)}
+                  placeholder="https://example.com/page"
+                />
+              </FormField>
+            )}
+          </>
+        )}
+
+        {stepType === 'transform' && (
+          <>
+            <FormField label="Operation" stretch>
+              <Select
+                selectedOption={TRANSFORM_OPERATION_OPTIONS.find(opt => opt.value === transformOperation) || null}
+                onChange={({ detail }) => setTransformOperation(detail.selectedOption?.value || 'math')}
+                options={TRANSFORM_OPERATION_OPTIONS}
+              />
+            </FormField>
+            <FormField label="Output Variable Name" stretch description="The result will be stored in this variable (use with {{ variable_name }})">
+              <Input
+                value={captureVariable}
+                onChange={({ detail }) => setCaptureVariable(detail.value)}
+                placeholder="result_variable"
+              />
+            </FormField>
+            {transformOperation === 'math' && (
+              <FormField label="Expression" stretch description="Arithmetic expression. Use {{ variable }} to reference captured values.">
+                <Textarea
+                  value={transformExpression}
+                  onChange={({ detail }) => setTransformExpression(detail.value)}
+                  placeholder="{{ price }} * {{ quantity }} + 5.99"
+                  rows={2}
+                />
+              </FormField>
+            )}
+            {['floor', 'ceil', 'abs', 'upper', 'lower', 'trim', 'length', 'to_number', 'to_string', 'to_int'].includes(transformOperation) && (
+              <FormField label="Value" stretch description="Input value. Use {{ variable }} to reference captured values.">
+                <Input
+                  value={transformValue}
+                  onChange={({ detail }) => setTransformValue(detail.value)}
+                  placeholder="{{ captured_value }}"
+                />
+              </FormField>
+            )}
+            {transformOperation === 'round' && (
+              <>
+                <FormField label="Value" stretch>
+                  <Input value={transformValue} onChange={({ detail }) => setTransformValue(detail.value)} placeholder="{{ price }}" />
+                </FormField>
+                <FormField label="Decimal Digits" stretch>
+                  <Input value={transformDigits} onChange={({ detail }) => setTransformDigits(detail.value)} placeholder="2" type="number" />
+                </FormField>
+              </>
+            )}
+            {transformOperation === 'replace' && (
+              <>
+                <FormField label="Value" stretch>
+                  <Input value={transformValue} onChange={({ detail }) => setTransformValue(detail.value)} placeholder="{{ text }}" />
+                </FormField>
+                <FormField label="Find" stretch>
+                  <Input value={transformOld} onChange={({ detail }) => setTransformOld(detail.value)} placeholder="old text" />
+                </FormField>
+                <FormField label="Replace With" stretch>
+                  <Input value={transformNew} onChange={({ detail }) => setTransformNew(detail.value)} placeholder="new text" />
+                </FormField>
+              </>
+            )}
+            {transformOperation === 'substring' && (
+              <>
+                <FormField label="Value" stretch>
+                  <Input value={transformValue} onChange={({ detail }) => setTransformValue(detail.value)} placeholder="{{ text }}" />
+                </FormField>
+                <FormField label="Start Index" stretch>
+                  <Input value={transformStart} onChange={({ detail }) => setTransformStart(detail.value)} placeholder="0" type="number" />
+                </FormField>
+                <FormField label="End Index (optional)" stretch>
+                  <Input value={transformEnd} onChange={({ detail }) => setTransformEnd(detail.value)} placeholder="5" type="number" />
+                </FormField>
+              </>
+            )}
+            {transformOperation === 'regex_extract' && (
+              <>
+                <FormField label="Value" stretch>
+                  <Input value={transformValue} onChange={({ detail }) => setTransformValue(detail.value)} placeholder="{{ text }}" />
+                </FormField>
+                <FormField label="Regex Pattern" stretch>
+                  <Input value={transformPattern} onChange={({ detail }) => setTransformPattern(detail.value)} placeholder="#(\d+)" />
+                </FormField>
+                <FormField label="Capture Group" stretch>
+                  <Input value={transformGroup} onChange={({ detail }) => setTransformGroup(detail.value)} placeholder="0" type="number" />
+                </FormField>
+              </>
+            )}
+            {transformOperation === 'format' && (
+              <>
+                <FormField label="Template" stretch description="Use {} as placeholders">
+                  <Input value={transformTemplate} onChange={({ detail }) => setTransformTemplate(detail.value)} placeholder="Order #{} - {}" />
+                </FormField>
+                <FormField label="Arguments (comma-separated)" stretch>
+                  <Input value={transformFormatArgs} onChange={({ detail }) => setTransformFormatArgs(detail.value)} placeholder="{{ order_id }}, {{ status }}" />
+                </FormField>
+              </>
+            )}
+            {['concat', 'min', 'max'].includes(transformOperation) && (
+              <FormField label="Values (comma-separated)" stretch description="Use {{ variable }} to reference captured values.">
+                <Input
+                  value={transformValues}
+                  onChange={({ detail }) => setTransformValues(detail.value)}
+                  placeholder={transformOperation === 'concat' ? '{{ first_name }},  , {{ last_name }}' : '{{ price1 }}, {{ price2 }}, {{ price3 }}'}
+                />
+              </FormField>
+            )}
+          </>
         )}
 
         {stepType === 'secret' && (

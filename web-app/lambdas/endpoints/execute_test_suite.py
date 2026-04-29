@@ -582,7 +582,10 @@ def create_execution_record_for_usecase(
         # Copy optional fields if present
         for field in ['secret_key', 'validation_type', 'validation_operator', 
                      'validation_value', 'capture_variable', 'assertion_variable', 'value_type', 'enable_advanced_click_types',
-                     'cached_steps', 'cache_last_updated']:
+                     'value_source', 'cached_steps', 'cache_last_updated',
+                     'trajectory_s3_key', 'trajectory_last_updated',
+                     'browser_action', 'browser_args',
+                     'transform_operation', 'transform_args']:
             if field in step:
                 execution_step[field] = step[field]
         

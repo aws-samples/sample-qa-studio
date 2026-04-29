@@ -40,6 +40,10 @@ class UseCaseStep(BaseModel):
     expected_value: Optional[str] = None
     capture_variable: Optional[str] = None
     operator: Optional[str] = None
+    browser_action: Optional[str] = None
+    browser_args: Optional[str] = None
+    transform_operation: Optional[str] = None
+    transform_args: Optional[str] = None
 
 
 class StepResultDetail(BaseModel):

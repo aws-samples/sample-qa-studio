@@ -66,7 +66,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Add optional fields
         optional_fields = [
             'secret_key', 'validation_type', 'validation_operator',
-            'validation_value', 'capture_variable', 'assertion_variable', 'value_type'
+            'validation_value', 'capture_variable', 'assertion_variable', 'value_type',
+            'enable_advanced_click_types', 'value_source',
+            'browser_action', 'browser_args',
+            'transform_operation', 'transform_args',
         ]
         for field in optional_fields:
             if field in body:

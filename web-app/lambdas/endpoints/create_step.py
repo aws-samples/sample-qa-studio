@@ -75,6 +75,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'created_at': now
         }
         
+        # Add browser step fields if present
+        for field in ['browser_action', 'browser_args', 'transform_operation', 'transform_args']:
+            if body.get(field):
+                step[field] = body[field]
+        
         # Put item in DynamoDB
         table.put_item(Item=step)
         

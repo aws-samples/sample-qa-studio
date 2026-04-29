@@ -1,7 +1,80 @@
 """Client-side validation for QA Studio CLI."""
 
+import json
 import re
 from urllib.parse import urlparse
+
+
+VALID_BROWSER_ACTIONS = {"reload", "back", "forward", "navigate"}
+
+VALID_TRANSFORM_OPERATIONS = {
+    "math", "round", "floor", "ceil", "abs", "min", "max",
+    "concat", "upper", "lower", "trim", "replace", "substring", "length",
+    "to_number", "to_string", "to_int", "regex_extract", "format",
+}
+
+
+def validate_step(step: dict) -> tuple[bool, list[str]]:
+    """Validate a step dict based on its step_type.
+
+    Returns (is_valid, errors).  Only validates browser and transform
+    step types; other step types are accepted without additional checks.
+    """
+    step_type = step.get("step_type", "")
+    if step_type == "browser":
+        return validate_browser_step(step)
+    if step_type == "transform":
+        return validate_transform_step(step)
+    return True, []
+
+
+def validate_browser_step(step: dict) -> tuple[bool, list[str]]:
+    """Validate a browser step."""
+    errors: list[str] = []
+    action = step.get("browser_action")
+    if not action:
+        errors.append("browser_action is required for browser steps")
+        return False, errors
+    if action not in VALID_BROWSER_ACTIONS:
+        errors.append(
+            f"Invalid browser_action '{action}'. Must be one of: {', '.join(sorted(VALID_BROWSER_ACTIONS))}"
+        )
+    args_raw = step.get("browser_args")
+    if args_raw:
+        try:
+            args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+        except (json.JSONDecodeError, TypeError):
+            errors.append("browser_args must be valid JSON")
+            return len(errors) == 0, errors
+        if action == "navigate" and not args.get("url"):
+            errors.append("browser_args.url is required for navigate action")
+    elif action == "navigate":
+        errors.append("browser_args with url is required for navigate action")
+    return len(errors) == 0, errors
+
+
+def validate_transform_step(step: dict) -> tuple[bool, list[str]]:
+    """Validate a transform step."""
+    errors: list[str] = []
+    operation = step.get("transform_operation")
+    if not operation:
+        errors.append("transform_operation is required for transform steps")
+        return False, errors
+    if operation not in VALID_TRANSFORM_OPERATIONS:
+        errors.append(
+            f"Invalid transform_operation '{operation}'. Must be one of: {', '.join(sorted(VALID_TRANSFORM_OPERATIONS))}"
+        )
+    if not step.get("capture_variable"):
+        errors.append("capture_variable is required for transform steps")
+    args_raw = step.get("transform_args")
+    if not args_raw:
+        errors.append("transform_args is required for transform steps")
+    else:
+        try:
+            json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+        except (json.JSONDecodeError, TypeError):
+            errors.append("transform_args must be valid JSON")
+    return len(errors) == 0, errors
 
 
 def validate_journey_description(journey: str) -> tuple[bool, list[str]]:

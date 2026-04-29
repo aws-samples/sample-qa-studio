@@ -27,6 +27,10 @@ interface UsecaseStep {
   template_version?: number;
   cached_steps?: string | null;
   cache_last_updated?: string | null;
+  browser_action?: string;
+  browser_args?: string;
+  transform_operation?: string;
+  transform_args?: string;
 }
 
 interface StepsTableProps {
@@ -144,7 +148,13 @@ export default function StepsTable({
         typeBadge = <Badge color="blue" className="step">Value</Badge>;
         break;
       case 'url':
-        typeBadge = <Badge color="severity-medium" className="step">Goto</Badge>;
+        typeBadge = <Badge color="severity-medium" className="step">Goto (deprecated)</Badge>;
+        break;
+      case 'browser':
+        typeBadge = <Badge color="severity-medium" className="step">Browser</Badge>;
+        break;
+      case 'transform':
+        typeBadge = <Badge color="blue" className="step">Transform</Badge>;
         break;
       case 'download':
         typeBadge = <Badge className="step badge-purple">Download</Badge>;

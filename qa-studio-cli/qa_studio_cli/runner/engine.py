@@ -23,6 +23,7 @@ from qa_studio_cli.runner.artifact_uploader import ArtifactUploader
 from qa_studio_cli.runner.step_executor import StepExecutor
 from qa_studio_cli.runner.workflow_manager import WorkflowManager
 from qa_studio_cli.utils.errors import sanitize_error_message
+from qa_studio_cli.validation import validate_step
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,22 @@ class ExecutionEngine:
                         sort_order = step.get("sort", 0)
                         step_start = datetime.utcnow()
 
+                        # Validate browser/transform steps before execution
+                        is_valid, validation_errors = validate_step(step)
+                        if not is_valid:
+                            error_msg = f"Step {sort_order} validation failed: {'; '.join(validation_errors)}"
+                            logger.error("[local] %s", error_msg)
+                            step_results.append(StepResultDetail(
+                                step_id=step_id,
+                                step_type=step.get("step_type", ""),
+                                instruction=step.get("instruction", ""),
+                                status="failed",
+                                duration=0,
+                                error=error_msg,
+                            ))
+                            overall_status = "failed"
+                            break
+
                         instruction = self._resolve_variables(
                             step.get("instruction", ""), variables, runtime_variables,
                         )
@@ -146,7 +163,7 @@ class ExecutionEngine:
 
                         if (
                             step_result.success
-                            and step.get("step_type") == "retrieve_value"
+                            and step.get("step_type") in ("retrieve_value", "transform")
                             and step.get("capture_variable")
                             and step_result.actual_value
                         ):
@@ -596,6 +613,24 @@ class ExecutionEngine:
                 execution_step_id = sk.replace("EXECUTION_STEP#", "") if sk.startswith("EXECUTION_STEP#") else step.get("step_id", "")
                 sort_order = step.get("sort", 0)
 
+                # Validate browser/transform steps before execution
+                is_valid, validation_errors = validate_step(step)
+                if not is_valid:
+                    error_msg = f"Step {sort_order} validation failed: {'; '.join(validation_errors)}"
+                    logger.error("%s", error_msg)
+                    try:
+                        self._run_async(
+                            self.execution_api.update_step_status(
+                                usecase_id=usecase_id, execution_id=execution_id,
+                                step_id=execution_step_id, status="failed",
+                                error_message=error_msg,
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning("Failed to update step status: %s", sanitize_error_message(str(e)))
+                    result = {"success": False, "error": error_msg}
+                    break
+
                 instruction = self._resolve_variables(
                     step.get("instruction", ""), variables, runtime_variables,
                 )
@@ -638,7 +673,7 @@ class ExecutionEngine:
 
                 if (
                     step_result.success
-                    and step.get("step_type") == "retrieve_value"
+                    and step.get("step_type") in ("retrieve_value", "transform")
                     and step.get("capture_variable")
                     and step_result.actual_value
                 ):

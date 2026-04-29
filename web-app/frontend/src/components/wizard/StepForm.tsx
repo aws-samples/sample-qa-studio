@@ -34,7 +34,8 @@ interface StepFormProps {
 
 const STEP_TYPE_OPTIONS = [
   { label: 'Navigation', value: 'navigation' },
-  { label: 'URL', value: 'url' },
+  { label: 'Browser', value: 'browser' },
+  { label: 'Transform', value: 'transform' },
   { label: 'Secret', value: 'secret' },
   { label: 'Validation', value: 'validation' },
   { label: 'Retrieve Value', value: 'retrieve_value' },

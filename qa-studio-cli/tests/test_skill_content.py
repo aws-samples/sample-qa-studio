@@ -190,6 +190,8 @@ class TestReferenceTOC:
         "retrieve_value",
         "assertion",
         "download",
+        "browser",
+        "transform",
     ]
 
     def test_step_types_has_all_7_step_types(self):

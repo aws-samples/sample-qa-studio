@@ -5,11 +5,19 @@ All nova_act imports are at module level since this module is only
 loaded lazily via the run command.
 """
 
+import base64
+import json
 import logging
+import math
 import os
 import re
+import ssl
+import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Callable, Optional
+from urllib.parse import urlparse
 
 from nova_act import NovaAct, BOOL_SCHEMA
 
@@ -19,6 +27,59 @@ logger = logging.getLogger(__name__)
 
 STRING_SCHEMA = {"type": "string"}
 NUMBER_SCHEMA = {"type": "number"}
+
+
+def _safe_eval_math(expression: str, variables: dict | None = None) -> float | int:
+    """Safe AST-based arithmetic evaluator. Mirrors worker/transform/math_evaluator.py."""
+    import ast
+    import operator as _op
+
+    _MAX_EXPONENT = 1000
+    _MAX_RESULT = 1e308  # prevent intermediate results from blowing up memory
+
+    _BIN = {ast.Add: _op.add, ast.Sub: _op.sub, ast.Mult: _op.mul,
+            ast.Div: _op.truediv, ast.Mod: _op.mod, ast.Pow: _op.pow}
+    _UN = {ast.UAdd: _op.pos, ast.USub: _op.neg}
+    variables = variables or {}
+
+    def _check_magnitude(value, context="Result"):
+        if isinstance(value, (int, float)) and abs(value) > _MAX_RESULT:
+            raise ValueError(f"{context} magnitude too large (abs > {_MAX_RESULT})")
+        return value
+
+    def _walk(node):
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+                raise ValueError(f"Non-numeric constant: {node.value!r}")
+            return node.value
+        if isinstance(node, ast.Name):
+            if node.id not in variables:
+                raise ValueError(f"Unknown variable: '{node.id}'")
+            val = variables[node.id]
+            if not isinstance(val, (int, float)) or isinstance(val, bool):
+                raise ValueError(f"Variable '{node.id}' must be numeric, got {type(val).__name__}: {val!r}")
+            return val
+        if isinstance(node, ast.BinOp):
+            fn = _BIN.get(type(node.op))
+            if not fn:
+                raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
+            left, right = _walk(node.left), _walk(node.right)
+            if isinstance(node.op, ast.Pow):
+                if isinstance(right, (int, float)) and abs(right) > _MAX_EXPONENT:
+                    raise ValueError(f"Exponent too large: {right} (max {_MAX_EXPONENT})")
+                if isinstance(left, (int, float)) and abs(left) > _MAX_EXPONENT:
+                    raise ValueError(f"Base too large for exponentiation: {left}")
+            result = fn(left, right)
+            return _check_magnitude(result)
+        if isinstance(node, ast.UnaryOp):
+            fn = _UN.get(type(node.op))
+            if not fn:
+                raise ValueError(f"Unsupported unary: {type(node.op).__name__}")
+            return fn(_walk(node.operand))
+        raise ValueError(f"Disallowed expression: {type(node).__name__}")
+
+    tree = ast.parse(expression.strip(), mode="eval")
+    return _walk(tree.body)
 
 CLICK_PROMPT = """
 The `agentClick` statement supports a `clickType` argument to specify the type of click to perform.
@@ -69,6 +130,10 @@ class StepExecutor:
                 return self._execute_secret(step)
             case "download":
                 return self._execute_download(step)
+            case "browser":
+                return self._execute_browser(step)
+            case "transform":
+                return self._execute_transform(step, variables, runtime_variables)
             case _:
                 logger.warning("Unknown step_type '%s', falling back to navigation", step_type)
                 return self._execute_navigation(step)
@@ -108,7 +173,6 @@ class StepExecutor:
     def _execute_retrieve_value(self, step: dict) -> StepResult:
         # Programmatic URL extraction — bypasses vision model
         if step.get("value_source") == "url":
-            import re
             try:
                 current_url = self.nova.page.url
                 pattern = step.get("instruction", "").strip()
@@ -214,19 +278,16 @@ class StepExecutor:
             act_id = self._extract_act_id(result)
             playwright_download = download_info.value
 
-            import time as _time
-            _time.sleep(1)
+            time.sleep(1)
 
             if download_data["file"]:
                 temp_path = download_data["file"]
                 filename = download_data["filename"]
             else:
-                import urllib.request, ssl
                 filename = playwright_download.suggested_filename
                 self.downloads_dir.mkdir(parents=True, exist_ok=True)
                 temp_path = str(self.downloads_dir / filename)
                 # Validate URL scheme to prevent SSRF
-                from urllib.parse import urlparse
                 parsed_url = urlparse(playwright_download.url)
                 if parsed_url.scheme not in ('http', 'https'):
                     raise ValueError(f"Unsupported URL scheme: {parsed_url.scheme}")
@@ -256,6 +317,153 @@ class StepExecutor:
                 except Exception:
                     pass
 
+    def _execute_browser(self, step: dict) -> StepResult:
+        """Execute a browser step (reload, back, forward, navigate)."""
+        action = step.get("browser_action", "")
+        if not action:
+            return StepResult(success=False, logs="browser_action is required")
+        raw_args = step.get("browser_args")
+        args = json.loads(raw_args) if isinstance(raw_args, str) and raw_args else (raw_args or {})
+        try:
+            page = self.nova.page
+            match action:
+                case "reload":
+                    if args.get("hard"):
+                        page.evaluate("() => location.reload()")
+                    else:
+                        page.reload()
+                    return StepResult(success=True)
+                case "back":
+                    url_before = page.url
+                    response = page.go_back()
+                    if response is None and page.url == url_before:
+                        return StepResult(success=False, logs="Browser back failed: no previous history entry")
+                    return StepResult(success=True)
+                case "forward":
+                    url_before = page.url
+                    response = page.go_forward()
+                    if response is None and page.url == url_before:
+                        return StepResult(success=False, logs="Browser forward failed: no forward history entry")
+                    return StepResult(success=True)
+                case "navigate":
+                    url = args.get("url", "")
+                    if not url:
+                        return StepResult(success=False, logs="browser_args.url is required for navigate")
+                    _parsed = urlparse(url)
+                    if _parsed.scheme not in ("http", "https"):
+                        return StepResult(success=False, logs=f"URL scheme must be http or https, got '{_parsed.scheme}'")
+                    self.nova.go_to_url(url)
+                    return StepResult(success=True)
+                case _:
+                    return StepResult(success=False, logs=f"Unknown browser_action: '{action}'")
+        except Exception as e:
+            return StepResult(success=False, logs=str(e))
+
+    def _execute_transform(self, step: dict, variables: dict, runtime_variables: dict) -> StepResult:
+        """Execute a transform step (math, string ops, etc.)."""
+        operation = step.get("transform_operation", "")
+        if not operation:
+            return StepResult(success=False, logs="transform_operation is required")
+        capture_var = step.get("capture_variable", "")
+        if not capture_var:
+            return StepResult(success=False, logs="capture_variable is required for transform steps")
+        try:
+            raw_args = json.loads(step.get("transform_args", "{}") or "{}")
+        except (ValueError, TypeError) as exc:
+            return StepResult(success=False, logs=f"Invalid transform_args JSON: {exc}")
+
+        # Resolve {{ variables }} in string args
+        merged = {**variables, **runtime_variables}
+        resolved = {}
+        for k, v in raw_args.items():
+            if isinstance(v, str):
+                resolved[k] = re.sub(r"\{\{\s*(\w+)\s*\}\}", lambda m: merged.get(m.group(1), m.group(0)), v)
+            elif isinstance(v, list):
+                resolved[k] = [
+                    re.sub(r"\{\{\s*(\w+)\s*\}\}", lambda m: merged.get(m.group(1), m.group(0)), i) if isinstance(i, str) else i
+                    for i in v
+                ]
+            else:
+                resolved[k] = v
+
+        try:
+            result = self._run_transform(operation, resolved)
+        except Exception as exc:
+            return StepResult(success=False, logs=f"Transform '{operation}' failed: {exc}")
+
+        actual = str(result)
+        return StepResult(success=True, actual_value=actual)
+
+    @staticmethod
+    def _run_transform(operation: str, args: dict):
+        """Execute a single transform operation. Pure function, no side effects."""
+        match operation:
+            case "math":
+                return _safe_eval_math(args.get("expression", ""))
+            case "round":
+                return round(float(args["value"]), int(args.get("digits", 0)))
+            case "floor":
+                return math.floor(float(args["value"]))
+            case "ceil":
+                return math.ceil(float(args["value"]))
+            case "abs":
+                return abs(float(args["value"]))
+            case "min":
+                vals = [float(v) for v in args["values"]]
+                if not vals:
+                    raise ValueError("min requires at least one value")
+                return min(vals)
+            case "max":
+                vals = [float(v) for v in args["values"]]
+                if not vals:
+                    raise ValueError("max requires at least one value")
+                return max(vals)
+            case "concat":
+                return "".join(str(v) for v in args.get("values", []))
+            case "upper":
+                return str(args["value"]).upper()
+            case "lower":
+                return str(args["value"]).lower()
+            case "trim":
+                return str(args["value"]).strip()
+            case "replace":
+                return str(args["value"]).replace(args["old"], args["new"])
+            case "substring":
+                end = int(args["end"]) if args.get("end") is not None else None
+                return str(args["value"])[int(args["start"]):end]
+            case "length":
+                return len(str(args["value"]))
+            case "to_number":
+                try:
+                    return float(args["value"])
+                except ValueError:
+                    raise ValueError(f"Cannot convert '{args['value']}' to number")
+            case "to_string":
+                return str(args["value"])
+            case "to_int":
+                try:
+                    return int(float(args["value"]))
+                except ValueError:
+                    raise ValueError(f"Cannot convert '{args['value']}' to int")
+            case "regex_extract":
+                try:
+                    m = re.search(args["pattern"], str(args["value"]))
+                except re.error as exc:
+                    raise ValueError(f"Invalid regex: {exc}")
+                if not m:
+                    raise ValueError(f"Pattern did not match")
+                group = int(args.get("group", 0))
+                try:
+                    return m.group(group)
+                except IndexError:
+                    raise ValueError(f"Group {group} not found")
+            case "format":
+                if re.search(r'\{[^}]*[.\[]', args["template"]):
+                    raise ValueError("Format template must not contain attribute or index access")
+                return args["template"].format(*args.get("args", []))
+            case _:
+                raise ValueError(f"Unknown transform operation: '{operation}'")
+
     def _handle_download_intercept(self, event: dict, cdp_session, download_data: dict) -> None:
         """Handle a CDP Network.requestIntercepted event for downloads."""
         interception_id = event.get("interceptionId")
@@ -272,7 +480,6 @@ class StepExecutor:
                 or response_headers.get("Content-Disposition")
             )
         if content_disposition and "attachment" in content_disposition.lower():
-            import urllib.parse
             filename = None
             match = re.search(r"filename\*=(?:UTF-8'')?([^;\s]+)", content_disposition)
             if match:
@@ -296,7 +503,6 @@ class StepExecutor:
 
     def _download_from_stream(self, cdp_session, interception_id: str, filename: str) -> Optional[str]:
         """Download file content from a CDP interception stream."""
-        import base64
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
         temp_path = str(self.downloads_dir / filename)
         try:

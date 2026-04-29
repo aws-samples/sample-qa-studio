@@ -55,6 +55,12 @@ class ExecutionStep:
     value_source: str = ''
     cached_steps: Optional[str] = None
     cache_last_updated: Optional[str] = None
+    trajectory_s3_key: Optional[str] = None
+    trajectory_last_updated: Optional[str] = None
+    browser_action: Optional[str] = None
+    browser_args: Optional[str] = None
+    transform_operation: Optional[str] = None
+    transform_args: Optional[str] = None
 
 @dataclass
 class ExecutionVariables:
@@ -70,6 +76,23 @@ class ExecutionHeaders:
     sk: str
     headers: Dict[str, str]
     created_at: str
+
+
+@dataclass
+class ReplayResult:
+    """Result of a trajectory replay attempt."""
+    success: bool
+    duration_ms: int
+    trajectory_s3_key: str
+    error: Optional[str] = None
+
+
+class TrajectoryReplayError(Exception):
+    """Raised when trajectory replay fails."""
+    def __init__(self, message: str, s3_key: str, cause: Optional[Exception] = None):
+        super().__init__(message)
+        self.s3_key = s3_key
+        self.cause = cause
 
 
 from pydantic import BaseModel

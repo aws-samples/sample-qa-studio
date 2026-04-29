@@ -101,7 +101,13 @@ class DynamoDBClient:
                         enable_advanced_click_types=item.get('enable_advanced_click_types', False),
                         value_source=item.get('value_source', ''),
                         cached_steps=item.get('cached_steps', None),
-                        cache_last_updated=item.get('cache_last_updated', None)
+                        cache_last_updated=item.get('cache_last_updated', None),
+                        trajectory_s3_key=item.get('trajectory_s3_key', None),
+                        trajectory_last_updated=item.get('trajectory_last_updated', None),
+                        browser_action=item.get('browser_action', None),
+                        browser_args=item.get('browser_args', None),
+                        transform_operation=item.get('transform_operation', None),
+                        transform_args=item.get('transform_args', None),
                     )
                     steps.append(step)
                 except Exception as e:
@@ -630,6 +636,14 @@ class DynamoDBClient:
                 assertion_variable=item.get('assertion_variable', ''),
                 enable_advanced_click_types=item.get('enable_advanced_click_types', False),
                 value_source=item.get('value_source', ''),
+                cached_steps=item.get('cached_steps', None),
+                cache_last_updated=item.get('cache_last_updated', None),
+                trajectory_s3_key=item.get('trajectory_s3_key', None),
+                trajectory_last_updated=item.get('trajectory_last_updated', None),
+                browser_action=item.get('browser_action', None),
+                browser_args=item.get('browser_args', None),
+                transform_operation=item.get('transform_operation', None),
+                transform_args=item.get('transform_args', None),
             )
         except ClientError as e:
             logger.error(f"Error getting execution step {step_id}: {e}")
@@ -669,6 +683,14 @@ class DynamoDBClient:
                     assertion_variable=item.get('assertion_variable', ''),
                     enable_advanced_click_types=item.get('enable_advanced_click_types', False),
                     value_source=item.get('value_source', ''),
+                    cached_steps=item.get('cached_steps', None),
+                    cache_last_updated=item.get('cache_last_updated', None),
+                    trajectory_s3_key=item.get('trajectory_s3_key', None),
+                    trajectory_last_updated=item.get('trajectory_last_updated', None),
+                    browser_action=item.get('browser_action', None),
+                    browser_args=item.get('browser_args', None),
+                    transform_operation=item.get('transform_operation', None),
+                    transform_args=item.get('transform_args', None),
                 )
                 steps.append(step)
             

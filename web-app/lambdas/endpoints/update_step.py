@@ -66,6 +66,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'value_type': body.get('value_type'),
             'enable_advanced_click_types': body.get('enable_advanced_click_types'),
             'value_source': body.get('value_source'),
+            'browser_action': body.get('browser_action'),
+            'browser_args': body.get('browser_args'),
+            'transform_operation': body.get('transform_operation'),
+            'transform_args': body.get('transform_args'),
         }
         
         for field_name, field_value in optional_fields.items():

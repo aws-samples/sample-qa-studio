@@ -116,6 +116,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if template_step.get('value_type'):
             updated_step['value_type'] = template_step['value_type']
         
+        # Add browser/transform fields from template if present
+        for field in ['browser_action', 'browser_args', 'transform_operation', 'transform_args',
+                      'enable_advanced_click_types', 'value_source']:
+            if template_step.get(field):
+                updated_step[field] = template_step[field]
+        
         # Save updated step
         table.put_item(Item=updated_step)
         

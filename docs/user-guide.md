@@ -124,7 +124,9 @@ You can add, edit, reorder, and delete steps here.
 - **Secret**: Steps that reference a stored secret. The action describes what to do (e.g., "Type the password in the password field") and the secret provides the sensitive value at runtime. The secret value never appears in logs.
 - **Retrieve Value**: Extracts a value from the page and stores it as a runtime variable for use in later steps. You specify a variable name and a value type (`string`, `number`, or `bool`). The captured value can be referenced in subsequent steps using `{{VariableName}}` template syntax.
 - **Assertion**: Compares a previously captured runtime variable against an expected value. Does not interact with the browser. Use this after a Retrieve Value step to verify the captured data matches expectations. Supports the same type and operator combinations as Validation.
-- **URL**: Navigates the browser directly to a specific URL. The instruction is the URL itself.
+- **URL**: Navigates the browser directly to a specific URL. The instruction is the URL itself. ⚠️ *Deprecated — use Browser → Navigate instead. Existing URL steps continue to work.*
+- **Browser**: Performs browser-level actions without interacting with page elements. Choose an action: **Reload** (optionally hard reload to bypass cache), **Back** (navigate back in history), **Forward** (navigate forward in history), or **Navigate** (go to a specific URL). This replaces the URL step type for new tests.
+- **Transform**: Computes or manipulates a value using a built-in operation and stores the result in a variable. Supports 19 operations: math, round, floor, ceil, abs, min, max, concat, upper, lower, trim, replace, substring, length, to_number, to_string, to_int, regex_extract, and format. Always requires a capture variable for the output.
 - **Download**: Downloads a file from the page and uploads it to S3 for later retrieval.
 
 #### Schedule
