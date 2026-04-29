@@ -6,6 +6,7 @@ lazily via the `run` command.
 """
 
 import asyncio
+import inspect
 import logging
 import os
 import re
@@ -26,6 +27,10 @@ from qa_studio_cli.utils.errors import sanitize_error_message
 from qa_studio_cli.validation import validate_step
 
 logger = logging.getLogger(__name__)
+
+# Detect whether the installed NovaAct supports the `replayable` kwarg.
+# This avoids TypeError on older SDK versions that lack the parameter.
+_replayable_supported = 'replayable' in inspect.signature(NovaAct.__init__).parameters
 
 
 class ExecutionEngine:
@@ -99,6 +104,12 @@ class ExecutionEngine:
                 nova_kwargs["ignore_https_errors"] = True
             else:
                 nova_kwargs["starting_page"] = starting_url
+
+            # Enable trajectory recording for web tests when supported
+            if not mobile_config and _replayable_supported:
+                if os.getenv("ENABLE_TRAJECTORY_REPLAY", "true").lower() != "false":
+                    nova_kwargs["replayable"] = True
+                    logger.info("Trajectory recording enabled (replayable=True)")
 
             wf_manager = WorkflowManager()
             workflow_name = wf_manager.ensure_workflow(usecase_id)
@@ -534,6 +545,12 @@ class ExecutionEngine:
             nova_kwargs["ignore_https_errors"] = True
         else:
             nova_kwargs["starting_page"] = starting_url
+
+        # Enable trajectory recording for web tests when supported
+        if not is_mobile and _replayable_supported:
+            if os.getenv("ENABLE_TRAJECTORY_REPLAY", "true").lower() != "false":
+                nova_kwargs["replayable"] = True
+                logger.info("Trajectory recording enabled (replayable=True)")
 
         region = os.getenv("AWS_REGION", "us-east-1")
         wf_manager = WorkflowManager()

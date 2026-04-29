@@ -14,7 +14,7 @@ setup(
     install_requires=requirements,
     extras_require={
         "runner": [
-            "nova-act==3.1.157.0",
+            "nova-act~=3.3",
             "boto3>=1.34.0",
             "tenacity>=8.2.0",
             "playwright",

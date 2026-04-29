@@ -108,6 +108,7 @@ class DynamoDBClient:
                         browser_args=item.get('browser_args', None),
                         transform_operation=item.get('transform_operation', None),
                         transform_args=item.get('transform_args', None),
+
                     )
                     steps.append(step)
                 except Exception as e:
@@ -644,6 +645,7 @@ class DynamoDBClient:
                 browser_args=item.get('browser_args', None),
                 transform_operation=item.get('transform_operation', None),
                 transform_args=item.get('transform_args', None),
+
             )
         except ClientError as e:
             logger.error(f"Error getting execution step {step_id}: {e}")
@@ -691,6 +693,7 @@ class DynamoDBClient:
                     browser_args=item.get('browser_args', None),
                     transform_operation=item.get('transform_operation', None),
                     transform_args=item.get('transform_args', None),
+
                 )
                 steps.append(step)
             

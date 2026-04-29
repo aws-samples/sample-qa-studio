@@ -1,5 +1,5 @@
 boto3
-nova-act==3.1.157.0
+nova-act~=3.3
 Appium-Python-Client~=4.0.0
 pydantic-settings~=2.13.0
 requests~=2.32.5
