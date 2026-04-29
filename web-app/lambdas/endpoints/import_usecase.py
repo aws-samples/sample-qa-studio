@@ -61,6 +61,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         variables_data = body.get('variables', [])
         secrets_data = body.get('secrets', [])
         hooks_data = body.get('hooks')
+        region_override = body.get('regionOverride')
         
         # Create new usecase with proper pk/sk
         usecase_tags = usecase_data.get('tags', [])
@@ -76,7 +77,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'description': usecase_data.get('description', ''),
             'starting_url': usecase_data.get('starting_url', ''),
             'active': usecase_data.get('active', False),
-            'executing_region': usecase_data.get('executing_region', ''),
+            'executing_region': region_override or usecase_data.get('executing_region', ''),
             'tags': usecase_tags,
             'created_at': now,
             'test_platform': usecase_data.get('test_platform', 'web'),

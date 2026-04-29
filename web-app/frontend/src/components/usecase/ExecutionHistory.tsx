@@ -9,6 +9,7 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Box from "@cloudscape-design/components/box";
 import Flashbar from "@cloudscape-design/components/flashbar";
 import { api, ExecutionModel } from '../../utils/api';
+import { batchedPromiseAll } from '../../utils/batchedPromiseAll';
 import { useApiData } from '../common/useAsyncData';
 import { ContainerLoading } from '../common/LoadingStates';
 import { SpaceBetween } from '@cloudscape-design/components';
@@ -60,7 +61,7 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
       loading: true
     }]);
 
-    const deletePromises = selectedItems.map(async (execution) => {
+    const results = await batchedPromiseAll(selectedItems, async (execution) => {
       try {
         const cleanExecutionId = execution.sk.replace('EXECUTION#', '');
         await api.delete(`usecase/${usecaseId}/executions/${cleanExecutionId}`);
@@ -76,8 +77,6 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
         } as BatchDeleteResult;
       }
     });
-
-    const results = await Promise.all(deletePromises);
     
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;

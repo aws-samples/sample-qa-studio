@@ -1,6 +1,8 @@
 """Click command group for test (usecase) management."""
 
 import json
+from pathlib import Path
+
 import click
 
 from qa_studio_cli.api.client import require_auth
@@ -193,3 +195,229 @@ def run_test(ctx, id, trigger_type):
         click.echo(str(e), err=True)
         raise SystemExit(1)
 
+
+
+@tests.command("import")
+@require_auth
+@click.argument("path", type=click.Path(exists=True))
+@click.option("--dry-run", is_flag=True, help="Validate only, do not import")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+@click.option("--base-url", default=None, help="Override starting_url for all imports")
+@click.option("--region", default=None, help="Override executing_region for all imports")
+@click.option("--skip-secrets", is_flag=True, help="Skip interactive secret prompts")
+@click.option(
+    "--format", "output_format",
+    type=click.Choice(["human", "json"], case_sensitive=False),
+    default="human", help="Output format (default: human)",
+)
+@click.pass_context
+def import_tests(ctx, path, dry_run, yes, base_url, region, skip_secrets, output_format):
+    """Import test cases from a JSON file or folder."""
+    from qa_studio_cli.importers.scanner import scan_all
+    from qa_studio_cli.importers.executor import execute_imports, set_secret_value
+
+    client = ctx.obj["client"]
+    is_json = output_format == "json"
+
+    # Phase 1: Scan & Validate
+    results = scan_all(Path(path))
+
+    if not results:
+        if is_json:
+            click.echo(json.dumps({"error": "No JSON files found"}))
+        else:
+            click.echo("No JSON files found.", err=True)
+        raise SystemExit(1)
+
+    valid = [r for r in results if r.is_valid]
+    invalid = [r for r in results if not r.is_valid]
+
+    # Display validation summary
+    if is_json:
+        json_output = _build_validation_json(results)
+    else:
+        _print_validation_table(results)
+
+    # Dry-run: stop here
+    if dry_run:
+        if is_json:
+            click.echo(json.dumps(json_output, indent=2))
+        exit_code = 0 if valid else 1
+        raise SystemExit(exit_code)
+
+    # All invalid: stop
+    if not valid:
+        if is_json:
+            click.echo(json.dumps(json_output, indent=2))
+        else:
+            click.echo("\nNo valid files to import.", err=True)
+        raise SystemExit(1)
+
+    # Confirmation
+    if not is_json and not yes:
+        if not click.confirm(f"\nImport {len(valid)} test(s)?"):
+            click.echo("Aborted.")
+            raise SystemExit(0)
+
+    # Collect secrets interactively (unless skipped or JSON mode)
+    # Deduplicate: prompt once per unique secret key, reuse across files
+    secret_values: dict[str, dict[str, str]] = {}
+    should_prompt_secrets = not skip_secrets and not is_json
+
+    if should_prompt_secrets:
+        # Build unique secret map: key -> description (first seen wins)
+        unique_secrets: dict[str, str] = {}
+        for scan_result in valid:
+            for secret in scan_result.payload.secrets:
+                if secret.key not in unique_secrets:
+                    unique_secrets[secret.key] = secret.description
+
+        if unique_secrets:
+            click.echo("\nSecrets (shared across all imported tests):")
+            prompted_values: dict[str, str] = {}
+            for key, description in unique_secrets.items():
+                desc = f" ({description})" if description else ""
+                value = click.prompt(
+                    f"  {key}{desc}",
+                    hide_input=True,
+                    default="",
+                    show_default=False,
+                )
+                if value:
+                    prompted_values[key] = value
+
+            # Distribute prompted values to each file that needs them
+            if prompted_values:
+                for scan_result in valid:
+                    file_secrets = {
+                        s.key: prompted_values[s.key]
+                        for s in scan_result.payload.secrets
+                        if s.key in prompted_values
+                    }
+                    if file_secrets:
+                        secret_values[scan_result.file_name] = file_secrets
+
+    # Phase 2: Import
+    import_results = execute_imports(
+        client, valid, base_url=base_url, region=region, secret_values=secret_values or None,
+    )
+
+    # Display results
+    if is_json:
+        json_output["import"] = _build_import_json(import_results)
+        click.echo(json.dumps(json_output, indent=2))
+    else:
+        _print_import_table(import_results)
+
+        # Report skipped secrets
+        if skip_secrets:
+            all_missing = []
+            for r in import_results:
+                if r.success and r.missing_secrets:
+                    all_missing.extend(r.missing_secrets)
+            if all_missing:
+                click.echo(
+                    f"\n⚠ Skipped secrets (configure in UI): "
+                    f"{', '.join(all_missing)}"
+                )
+
+    # Exit code
+    has_failures = any(not r.success for r in import_results)
+    raise SystemExit(1 if has_failures else 0)
+
+
+def _print_validation_table(results):
+    """Print human-readable validation summary table."""
+    click.echo(f"\nScanned {len(results)} file(s):\n")
+
+    # Calculate dynamic column widths
+    fw = max((len(r.file_name) for r in results), default=4)
+    nw = max(
+        (len(r.usecase_name) for r in results if r.is_valid),
+        default=12,
+    )
+    fw = max(fw, 4)   # min "File"
+    nw = max(nw, 12)  # min "Usecase Name"
+
+    header = f"{'File':<{fw}}  {'Usecase Name':<{nw}}  {'Steps':>5}  {'Secrets':>7}  Status"
+    click.echo(header)
+    click.echo("─" * len(header))
+
+    for r in results:
+        if r.is_valid:
+            click.echo(
+                f"{r.file_name:<{fw}}  {r.usecase_name:<{nw}}  "
+                f"{r.step_count:>5}  {r.secrets_count:>7}  ✓ Valid"
+            )
+        else:
+            errs = "; ".join(r.errors[:2])
+            click.echo(
+                f"{r.file_name:<{fw}}  {'—':<{nw}}  {'—':>5}  "
+                f"{'—':>7}  ✗ Invalid: {errs}"
+            )
+
+
+def _print_import_table(results):
+    """Print human-readable import results table."""
+    click.echo(f"\nImport Results:\n")
+
+    fw = max((len(r.file_name) for r in results), default=4)
+    fw = max(fw, 4)
+    uid_w = 36  # UUID length
+
+    header = f"{'File':<{fw}}  {'Usecase ID':<{uid_w}}  Status"
+    click.echo(header)
+    click.echo("─" * len(header))
+
+    for r in results:
+        if r.success:
+            click.echo(
+                f"{r.file_name:<{fw}}  {r.usecase_id:<{uid_w}}  ✓ Imported"
+            )
+        else:
+            click.echo(
+                f"{r.file_name:<{fw}}  {'—':<{uid_w}}  ✗ Failed: {r.error_message}"
+            )
+
+
+def _build_validation_json(results):
+    """Build JSON output for validation phase."""
+    valid_count = sum(1 for r in results if r.is_valid)
+    return {
+        "validation": {
+            "total": len(results),
+            "valid": valid_count,
+            "invalid": len(results) - valid_count,
+            "files": [
+                {
+                    "file": r.file_name,
+                    "usecaseName": r.usecase_name,
+                    "stepCount": r.step_count,
+                    "secretsCount": r.secrets_count,
+                    "valid": r.is_valid,
+                    "errors": r.errors,
+                }
+                for r in results
+            ],
+        }
+    }
+
+
+def _build_import_json(import_results):
+    """Build JSON output for import phase."""
+    succeeded = sum(1 for r in import_results if r.success)
+    return {
+        "total": len(import_results),
+        "succeeded": succeeded,
+        "failed": len(import_results) - succeeded,
+        "results": [
+            {
+                "file": r.file_name,
+                "success": r.success,
+                "usecaseId": r.usecase_id,
+                "missingSecrets": r.missing_secrets,
+                "error": r.error_message,
+            }
+            for r in import_results
+        ],
+    }

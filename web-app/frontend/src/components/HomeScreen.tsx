@@ -8,6 +8,7 @@ import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import Table from "@cloudscape-design/components/table";
 import TextFilter from "@cloudscape-design/components/text-filter";
 import { api } from '../utils/api';
+import { batchedPromiseAll } from '../utils/batchedPromiseAll';
 import Badge from "@cloudscape-design/components/badge";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import DeleteUsecaseModal from './DeleteUsecaseModal';
@@ -196,8 +197,8 @@ export default function HomeScreen() {
       loading: true
     }]);
 
-    // Delete all selected use cases in parallel
-    const deletePromises = selectedItems.map(async (usecase) => {
+    // Delete selected use cases in batches matching Lambda concurrency limit
+    const results = await batchedPromiseAll(selectedItems, async (usecase) => {
       try {
         await api.delete(`usecase/${usecase.id}`);
         return {
@@ -214,8 +215,6 @@ export default function HomeScreen() {
         } as BatchExecutionResult;
       }
     });
-
-    const results = await Promise.all(deletePromises);
 
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;

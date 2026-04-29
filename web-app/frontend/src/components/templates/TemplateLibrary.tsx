@@ -7,6 +7,7 @@ import Table from "@cloudscape-design/components/table";
 import Badge from "@cloudscape-design/components/badge";
 import Link from "@cloudscape-design/components/link";
 import { api } from '../../utils/api';
+import { batchedPromiseAll } from '../../utils/batchedPromiseAll';
 import CreateTemplateModal from './CreateTemplateModal';
 import DeleteTemplateModal from '../DeleteTemplateModal';
 
@@ -61,9 +62,7 @@ export default function TemplateLibrary() {
 
     setDeleting(true);
     try {
-      await Promise.all(
-        selectedItems.map(template => api.delete(`templates/${template.id}`))
-      );
+      await batchedPromiseAll(selectedItems, (template) => api.delete(`templates/${template.id}`));
       setSelectedItems([]);
       setShowDeleteModal(false);
       fetchTemplates();

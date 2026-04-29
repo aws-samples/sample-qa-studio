@@ -181,6 +181,43 @@ Example policy that blocks all permission dialogs:
 
 From the use case detail page, you can export the use case as a JSON file. This file contains all steps, configuration, mobile settings, and metadata (secrets and app binaries are excluded for security). Use this to share tests with colleagues or back them up.
 
+### Importing via CLI
+
+In addition to importing a single use case through the UI, the QA Studio CLI supports batch importing exported JSON files from a file or folder:
+
+```bash
+# Import a single file
+qa-studio tests import ./login_test.json
+
+# Import all JSON files from a folder (recursive)
+qa-studio tests import ./testcases/ --yes
+
+# Validate files without importing (dry-run)
+qa-studio tests import ./testcases/ --dry-run
+
+# Override the starting URL for a different environment
+qa-studio tests import ./testcases/ --base-url https://staging.example.com --yes
+
+# CI pipeline usage: JSON output, no prompts
+qa-studio tests import ./testcases/ --format json --skip-secrets
+```
+
+The import follows a two-phase flow:
+
+1. **Scan & Validate** — All JSON files are discovered and validated against the export schema. A summary table shows which files are valid.
+2. **Import** — After confirmation, valid files are sent to the API. If any file contains secrets, you'll be prompted to enter values (use `--skip-secrets` to configure them later in the UI).
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `path` | positional | required | File or directory path to import |
+| `--dry-run` | flag | `false` | Validate only, do not import |
+| `--yes` / `-y` | flag | `false` | Skip confirmation prompt |
+| `--base-url` | string | `None` | Override `starting_url` for all imports |
+| `--skip-secrets` | flag | `false` | Skip interactive secret prompts |
+| `--format` | choice | `human` | Output format: `human` or `json` |
+
+See the [CLI README](../qa-studio-cli/README.md#importing-test-cases) for the full reference.
+
 ---
 
 ## Mobile Testing

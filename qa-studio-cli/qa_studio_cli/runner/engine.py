@@ -45,146 +45,145 @@ class ExecutionEngine:
     # Local-only execution (no remote state management)
     # ------------------------------------------------------------------
 
-    
-        def execute_usecase_local(
-            self,
-            usecase_id: str,
-            usecase_name: str,
-            starting_url: str,
-            steps: List[Dict[str, Any]],
-            variables: Dict[str, str],
-            secrets: list,
-            region: str,
-            model_id: str,
-            mobile_config: Dict[str, Any] | None = None,
-        ) -> Dict[str, Any]:
-            """Execute use case locally without remote state management."""
-            from qa_studio_cli.models.execution import (
-                LocalExecutionResult, StepResultDetail, ArtifactPaths,
-            )
+    def execute_usecase_local(
+        self,
+        usecase_id: str,
+        usecase_name: str,
+        starting_url: str,
+        steps: List[Dict[str, Any]],
+        variables: Dict[str, str],
+        secrets: list,
+        region: str,
+        model_id: str,
+        mobile_config: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Execute use case locally without remote state management."""
+        from qa_studio_cli.models.execution import (
+            LocalExecutionResult, StepResultDetail, ArtifactPaths,
+        )
 
-            start_time = datetime.utcnow()
-            artifacts_dir = Path("/tmp/qa-studio-artifacts") / usecase_id
-            artifacts_dir.mkdir(parents=True, exist_ok=True)
-            logs_dir = str(artifacts_dir / "nova_act_logs")
-            os.makedirs(logs_dir, exist_ok=True)
+        start_time = datetime.utcnow()
+        artifacts_dir = Path("/tmp/qa-studio-artifacts") / usecase_id
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir = str(artifacts_dir / "nova_act_logs")
+        os.makedirs(logs_dir, exist_ok=True)
 
-            log_path = artifacts_dir / "logs.txt"
-            file_handler = logging.FileHandler(log_path)
-            file_handler.setLevel(logging.DEBUG)
-            file_handler.setFormatter(logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            ))
-            logging.getLogger().addHandler(file_handler)
+        log_path = artifacts_dir / "logs.txt"
+        file_handler = logging.FileHandler(log_path)
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        ))
+        logging.getLogger().addHandler(file_handler)
 
-            step_results: List[StepResultDetail] = []
-            overall_status = "success"
-            video_path = None
+        step_results: List[StepResultDetail] = []
+        overall_status = "success"
+        video_path = None
 
-            try:
-                headless = os.getenv("HEADLESS", "true").lower() != "false"
-                nova_kwargs: Dict[str, Any] = {
-                    "headless": headless,
-                    "logs_directory": logs_dir,
-                    "record_video": True,
-                }
+        try:
+            headless = os.getenv("HEADLESS", "true").lower() != "false"
+            nova_kwargs: Dict[str, Any] = {
+                "headless": headless,
+                "logs_directory": logs_dir,
+                "record_video": True,
+            }
 
-                # Build mobile actuator if this is a mobile use case
-                actuator = None
-                if mobile_config:
-                    actuator, effective_starting_page = self._build_mobile_actuator(mobile_config)
-                    nova_kwargs["actuator"] = actuator
-                    nova_kwargs["starting_page"] = effective_starting_page
-                    nova_kwargs["ignore_screen_dims_check"] = True
-                    nova_kwargs["ignore_https_errors"] = True
-                else:
-                    nova_kwargs["starting_page"] = starting_url
+            # Build mobile actuator if this is a mobile use case
+            actuator = None
+            if mobile_config:
+                actuator, effective_starting_page = self._build_mobile_actuator(mobile_config)
+                nova_kwargs["actuator"] = actuator
+                nova_kwargs["starting_page"] = effective_starting_page
+                nova_kwargs["ignore_screen_dims_check"] = True
+                nova_kwargs["ignore_https_errors"] = True
+            else:
+                nova_kwargs["starting_page"] = starting_url
 
-                wf_manager = WorkflowManager()
-                workflow_name = wf_manager.ensure_workflow(usecase_id)
+            wf_manager = WorkflowManager()
+            workflow_name = wf_manager.ensure_workflow(usecase_id)
 
-                with Workflow(
-                    workflow_definition_name=workflow_name,
-                    model_id=model_id or "nova-act-v1.0",
-                    boto_session_kwargs={"region_name": region or "us-east-1"},
-                ) as workflow:
-                    nova_kwargs["workflow"] = workflow
+            with Workflow(
+                workflow_definition_name=workflow_name,
+                model_id=model_id or "nova-act-v1.0",
+                boto_session_kwargs={"region_name": region or "us-east-1"},
+            ) as workflow:
+                nova_kwargs["workflow"] = workflow
 
-                    with NovaAct(**nova_kwargs) as nova:
-                        secrets_dict = {s.get("key", s.get("secret_key", "")): s for s in secrets}
+                with NovaAct(**nova_kwargs) as nova:
+                    secrets_dict = {s.get("key", s.get("secret_key", "")): s for s in secrets}
 
-                        def _local_secret_resolver(uc_id: str, secret_key: str):
-                            secret = secrets_dict.get(secret_key)
-                            return secret.get("value") if secret else None
+                    def _local_secret_resolver(uc_id: str, secret_key: str):
+                        secret = secrets_dict.get(secret_key)
+                        return secret.get("value") if secret else None
 
-                        executor = StepExecutor(nova, secrets_resolver=_local_secret_resolver)
-                        runtime_variables: Dict[str, str] = {}
+                    executor = StepExecutor(nova, secrets_resolver=_local_secret_resolver)
+                    runtime_variables: Dict[str, str] = {}
 
-                        for step in steps:
-                            step_id = step.get("step_id", step.get("sk", ""))
-                            sort_order = step.get("sort", 0)
-                            step_start = datetime.utcnow()
+                    for step in steps:
+                        step_id = step.get("step_id", step.get("sk", ""))
+                        sort_order = step.get("sort", 0)
+                        step_start = datetime.utcnow()
 
-                            instruction = self._resolve_variables(
-                                step.get("instruction", ""), variables, runtime_variables,
-                            )
-                            resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id}
+                        instruction = self._resolve_variables(
+                            step.get("instruction", ""), variables, runtime_variables,
+                        )
+                        resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id}
 
-                            logger.info("[local] Executing step %d: %s", sort_order, instruction)
-                            step_result: StepResult = executor.execute(resolved_step, variables, runtime_variables)
+                        logger.info("[local] Executing step %d: %s", sort_order, instruction)
+                        step_result: StepResult = executor.execute(resolved_step, variables, runtime_variables)
 
-                            step_duration = (datetime.utcnow() - step_start).total_seconds()
-                            step_status = "success" if step_result.success else "failed"
+                        step_duration = (datetime.utcnow() - step_start).total_seconds()
+                        step_status = "success" if step_result.success else "failed"
 
-                            step_results.append(StepResultDetail(
-                                step_id=step_id,
-                                step_type=step.get("step_type", ""),
-                                instruction=instruction,
-                                status=step_status,
-                                duration=step_duration,
-                                error=sanitize_error_message(step_result.logs) if not step_result.success and step_result.logs else None,
-                            ))
+                        step_results.append(StepResultDetail(
+                            step_id=step_id,
+                            step_type=step.get("step_type", ""),
+                            instruction=instruction,
+                            status=step_status,
+                            duration=step_duration,
+                            error=sanitize_error_message(step_result.logs) if not step_result.success and step_result.logs else None,
+                        ))
 
-                            if (
-                                step_result.success
-                                and step.get("step_type") == "retrieve_value"
-                                and step.get("capture_variable")
-                                and step_result.actual_value
-                            ):
-                                runtime_variables[step["capture_variable"]] = step_result.actual_value
+                        if (
+                            step_result.success
+                            and step.get("step_type") == "retrieve_value"
+                            and step.get("capture_variable")
+                            and step_result.actual_value
+                        ):
+                            runtime_variables[step["capture_variable"]] = step_result.actual_value
 
-                            if not step_result.success:
-                                overall_status = "failed"
-                                logger.error("[local] Step %d failed: %s", sort_order, sanitize_error_message(step_result.logs))
-                                break
+                        if not step_result.success:
+                            overall_status = "failed"
+                            logger.error("[local] Step %d failed: %s", sort_order, sanitize_error_message(step_result.logs))
+                            break
 
-                logs_path = Path(logs_dir)
-                for f in logs_path.rglob("*"):
-                    if f.suffix.lower() in (".webm", ".mp4") and f.is_file():
-                        video_path = str(f)
-                        break
+            logs_path = Path(logs_dir)
+            for f in logs_path.rglob("*"):
+                if f.suffix.lower() in (".webm", ".mp4") and f.is_file():
+                    video_path = str(f)
+                    break
 
-            except Exception as e:
-                overall_status = "failed"
-                logger.error("[local] Execution failed: %s", sanitize_error_message(str(e)))
-            finally:
-                file_handler.close()
-                logging.getLogger().removeHandler(file_handler)
+        except Exception as e:
+            overall_status = "failed"
+            logger.error("[local] Execution failed: %s", sanitize_error_message(str(e)))
+        finally:
+            file_handler.close()
+            logging.getLogger().removeHandler(file_handler)
 
-            duration = (datetime.utcnow() - start_time).total_seconds()
+        duration = (datetime.utcnow() - start_time).total_seconds()
 
-            result = LocalExecutionResult(
-                status=overall_status,
-                usecase_id=usecase_id,
-                usecase_name=usecase_name,
-                duration=duration,
-                steps=step_results,
-                artifacts=ArtifactPaths(
-                    video=video_path,
-                    logs=str(log_path) if log_path.exists() else None,
-                ),
-            )
-            return result.model_dump(by_alias=True)
+        result = LocalExecutionResult(
+            status=overall_status,
+            usecase_id=usecase_id,
+            usecase_name=usecase_name,
+            duration=duration,
+            steps=step_results,
+            artifacts=ArtifactPaths(
+                video=video_path,
+                logs=str(log_path) if log_path.exists() else None,
+            ),
+        )
+        return result.model_dump(by_alias=True)
 
     def _build_mobile_actuator(self, mobile_config: Dict[str, Any]) -> tuple:
         """Build a DeviceFarmActuator from mobile config fields.

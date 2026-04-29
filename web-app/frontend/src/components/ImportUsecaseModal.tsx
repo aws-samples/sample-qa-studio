@@ -10,7 +10,9 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Table from "@cloudscape-design/components/table";
 import Header from "@cloudscape-design/components/header";
+import Select, { SelectProps } from "@cloudscape-design/components/select";
 import { exportImportApi } from '../utils/api';
+import { regionOptions, findRegionOptions } from '../utils/browser_regions';
 
 interface ImportUsecaseModalProps {
   visible: boolean;
@@ -25,6 +27,7 @@ export default function ImportUsecaseModal({ visible, onDismiss, onImportSuccess
   const [error, setError] = useState<string>('');
   const [filePreview, setFilePreview] = useState<any>(null);
   const [previewError, setPreviewError] = useState<string>('');
+  const [selectedRegion, setSelectedRegion] = useState<SelectProps.Option | null>(findRegionOptions() as SelectProps.Option);
 
   // Preview file content when file is selected
   useEffect(() => {
@@ -68,6 +71,10 @@ export default function ImportUsecaseModal({ visible, onDismiss, onImportSuccess
       const fileContent = await file[0].text();
       const importData = JSON.parse(fileContent);
       
+      if (selectedRegion?.value) {
+        importData.regionOverride = selectedRegion.value;
+      }
+
       const result = await exportImportApi.importUsecase(importData);
       setImportResult(result);
       
@@ -88,6 +95,7 @@ export default function ImportUsecaseModal({ visible, onDismiss, onImportSuccess
     setError('');
     setFilePreview(null);
     setPreviewError('');
+    setSelectedRegion(findRegionOptions() as SelectProps.Option);
     onDismiss();
   };
 
@@ -137,6 +145,17 @@ export default function ImportUsecaseModal({ visible, onDismiss, onImportSuccess
             showFileThumbnail
             tokenLimit={3}
             accept=".json"
+          />
+        </FormField>
+
+        <FormField
+          label="Execution region"
+          description="AWS region where the browser will run during test execution"
+        >
+          <Select
+            selectedOption={selectedRegion}
+            onChange={({ detail }) => setSelectedRegion(detail.selectedOption)}
+            options={regionOptions()}
           />
         </FormField>
 

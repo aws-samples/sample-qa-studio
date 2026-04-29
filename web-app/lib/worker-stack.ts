@@ -129,11 +129,19 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     });
 
     // Create cross-region buckets for enabled regions and collect all bucket ARNs
+    // When Nova Act GA is enabled, us-east-1 is always needed (Nova Act requires a same-region bucket)
+    const crossRegionTargets = new Set(
+      enabledRegions.filter((region: string) => region !== defaultRegion)
+    );
+    if (config.useNovaActGa) {
+      crossRegionTargets.add('us-east-1');
+    }
+    // Remove default region in case it was added by the Nova Act check
+    crossRegionTargets.delete(defaultRegion);
+
     this.regionalBucketArns = [
       this.artefactsBucket.bucketArn,
-      ...enabledRegions
-        .filter((region: string) => region !== defaultRegion)
-        .map((region: string) => this.createCrossRegionBucket(region)),
+      ...[...crossRegionTargets].map((region: string) => this.createCrossRegionBucket(region)),
     ];
 
     // Notification infrastructure

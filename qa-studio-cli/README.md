@@ -58,6 +58,7 @@ qa-studio logout
 - `qa-studio tests get <id>` - Get test details
 - `qa-studio tests update <id>` - Update a test
 - `qa-studio tests delete <id>` - Delete a test
+- `qa-studio tests import <path>` - Import test cases from a JSON file or folder
 
 ### Suite Management
 
@@ -89,39 +90,54 @@ qa-studio run --usecase-id test-123 --local-only
 qa-studio run --usecase-id test-123 --verbose
 ```
 
-### Kiro IDE Skill Installation
+### Kiro IDE Integration
 
-QA Studio ships an agent skill for Kiro IDE (and other supported agents). Install it using the open [skills CLI](https://github.com/vercel-labs/skills):
+- `qa-studio setup` - Install QA Studio skills for Kiro IDE
+- `qa-studio uninstall` - Remove QA Studio skills from Kiro IDE
 
-**Prerequisites:**
-- Node.js 18+ (for `npx`)
+## Importing Test Cases
 
-```bash
-# Install the QA Studio skill into Kiro
-npx skills add <repository-url> --skill qa-studio -a kiro-cli
+The `qa-studio tests import` command imports test case JSON files (QA Studio export format) from a file or folder.
 
-# Or install globally (available across all projects)
-npx skills add <repository-url> --skill qa-studio -a kiro-cli -g
+### Import Options
 
-# Verify installation
-npx skills list
-```
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `path` | positional | required | File or directory path to import |
+| `--dry-run` | flag | `false` | Validate only, do not import |
+| `--yes` / `-y` | flag | `false` | Skip confirmation prompt |
+| `--base-url` | string | `None` | Override `starting_url` for all imports |
+| `--skip-secrets` | flag | `false` | Skip interactive secret prompts |
+| `--format` | choice | `human` | Output format: `human` or `json` |
 
-After installation, add the skill to your Kiro agent resources in `.kiro/agents/<agent>.json`:
-
-```json
-{
-  "resources": ["skill://.kiro/skills/**/SKILL.md"]
-}
-```
-
-To remove the skill:
+### Examples
 
 ```bash
-npx skills remove qa-studio
+# Import a single test file
+qa-studio tests import ./login_test.json
+
+# Import all tests from a folder (recursive)
+qa-studio tests import ./testcases/
+
+# Dry-run: validate files without importing
+qa-studio tests import ./testcases/ --dry-run
+
+# Import with base URL override (e.g. staging)
+qa-studio tests import ./testcases/ --base-url https://staging.example.com --yes
+
+# CI pipeline: JSON output, skip secrets, no prompts
+qa-studio tests import ./testcases/ --format json --skip-secrets
+
+# Skip secrets and configure them later in the UI
+qa-studio tests import ./login_test.json --skip-secrets
 ```
 
-The skill is also compatible with other agents (Claude Code, Cursor, Codex, etc.). See the [skills CLI docs](https://github.com/vercel-labs/skills) for the full list of supported agents.
+### Two-Phase Flow
+
+1. **Scan & Validate**: All JSON files are discovered and validated against the export schema. A summary table shows valid/invalid files.
+2. **Import**: After confirmation, valid files are sent to the API. Results are displayed per file.
+
+In `--format json` mode, all prompts are suppressed and output is a single JSON object suitable for CI parsing.
 
 ## Configuration
 
@@ -211,10 +227,8 @@ pip install -e "./qa-studio-cli[runner]"
 | `--local-only` | Local-only execution (no remote records) |
 | `--base-url` | Override base URL for all tests |
 | `--var` | Override variable (key=value, repeatable) |
-| `--header` | Set HTTP header (key=value, repeatable, each key allowed once) |
 | `--region` | Override AWS region for browser |
 | `--model-id` | Override Nova Act model ID |
-| `--user-agent` | Override browser User-Agent string |
 | `--verbose` | Enable verbose logging |
 | `--timeout` | Global timeout in seconds |
 | `--keep-artifacts` | Keep local artifact files after upload |
@@ -233,13 +247,7 @@ qa-studio run --suite-id suite-456 --var env=staging --var user=testuser
 qa-studio run --usecase-id test-123 --local-only
 
 # Run with custom region and model
-qa-studio run --usecase-id test-123 --region us-west-2 --model-id us.amazon.nova-2-lite-v1:0
-
-# Run with custom HTTP headers
-qa-studio run --usecase-id test-123 --header "X-Api-Key=my-key" --header "X-Custom-Header=value"
-
-# Run with custom User-Agent
-qa-studio run --usecase-id test-123 --user-agent "MyBot/1.0"
+qa-studio run --usecase-id test-123 --region us-west-2 --model-id anthropic.claude-3-5-sonnet-20240620-v1:0
 ```
 
 ## Development
