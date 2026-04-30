@@ -585,8 +585,7 @@ def create_execution_record_for_usecase(
                      'value_source', 'cached_steps', 'cache_last_updated',
                      'trajectory_s3_key', 'trajectory_last_updated',
                      'browser_action', 'browser_args',
-                     'transform_operation', 'transform_args']:
-                     'cached_steps', 'cache_last_updated',
+                     'transform_operation', 'transform_args',
                      'network_url_pattern', 'network_method', 'network_request_body',
                      'network_body_match_type', 'network_mock_response',
                      'network_mock_passthrough', 'network_timeout',
