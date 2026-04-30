@@ -20,6 +20,7 @@ Tests are written as plain English instructions (e.g., "Click the Login button",
 ### Web Application
 - **Natural Language Testing**: Define test steps in plain English through an intuitive web interface
 - **AI-Powered Execution**: Amazon Nova Act performs browser automation and validates test outcomes
+- **Network Assertion**: Intercept HTTP requests triggered by UI actions to verify API contracts and mock responses on the fly, without a separate integration-test harness. Supports `exact`, `subset`, and JSON Schema (Draft 2020-12) body matching for requests; `subset` and schema matching for responses; plus optional response status assertion.
 - **Interactive Wizard**: Build tests step-by-step with a live browser, watching each action execute in real-time
 - **AI Test Generation**: Describe user journeys in plain language and let AI generate complete test cases
 - **Rich Artifacts**: Review video recordings, screenshots, traces, and logs for every test execution

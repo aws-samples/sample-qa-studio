@@ -70,10 +70,20 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'browser_args': body.get('browser_args'),
             'transform_operation': body.get('transform_operation'),
             'transform_args': body.get('transform_args'),
+            'network_url_pattern': body.get('network_url_pattern'),
+            'network_method': body.get('network_method'),
+            'network_request_body': body.get('network_request_body'),
+            'network_body_match_type': body.get('network_body_match_type'),
+            'network_mock_response': body.get('network_mock_response'),
+            'network_mock_passthrough': body.get('network_mock_passthrough'),
+            'network_timeout': body.get('network_timeout'),
+            'network_response_body': body.get('network_response_body'),
+            'network_response_body_match_type': body.get('network_response_body_match_type'),
+            'network_response_status': body.get('network_response_status'),
         }
         
         for field_name, field_value in optional_fields.items():
-            if field_value:
+            if field_value is not None and field_value != '':
                 update_expression_parts.append(f'{field_name} = :{field_name}')
                 expression_attribute_values[f':{field_name}'] = field_value
         

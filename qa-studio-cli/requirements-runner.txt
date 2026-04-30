@@ -2,3 +2,4 @@ nova-act~=3.3
 boto3>=1.34.0
 tenacity>=8.2.0
 playwright
+jsonschema>=4.18.0

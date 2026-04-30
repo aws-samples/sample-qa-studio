@@ -67,6 +67,50 @@ class TestUseCaseStep:
         assert s.expected_value == "Hello"
         assert s.capture_variable == "greeting"
 
+    def test_network_assertion_fields_default_to_none(self):
+        s = UseCaseStep(
+            step_id="s1", step_type="navigation", instruction="Click",
+            sort=1,
+        )
+        assert s.network_url_pattern is None
+        assert s.network_method is None
+        assert s.network_request_body is None
+        assert s.network_body_match_type is None
+        assert s.network_mock_response is None
+        assert s.network_mock_passthrough is False
+        assert s.network_timeout is None
+        assert s.network_response_body is None
+        assert s.network_response_body_match_type is None
+        assert s.network_response_status is None
+
+    def test_network_assertion_fields_populated(self):
+        s = UseCaseStep(
+            step_id="s1",
+            step_type="network_assertion",
+            instruction="Click submit",
+            sort=1,
+            network_url_pattern="**/api/users",
+            network_method="POST",
+            network_request_body='{"name": "John"}',
+            network_body_match_type="subset",
+            network_mock_response='{"status": 201}',
+            network_mock_passthrough=True,
+            network_timeout=30,
+            network_response_body='{"type": "object", "required": ["id"]}',
+            network_response_body_match_type="schema",
+            network_response_status=201,
+        )
+        assert s.network_url_pattern == "**/api/users"
+        assert s.network_method == "POST"
+        assert s.network_request_body == '{"name": "John"}'
+        assert s.network_body_match_type == "subset"
+        assert s.network_mock_response == '{"status": 201}'
+        assert s.network_mock_passthrough is True
+        assert s.network_timeout == 30
+        assert s.network_response_body == '{"type": "object", "required": ["id"]}'
+        assert s.network_response_body_match_type == "schema"
+        assert s.network_response_status == 201
+
 
 class TestStepResultDetail:
     """Tests for StepResultDetail with alias serialization."""

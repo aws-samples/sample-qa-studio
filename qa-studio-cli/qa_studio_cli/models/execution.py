@@ -44,6 +44,18 @@ class UseCaseStep(BaseModel):
     browser_args: Optional[str] = None
     transform_operation: Optional[str] = None
     transform_args: Optional[str] = None
+    # network_assertion step fields
+    network_url_pattern: Optional[str] = None
+    network_method: Optional[str] = None
+    network_request_body: Optional[str] = None
+    network_body_match_type: Optional[str] = None
+    network_mock_response: Optional[str] = None
+    network_mock_passthrough: bool = False
+    network_timeout: Optional[int] = None
+    # network_assertion response-side assertion fields
+    network_response_body: Optional[str] = None
+    network_response_body_match_type: Optional[str] = None
+    network_response_status: Optional[int] = None
 
 
 class StepResultDetail(BaseModel):

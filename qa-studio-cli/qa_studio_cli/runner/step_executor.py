@@ -134,6 +134,8 @@ class StepExecutor:
                 return self._execute_browser(step)
             case "transform":
                 return self._execute_transform(step, variables, runtime_variables)
+            case "network_assertion":
+                return self._execute_network_assertion(step)
             case _:
                 logger.warning("Unknown step_type '%s', falling back to navigation", step_type)
                 return self._execute_navigation(step)
@@ -535,6 +537,345 @@ class StepExecutor:
         except Exception as e:
             logger.error("Error downloading from stream: %s", e)
             return None
+
+    def _execute_network_assertion(self, step: dict) -> StepResult:
+        """Execute a network_assertion step.
+
+        Observe (and optionally mock) an HTTP request triggered by a Nova Act
+        action, then optionally assert on the response.  Mirrors the worker
+        executor — see ``web-app/worker/network_assertion_step.py``.
+
+        Behaviour:
+          - validates URL pattern, method allow-list, body/mock/response
+            size caps, JSON validity
+          - request match-type ∈ {exact, subset, schema}
+          - response match-type ∈ {subset, schema} (``exact`` is rejected)
+          - response status must be an integer in [100, 599] when set
+          - captures ``response.body()`` after the response promise resolves
+            and size-checks it always — an oversize response fails the step
+            even with no body assertion configured
+          - summary segments are included only when the corresponding
+            assertion actually ran
+          - uses try/finally to guarantee page.unroute() cleanup
+          - truncates request/response bodies in logs to 500 chars
+          - caching is not applied to this step type by design
+        """
+        import json as _json
+
+        from qa_studio_cli.runner.network_matcher import (
+            match_exact,
+            match_schema,
+            match_subset,
+            validate_body_size,
+        )
+
+        DEFAULT_TIMEOUT_S = 15
+        MAX_TIMEOUT_S = 120
+        ALLOWED_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+        REQUEST_MATCH_TYPES = {"exact", "subset", "schema"}
+        RESPONSE_MATCH_TYPES = {"subset", "schema"}
+        LOG_BODY_MAX = 500
+        MIN_HTTP_STATUS = 100
+        MAX_HTTP_STATUS = 599
+
+        url_pattern = step.get("network_url_pattern") or ""
+        if not url_pattern:
+            return StepResult(
+                success=False,
+                logs="network_url_pattern is required for network_assertion steps",
+            )
+
+        method_expected = (step.get("network_method") or "").upper() or None
+        if method_expected is not None and method_expected not in ALLOWED_METHODS:
+            return StepResult(success=False, logs=f"invalid network_method: {method_expected!r}")
+
+        expected_body = step.get("network_request_body")
+        req_match_type = (step.get("network_body_match_type") or "exact").lower()
+        if expected_body and req_match_type not in REQUEST_MATCH_TYPES:
+            return StepResult(
+                success=False, logs=f"invalid network_body_match_type: {req_match_type!r}"
+            )
+
+        ok, err = validate_body_size(expected_body)
+        if not ok:
+            return StepResult(success=False, logs=f"network_request_body: {err}")
+
+        mock_raw = step.get("network_mock_response")
+        ok, err = validate_body_size(mock_raw)
+        if not ok:
+            return StepResult(success=False, logs=f"network_mock_response: {err}")
+
+        # Response-side validation.
+        expected_response_body = step.get("network_response_body")
+        resp_match_type_raw = step.get("network_response_body_match_type")
+        resp_match_type = (resp_match_type_raw or "").lower() or None
+        if expected_response_body and resp_match_type is None:
+            resp_match_type = "subset"
+        if resp_match_type is not None and resp_match_type not in RESPONSE_MATCH_TYPES:
+            return StepResult(
+                success=False,
+                logs=(
+                    f"invalid network_response_body_match_type: {resp_match_type!r} "
+                    '("exact" is not permitted on the response side)'
+                ),
+            )
+
+        ok, err = validate_body_size(expected_response_body)
+        if not ok:
+            return StepResult(success=False, logs=f"network_response_body: {err}")
+
+        status_expected = None
+        raw_status = step.get("network_response_status")
+        if raw_status is not None:
+            try:
+                status_expected = int(raw_status)
+            except (TypeError, ValueError):
+                return StepResult(
+                    success=False, logs="network_response_status must be an integer",
+                )
+            if status_expected < MIN_HTTP_STATUS or status_expected > MAX_HTTP_STATUS:
+                return StepResult(
+                    success=False,
+                    logs=(
+                        f"network_response_status must be between "
+                        f"{MIN_HTTP_STATUS} and {MAX_HTTP_STATUS}"
+                    ),
+                )
+
+        mock_cfg = None
+        if mock_raw:
+            try:
+                mock_cfg = _json.loads(mock_raw)
+            except (ValueError, TypeError) as exc:
+                return StepResult(
+                    success=False, logs=f"network_mock_response is not valid JSON: {exc}"
+                )
+            if not isinstance(mock_cfg, dict):
+                return StepResult(
+                    success=False, logs="network_mock_response must be a JSON object"
+                )
+
+        passthrough = bool(step.get("network_mock_passthrough"))
+
+        raw_timeout = step.get("network_timeout")
+        try:
+            timeout_s = int(raw_timeout) if raw_timeout is not None else DEFAULT_TIMEOUT_S
+        except (TypeError, ValueError):
+            timeout_s = DEFAULT_TIMEOUT_S
+        if timeout_s <= 0:
+            timeout_s = DEFAULT_TIMEOUT_S
+        timeout_s = min(timeout_s, MAX_TIMEOUT_S)
+        timeout_ms = timeout_s * 1000
+
+        page = getattr(self.nova, "page", None)
+        if page is None:
+            return StepResult(
+                success=False,
+                logs="nova.page is not available; cannot set up network interception",
+            )
+
+        def _serialize_body(body):
+            if body is None:
+                return ""
+            if isinstance(body, (bytes, bytearray)):
+                return body.decode("utf-8", errors="replace")
+            if isinstance(body, str):
+                return body
+            return _json.dumps(body)
+
+        def _build_handler(cfg: dict, pass_through: bool):
+            status = cfg.get("status", 200)
+            mock_body = cfg.get("body")
+            mock_headers = cfg.get("headers") or {}
+            if pass_through:
+                def handler(route):
+                    real = route.fetch()
+                    merged_headers = {**(real.headers or {}), **mock_headers}
+                    merged_body = (
+                        _serialize_body(mock_body) if "body" in cfg else real.body()
+                    )
+                    merged_status = cfg.get("status", real.status)
+                    route.fulfill(
+                        status=merged_status, body=merged_body, headers=merged_headers,
+                    )
+            else:
+                def handler(route):
+                    route.fulfill(
+                        status=status,
+                        body=_serialize_body(mock_body),
+                        headers=mock_headers,
+                    )
+            return handler
+
+        def _truncate(body):
+            if not body:
+                return "<empty>"
+            if len(body) <= LOG_BODY_MAX:
+                return body
+            return body[:LOG_BODY_MAX] + f"...<truncated {len(body) - LOG_BODY_MAX} chars>"
+
+        def _capture_response_body(resp):
+            try:
+                data = resp.body()
+            except Exception:
+                return None
+            if data is None:
+                return None
+            if isinstance(data, (bytes, bytearray)):
+                return data.decode("utf-8", errors="replace")
+            return str(data)
+
+        def _dispatch_matcher(mt, expected, actual):
+            if mt == "schema":
+                return match_schema(expected, actual)
+            if mt == "subset":
+                return match_subset(expected, actual)
+            return match_exact(expected, actual)
+
+        # Import the runtime cap so the oversize-captured check uses the
+        # same threshold as the pre-submit validators.
+        from qa_studio_cli.runner.network_matcher import MAX_BODY_SIZE as _MAX_BODY
+
+        route_registered = False
+        act_id = ""
+        try:
+            if mock_cfg is not None:
+                page.route(url_pattern, _build_handler(mock_cfg, passthrough))
+                route_registered = True
+
+            with page.expect_response(url_pattern, timeout=timeout_ms) as response_info:
+                try:
+                    act_result = self.nova.act(step.get("instruction", ""))
+                    act_id = self._extract_act_id(act_result)
+                except Exception as exc:
+                    act_id = self._extract_act_id_from_exception(exc)
+                    return StepResult(
+                        success=False, act_id=act_id, logs=f"Nova Act action failed: {exc}",
+                    )
+
+            response = response_info.value
+            request = response.request
+            summary_parts = []
+
+            # --- Request-side: method --------------------------------------
+            if method_expected is not None:
+                actual_method = (request.method or "").upper()
+                if actual_method != method_expected:
+                    return StepResult(
+                        success=False,
+                        act_id=act_id,
+                        logs=f"method mismatch: expected {method_expected}, got {actual_method}",
+                        actual_value=f"method={actual_method}:fail",
+                    )
+                summary_parts.append(f"method={method_expected}")
+
+            # --- Request-side: body ----------------------------------------
+            if expected_body:
+                body = request.post_data
+                if isinstance(body, (bytes, bytearray)):
+                    body = body.decode("utf-8", errors="replace")
+                logger.info(
+                    "network_assertion step: captured %s %s body=%s",
+                    request.method, request.url, _truncate(body),
+                )
+                if body is None:
+                    return StepResult(
+                        success=False,
+                        act_id=act_id,
+                        logs="captured request had no body",
+                        actual_value=f"body_match={req_match_type}:fail",
+                    )
+                ok, diff = _dispatch_matcher(req_match_type, expected_body, body)
+                if not ok:
+                    return StepResult(
+                        success=False,
+                        act_id=act_id,
+                        logs=f"request body mismatch ({req_match_type}): {diff}",
+                        actual_value=f"body_match={req_match_type}:fail",
+                    )
+                summary_parts.append(f"body_match={req_match_type}:pass")
+            else:
+                logger.info(
+                    "network_assertion step: captured %s %s",
+                    request.method, request.url,
+                )
+
+            # --- Response capture + always size-check ----------------------
+            captured_response_body = _capture_response_body(response)
+            if captured_response_body is not None:
+                body_bytes = len(captured_response_body.encode("utf-8"))
+                if body_bytes > _MAX_BODY:
+                    return StepResult(
+                        success=False,
+                        act_id=act_id,
+                        logs=(
+                            f"captured response body size {body_bytes} exceeds "
+                            f"maximum {_MAX_BODY} bytes"
+                        ),
+                        actual_value="resp_body=cap:fail",
+                    )
+
+            # --- Response-side: status -------------------------------------
+            if status_expected is not None:
+                actual_status = getattr(response, "status", None)
+                try:
+                    actual_status_int = int(actual_status) if actual_status is not None else None
+                except (TypeError, ValueError):
+                    actual_status_int = None
+                if actual_status_int != status_expected:
+                    return StepResult(
+                        success=False,
+                        act_id=act_id,
+                        logs=(
+                            f"response status mismatch: expected {status_expected}, "
+                            f"got {actual_status!r}"
+                        ),
+                        actual_value=f"resp_status={actual_status_int or actual_status}:fail",
+                    )
+                summary_parts.append(f"resp_status={status_expected}")
+
+            # --- Response-side: body ---------------------------------------
+            if expected_response_body:
+                logger.info(
+                    "network_assertion step: captured response status=%s body=%s",
+                    getattr(response, "status", "?"),
+                    _truncate(captured_response_body),
+                )
+                if captured_response_body is None:
+                    return StepResult(
+                        success=False,
+                        act_id=act_id,
+                        logs="captured response had no body",
+                        actual_value=f"resp_body={resp_match_type}:fail",
+                    )
+                ok, diff = _dispatch_matcher(
+                    resp_match_type, expected_response_body, captured_response_body,
+                )
+                if not ok:
+                    return StepResult(
+                        success=False,
+                        act_id=act_id,
+                        logs=f"response body mismatch ({resp_match_type}): {diff}",
+                        actual_value=f"resp_body={resp_match_type}:fail",
+                    )
+                summary_parts.append(f"resp_body={resp_match_type}:pass")
+
+            summary = " ".join(summary_parts) if summary_parts else "captured"
+            return StepResult(success=True, act_id=act_id, actual_value=summary)
+
+        except Exception as exc:
+            err_name = type(exc).__name__
+            if "Timeout" in err_name:
+                msg = f"no request matched '{url_pattern}' within {timeout_s}s"
+            else:
+                msg = f"{err_name}: {exc}"
+            return StepResult(success=False, act_id=act_id, logs=msg)
+        finally:
+            if route_registered:
+                try:
+                    page.unroute(url_pattern)
+                except Exception as exc:
+                    logger.warning("Failed to unroute %s: %s", url_pattern, exc)
 
     @staticmethod
     def _schema_for_type(type_name: str) -> dict:

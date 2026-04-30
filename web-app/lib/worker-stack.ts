@@ -432,6 +432,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       DEVICE_FARM_REGION: 'us-west-2',
       // SQS queue for async Device Farm recording downloads
       RECORDING_QUEUE_URL: recordingQueue.queueUrl,
+      // Maximum body size accepted by network_assertion steps — read at
+      // worker boot.  See lib/config.ts networkAssertionBodyMaxBytes.
+      NETWORK_ASSERTION_BODY_MAX_BYTES: this.networkAssertionBodyMaxBytes.toString(),
     };
 
     // Add VPC environment variables if agentCoreVPC is enabled

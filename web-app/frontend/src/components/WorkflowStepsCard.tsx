@@ -47,6 +47,16 @@ interface UsecaseStep {
   browser_args?: string;
   transform_operation?: string;
   transform_args?: string;
+  network_url_pattern?: string | null;
+  network_method?: string | null;
+  network_request_body?: string | null;
+  network_body_match_type?: string | null;
+  network_mock_response?: string | null;
+  network_mock_passthrough?: boolean;
+  network_timeout?: number | null;
+  network_response_body?: string | null;
+  network_response_body_match_type?: string | null;
+  network_response_status?: number | null;
 }
 
 interface WorkflowStepsCardProps {
@@ -156,6 +166,8 @@ function SortableStepCard({
         return <Badge color="blue">Transform</Badge>;
       case 'download':
         return <Badge className="badge-purple">Download</Badge>;
+      case 'network_assertion':
+        return <Badge color="blue">Network</Badge>;
       case 'navigation':
       default:
         return <Badge>Navigation</Badge>;
@@ -246,6 +258,21 @@ function SortableStepCard({
     } else if (step.step_type === 'transform' && step.transform_operation) {
       details.push(`Operation: ${step.transform_operation}`);
       if (step.capture_variable) details.push(`→ {{ ${step.capture_variable} }}`);
+    } else if (step.step_type === 'network_assertion' && step.network_url_pattern) {
+      const parts = [`Network: ${step.network_method || 'any'} ${step.network_url_pattern}`];
+      if (step.network_request_body) {
+        parts.push(`req body (${step.network_body_match_type || 'exact'})`);
+      }
+      if (step.network_mock_response) {
+        parts.push(step.network_mock_passthrough ? 'passthrough mock' : 'static mock');
+      }
+      if (step.network_response_status != null) {
+        parts.push(`resp ${step.network_response_status}`);
+      }
+      if (step.network_response_body) {
+        parts.push(`resp body (${step.network_response_body_match_type || 'subset'})`);
+      }
+      details.push(parts.join(' · '));
     }
 
     return details;

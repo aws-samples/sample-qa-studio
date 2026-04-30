@@ -20,6 +20,7 @@ setup(
             "playwright",
             "Appium-Python-Client>=4.0.0",
             "requests>=2.32.0",
+            "jsonschema>=4.18.0",
         ],
     },
     python_requires=">=3.11",

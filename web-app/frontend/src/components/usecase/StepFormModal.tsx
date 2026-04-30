@@ -5,8 +5,12 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Button from "@cloudscape-design/components/button";
 import FormField from "@cloudscape-design/components/form-field";
 import Select from "@cloudscape-design/components/select";
+import SegmentedControl from "@cloudscape-design/components/segmented-control";
+import Grid from "@cloudscape-design/components/grid";
+import Autosuggest from "@cloudscape-design/components/autosuggest";
 import Textarea from "@cloudscape-design/components/textarea";
 import Input from "@cloudscape-design/components/input";
+import Toggle from "@cloudscape-design/components/toggle";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
@@ -35,7 +39,8 @@ const STEP_TYPE_OPTIONS = [
   { label: 'Validation', value: 'validation' },
   { label: 'Retrieve Value', value: 'retrieve_value' },
   { label: 'Assertion', value: 'assertion' },
-  { label: 'Download', value: 'download' }
+  { label: 'Download', value: 'download' },
+  { label: 'Network Assertion', value: 'network_assertion' }
 ];
 
 const BROWSER_ACTION_OPTIONS = [
@@ -66,7 +71,43 @@ const TRANSFORM_OPERATION_OPTIONS = [
   { label: 'Regex Extract', value: 'regex_extract', description: 'Extract with a regex pattern' },
   { label: 'Format', value: 'format', description: 'Format a template string' }
 ];
+const NETWORK_METHOD_OPTIONS = [
+  { label: 'Any method', value: '' },
+  { label: 'GET', value: 'GET' },
+  { label: 'POST', value: 'POST' },
+  { label: 'PUT', value: 'PUT' },
+  { label: 'PATCH', value: 'PATCH' },
+  { label: 'DELETE', value: 'DELETE' },
+  { label: 'HEAD', value: 'HEAD' },
+  { label: 'OPTIONS', value: 'OPTIONS' }
+];
 
+const NETWORK_REQUEST_MATCH_TYPE_SEGMENTS = [
+  { id: 'exact', text: 'Exact' },
+  { id: 'subset', text: 'Subset' },
+  { id: 'schema', text: 'JSON Schema' }
+];
+
+const NETWORK_RESPONSE_MATCH_TYPE_SEGMENTS = [
+  { id: 'subset', text: 'Subset' },
+  { id: 'schema', text: 'JSON Schema' }
+];
+
+// Body-size cap sourced from a Vite build-time env var so operators who
+// raise `networkAssertionBodyMaxBytes` in `configuration.json` see the
+// matching client-side counter ceiling.  Defaults to 1 MiB when unset.
+// The server is authoritative — the client guard is UX courtesy.
+const _envCap = Number(
+  (import.meta as any).env?.VITE_NETWORK_ASSERTION_BODY_MAX_BYTES,
+);
+const NETWORK_BODY_BYTE_LIMIT =
+  Number.isFinite(_envCap) && _envCap > 0 ? _envCap : 1_048_576;
+const NETWORK_BODY_WARN_BYTES = Math.floor(NETWORK_BODY_BYTE_LIMIT * 0.86);
+const NETWORK_TIMEOUT_DEFAULT = 15;
+const NETWORK_TIMEOUT_MAX = 120;
+
+const NETWORK_STATUS_MIN = 100;
+const NETWORK_STATUS_MAX = 599;
 const VALIDATION_TYPE_OPTIONS = [
   { label: 'Boolean (True/False)', value: 'bool' },
   { label: 'String Comparison', value: 'string' },
@@ -115,6 +156,9 @@ export default function StepFormModal({
   existingSteps = []
 }: StepFormModalProps) {
   const [stepType, setStepType] = useState('navigation');
+  const [stepTypeInputValue, setStepTypeInputValue] = useState(
+    STEP_TYPE_OPTIONS.find(opt => opt.value === 'navigation')?.label || ''
+  );
   const [instruction, setInstruction] = useState('');
   const [selectedSecret, setSelectedSecret] = useState('');
   const [validationType, setValidationType] = useState('bool');
@@ -151,6 +195,26 @@ export default function StepFormModal({
   const [templateDifferences, setTemplateDifferences] = useState<Array<{field: string, current: any, template: any}>>([]);
   const [enableAdvancedClickTypes, setEnableAdvancedClickTypes] = useState(false);
 
+  // network_assertion step fields
+  const [networkUrlPattern, setNetworkUrlPattern] = useState('');
+
+  // Inline secret creation
+  const [showCreateSecret, setShowCreateSecret] = useState(false);
+  const [newSecretKey, setNewSecretKey] = useState('');
+  const [newSecretValue, setNewSecretValue] = useState('');
+  const [creatingSecret, setCreatingSecret] = useState(false);
+  const [createSecretError, setCreateSecretError] = useState<string | null>(null);
+  const [networkMethod, setNetworkMethod] = useState('');
+  const [networkRequestBody, setNetworkRequestBody] = useState('');
+  const [networkBodyMatchType, setNetworkBodyMatchType] = useState('exact');
+  const [networkMockResponse, setNetworkMockResponse] = useState('');
+  const [networkMockPassthrough, setNetworkMockPassthrough] = useState(false);
+  const [networkTimeout, setNetworkTimeout] = useState<string>(String(NETWORK_TIMEOUT_DEFAULT));
+  // Response-side assertion fields
+  const [networkResponseStatus, setNetworkResponseStatus] = useState<string>('');
+  const [networkResponseBody, setNetworkResponseBody] = useState('');
+  const [networkResponseBodyMatchType, setNetworkResponseBodyMatchType] = useState('subset');
+
   // Get available runtime variables from existing retrieve_value steps
   const getAvailableRuntimeVariables = () => {
     return existingSteps
@@ -167,6 +231,9 @@ export default function StepFormModal({
   useEffect(() => {
     if (step) {
       setStepType(step.step_type || 'navigation');
+      setStepTypeInputValue(
+        STEP_TYPE_OPTIONS.find(opt => opt.value === (step.step_type || 'navigation'))?.label || ''
+      );
       setInstruction(step.instruction || '');
       setSelectedSecret(step.secret_key || '');
       setValidationType(step.validation_type || 'bool');
@@ -205,6 +272,20 @@ export default function StepFormModal({
           setTransformValues((args.values || []).join(', '));
         } catch {}
       }
+      setNetworkUrlPattern(step.network_url_pattern || '');
+      setNetworkMethod(step.network_method || '');
+      setNetworkRequestBody(step.network_request_body || '');
+      setNetworkBodyMatchType(step.network_body_match_type || 'exact');
+      setNetworkMockResponse(step.network_mock_response || '');
+      setNetworkMockPassthrough(Boolean(step.network_mock_passthrough));
+      setNetworkTimeout(
+        step.network_timeout != null ? String(step.network_timeout) : String(NETWORK_TIMEOUT_DEFAULT)
+      );
+      setNetworkResponseStatus(
+        step.network_response_status != null ? String(step.network_response_status) : ''
+      );
+      setNetworkResponseBody(step.network_response_body || '');
+      setNetworkResponseBodyMatchType(step.network_response_body_match_type || 'subset');
       // Initialize boolean input mode based on existing value
       if (step.validation_value && (step.validation_value === 'true' || step.validation_value === 'false')) {
         setBooleanInputMode(step.validation_value);
@@ -216,6 +297,9 @@ export default function StepFormModal({
     } else {
       // Reset form for new step
       setStepType('navigation');
+      setStepTypeInputValue(
+        STEP_TYPE_OPTIONS.find(opt => opt.value === 'navigation')?.label || ''
+      );
       setInstruction('');
       setSelectedSecret('');
       setValidationType('bool');
@@ -243,6 +327,20 @@ export default function StepFormModal({
       setTransformTemplate('');
       setTransformFormatArgs('');
       setTransformValues('');
+      setNetworkUrlPattern('');
+      setNetworkMethod('');
+      setNetworkRequestBody('');
+      setNetworkBodyMatchType('exact');
+      setNetworkMockResponse('');
+      setNetworkMockPassthrough(false);
+      setNetworkTimeout(String(NETWORK_TIMEOUT_DEFAULT));
+      setNetworkResponseStatus('');
+      setNetworkResponseBody('');
+      setNetworkResponseBodyMatchType('subset');
+      setShowCreateSecret(false);
+      setNewSecretKey('');
+      setNewSecretValue('');
+      setCreateSecretError(null);
     }
   }, [step]);
 
@@ -270,6 +368,35 @@ export default function StepFormModal({
     } catch (error) {
       console.error('Failed to load secrets:', error);
       setAvailableSecrets([]);
+    }
+  };
+
+  const handleCreateSecret = async () => {
+    const key = newSecretKey.trim();
+    const value = newSecretValue.trim();
+    if (!key || !value) {
+      setCreateSecretError('Both key and value are required');
+      return;
+    }
+    if (availableSecrets.some(s => s.key === key)) {
+      setCreateSecretError(`Secret "${key}" already exists`);
+      return;
+    }
+
+    setCreatingSecret(true);
+    setCreateSecretError(null);
+    try {
+      await api.post(`usecase/${usecaseId}/secrets`, { secrets: [{ key, value }] });
+      await loadSecrets();
+      setSelectedSecret(key);
+      setNewSecretKey('');
+      setNewSecretValue('');
+      setShowCreateSecret(false);
+    } catch (error) {
+      console.error('Failed to create secret:', error);
+      setCreateSecretError('Failed to create secret');
+    } finally {
+      setCreatingSecret(false);
     }
   };
 
@@ -471,6 +598,32 @@ export default function StepFormModal({
         stepData.validation_type = validationType;
         stepData.validation_operator = validationOperator;
         stepData.validation_value = validationValue.trim();
+      } else if (stepType === 'network_assertion') {
+        stepData.network_url_pattern = networkUrlPattern.trim();
+        if (networkMethod) {
+          stepData.network_method = networkMethod;
+        }
+        if (networkRequestBody.trim()) {
+          stepData.network_request_body = networkRequestBody.trim();
+          stepData.network_body_match_type = networkBodyMatchType;
+        }
+        if (networkMockResponse.trim()) {
+          stepData.network_mock_response = networkMockResponse.trim();
+          stepData.network_mock_passthrough = networkMockPassthrough;
+        }
+        const parsedTimeout = parseInt(networkTimeout, 10);
+        if (!Number.isNaN(parsedTimeout)) {
+          stepData.network_timeout = parsedTimeout;
+        }
+        // Response-side assertion — only send fields the user filled in.
+        const parsedStatus = parseInt(networkResponseStatus, 10);
+        if (!Number.isNaN(parsedStatus)) {
+          stepData.network_response_status = parsedStatus;
+        }
+        if (networkResponseBody.trim()) {
+          stepData.network_response_body = networkResponseBody.trim();
+          stepData.network_response_body_match_type = networkResponseBodyMatchType;
+        }
       }
 
       // Ensure other step types don't have these fields
@@ -515,6 +668,29 @@ export default function StepFormModal({
     if (stepType === 'assertion' && validationType === 'string' && !validationValue.trim()) return false;
     if (stepType === 'assertion' && validationType === 'number' && !validationValue.trim()) return false;
     if (stepType === 'assertion' && validationType === 'bool' && !validationValue.trim()) return false;
+    if (stepType === 'network_assertion') {
+      if (!networkUrlPattern.trim()) return false;
+      // Size cap — counted as UTF-8 bytes to match server-side check.
+      const bodyBytes = new TextEncoder().encode(networkRequestBody).length;
+      const mockBytes = new TextEncoder().encode(networkMockResponse).length;
+      const respBytes = new TextEncoder().encode(networkResponseBody).length;
+      if (
+        bodyBytes > NETWORK_BODY_BYTE_LIMIT ||
+        mockBytes > NETWORK_BODY_BYTE_LIMIT ||
+        respBytes > NETWORK_BODY_BYTE_LIMIT
+      ) return false;
+      const parsedTimeout = parseInt(networkTimeout, 10);
+      if (Number.isNaN(parsedTimeout) || parsedTimeout < 1 || parsedTimeout > NETWORK_TIMEOUT_MAX) return false;
+      // Response status is optional, but if set, must be in [100, 599].
+      if (networkResponseStatus.trim()) {
+        const parsedStatus = parseInt(networkResponseStatus, 10);
+        if (
+          Number.isNaN(parsedStatus) ||
+          parsedStatus < NETWORK_STATUS_MIN ||
+          parsedStatus > NETWORK_STATUS_MAX
+        ) return false;
+      }
+    }
     return true;
   };
 
@@ -563,19 +739,30 @@ export default function StepFormModal({
           label="Step Type"
           description="Select the type of step to create"
         >
-          <Select
-            selectedOption={STEP_TYPE_OPTIONS.find(opt => opt.value === stepType) || null}
+          <Autosuggest
+            value={stepTypeInputValue}
             onChange={({ detail }) => {
-              setStepType(detail.selectedOption?.value || 'navigation');
-              // Reset all dependent fields when changing type
-              setSelectedSecret('');
-              setValidationType('bool');
-              setValidationOperator('exact');
-              setValidationValue('');
-              setCaptureVariable('');
-              setValueType('string');
+              setStepTypeInputValue(detail.value);
+            }}
+            onSelect={({ detail }) => {
+              const match = STEP_TYPE_OPTIONS.find(opt => opt.value === detail.value);
+              if (match) {
+                setStepType(match.value);
+                setStepTypeInputValue(match.label);
+                // Reset all dependent fields when changing type
+                setSelectedSecret('');
+                setValidationType('bool');
+                setValidationOperator('exact');
+                setValidationValue('');
+                setCaptureVariable('');
+                setValueType('string');
+              }
             }}
             options={step?.step_type === 'url' ? [...STEP_TYPE_OPTIONS, { label: 'URL (deprecated — use Browser → Navigate)', value: 'url' }] : STEP_TYPE_OPTIONS}
+            options={STEP_TYPE_OPTIONS}
+            enteredTextLabel={(value) => `Use: "${value}"`}
+            placeholder="Search step types..."
+            empty="No matching step type"
           />
         </FormField>
 
@@ -753,26 +940,90 @@ export default function StepFormModal({
         )}
 
         {stepType === 'secret' && (
-          <FormField
-            stretch
-            label="Select Secret"
-            description="Choose which secret to use for this step"
-          >
-            <Select
-              selectedOption={availableSecrets.find(secret => secret.key === selectedSecret) ?
-                { label: availableSecrets.find(secret => secret.key === selectedSecret)?.key || '', value: selectedSecret } :
-                null
+          <SpaceBetween direction="vertical" size="m">
+            <FormField
+              stretch
+              label="Select Secret"
+              description="Choose which secret to use for this step"
+              secondaryControl={
+                <Button
+                  iconName={showCreateSecret ? "close" : "add-plus"}
+                  variant="normal"
+                  onClick={() => {
+                    setShowCreateSecret(!showCreateSecret);
+                    setCreateSecretError(null);
+                  }}
+                >
+                  {showCreateSecret ? "Cancel" : "Add Secret"}
+                </Button>
               }
-              onChange={({ detail }) => setSelectedSecret(detail.selectedOption?.value || '')}
-              options={availableSecrets.map(secret => ({
-                label: secret.key,
-                value: secret.key,
-                description: secret.description
-              }))}
-              placeholder="Select a secret"
-              empty="No secrets available. Create secrets first."
-            />
-          </FormField>
+            >
+              <Select
+                selectedOption={availableSecrets.find(secret => secret.key === selectedSecret) ?
+                  { label: availableSecrets.find(secret => secret.key === selectedSecret)?.key || '', value: selectedSecret } :
+                  null
+                }
+                onChange={({ detail }) => setSelectedSecret(detail.selectedOption?.value || '')}
+                options={availableSecrets.map(secret => ({
+                  label: secret.key,
+                  value: secret.key,
+                  description: secret.description
+                }))}
+                placeholder="Select a secret"
+                empty="No secrets available. Click + to create one."
+              />
+            </FormField>
+
+            {showCreateSecret && (
+              <Container header={<Header variant="h3">Create Secret</Header>}>
+                <SpaceBetween direction="vertical" size="s">
+                  {createSecretError && (
+                    <Alert type="error" dismissible onDismiss={() => setCreateSecretError(null)}>
+                      {createSecretError}
+                    </Alert>
+                  )}
+                  <FormField label="Secret Key" stretch>
+                    <Input
+                      value={newSecretKey}
+                      onChange={({ detail }) => setNewSecretKey(detail.value)}
+                      placeholder="e.g., api_key, password, token"
+                    />
+                  </FormField>
+                  <FormField label="Secret Value" stretch>
+                    <Input
+                      type="password"
+                      value={newSecretValue}
+                      onChange={({ detail }) => setNewSecretValue(detail.value)}
+                      placeholder="Enter the secret value"
+                    />
+                  </FormField>
+                  <Box float="right">
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button
+                        variant="link"
+                        onClick={() => {
+                          setShowCreateSecret(false);
+                          setNewSecretKey('');
+                          setNewSecretValue('');
+                          setCreateSecretError(null);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={handleCreateSecret}
+                        loading={creatingSecret}
+                        disabled={!newSecretKey.trim() || !newSecretValue.trim()}
+                      >
+                        Create
+                      </Button>
+                    </SpaceBetween>
+                  </Box>
+                </SpaceBetween>
+              </Container>
+            )}
+          </SpaceBetween>
         )}
 
         {stepType === 'validation' && (
@@ -1042,6 +1293,226 @@ export default function StepFormModal({
                 </FormField>
               </>
             )}
+          </>
+        )}
+
+        {stepType === 'network_assertion' && (
+          <>
+            {/* URL pattern, method, and timeout in a single row.
+                URL gets the majority of space; method and timeout are compact. */}
+            <Grid gridDefinition={[{ colspan: 7 }, { colspan: 3 }, { colspan: 2 }]}>
+              <FormField
+                stretch
+                label="URL pattern"
+                description="Playwright glob, e.g. **/api/users"
+              >
+                <Input
+                  value={networkUrlPattern}
+                  onChange={({ detail }) => setNetworkUrlPattern(detail.value)}
+                  placeholder="**/api/users"
+                />
+              </FormField>
+
+              <FormField
+                label="HTTP method"
+                description="Empty = any"
+              >
+                <Select
+                  selectedOption={
+                    NETWORK_METHOD_OPTIONS.find(opt => opt.value === networkMethod)
+                    ?? NETWORK_METHOD_OPTIONS[0]
+                  }
+                  onChange={({ detail }) => setNetworkMethod(detail.selectedOption?.value || '')}
+                  options={NETWORK_METHOD_OPTIONS}
+                />
+              </FormField>
+
+              <FormField
+                label="Timeout (s)"
+                description={`Max ${NETWORK_TIMEOUT_MAX}s`}
+              >
+                <Input
+                  value={networkTimeout}
+                  onChange={({ detail }) => setNetworkTimeout(detail.value)}
+                  type="number"
+                  inputMode="numeric"
+                />
+              </FormField>
+            </Grid>
+
+            <ExpandableSection
+              headerText="Request assertion (optional)"
+              headerDescription="Verify the body of the captured request."
+            >
+              <SpaceBetween direction="vertical" size="m">
+                <FormField
+                  stretch
+                  label="Request body match type"
+                  description="How the expected body below is compared to the captured request body."
+                >
+                  <SegmentedControl
+                    selectedId={networkBodyMatchType}
+                    onChange={({ detail }) =>
+                      setNetworkBodyMatchType(detail.selectedId || 'exact')
+                    }
+                    options={NETWORK_REQUEST_MATCH_TYPE_SEGMENTS}
+                  />
+                </FormField>
+
+                <FormField
+                  stretch
+                  label="Expected request body (JSON)"
+                  description={
+                    networkBodyMatchType === 'schema'
+                      ? `JSON Schema Draft 2020-12 document. External $ref (http/https/file) is rejected. Max ${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes.`
+                      : `JSON template. Leave empty to skip the body check. Max ${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes.`
+                  }
+                  constraintText={`${new TextEncoder().encode(networkRequestBody).length.toLocaleString()} / ${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes`}
+                  warningText={
+                    new TextEncoder().encode(networkRequestBody).length > NETWORK_BODY_WARN_BYTES
+                      ? 'Approaching size limit'
+                      : undefined
+                  }
+                  errorText={
+                    new TextEncoder().encode(networkRequestBody).length > NETWORK_BODY_BYTE_LIMIT
+                      ? `Body exceeds size limit (${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes)`
+                      : undefined
+                  }
+                >
+                  <Textarea
+                    value={networkRequestBody}
+                    onChange={({ detail }) => setNetworkRequestBody(detail.value)}
+                    placeholder={
+                      networkBodyMatchType === 'schema'
+                        ? '{"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}'
+                        : '{"user": {"name": "John"}}'
+                    }
+                    rows={4}
+                  />
+                </FormField>
+              </SpaceBetween>
+            </ExpandableSection>
+
+            <ExpandableSection
+              headerText="Response assertion (optional)"
+              headerDescription="Verify the response status and/or body shape."
+            >
+              <SpaceBetween direction="vertical" size="m">
+                <FormField
+                  stretch
+                  label="Expected status code"
+                  description={`Optional — integer between ${NETWORK_STATUS_MIN} and ${NETWORK_STATUS_MAX}. Leave empty to skip the status check.`}
+                  errorText={
+                    networkResponseStatus.trim() &&
+                    (() => {
+                      const n = parseInt(networkResponseStatus, 10);
+                      return Number.isNaN(n) || n < NETWORK_STATUS_MIN || n > NETWORK_STATUS_MAX
+                        ? `Status must be between ${NETWORK_STATUS_MIN} and ${NETWORK_STATUS_MAX}`
+                        : undefined;
+                    })() || undefined
+                  }
+                >
+                  <Input
+                    value={networkResponseStatus}
+                    onChange={({ detail }) => setNetworkResponseStatus(detail.value)}
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="201"
+                  />
+                </FormField>
+
+                <FormField
+                  stretch
+                  label="Response body match type"
+                  description='"Exact" is deliberately not offered on the response side — response payloads commonly contain non-deterministic values (timestamps, generated ids). Use a schema with "const" for strict comparisons.'
+                >
+                  <SegmentedControl
+                    selectedId={networkResponseBodyMatchType}
+                    onChange={({ detail }) =>
+                      setNetworkResponseBodyMatchType(detail.selectedId || 'subset')
+                    }
+                    options={NETWORK_RESPONSE_MATCH_TYPE_SEGMENTS}
+                  />
+                </FormField>
+
+                <FormField
+                  stretch
+                  label="Expected response body (JSON)"
+                  description={
+                    networkResponseBodyMatchType === 'schema'
+                      ? `JSON Schema Draft 2020-12 document. External $ref (http/https/file) is rejected. Max ${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes.`
+                      : `JSON template. Every key/value in the template must appear in the response; extra keys are ignored. Max ${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes.`
+                  }
+                  constraintText={`${new TextEncoder().encode(networkResponseBody).length.toLocaleString()} / ${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes`}
+                  warningText={
+                    new TextEncoder().encode(networkResponseBody).length > NETWORK_BODY_WARN_BYTES
+                      ? 'Approaching size limit'
+                      : undefined
+                  }
+                  errorText={
+                    new TextEncoder().encode(networkResponseBody).length > NETWORK_BODY_BYTE_LIMIT
+                      ? `Response body exceeds size limit (${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes)`
+                      : undefined
+                  }
+                >
+                  <Textarea
+                    value={networkResponseBody}
+                    onChange={({ detail }) => setNetworkResponseBody(detail.value)}
+                    placeholder={
+                      networkResponseBodyMatchType === 'schema'
+                        ? '{"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}}}'
+                        : '{"id": "abc-123"}'
+                    }
+                    rows={5}
+                  />
+                </FormField>
+              </SpaceBetween>
+            </ExpandableSection>
+
+            <ExpandableSection
+              headerText="Response mock (optional)"
+              headerDescription="Intercept the request and return a fixed response — useful for error states or edge cases without touching the real backend."
+            >
+              <SpaceBetween direction="vertical" size="m">
+                <FormField
+                  stretch
+                  label="Mock response (JSON)"
+                  description={`Shape: {"status": 201, "body": {...}, "headers": {...}}. Max ${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes.`}
+                  constraintText={`${new TextEncoder().encode(networkMockResponse).length.toLocaleString()} / ${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes`}
+                  warningText={
+                    new TextEncoder().encode(networkMockResponse).length > NETWORK_BODY_WARN_BYTES
+                      ? 'Approaching size limit'
+                      : undefined
+                  }
+                  errorText={
+                    new TextEncoder().encode(networkMockResponse).length > NETWORK_BODY_BYTE_LIMIT
+                      ? `Mock response exceeds size limit (${NETWORK_BODY_BYTE_LIMIT.toLocaleString()} bytes)`
+                      : undefined
+                  }
+                >
+                  <Textarea
+                    value={networkMockResponse}
+                    onChange={({ detail }) => setNetworkMockResponse(detail.value)}
+                    placeholder='{"status": 201, "body": {"id": "abc-123"}}'
+                    rows={4}
+                  />
+                </FormField>
+
+                {networkMockResponse.trim() && (
+                  <FormField
+                    label="Passthrough mock"
+                    description="Fetch the real response then merge the fields above on top. Leave off for a fully static mock."
+                  >
+                    <Toggle
+                      checked={networkMockPassthrough}
+                      onChange={({ detail }) => setNetworkMockPassthrough(detail.checked)}
+                    >
+                      Passthrough
+                    </Toggle>
+                  </FormField>
+                )}
+              </SpaceBetween>
+            </ExpandableSection>
           </>
         )}
 

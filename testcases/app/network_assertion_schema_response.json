@@ -1,0 +1,58 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-04-29T13:00:00Z",
+  "usecase": {
+    "name": "[QA Studio E2E] Network Assertion Schema + Response",
+    "description": "Verifies the two new capabilities added in the response-side + schema feature: (1) a response-side schema assertion against a list endpoint that must have a specific item shape regardless of list length, and (2) a combined request+response flow where the request body is validated with 'subset' and the response is validated with a JSON Schema carrying 'const' for the fields we need to pin.",
+    "starting_url": "https://example.test/",
+    "active": true,
+    "executing_region": "",
+    "tags": ["network_assertion", "e2e", "schema", "response"]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "instruction": "Click the Test Suites menu item",
+      "step_type": "network_assertion",
+      "network_url_pattern": "**/api/suites",
+      "network_method": "GET",
+      "network_response_status": 200,
+      "network_response_body_match_type": "schema",
+      "network_response_body": "{\"type\":\"object\",\"required\":[\"suites\"],\"properties\":{\"suites\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"id\",\"name\",\"created_by\"],\"properties\":{\"id\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"created_by\":{\"type\":\"string\"}}}}}}",
+      "network_timeout": 15
+    },
+    {
+      "sort": 2,
+      "instruction": "Fill the name field with 'John' and click Save",
+      "step_type": "network_assertion",
+      "network_url_pattern": "**/api/users",
+      "network_method": "POST",
+      "network_request_body": "{\"name\": \"John\"}",
+      "network_body_match_type": "subset",
+      "network_mock_response": "{\"status\": 201, \"body\": {\"id\": \"user-42\", \"name\": \"John\", \"created_at\": \"2026-04-29T13:00:00Z\"}}",
+      "network_mock_passthrough": false,
+      "network_response_status": 201,
+      "network_response_body_match_type": "schema",
+      "network_response_body": "{\"type\":\"object\",\"required\":[\"id\",\"name\"],\"properties\":{\"id\":{\"type\":\"string\"},\"name\":{\"type\":\"string\",\"const\":\"John\"},\"created_at\":{\"type\":\"string\"}}}",
+      "network_timeout": 15
+    },
+    {
+      "sort": 3,
+      "instruction": "Return the user id shown on the success banner",
+      "step_type": "retrieve_value",
+      "capture_variable": "user_id",
+      "value_type": "string"
+    },
+    {
+      "sort": 4,
+      "instruction": "Compare the captured user id against the mocked value",
+      "step_type": "assertion",
+      "assertion_variable": "user_id",
+      "validation_type": "string",
+      "validation_operator": "exact",
+      "validation_value": "user-42"
+    }
+  ],
+  "variables": [],
+  "secrets": []
+}

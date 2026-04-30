@@ -3,6 +3,7 @@
 ## Overview
 
 QA Studio supports 9 step types for building tests. Each step type serves a specific purpose in test automation.
+QA Studio supports 8 step types for building tests. Each step type serves a specific purpose in test automation.
 
 ---
 
@@ -230,6 +231,64 @@ Extract digits from text:
 ```
 
 **When to use:** Manipulate or compute values from captured variables without browser interaction. Useful for data preparation, formatting, and arithmetic between steps.
+### 8. network_assertion
+
+**Purpose:** Intercept an HTTP request triggered by a UI action, optionally assert its shape, optionally mock the response, and optionally assert on the response status and body.
+
+**Examples:**
+- "Click Submit and verify POST **/api/users carries {name: 'John'}"
+- "Click Save and mock the response with status 500 to test the error state"
+- "Click Refresh and verify GET **/api/config was called"
+- "Click Users and verify the response is an array where every item has id, name, email"
+- "Click Checkout and verify POST **/api/orders returns 201 with a valid order schema"
+
+**When to use:**
+- Verify that a button click triggers the expected API call (URL, method, body)
+- Drive the UI into specific states (loading, error, empty) via mock responses
+- Test against edge-case backend payloads without touching the real backend
+- Verify response structure against a JSON Schema (great for list endpoints where only "every item has these keys" matters, not the array length)
+- Assert the response status code explicitly (e.g. `201` after a create)
+
+**Fields:**
+
+| Field | Type | Required | Purpose |
+|---|---|---|---|
+| `network_url_pattern` | string | **yes** | Playwright glob pattern (e.g. `**/api/users`) |
+| `network_method` | string | no | Expected HTTP verb (`GET`/`POST`/…). Empty = no method check. |
+| `network_request_body` | string (JSON) | no | Expected request body, interpreted per `network_body_match_type` |
+| `network_body_match_type` | string | no | `exact` (default), `subset`, or `schema` |
+| `network_mock_response` | string (JSON) | no | `{"status": …, "body": …, "headers": …}` |
+| `network_mock_passthrough` | boolean | no | If `true`, fetch real response and merge overrides |
+| `network_timeout` | integer | no | Seconds (1–120). Default **15**. |
+| `network_response_body` | string (JSON) | no | Expected response body, interpreted per `network_response_body_match_type` |
+| `network_response_body_match_type` | string | no | `subset` (default) or `schema` — **`exact` is not permitted on the response side** |
+| `network_response_status` | integer | no | Exact-match expected HTTP status (100–599) |
+
+**Match types:**
+
+- **`exact`** — the captured body parsed as JSON must equal the expected body exactly. Extra keys fail.
+- **`subset`** — every key/value in the expected template must be present in the captured body. Extra keys are ignored. For arrays: lengths must match, element-by-element.
+- **`schema`** — the expected body is a [JSON Schema Draft 2020-12](https://json-schema.org/draft/2020-12) document. The captured body is validated against the schema. External `$ref` (http/https/file) is rejected; only local-pointer refs (`#/...`) are allowed. Schema mode is the right choice when you care about structure, not specific values — for example "the response is an array where every item has these fields."
+
+**Operating modes:**
+
+1. **Assert-only** — configure URL (+ optional method/request body/response status/response body). The request passes through to the real server and every configured field is verified.
+2. **Mock-only** — configure URL + `network_mock_response`. The real server is never called.
+3. **Mock + assert** — both: return a mock AND verify the request and/or the (mocked) response.
+
+**Security limits (enforced client + server + runtime):**
+- Request body, response body, mock response, and schema documents are each capped at **1 MiB** (configurable per deployment via `networkAssertionBodyMaxBytes` in `configuration.json`).
+- Subset matcher refuses nested JSON deeper than 20 levels.
+- Schema mode rejects `$ref` entries targeting external URIs (`http://`, `https://`, `file://`) to prevent SSRF and file-read attacks from the runner.
+- Captured bodies are truncated to 500 chars in logs; only a match summary is stored in execution records.
+- Captured response body size is always checked even when no body assertion is configured — an oversized response fails the step early rather than silently.
+- Route handlers are always cleaned up after the step (no interception leaks into later steps).
+
+**Response side constraints:**
+- `network_response_body_match_type` accepts only `subset` or `schema`. **`exact` is deliberately rejected** because response payloads commonly contain non-deterministic values (server timestamps, generated IDs, ordering). Users needing strict comparisons should express them via a schema with `const` values or narrow to a `subset` template over the stable keys.
+- Non-JSON response bodies cannot be asserted on with `subset` or `schema`. If a response is binary or non-JSON, omit the body assertion; use a `download` step or DOM-level `validation` step instead.
+
+**Caching:** this step type is **not cached**. An API contract change must never be masked by a cache hit.
 
 ---
 
@@ -248,6 +307,7 @@ Extract digits from text:
 | Verify a saved value | `assertion` |
 | Download a file | `download` |
 | Compute or format a value | `transform` |
+| Verify an HTTP call happened / mock an API response | `network_assertion` |
 
 ---
 
@@ -285,6 +345,94 @@ Extract digits from text:
 5. [navigation] Click Submit
 6. [validation] Verify error message contains 'Invalid email format'
 ```
+
+### API Contract Verification
+
+```
+1. [url] Navigate to https://app.example.com/users/new
+2. [navigation] Fill the name field with 'John'
+3. [network_assertion]
+   instruction: Click Save
+   network_url_pattern: **/api/users
+   network_method: POST
+   network_request_body: {"user": {"name": "John"}}
+   network_body_match_type: subset
+4. [validation] Verify success banner contains 'User created'
+```
+
+### Error State via Mock
+
+```
+1. [url] Navigate to https://app.example.com/users
+2. [network_assertion]
+   instruction: Click Refresh
+   network_url_pattern: **/api/users
+   network_method: GET
+   network_mock_response: {"status": 503, "body": {"error": "unavailable"}}
+3. [validation] Verify the page shows 'Service temporarily unavailable'
+```
+
+### Response Schema Validation (list endpoint)
+
+Verify every item in a variable-length response carries the required fields, without coupling to how many items the list has:
+
+```
+1. [url] Navigate to https://app.example.com/test-suites
+2. [network_assertion]
+   instruction: Click Refresh
+   network_url_pattern: **/api/suites
+   network_method: GET
+   network_response_status: 200
+   network_response_body_match_type: schema
+   network_response_body: {
+     "type": "object",
+     "required": ["suites"],
+     "properties": {
+       "suites": {
+         "type": "array",
+         "items": {
+           "type": "object",
+           "required": ["id", "name", "created_by"],
+           "properties": {
+             "id":         { "type": "string" },
+             "name":       { "type": "string" },
+             "created_by": { "type": "string" }
+           }
+         }
+       }
+     }
+   }
+```
+
+This is the flagship use case for schema mode: `subset` can't express "every item has these keys" without coupling to array length, but a schema `items` clause can.
+
+### Create Flow with Status + Body Assertions
+
+Assert the request AND the response in one step — useful for POST/PUT flows where both sides matter:
+
+```
+1. [url] Navigate to https://app.example.com/users/new
+2. [navigation] Fill the name field with 'John'
+3. [network_assertion]
+   instruction: Click Save
+   network_url_pattern: **/api/users
+   network_method: POST
+   network_request_body: {"name": "John"}
+   network_body_match_type: subset
+   network_response_status: 201
+   network_response_body_match_type: schema
+   network_response_body: {
+     "type": "object",
+     "required": ["id", "name"],
+     "properties": {
+       "id":   { "type": "string" },
+       "name": { "type": "string", "const": "John" }
+     }
+   }
+4. [validation] Verify success banner contains 'User created'
+```
+
+Notice the use of `"const": "John"` inside the schema to pin a value without losing schema-style structural checking on the rest of the object.
 
 ---
 

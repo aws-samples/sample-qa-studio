@@ -28,6 +28,7 @@ from url_step import execute_url_step
 from download_step import execute_download_step
 from transform_step import execute_transform_step
 from browser_step import execute_browser_step
+from network_assertion_step import execute_network_assertion_step
 from event_emitter import emit_execution_completed_event
 
 # MobileActuator is only available in the Docker image with nova_act_mobile
@@ -537,6 +538,8 @@ def _execute_steps(nova, execution, execution_headers, template_parser, usecase_
                             result, success, logs, actual_value = execute_transform_step(parsed_step, template_parser)
                         case 'browser':
                             result, success, logs = execute_browser_step(nova, parsed_step)
+                        case 'network_assertion':
+                            result, success, logs, actual_value = execute_network_assertion_step(nova, parsed_step)
                         case _:
                             result, success, logs = execute_navigation_step(nova, parsed_step, execution.enable_cache, trajectory_manager)
 

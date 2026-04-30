@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import FormField from "@cloudscape-design/components/form-field";
 import Select from "@cloudscape-design/components/select";
+import Autosuggest from "@cloudscape-design/components/autosuggest";
 import Textarea from "@cloudscape-design/components/textarea";
 import Input from "@cloudscape-design/components/input";
 import { api } from '../../utils/api';
@@ -104,6 +105,16 @@ export default function StepForm({
   onBooleanInputModeChange
 }: StepFormProps) {
   const [availableSecrets, setAvailableSecrets] = useState<any[]>([]);
+  const [stepTypeInputValue, setStepTypeInputValue] = useState(
+    STEP_TYPE_OPTIONS.find(opt => opt.value === stepType)?.label || ''
+  );
+
+  // Keep input value in sync when stepType prop changes externally
+  useEffect(() => {
+    setStepTypeInputValue(
+      STEP_TYPE_OPTIONS.find(opt => opt.value === stepType)?.label || ''
+    );
+  }, [stepType]);
 
   // Load available secrets when step type changes to secret
   useEffect(() => {
@@ -125,10 +136,22 @@ export default function StepForm({
   return (
     <SpaceBetween direction="vertical" size="m">
       <FormField label="Step Type">
-        <Select
-          selectedOption={STEP_TYPE_OPTIONS.find(opt => opt.value === stepType) || null}
-          onChange={({ detail }) => onStepTypeChange(detail.selectedOption.value || 'navigation')}
+        <Autosuggest
+          value={stepTypeInputValue}
+          onChange={({ detail }) => {
+            setStepTypeInputValue(detail.value);
+          }}
+          onSelect={({ detail }) => {
+            const match = STEP_TYPE_OPTIONS.find(opt => opt.value === detail.value);
+            if (match) {
+              onStepTypeChange(match.value);
+              setStepTypeInputValue(match.label);
+            }
+          }}
           options={STEP_TYPE_OPTIONS}
+          enteredTextLabel={(value) => `Use: "${value}"`}
+          placeholder="Search step types..."
+          empty="No matching step type"
           disabled={disabled}
         />
       </FormField>

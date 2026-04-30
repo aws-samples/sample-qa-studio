@@ -129,7 +129,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Copy optional fields
             for field in ['secret_key', 'capture_variable', 'validation_type', 
                          'validation_operator', 'validation_value', 'assertion_variable',
-                         'value_type']:
+                         'value_type',
+                         'network_url_pattern', 'network_method', 'network_request_body',
+                         'network_body_match_type', 'network_mock_response',
+                         'network_mock_passthrough', 'network_timeout',
+                         'network_response_body', 'network_response_body_match_type',
+                         'network_response_status']:
                 if field in step:
                     new_step[field] = step[field]
             

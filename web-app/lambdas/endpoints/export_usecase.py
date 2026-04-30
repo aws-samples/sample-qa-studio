@@ -111,6 +111,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 step_export['value_step'] = item['value_step']
             if item.get('value_type'):
                 step_export['value_type'] = item['value_type']
+
+            for network_field in (
+                'network_url_pattern', 'network_method', 'network_request_body',
+                'network_body_match_type', 'network_mock_response',
+                'network_mock_passthrough', 'network_timeout',
+                'network_response_body', 'network_response_body_match_type',
+                'network_response_status',
+            ):
+                if network_field in item:
+                    step_export[network_field] = item[network_field]
             
             steps.append(step_export)
         

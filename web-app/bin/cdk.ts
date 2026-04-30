@@ -15,7 +15,7 @@ import { applyCdkNagSuppressions } from '../lib/cdk-nag-suppressions';
 
 // Load and validate configuration with sane defaults
 const config = loadConfig();
-const { adminEmail, baseName, apiEndpoint, apiDeploymentStage, bedrockModelId, lambdaConcurrency } = config;
+const { adminEmail, baseName, apiEndpoint, apiDeploymentStage, bedrockModelId, lambdaConcurrency, networkAssertionBodyMaxBytes } = config;
 
 // Read version from package.json
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
@@ -35,6 +35,7 @@ const storageStack = new NovaActQAStudioStorageStack(app, 'storage', {
   stackName: `${baseName}-storage`,
   baseName,
   lambdaConcurrency,
+  networkAssertionBodyMaxBytes,
   env: stackEnv,
 })
 
@@ -47,6 +48,7 @@ const authStack = new NovaActQAStudioAuthStack(app, 'auth', {
   baseName,
   adminEmail,
   lambdaConcurrency,
+  networkAssertionBodyMaxBytes,
   ...(oauthCallbackUrls.length > 0 && { callbackUrls: oauthCallbackUrls }),
   env: stackEnv,
 })
@@ -56,6 +58,7 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   stackName: `${baseName}-worker`,
   baseName,
   lambdaConcurrency,
+  networkAssertionBodyMaxBytes,
   env: stackEnv,
   table: storageStack.table,
   tableReadPolicy: storageStack.tableReadPolicy,
@@ -69,6 +72,7 @@ const lambdaStack = new NovaActQAStudioLambdaStack(app, 'lambdas', {
   stackName: `${baseName}-lambdas`,
   baseName,
   lambdaConcurrency,
+  networkAssertionBodyMaxBytes,
   table: storageStack.table,
   userPool: authStack.userPool,
   artefactsBucket: workerStack.artefactsBucket,
@@ -91,6 +95,7 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   stackName: `${baseName}-api`,
   baseName,
   lambdaConcurrency,
+  networkAssertionBodyMaxBytes,
   userPool: authStack.userPool,
   apiDeploymentStage,
   lambdaStack: lambdaStack,
@@ -125,6 +130,7 @@ const frontendStack = new NovaActQAStudioFrontendStack(app, 'frontend', {
   apiEndpoint: apiEndpoint,
   baseName,
   lambdaConcurrency,
+  networkAssertionBodyMaxBytes,
   apiId: apiStack.api.restApiId,
   env: stackEnv,
 })

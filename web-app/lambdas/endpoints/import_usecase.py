@@ -133,6 +133,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 new_step['value_step'] = step['value_step']
             if step.get('value_type'):
                 new_step['value_type'] = step['value_type']
+
+            for network_field in (
+                'network_url_pattern', 'network_method', 'network_request_body',
+                'network_body_match_type', 'network_mock_response',
+                'network_mock_passthrough', 'network_timeout',
+                'network_response_body', 'network_response_body_match_type',
+                'network_response_status',
+            ):
+                if network_field in step:
+                    new_step[network_field] = step[network_field]
             
             try:
                 table.put_item(Item=new_step)

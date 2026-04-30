@@ -31,6 +31,16 @@ interface UsecaseStep {
   browser_args?: string;
   transform_operation?: string;
   transform_args?: string;
+  network_url_pattern?: string | null;
+  network_method?: string | null;
+  network_request_body?: string | null;
+  network_body_match_type?: string | null;
+  network_mock_response?: string | null;
+  network_mock_passthrough?: boolean | null;
+  network_timeout?: number | null;
+  network_response_body?: string | null;
+  network_response_body_match_type?: string | null;
+  network_response_status?: number | null;
 }
 
 interface StepsTableProps {
@@ -159,6 +169,9 @@ export default function StepsTable({
       case 'download':
         typeBadge = <Badge className="step badge-purple">Download</Badge>;
         break;
+      case 'network_assertion':
+        typeBadge = <Badge color="blue" className="step">Network</Badge>;
+        break;
       case 'navigation':
       default:
         typeBadge = <Badge className="step">Navigation</Badge>;
@@ -247,6 +260,21 @@ export default function StepsTable({
       }
     } else if (item.step_type === 'retrieve_value' && item.capture_variable) {
       details.push(`Captures variable: ${item.capture_variable}`);
+    } else if (item.step_type === 'network_assertion' && item.network_url_pattern) {
+      const parts = [`Network: ${item.network_method || 'any'} ${item.network_url_pattern}`];
+      if (item.network_request_body) {
+        parts.push(`req body (${item.network_body_match_type || 'exact'})`);
+      }
+      if (item.network_mock_response) {
+        parts.push(item.network_mock_passthrough ? 'passthrough mock' : 'static mock');
+      }
+      if (item.network_response_status != null) {
+        parts.push(`resp ${item.network_response_status}`);
+      }
+      if (item.network_response_body) {
+        parts.push(`resp body (${item.network_response_body_match_type || 'subset'})`);
+      }
+      details.push(parts.join(' · '));
     }
 
     // Add cache age for navigation steps with cache

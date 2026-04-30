@@ -43,6 +43,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         value_type = body.get('value_type', '')
         enable_advanced_click_types = body.get('enable_advanced_click_types', False)
         value_source = body.get('value_source', '')
+        network_url_pattern = body.get('network_url_pattern')
+        network_method = body.get('network_method')
+        network_request_body = body.get('network_request_body')
+        network_body_match_type = body.get('network_body_match_type')
+        network_mock_response = body.get('network_mock_response')
+        network_mock_passthrough = body.get('network_mock_passthrough', False)
+        network_timeout = body.get('network_timeout')
+        network_response_body = body.get('network_response_body')
+        network_response_body_match_type = body.get('network_response_body_match_type')
+        network_response_status = body.get('network_response_status')
         
         if not usecase_id or sort is None or not instruction:
             return create_response(400, {'error': 'Missing required fields'})
@@ -74,6 +84,24 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'value_source': value_source,
             'created_at': now
         }
+
+        # Add network_assertion fields when provided (kept off the record otherwise
+        # so existing step types are unaffected).
+        for key, value in (
+            ('network_url_pattern', network_url_pattern),
+            ('network_method', network_method),
+            ('network_request_body', network_request_body),
+            ('network_body_match_type', network_body_match_type),
+            ('network_mock_response', network_mock_response),
+            ('network_timeout', network_timeout),
+            ('network_response_body', network_response_body),
+            ('network_response_body_match_type', network_response_body_match_type),
+            ('network_response_status', network_response_status),
+        ):
+            if value is not None:
+                step[key] = value
+        if network_mock_passthrough:
+            step['network_mock_passthrough'] = True
         
         # Add browser step fields if present
         for field in ['browser_action', 'browser_args', 'transform_operation', 'transform_args']:

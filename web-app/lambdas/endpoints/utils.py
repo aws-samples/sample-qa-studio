@@ -586,7 +586,7 @@ def validate_generated_json(json_str):
     elif not data['steps']:
         errors.append('at least one step is required')
     else:
-        valid_step_types = ['navigation', 'validation', 'secret', 'retrieve_value', 'assertion', 'url', 'download']
+        valid_step_types = ['navigation', 'validation', 'secret', 'retrieve_value', 'assertion', 'url', 'download', 'network_assertion']
         for i, step in enumerate(data['steps']):
             if 'sort' not in step or step['sort'] <= 0:
                 errors.append(f'steps[{i}].sort must be a positive integer')
@@ -594,6 +594,218 @@ def validate_generated_json(json_str):
                 errors.append(f'steps[{i}].instruction is required')
             if step.get('step_type') not in valid_step_types:
                 errors.append(f'steps[{i}].step_type must be one of: {", ".join(valid_step_types)}')
+            elif step.get('step_type') == 'network_assertion':
+                _validate_network_assertion_fields(step, i, errors)
     
     is_valid = len(errors) == 0
     return is_valid, errors, data if is_valid else None
+
+
+# ---------------------------------------------------------------------------
+# network_assertion field validation
+# ---------------------------------------------------------------------------
+
+_NETWORK_ASSERTION_ALLOWED_METHODS = {
+    "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS",
+}
+# Request side accepts all three match types.
+_NETWORK_ASSERTION_REQUEST_MATCH_TYPES = {"exact", "subset", "schema"}
+# Response side explicitly rejects "exact" — response payloads frequently
+# contain non-deterministic values (timestamps, generated ids, ordering)
+# and strict equality is a known footgun.  Users who need tight
+# response checks express them via a schema with ``const`` or via subset.
+_NETWORK_ASSERTION_RESPONSE_MATCH_TYPES = {"subset", "schema"}
+_EXTERNAL_REF_PREFIXES = ("http://", "https://", "file://")
+_MIN_HTTP_STATUS = 100
+_MAX_HTTP_STATUS = 599
+
+
+def _read_network_assertion_max_body_bytes() -> int:
+    """Read the configurable body-size cap from the Lambda environment.
+
+    Defaults to 1 MiB (1_048_576 bytes).  Malformed values fall back to the
+    default rather than failing at cold start.
+    """
+    raw = os.getenv("NETWORK_ASSERTION_BODY_MAX_BYTES", "1048576")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 1_048_576
+    return value if value > 0 else 1_048_576
+
+
+_NETWORK_ASSERTION_MAX_BODY_BYTES = _read_network_assertion_max_body_bytes()
+_NETWORK_ASSERTION_MIN_TIMEOUT = 1
+_NETWORK_ASSERTION_MAX_TIMEOUT = 120
+
+
+def _validate_network_assertion_fields(step: dict, index: int, errors: list) -> None:
+    """Server-side validation for ``network_assertion`` step fields.
+
+    Mirrors the CLI-side rules in ``qa_studio_cli.validation``:
+    URL pattern required, method allow-list, body/mock size caps (configured
+    via ``NETWORK_ASSERTION_BODY_MAX_BYTES``, default 1 MiB), JSON validity
+    (with schema-document checks when match-type is ``schema``), match-type
+    allow-list, timeout range [1, 120], response-side fields (status in
+    [100, 599], body/match-type following the same rules except that the
+    response side does not permit ``exact``).
+    """
+    prefix = f'steps[{index}]'
+
+    url_pattern = step.get('network_url_pattern')
+    if not url_pattern or not str(url_pattern).strip():
+        errors.append(f'{prefix}.network_url_pattern is required for network_assertion steps')
+
+    method = step.get('network_method')
+    if method is not None and method != '':
+        if str(method).upper() not in _NETWORK_ASSERTION_ALLOWED_METHODS:
+            allowed = ', '.join(sorted(_NETWORK_ASSERTION_ALLOWED_METHODS))
+            errors.append(f'{prefix}.network_method must be one of: {allowed}')
+
+    # Request-side match type — accepts exact / subset / schema.
+    req_match_type = step.get('network_body_match_type')
+    if req_match_type is not None and req_match_type != '':
+        normalized = str(req_match_type).lower()
+        if normalized not in _NETWORK_ASSERTION_REQUEST_MATCH_TYPES:
+            allowed = ', '.join(sorted(_NETWORK_ASSERTION_REQUEST_MATCH_TYPES))
+            errors.append(f'{prefix}.network_body_match_type must be one of: {allowed}')
+        req_match_type = normalized
+    else:
+        req_match_type = None
+
+    body = step.get('network_request_body')
+    if body:
+        _validate_network_json_field(
+            body, f'{prefix}.network_request_body', errors,
+            is_schema=(req_match_type == 'schema'),
+        )
+
+    mock = step.get('network_mock_response')
+    if mock:
+        _validate_network_json_field(
+            mock, f'{prefix}.network_mock_response', errors, require_object=True,
+        )
+
+    timeout = step.get('network_timeout')
+    if timeout is not None:
+        try:
+            timeout_int = int(timeout)
+        except (TypeError, ValueError):
+            errors.append(f'{prefix}.network_timeout must be an integer')
+        else:
+            if (
+                timeout_int < _NETWORK_ASSERTION_MIN_TIMEOUT
+                or timeout_int > _NETWORK_ASSERTION_MAX_TIMEOUT
+            ):
+                errors.append(
+                    f'{prefix}.network_timeout must be between '
+                    f'{_NETWORK_ASSERTION_MIN_TIMEOUT} and '
+                    f'{_NETWORK_ASSERTION_MAX_TIMEOUT} seconds'
+                )
+
+    # Response-side match type — subset / schema only.
+    resp_match_type = step.get('network_response_body_match_type')
+    if resp_match_type is not None and resp_match_type != '':
+        normalized = str(resp_match_type).lower()
+        if normalized not in _NETWORK_ASSERTION_RESPONSE_MATCH_TYPES:
+            allowed = ', '.join(sorted(_NETWORK_ASSERTION_RESPONSE_MATCH_TYPES))
+            errors.append(
+                f'{prefix}.network_response_body_match_type must be one of: {allowed} '
+                f'("exact" is not permitted on the response side)'
+            )
+        resp_match_type = normalized
+    else:
+        resp_match_type = None
+
+    resp_body = step.get('network_response_body')
+    if resp_body:
+        _validate_network_json_field(
+            resp_body, f'{prefix}.network_response_body', errors,
+            is_schema=(resp_match_type == 'schema'),
+        )
+
+    status = step.get('network_response_status')
+    if status is not None:
+        try:
+            status_int = int(status)
+        except (TypeError, ValueError):
+            errors.append(f'{prefix}.network_response_status must be an integer')
+        else:
+            if status_int < _MIN_HTTP_STATUS or status_int > _MAX_HTTP_STATUS:
+                errors.append(
+                    f'{prefix}.network_response_status must be between '
+                    f'{_MIN_HTTP_STATUS} and {_MAX_HTTP_STATUS}'
+                )
+
+
+def _validate_network_json_field(
+    raw,
+    field_name: str,
+    errors: list,
+    *,
+    require_object: bool = False,
+    is_schema: bool = False,
+) -> None:
+    """Validate a JSON string field on a network_assertion step.
+
+    When ``is_schema=True`` the parsed document is additionally checked:
+    must be a JSON object, and must not contain ``$ref`` entries targeting
+    external URIs (SSRF + file-read protection).  Structural Draft 2020-12
+    validity is *not* performed here — that would require adding
+    ``jsonschema`` as a Lambda dependency.  The server still rejects the
+    biggest failure modes (malformed JSON, oversize, external refs) and the
+    worker/CLI runner do the deep validation at execution time.
+    """
+    if not isinstance(raw, str):
+        errors.append(f'{field_name} must be a JSON string')
+        return
+    size = len(raw.encode('utf-8'))
+    if size > _NETWORK_ASSERTION_MAX_BODY_BYTES:
+        errors.append(
+            f'{field_name} exceeds maximum size '
+            f'({size} > {_NETWORK_ASSERTION_MAX_BODY_BYTES} bytes)'
+        )
+        return
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError) as exc:
+        errors.append(f'{field_name} is not valid JSON: {exc}')
+        return
+    if require_object and not isinstance(parsed, dict):
+        errors.append(f'{field_name} must be a JSON object')
+        return
+    if is_schema:
+        if not isinstance(parsed, dict):
+            errors.append(f'{field_name} must be a JSON object (schema document)')
+            return
+        try:
+            _reject_external_refs(parsed, field_name)
+        except ValueError as exc:
+            errors.append(str(exc))
+
+
+def _reject_external_refs(node, context: str, path: str = "") -> None:
+    """Reject ``$ref`` entries pointing at external URIs.
+
+    Walks nested dicts and lists.  Raises ``ValueError`` on the first
+    offender.  Only local-pointer refs (values beginning with ``#``) are
+    accepted; anything else (URLs, file paths, bare identifiers) is
+    rejected.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            key_path = f"{path}.{key}" if path else key
+            if key == '$ref' and isinstance(value, str):
+                if value.startswith(_EXTERNAL_REF_PREFIXES):
+                    raise ValueError(
+                        f'{context}: external $ref not allowed at {key_path}: {value}'
+                    )
+                if not value.startswith('#'):
+                    raise ValueError(
+                        f'{context}: only local-pointer $ref is allowed at {key_path}: {value}'
+                    )
+            else:
+                _reject_external_refs(value, context, key_path)
+    elif isinstance(node, list):
+        for i, item in enumerate(node):
+            _reject_external_refs(item, context, f'{path}[{i}]')

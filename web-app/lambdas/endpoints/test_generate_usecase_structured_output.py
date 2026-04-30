@@ -69,7 +69,7 @@ class TestUsecaseExportSchema:
 
     def test_step_type_enum_values(self):
         step_type = USECASE_EXPORT_SCHEMA['properties']['steps']['items']['properties']['step_type']
-        expected = ['navigation', 'validation', 'secret', 'retrieve_value', 'assertion', 'url', 'download']
+        expected = ['navigation', 'validation', 'secret', 'retrieve_value', 'assertion', 'url', 'download', 'network_assertion']
         assert step_type['enum'] == expected
 
     def test_validation_type_allows_empty_string(self):

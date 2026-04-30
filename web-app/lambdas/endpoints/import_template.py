@@ -143,6 +143,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 new_step['assertion_variable'] = template_step['assertion_variable']
             if template_step.get('value_type'):
                 new_step['value_type'] = template_step['value_type']
+
+            for network_field in (
+                'network_url_pattern', 'network_method', 'network_request_body',
+                'network_body_match_type', 'network_mock_response',
+                'network_mock_passthrough', 'network_timeout',
+                'network_response_body', 'network_response_body_match_type',
+                'network_response_status',
+            ):
+                if network_field in template_step:
+                    new_step[network_field] = template_step[network_field]
             
             new_steps.append(new_step)
         

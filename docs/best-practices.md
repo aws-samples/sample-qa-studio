@@ -143,6 +143,40 @@ Step: "Enter the password from secret 'test-user-password'"
 - Centralized secret management
 - Easy rotation without updating tests
 
+### When to Use Network Assertion vs Validation
+
+Both step types verify behaviour, but they look at different layers of the app:
+
+- **Validation** reads from the live DOM. Use it to check what the user sees on the page.
+- **Network Assertion** reads from the outgoing HTTP request. Use it to verify the contract between the UI and the backend.
+
+Use `network_assertion` when:
+- A button click must trigger a specific API call with specific data.
+- You need to test the UI against an error or edge-case response the real backend doesn't produce.
+- Your test depends on a downstream system that isn't reliable in your test environment — mock it.
+
+Cautions:
+- Avoid mocking endpoints that transmit secrets (login, token refresh). The mock response bodies you define live in the test definition and are visible to anyone with access to the use case.
+- The step type is not cached. If your test suite is slow, cache the navigation steps around it rather than trying to cache the network observation.
+- The 15 s default timeout fits most click-then-request flows. Raise it only when the underlying call is known to take longer.
+
+### When to Use `subset` vs `schema` for Body Matching
+
+Network assertions support three body-match modes. The right one depends on what you're actually testing:
+
+- **`exact`** — the parsed JSON equals the expected body exactly. Extra keys fail. Good for small, stable payloads where every key matters. **Request side only** — response bodies frequently contain non-deterministic values and are rejected as `exact` targets by design.
+- **`subset`** — every key/value in the template must be in the captured body; extra keys are ignored. Use this when you know the specific values you expect for the keys you care about (e.g. `{"status": "active"}`). Arrays match element-by-element, so lengths must align.
+- **`schema`** — a JSON Schema Draft 2020-12 document validates the captured body structurally. Use this when you care about types and required keys but not specific values, especially for variable-length responses (lists, paginated data). A schema with `"items": {...}` checks every element of a list against the same shape, decoupling the test from the list length.
+
+Rule of thumb: if your assertion would break whenever the real response adds a valid field or timestamp, you're using `exact` or over-specified `subset` — reach for `schema` instead.
+
+### Cautions for Response-Side Assertions
+
+- Response bodies are captured after any mock/passthrough merge runs, not before. If your mock replaces the response, you are asserting against the merged response.
+- Non-JSON response bodies (HTML, binary downloads) cannot be verified with `subset` or `schema`. Use a `download` step or a DOM-level `validation` step instead.
+- A captured response larger than the configured cap fails the step even when no body assertion is configured. Use `network_response_body_match_type: schema` with a schema that ignores large fields, or narrow the URL pattern to a smaller endpoint.
+- External `$ref` (`http://`, `https://`, `file://`) in schemas is rejected at submit time. Keep schemas self-contained or use local `#/$defs/...` references.
+
 ---
 
 ## Test Maintenance

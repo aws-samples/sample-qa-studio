@@ -1,0 +1,44 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-04-29T08:00:00Z",
+  "usecase": {
+    "name": "[QA Studio E2E] Network Assertion Full Flow",
+    "description": "Click triggers POST to /api/submit, body subset-matches {status:'active'}, mock returns 200 with {id:'xyz'}; a follow-up retrieve_value reads the rendered DOM value; a final assertion compares it.",
+    "starting_url": "https://example.test/form",
+    "active": true,
+    "executing_region": "",
+    "tags": ["network_assertion", "e2e", "mock"]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "instruction": "Click Submit",
+      "step_type": "network_assertion",
+      "network_url_pattern": "**/api/submit",
+      "network_method": "POST",
+      "network_request_body": "{\"status\": \"active\"}",
+      "network_body_match_type": "subset",
+      "network_mock_response": "{\"status\": 200, \"body\": {\"id\": \"xyz\"}}",
+      "network_mock_passthrough": false,
+      "network_timeout": 15
+    },
+    {
+      "sort": 2,
+      "instruction": "Return the confirmation id shown on the success banner",
+      "step_type": "retrieve_value",
+      "capture_variable": "confirmation_id",
+      "value_type": "string"
+    },
+    {
+      "sort": 3,
+      "instruction": "Compare the captured confirmation id against the mocked value",
+      "step_type": "assertion",
+      "assertion_variable": "confirmation_id",
+      "validation_type": "string",
+      "validation_operator": "exact",
+      "validation_value": "xyz"
+    }
+  ],
+  "variables": [],
+  "secrets": []
+}

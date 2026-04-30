@@ -273,6 +273,11 @@ def handler(event, context):
                          'trajectory_s3_key', 'trajectory_last_updated',
                          'browser_action', 'browser_args',
                          'transform_operation', 'transform_args']:
+                         'network_url_pattern', 'network_method', 'network_request_body',
+                         'network_body_match_type', 'network_mock_response',
+                         'network_mock_passthrough', 'network_timeout',
+                         'network_response_body', 'network_response_body_match_type',
+                         'network_response_status']:
                 if field in step:
                     execution_step[field] = step[field]
             
