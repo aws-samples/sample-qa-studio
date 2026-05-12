@@ -1,5 +1,13 @@
 """JSON body matcher for network_assertion steps.
 
+**Deprecated.**  This module is scheduled for removal as part of the
+CLI-unified-runner refactor (see ``.kiro/specs/cli-unified-runner/``).
+The canonical implementation now lives at
+``qa-studio-cli/qa_studio_cli/runner/network_matcher.py``.
+
+Until the worker is migrated (refactor phase 4, R-WORKER-5), any change
+here MUST also be applied to the CLI copy.
+
 Three matching modes:
 
 - ``match_exact`` — strict JSON equality between the expected body and the

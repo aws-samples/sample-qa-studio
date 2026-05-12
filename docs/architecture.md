@@ -2,7 +2,7 @@
 
 ## System Overview
 
-QA Studio is a serverless web application for AI-powered automated testing built on Amazon Nova Act. The system consists of a React frontend, serverless API backend, ECS-based test execution workers, and a CLI tool for local development.
+QA Studio is a serverless web application for AI-powered automated testing built on Amazon Nova Act. The system consists of a React frontend, serverless API backend, ECS-based test execution workers, and a CLI tool. The `qa-studio` CLI is the single execution runtime: developer-run tests, CI-run tests, and cloud-triggered ECS worker tests all invoke the same code path.
 
 **Key Capabilities**:
 - Natural language test creation and management
@@ -12,7 +12,7 @@ QA Studio is a serverless web application for AI-powered automated testing built
 - Test suite organization and execution
 - Comprehensive artifact capture (videos, screenshots, logs, traces)
 - OAuth 2.0 authentication for users and API clients
-- CLI tool for local test execution and management
+- CLI tool for local test execution and management, and as the runtime for the cloud worker
 
 ---
 
@@ -47,7 +47,9 @@ graph TB
         subgraph "Test Execution"
             SQS[SQS Queue<br/>Execution Queue]
             ECS[ECS Fargate<br/>Worker Tasks]
+            CLIRuntime["qa-studio CLI<br/>(shared runtime)"]
             NovaAct[Nova Act SDK<br/>+ Playwright]
+            AgentCore[Bedrock AgentCore<br/>Browser Tool]
             DeviceFarm[AWS Device Farm<br/>Mobile Devices]
             RecordingQueue[SQS Queue<br/>Recording Downloads]
             RecordingLambda[Lambda<br/>download_recording]
@@ -61,9 +63,11 @@ graph TB
     
     WebUI -->|OAuth PKCE| Cognito
     CLI -->|OAuth PKCE| Cognito
+    CLIRuntime -->|OAuth M2M<br/>client_credentials| Cognito
     
     WebUI -->|API Requests| APIGW
     CLI -->|API Requests| APIGW
+    CLIRuntime -->|API Requests| APIGW
     
     APIGW --> Authorizer
     Authorizer --> Cognito
@@ -85,11 +89,12 @@ graph TB
     OAuthMgmt --> Cognito
     
     SQS --> ECS
-    ECS --> NovaAct
-    ECS --> DynamoDB
-    ECS --> S3
-    ECS -->|Mobile tests| DeviceFarm
-    ECS -->|Enqueue recording| RecordingQueue
+    ECS --> CLIRuntime
+    CLIRuntime --> NovaAct
+    CLIRuntime --> AgentCore
+    NovaAct --> AgentCore
+    CLIRuntime -->|Mobile tests| DeviceFarm
+    CLIRuntime -->|Enqueue via API| RecordingQueue
     RecordingQueue --> RecordingLambda
     RecordingLambda -->|Download video| DeviceFarm
     RecordingLambda -->|Upload video| S3
@@ -100,12 +105,15 @@ graph TB
     
     style WebUI fill:#e1f5ff
     style CLI fill:#e1f5ff
+    style CLIRuntime fill:#e1f5ff
     style Cognito fill:#fff4e1
     style APIGW fill:#ffe1e1
     style ECS fill:#ffe1f5
     style DynamoDB fill:#e1ffe1
     style S3 fill:#e1ffe1
 ```
+
+> **Note on the cloud worker**: batch ECS tasks run `qa-studio run` as their entrypoint (via the CLI-unified-runner refactor). The container reads execution context from ECS env vars, authenticates against Cognito using an M2M client whose credentials live in Secrets Manager, and writes all state back through the public API — the worker no longer talks to DynamoDB, S3, SQS or EventBridge directly for batch executions. Wizard-mode tasks still use the legacy `wizard_worker.py` path until the wizard migration lands (separate spec).
 
 ---
 
@@ -160,33 +168,43 @@ sequenceDiagram
     participant Lambda as Execute Lambda
     participant SQS as SQS Queue
     participant ECS as ECS Worker
+    participant Entrypoint as entrypoint.sh
+    participant RunnerCLI as qa-studio run
+    participant AgentCore as Bedrock AgentCore Browser
     participant NovaAct as Nova Act SDK
-    participant DynamoDB
-    participant S3
     participant EventBridge as EventBridge
     
     User->>WebUI: Trigger test execution
     WebUI->>API: POST /usecase/{id}/execute
     API->>Lambda: Invoke
-    Lambda->>DynamoDB: Create execution record
+    Lambda->>API: Create execution record (via DynamoDB)
     Lambda->>SQS: Send execution message
     Lambda->>WebUI: Return execution ID
     
     SQS->>ECS: Trigger worker task
-    ECS->>DynamoDB: Fetch test steps
+    ECS->>Entrypoint: Start container (env: USECASE_ID, EXECUTION_ID, …)
+    Entrypoint->>Entrypoint: Read API URL + token endpoint from SSM
+    Entrypoint->>RunnerCLI: exec qa-studio run --browser agentcore …
+    
+    RunnerCLI->>API: Cognito M2M client_credentials grant<br/>GET execution, steps, variables
+    RunnerCLI->>AgentCore: Provision browser
+    AgentCore->>RunnerCLI: CDP endpoint + live-view URL
+    RunnerCLI->>API: POST live-view URL
     
     loop For each step
-        ECS->>NovaAct: Execute step with nova.act()
-        NovaAct->>NovaAct: AI determines actions
-        NovaAct->>NovaAct: Execute browser actions
-        NovaAct->>S3: Save action traces
-        ECS->>DynamoDB: Update step status
-        ECS->>S3: Upload artifacts (screenshots, videos)
+        RunnerCLI->>NovaAct: Execute step with nova.act()
+        NovaAct->>AgentCore: Drive browser over CDP
+        NovaAct->>AgentCore: Save action traces (S3Writer / API)
+        RunnerCLI->>API: PATCH step status
+        RunnerCLI->>API: Upload step artifact (presigned PUT)
+        Note over RunnerCLI,API: For retrieve_value / transform:<br/>POST runtime-variable per-capture
     end
     
-    ECS->>DynamoDB: Update execution status
-    ECS->>EventBridge: Emit usecase.execution.completed event
-    ECS->>ECS: Task completes
+    RunnerCLI->>API: PATCH execution status (success/failed)
+    API->>EventBridge: Emit usecase.execution.completed
+    RunnerCLI->>API: DELETE live-view
+    RunnerCLI->>AgentCore: Delete browser
+    ECS->>ECS: Container exits with CLI's exit code
     
     Note over EventBridge: Event triggers downstream<br/>processes (e.g., cache building)
 ```
@@ -295,47 +313,48 @@ sequenceDiagram
 
 ### Test Execution (ECS Workers)
 
-**Technology**: Amazon ECS with Fargate, Python 3.11, Nova Act SDK, Playwright, Appium (mobile)
+**Technology**: Amazon ECS with Fargate, Python 3.13, the `qa-studio` CLI (with `[runner,agentcore]` extras), Nova Act SDK, Playwright (browser execution runs in Bedrock AgentCore, not inside the container).
 
-**Trigger**: SQS messages from execute_usecase or execute_test_suite Lambdas
+**Trigger**: SQS messages from `execute_usecase` or `execute_test_suite` Lambdas.
 
-**Execution Flow (Web)**:
-1. Receive execution message from SQS
-2. Fetch test steps from DynamoDB
-3. Initialize Nova Act with Bedrock AgentCore Browser
-4. Execute each step with `nova.act(instruction)`
-5. Upload artifacts to S3 via presigned URLs
-6. Update execution status in DynamoDB
-7. Emit EventBridge event for downstream processing
+**Container contract**:
+- The worker image installs the `qa-studio` CLI from the sibling `qa-studio-cli/` package during Docker build.
+- `entrypoint.sh` runs on container start.  It branches on `WORKER_MODE`:
+  - `batch` (default) — resolves the API URL + Cognito token endpoint from SSM, reads OAuth client-credentials from env (injected by ECS from Secrets Manager), and execs `qa-studio run --browser agentcore …`.
+  - `wizard` — defers to `wizard_worker.py` until the wizard migration lands.
 
-**Execution Flow (Mobile)**:
-1. Receive execution message from SQS
-2. Fetch test steps from DynamoDB
-3. Provision a Device Farm remote access session (uploads app binary if needed)
-4. Connect to the device via Appium through the Device Farm endpoint
-5. Initialize Nova Act with [`DeviceFarmActuator`](https://github.com/amazon-agi-labs/nova-act-samples/blob/main/examples/actuation/mobile/nova_act_mobile/actuation/device_farm_actuator.py)
-6. Execute each step with `nova.act(instruction)`
-7. Stop the Device Farm session and enqueue a delayed SQS message for recording download
-8. Update execution status in DynamoDB
-9. Emit EventBridge event for downstream processing
+**Execution Flow (Web, batch mode)**:
+1. Entrypoint resolves `QA_STUDIO_API_URL` (SSM) and `OAUTH_TOKEN_ENDPOINT` (SSM), and exports `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` from the ECS `secrets:` injection.
+2. `qa-studio run --browser agentcore --trigger-type worker` starts.
+3. The CLI authenticates via Cognito M2M client-credentials and fetches execution details over the public API.
+4. The AgentCore browser provisioner calls Bedrock to create + start a remote browser, returns CDP endpoint + live-view URL.
+5. The runner publishes the live-view URL via the `live-view` endpoint so the frontend can show it.
+6. For each step, the runner executes via NovaAct, posts step status + uploads artifacts via presigned PUT URLs, and (for `retrieve_value` / `transform` steps) publishes captured runtime variables per-capture.
+7. On success or failure, the runner PATCHes the final execution status — the server-side `update_execution_status` Lambda emits the `usecase.execution.completed` EventBridge event.
+8. The AgentCore browser + live-view record are torn down in the runner's `finally` block.
+
+**Execution Flow (Mobile, batch mode)**:
+1. Steps 1-3 as above.
+2. Instead of provisioning an AgentCore browser, the CLI builds a `DeviceFarmActuator` and hands it to NovaAct (uploads the app binary to Device Farm if needed).
+3. After the Device Farm session starts, the runner persists the session ARN via the `mobile-metadata` endpoint so the frontend can link to Device Farm.
+4. Steps execute via the actuator; all state writes go through the API.
+5. After the session stops, the runner posts the final session ARN and calls the `download-recording` endpoint which enqueues a delayed SQS message (5 min) for the recording download Lambda.
 
 **Recording Download (Mobile)**:
-- After the worker stops the Device Farm session, it sends a delayed SQS message (5 min) to the recording download queue
-- A Lambda (`download_device_farm_recording`) picks up the message after the delay
-- The Lambda waits for the session to reach a terminal state, downloads the video artifact from Device Farm, uploads it to S3, and creates a DynamoDB artifact record
-- If the session hasn't finalized yet, the Lambda raises an error and SQS retries after the visibility timeout (3 min), up to 10 retries
+- The `download_device_farm_recording` Lambda picks up the delayed SQS message, waits for the session to reach a terminal state, downloads the video, uploads it to S3, and creates a DynamoDB artifact record.
+- If the session hasn't finalized yet, the Lambda raises an error and SQS retries after the visibility timeout.
 
 **Event Emission**:
-- After execution completes (success or failure), the worker emits a `usecase.execution.completed` event to EventBridge
-- Event includes: usecase_id, execution_id, execution_status, timestamp
-- Fire-and-forget pattern: failures are logged but don't affect test execution
-- Triggers downstream processes such as cache building for step optimization
+- `usecase.execution.completed` is emitted by the `update_execution_status` Lambda (`Source=qa-studio.api`) on every terminal status transition.
+- Event detail: `usecase_id`, `execution_id`, `execution_status`, `timestamp`.
+- Triggers downstream processes such as cache building for step optimization.
 
 **Artifacts Generated**:
 - Screenshots (PNG)
 - Videos (MP4) — from AgentCore Browser (web) or Device Farm (mobile)
 - Action traces (JSON and HTML)
 - Execution logs (text)
+- Trajectory JSONs (web) — persisted per step by the runner so subsequent runs can replay them without hitting Nova Act's LLM.
 
 ### Data Storage
 

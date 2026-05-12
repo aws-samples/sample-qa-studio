@@ -122,7 +122,7 @@ class TestTestsCreate:
 
         # Verify generate-usecase call
         gen_call = mock_client.post.call_args_list[0]
-        assert gen_call[0][0] == "/api/generate-usecase"
+        assert gen_call[0][0] == "/generate-usecase"
         body = gen_call[1]["json_body"]
         assert body["title"] == "Test Login"
         assert body["startingUrl"] == "https://example.com"

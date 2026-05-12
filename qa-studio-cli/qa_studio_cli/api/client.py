@@ -63,7 +63,7 @@ class ApiClient:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
-        logger.debug("→ %s %s", method, url)
+        logger.info("→ %s %s", method, url)
         try:
             response = self._session.request(method, url, headers=headers, **kwargs)
         except requests.ConnectionError as e:

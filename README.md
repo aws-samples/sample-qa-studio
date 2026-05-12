@@ -46,10 +46,12 @@ QA Studio is built on AWS serverless architecture:
 - **API Layer**: Amazon API Gateway with AWS Lambda functions
 - **Authentication**: Amazon Cognito for user and machine-to-machine authentication
 - **Data Storage**: Amazon DynamoDB with single-table design
-- **Test Execution**: Amazon ECS with AWS Fargate running Nova Act SDK
+- **Test Execution**: Amazon ECS with AWS Fargate, running the `qa-studio` CLI as the container entrypoint
 - **Browser Automation**: Amazon Bedrock AgentCore Browser Tool for managed remote browsers
 - **Queue System**: Amazon SQS for reliable execution orchestration
 - **Artifact Storage**: Amazon S3 for videos, screenshots, logs, and traces
+
+The `qa-studio` CLI is the single execution runtime: developer-run tests, CI-run tests, and cloud-triggered ECS worker tasks all invoke the same code path. The cloud worker container is a thin shell around the CLI — `entrypoint.sh` translates ECS environment variables into CLI flags and execs `qa-studio run`. Wizard-mode tasks (interactive step-by-step execution) still use the legacy path until that migration lands separately.
 
 For detailed architecture information, see [Architecture Documentation →](docs/architecture.md)
 

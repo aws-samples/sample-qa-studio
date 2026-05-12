@@ -634,3 +634,161 @@ class TestUpdateExecutionStepStatusErrors(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestClearCacheFields(unittest.TestCase):
+    """R-API-6: extend status update to remove stale cache fields.
+
+    The primary update lives on ``EXECUTION#{exec}/EXECUTION_STEP#{step}``;
+    the cache fields live on ``USECASE#{uc}/STEP#{step}``.  The handler
+    does two separate UpdateItem calls — the second is best-effort.
+    """
+
+    def setUp(self):
+        os.environ['TABLE_NAME'] = 'test-table'
+
+    def _event(self, body):
+        return {
+            'pathParameters': {
+                'id': 'uc-1',
+                'executionId': 'exec-1',
+                'stepId': 'step-1',
+            },
+            'body': json.dumps(body),
+            'requestContext': {
+                'authorizer': {
+                    'client_id': 'ci',
+                    'scope': 'api/executions.write',
+                },
+            },
+        }
+
+    def test_clear_fields_invokes_second_update(self):
+        event = self._event({
+            'status': 'failed',
+            'clear_cache_fields': [
+                'trajectory_s3_key', 'trajectory_last_updated',
+            ],
+        })
+
+        with patch('update_execution_step_status.dynamodb') as mock_ddb:
+            mock_ddb.get_item.side_effect = [
+                {'Item': {'pk': {'S': 'USECASE_EXECUTION#uc-1'}}},
+                {'Item': {'pk': {'S': 'EXECUTION#exec-1'}}},
+            ]
+            response = handler(event, None)
+
+        self.assertEqual(response['statusCode'], 200)
+        # First update = step status; second update = cache REMOVE.
+        self.assertEqual(mock_ddb.update_item.call_count, 2)
+        cleanup_kwargs = mock_ddb.update_item.call_args_list[1].kwargs
+        self.assertEqual(cleanup_kwargs['Key']['pk']['S'], 'USECASE#uc-1')
+        self.assertEqual(cleanup_kwargs['Key']['sk']['S'], 'STEP#step-1')
+        expr = cleanup_kwargs['UpdateExpression']
+        self.assertTrue(expr.startswith('REMOVE '))
+        self.assertIn('trajectory_s3_key', expr)
+        self.assertIn('trajectory_last_updated', expr)
+
+    def test_clear_fields_omitted_only_updates_status(self):
+        event = self._event({'status': 'running'})
+
+        with patch('update_execution_step_status.dynamodb') as mock_ddb:
+            mock_ddb.get_item.side_effect = [
+                {'Item': {'pk': {'S': 'USECASE_EXECUTION#uc-1'}}},
+                {'Item': {'pk': {'S': 'EXECUTION#exec-1'}}},
+            ]
+            response = handler(event, None)
+
+        self.assertEqual(response['statusCode'], 200)
+        self.assertEqual(mock_ddb.update_item.call_count, 1)
+
+    def test_empty_clear_fields_list_is_noop(self):
+        event = self._event({
+            'status': 'running', 'clear_cache_fields': [],
+        })
+
+        with patch('update_execution_step_status.dynamodb') as mock_ddb:
+            mock_ddb.get_item.side_effect = [
+                {'Item': {'pk': {'S': 'USECASE_EXECUTION#uc-1'}}},
+                {'Item': {'pk': {'S': 'EXECUTION#exec-1'}}},
+            ]
+            response = handler(event, None)
+
+        self.assertEqual(response['statusCode'], 200)
+        # No REMOVE call when list is empty.
+        self.assertEqual(mock_ddb.update_item.call_count, 1)
+
+    def test_unknown_field_rejected(self):
+        event = self._event({
+            'status': 'running',
+            'clear_cache_fields': ['trajectory_s3_key', 'arbitrary_attr'],
+        })
+
+        with patch('update_execution_step_status.dynamodb') as mock_ddb:
+            response = handler(event, None)
+
+        self.assertEqual(response['statusCode'], 400)
+        self.assertIn('arbitrary_attr', json.loads(response['body'])['error'])
+        mock_ddb.update_item.assert_not_called()
+
+    def test_non_list_rejected(self):
+        event = self._event({
+            'status': 'running',
+            'clear_cache_fields': 'trajectory_s3_key',
+        })
+
+        with patch('update_execution_step_status.dynamodb'):
+            response = handler(event, None)
+
+        self.assertEqual(response['statusCode'], 400)
+
+    def test_non_string_elements_rejected(self):
+        event = self._event({
+            'status': 'running',
+            'clear_cache_fields': ['trajectory_s3_key', 123],
+        })
+
+        with patch('update_execution_step_status.dynamodb'):
+            response = handler(event, None)
+
+        self.assertEqual(response['statusCode'], 400)
+
+    def test_duplicate_fields_deduplicated(self):
+        event = self._event({
+            'status': 'running',
+            'clear_cache_fields': [
+                'trajectory_s3_key', 'trajectory_s3_key', 'cached_steps',
+            ],
+        })
+
+        with patch('update_execution_step_status.dynamodb') as mock_ddb:
+            mock_ddb.get_item.side_effect = [
+                {'Item': {'pk': {'S': 'USECASE_EXECUTION#uc-1'}}},
+                {'Item': {'pk': {'S': 'EXECUTION#exec-1'}}},
+            ]
+            response = handler(event, None)
+
+        self.assertEqual(response['statusCode'], 200)
+        cleanup_kwargs = mock_ddb.update_item.call_args_list[1].kwargs
+        expr = cleanup_kwargs['UpdateExpression']
+        # trajectory_s3_key appears once, cached_steps once.
+        self.assertEqual(expr.count('trajectory_s3_key'), 1)
+        self.assertEqual(expr.count('cached_steps'), 1)
+
+    def test_cleanup_failure_does_not_fail_status_update(self):
+        event = self._event({
+            'status': 'failed',
+            'clear_cache_fields': ['trajectory_s3_key'],
+        })
+
+        with patch('update_execution_step_status.dynamodb') as mock_ddb:
+            mock_ddb.get_item.side_effect = [
+                {'Item': {'pk': {'S': 'USECASE_EXECUTION#uc-1'}}},
+                {'Item': {'pk': {'S': 'EXECUTION#exec-1'}}},
+            ]
+            # First update succeeds; cleanup update raises.
+            mock_ddb.update_item.side_effect = [None, Exception('boom')]
+            response = handler(event, None)
+
+        # Primary operation (status update) must still be reported as 200.
+        self.assertEqual(response['statusCode'], 200)

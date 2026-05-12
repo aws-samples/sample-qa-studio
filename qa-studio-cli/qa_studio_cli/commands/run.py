@@ -7,6 +7,13 @@ import click
 @click.option("--suite-id", default=None, help="Test suite ID to execute")
 @click.option("--usecase-id", default=None, help="Single use case ID to execute")
 @click.option(
+    "--execution-id", default=None,
+    help=(
+        "Attach to a pre-created execution record instead of creating a new "
+        "one. Only valid with --usecase-id in remote (non-local-only) mode."
+    ),
+)
+@click.option(
     "--local-only", is_flag=True, default=False,
     help="Local-only execution (no remote records)",
 )
@@ -20,6 +27,28 @@ import click
 @click.option("--model-id", default=None, help="Override Nova Act model ID")
 @click.option("--device-arn", default=None, help="Override Device Farm device ARN for mobile tests")
 @click.option("--app-path", default=None, help="Path to local .apk/.ipa file for mobile tests (uploads to Device Farm)")
+@click.option(
+    "--browser",
+    type=click.Choice(["local", "agentcore", "cdp-external"], case_sensitive=False),
+    default="local",
+    help=(
+        "Browser provisioner (default: local). 'agentcore' requires the "
+        "[agentcore] extra; 'cdp-external' requires --cdp-endpoint-url."
+    ),
+)
+@click.option(
+    "--cdp-endpoint-url", default=None,
+    help="CDP websocket URL (required when --browser=cdp-external).",
+)
+@click.option(
+    "--cdp-headers-file",
+    type=click.Path(exists=False, dir_okay=False, resolve_path=True),
+    default=None,
+    help=(
+        "Path to a JSON file containing CDP connection headers. "
+        "Delivered via file (not argv) to avoid leaking secrets."
+    ),
+)
 @click.option("--verbose", is_flag=True, help="Enable verbose logging")
 @click.option(
     "--timeout", type=int, default=3600, help="Global timeout in seconds",
@@ -36,6 +65,7 @@ import click
 def run(
     suite_id: str,
     usecase_id: str,
+    execution_id: str,
     local_only: bool,
     token_file: str,
     base_url: str,
@@ -44,6 +74,9 @@ def run(
     model_id: str,
     device_arn: str,
     app_path: str,
+    browser: str,
+    cdp_endpoint_url: str,
+    cdp_headers_file: str,
     verbose: bool,
     timeout: int,
     keep_artifacts: bool,
@@ -55,6 +88,22 @@ def run(
         raise click.UsageError("Either --suite-id or --usecase-id is required")
     if suite_id and usecase_id:
         raise click.UsageError("Cannot use both --suite-id and --usecase-id")
+    if execution_id and not usecase_id:
+        raise click.UsageError("--execution-id requires --usecase-id")
+    if execution_id and suite_id:
+        raise click.UsageError("--execution-id is not supported with --suite-id")
+
+    # Validate browser-selection combinations.
+    browser = (browser or "local").lower()
+    if browser == "cdp-external":
+        if not cdp_endpoint_url:
+            raise click.UsageError(
+                "--cdp-endpoint-url is required when --browser=cdp-external"
+            )
+    elif cdp_endpoint_url or cdp_headers_file:
+        raise click.UsageError(
+            "--cdp-endpoint-url and --cdp-headers-file require --browser=cdp-external"
+        )
 
     # Parse variables from key=value format
     parsed_vars = {}
@@ -94,6 +143,10 @@ def run(
             output_format=output_format,
             device_arn=device_arn,
             app_path=app_path,
+            execution_id=execution_id,
+            browser=browser,
+            cdp_endpoint_url=cdp_endpoint_url,
+            cdp_headers_file=cdp_headers_file,
         )
     else:
         run_runner(

@@ -22,6 +22,13 @@ setup(
             "requests>=2.32.0",
             "jsonschema>=4.18.0",
         ],
+        # Opt-in extra for --browser=agentcore.  The bedrock_agentcore
+        # dependency is heavy and pins its own boto3 range, so we keep it
+        # out of the base [runner] surface.  Implies [runner] because the
+        # AgentCore path only makes sense when NovaAct is installed.
+        "agentcore": [
+            "bedrock_agentcore>=1.4.0",
+        ],
     },
     python_requires=">=3.11",
     entry_points={

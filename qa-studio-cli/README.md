@@ -20,6 +20,16 @@ pip install -e ./qa-studio-cli
 pip install -e "./qa-studio-cli[runner]"
 ```
 
+### With Bedrock AgentCore Browser Support
+
+Use this when you want to provision remote browsers via Amazon Bedrock AgentCore — either locally against your own AgentCore setup, or inside the cloud worker image (which installs this extra at build time).
+
+```bash
+pip install -e "./qa-studio-cli[runner,agentcore]"
+```
+
+The `[agentcore]` extra pulls in `bedrock_agentcore`. Without it, `--browser=agentcore` raises a clear install-hint error at runtime.
+
 ## Quick Start
 
 ```bash
@@ -257,6 +267,22 @@ Install dev dependencies:
 ```bash
 pip install -e ./qa-studio-cli
 pip install -r qa-studio-cli/requirements-dev.txt
+```
+
+Run tests:
+
+```bash
+cd qa-studio-cli
+pytest tests/
+```
+
+Run tests with coverage:
+
+```bash
+cd qa-studio-cli
+pytest --cov=qa_studio_cli tests/
+```
+r qa-studio-cli/requirements-dev.txt
 ```
 
 Run tests:

@@ -6,6 +6,7 @@ loaded lazily via the run command.
 """
 
 import base64
+import ipaddress
 import json
 import logging
 import math
@@ -16,7 +17,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 from nova_act import NovaAct, BOOL_SCHEMA
@@ -29,57 +30,71 @@ STRING_SCHEMA = {"type": "string"}
 NUMBER_SCHEMA = {"type": "number"}
 
 
+# IP ranges that must never be navigated to from the runner. Mirrors
+# web-app/worker/browser_step.py so the CLI and cloud worker enforce the
+# same guard. DNS names are allowed through — only literal IP hostnames
+# are checked here.
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("169.254.0.0/16"),      # link-local / ECS metadata
+    ipaddress.ip_network("10.0.0.0/8"),           # RFC 1918
+    ipaddress.ip_network("172.16.0.0/12"),        # RFC 1918
+    ipaddress.ip_network("192.168.0.0/16"),       # RFC 1918
+    ipaddress.ip_network("127.0.0.0/8"),          # loopback
+    ipaddress.ip_network("fd00::/8"),             # IPv6 ULA
+    ipaddress.ip_network("::1/128"),              # IPv6 loopback
+    ipaddress.ip_network("fe80::/10"),            # IPv6 link-local
+]
+
+
+def _validate_navigate_url(url: str) -> Optional[str]:
+    """Validate a navigation URL. Returns an error message or None if valid."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return f"Invalid URL: {url}"
+    if parsed.scheme not in ("http", "https"):
+        return f"URL scheme must be http or https, got '{parsed.scheme}'"
+    hostname = parsed.hostname or ""
+    if not hostname:
+        return "URL must include a hostname"
+    try:
+        addr = ipaddress.ip_address(hostname)
+        for network in _BLOCKED_NETWORKS:
+            if addr in network:
+                return (
+                    f"Navigation to {hostname} is blocked "
+                    "(internal/metadata address)"
+                )
+    except ValueError:
+        # hostname is a DNS name, not a literal IP — allowed
+        pass
+    return None
+
+
+def _strip_step_sk(sk: Optional[str]) -> Optional[str]:
+    """Return the raw step id from a possibly-prefixed DynamoDB SK.
+
+    The API returns execution-step records with ``sk="EXECUTION_STEP#<id>"``
+    and step-definition records with ``sk="STEP#<id>"``.  Navigation-step
+    processing needs the bare id so trajectory calls target the step
+    definition, not the execution step.
+    """
+    if not sk:
+        return None
+    for prefix in ("EXECUTION_STEP#", "STEP#"):
+        if sk.startswith(prefix):
+            return sk[len(prefix):]
+    return sk
+
+
 def _safe_eval_math(expression: str, variables: dict | None = None) -> float | int:
-    """Safe AST-based arithmetic evaluator. Mirrors worker/transform/math_evaluator.py."""
-    import ast
-    import operator as _op
+    """Safe AST-based arithmetic evaluator.
 
-    _MAX_EXPONENT = 1000
-    _MAX_RESULT = 1e308  # prevent intermediate results from blowing up memory
-
-    _BIN = {ast.Add: _op.add, ast.Sub: _op.sub, ast.Mult: _op.mul,
-            ast.Div: _op.truediv, ast.Mod: _op.mod, ast.Pow: _op.pow}
-    _UN = {ast.UAdd: _op.pos, ast.USub: _op.neg}
-    variables = variables or {}
-
-    def _check_magnitude(value, context="Result"):
-        if isinstance(value, (int, float)) and abs(value) > _MAX_RESULT:
-            raise ValueError(f"{context} magnitude too large (abs > {_MAX_RESULT})")
-        return value
-
-    def _walk(node):
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
-                raise ValueError(f"Non-numeric constant: {node.value!r}")
-            return node.value
-        if isinstance(node, ast.Name):
-            if node.id not in variables:
-                raise ValueError(f"Unknown variable: '{node.id}'")
-            val = variables[node.id]
-            if not isinstance(val, (int, float)) or isinstance(val, bool):
-                raise ValueError(f"Variable '{node.id}' must be numeric, got {type(val).__name__}: {val!r}")
-            return val
-        if isinstance(node, ast.BinOp):
-            fn = _BIN.get(type(node.op))
-            if not fn:
-                raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
-            left, right = _walk(node.left), _walk(node.right)
-            if isinstance(node.op, ast.Pow):
-                if isinstance(right, (int, float)) and abs(right) > _MAX_EXPONENT:
-                    raise ValueError(f"Exponent too large: {right} (max {_MAX_EXPONENT})")
-                if isinstance(left, (int, float)) and abs(left) > _MAX_EXPONENT:
-                    raise ValueError(f"Base too large for exponentiation: {left}")
-            result = fn(left, right)
-            return _check_magnitude(result)
-        if isinstance(node, ast.UnaryOp):
-            fn = _UN.get(type(node.op))
-            if not fn:
-                raise ValueError(f"Unsupported unary: {type(node.op).__name__}")
-            return fn(_walk(node.operand))
-        raise ValueError(f"Disallowed expression: {type(node).__name__}")
-
-    tree = ast.parse(expression.strip(), mode="eval")
-    return _walk(tree.body)
+    Thin wrapper over ``qa_studio_cli.runner.transform.math_evaluator.safe_eval_math``
+    for backward compatibility with existing tests that import from this module.
+    """
+    from qa_studio_cli.runner.transform.math_evaluator import safe_eval_math
+    return safe_eval_math(expression, variables)
 
 CLICK_PROMPT = """
 The `agentClick` statement supports a `clickType` argument to specify the type of click to perform.
@@ -107,10 +122,18 @@ class StepExecutor:
         nova: NovaAct,
         downloads_dir: Optional[Path] = None,
         secrets_resolver: Optional[Callable[[str, str], Optional[str]]] = None,
+        trajectory_manager: Optional[Any] = None,
+        enable_cache: bool = False,
     ):
         self.nova = nova
         self.downloads_dir = downloads_dir or (Path.home() / ".ci_runner" / "downloads")
         self.secrets_resolver = secrets_resolver
+        # Optional trajectory cache.  When both ``trajectory_manager`` and
+        # ``enable_cache`` are set, navigation steps first attempt to replay
+        # a recorded trajectory before falling back to ``nova.act(...)``.
+        # See ``.kiro/specs/cli-unified-runner/`` R-API-5 and T2.10.
+        self.trajectory_manager = trajectory_manager
+        self.enable_cache = enable_cache
 
     def execute(self, step: dict, variables: dict, runtime_variables: dict) -> StepResult:
         """Dispatch step execution by step_type."""
@@ -141,15 +164,100 @@ class StepExecutor:
                 return self._execute_navigation(step)
 
     def _execute_navigation(self, step: dict) -> StepResult:
+        """Execute a ``navigation`` step.
+
+        Three-tier strategy (mirrors ``web-app/worker/navigation_step.py``):
+          1. Trajectory replay — if the step has a recorded trajectory and
+             cache is enabled, replay it via
+             :class:`~qa_studio_cli.runner.trajectory.TrajectoryManager`.
+             This is the fastest and most faithful option.
+          2. Playwright cache — the worker runs legacy cached Playwright
+             actions here when no trajectory exists.  NOT YET PORTED to
+             the CLI.  Tracked as follow-up work: when ``cached_steps`` is
+             set on a step, the CLI currently falls straight through to
+             Nova Act, which is behaviorally safe but slower.
+          3. Nova Act — ``nova.act(...)`` executes the instruction fresh.
+             On success, attempt to save the trajectory for future replay.
+             On failure, clear any stale trajectory pointer so the next
+             run doesn't keep replaying a broken recording.
+        """
+        from qa_studio_cli.models.execution import TrajectoryReplayError
+
         instruction = step.get("instruction", "")
         if step.get("enable_advanced_click_types"):
             instruction = f"{CLICK_PROMPT}\n\n{instruction}"
+
+        step_id = step.get("step_id") or _strip_step_sk(step.get("sk")) or ""
+        trajectory_s3_key = step.get("trajectory_s3_key")
+        cache_active = (
+            self.enable_cache
+            and self.trajectory_manager is not None
+            and bool(trajectory_s3_key)
+        )
+        replay_attempted = False
+
+        # --- TIER 1: trajectory replay ------------------------------------
+        if cache_active:
+            replay_attempted = True
+            try:
+                replay = self.trajectory_manager.replay_step(self.nova, step)
+                logger.info(
+                    "Trajectory replay succeeded for step %s (%dms)",
+                    step_id, replay.duration_ms,
+                )
+                return StepResult(success=True, act_id="trajectory_replay")
+            except TrajectoryReplayError as exc:
+                logger.warning(
+                    "Trajectory replay failed for step %s: %s — "
+                    "falling back to Nova Act",
+                    step_id, exc,
+                )
+
+        # --- TIER 3: Nova Act (always available) --------------------------
         try:
             result = self.nova.act(instruction)
             act_id = self._extract_act_id(result)
+
+            # Best-effort trajectory save: both fresh recording (no prior
+            # trajectory) and stale refresh (replay was attempted but failed).
+            if (
+                self.trajectory_manager is not None
+                and self.trajectory_manager.is_recording_enabled
+                and step_id
+                and (replay_attempted or not trajectory_s3_key)
+            ):
+                try:
+                    self.trajectory_manager.save_trajectory(step_id, result)
+                except Exception as save_err:
+                    logger.warning(
+                        "Failed to save trajectory for step %s: %s",
+                        step_id, save_err,
+                    )
+
             return StepResult(success=True, act_id=act_id)
         except Exception as e:
             act_id = self._extract_act_id_from_exception(e)
+
+            # Clean up stale trajectory pointer when replay and Nova Act
+            # both failed — the recording is no longer usable.  Deferred
+            # via record_clear so the engine piggybacks on the next
+            # update_step_status call (R-API-6).
+            if (
+                replay_attempted
+                and self.trajectory_manager is not None
+                and step_id
+            ):
+                try:
+                    self.trajectory_manager.record_clear(
+                        step_id,
+                        ["trajectory_s3_key", "trajectory_last_updated"],
+                    )
+                except Exception as cleanup_err:
+                    logger.warning(
+                        "Failed to queue cache cleanup for step %s: %s",
+                        step_id, cleanup_err,
+                    )
+
             return StepResult(success=False, act_id=act_id, logs=str(e))
 
     def _execute_validation(self, step: dict) -> StepResult:
@@ -351,9 +459,9 @@ class StepExecutor:
                     url = args.get("url", "")
                     if not url:
                         return StepResult(success=False, logs="browser_args.url is required for navigate")
-                    _parsed = urlparse(url)
-                    if _parsed.scheme not in ("http", "https"):
-                        return StepResult(success=False, logs=f"URL scheme must be http or https, got '{_parsed.scheme}'")
+                    validation_error = _validate_navigate_url(url)
+                    if validation_error:
+                        return StepResult(success=False, logs=validation_error)
                     self.nova.go_to_url(url)
                     return StepResult(success=True)
                 case _:
@@ -398,73 +506,16 @@ class StepExecutor:
 
     @staticmethod
     def _run_transform(operation: str, args: dict):
-        """Execute a single transform operation. Pure function, no side effects."""
-        match operation:
-            case "math":
-                return _safe_eval_math(args.get("expression", ""))
-            case "round":
-                return round(float(args["value"]), int(args.get("digits", 0)))
-            case "floor":
-                return math.floor(float(args["value"]))
-            case "ceil":
-                return math.ceil(float(args["value"]))
-            case "abs":
-                return abs(float(args["value"]))
-            case "min":
-                vals = [float(v) for v in args["values"]]
-                if not vals:
-                    raise ValueError("min requires at least one value")
-                return min(vals)
-            case "max":
-                vals = [float(v) for v in args["values"]]
-                if not vals:
-                    raise ValueError("max requires at least one value")
-                return max(vals)
-            case "concat":
-                return "".join(str(v) for v in args.get("values", []))
-            case "upper":
-                return str(args["value"]).upper()
-            case "lower":
-                return str(args["value"]).lower()
-            case "trim":
-                return str(args["value"]).strip()
-            case "replace":
-                return str(args["value"]).replace(args["old"], args["new"])
-            case "substring":
-                end = int(args["end"]) if args.get("end") is not None else None
-                return str(args["value"])[int(args["start"]):end]
-            case "length":
-                return len(str(args["value"]))
-            case "to_number":
-                try:
-                    return float(args["value"])
-                except ValueError:
-                    raise ValueError(f"Cannot convert '{args['value']}' to number")
-            case "to_string":
-                return str(args["value"])
-            case "to_int":
-                try:
-                    return int(float(args["value"]))
-                except ValueError:
-                    raise ValueError(f"Cannot convert '{args['value']}' to int")
-            case "regex_extract":
-                try:
-                    m = re.search(args["pattern"], str(args["value"]))
-                except re.error as exc:
-                    raise ValueError(f"Invalid regex: {exc}")
-                if not m:
-                    raise ValueError(f"Pattern did not match")
-                group = int(args.get("group", 0))
-                try:
-                    return m.group(group)
-                except IndexError:
-                    raise ValueError(f"Group {group} not found")
-            case "format":
-                if re.search(r'\{[^}]*[.\[]', args["template"]):
-                    raise ValueError("Format template must not contain attribute or index access")
-                return args["template"].format(*args.get("args", []))
-            case _:
-                raise ValueError(f"Unknown transform operation: '{operation}'")
+        """Execute a single transform operation via the shared registry.
+
+        Delegates to ``qa_studio_cli.runner.transform.TRANSFORM_OPERATIONS`` so
+        the CLI and the worker share a single, pydantic-validated implementation
+        (R-PARITY-3). Unknown operations raise ``ValueError``.
+        """
+        from qa_studio_cli.runner.transform import TRANSFORM_OPERATIONS
+        if operation not in TRANSFORM_OPERATIONS:
+            raise ValueError(f"Unknown transform operation: '{operation}'")
+        return TRANSFORM_OPERATIONS[operation].validate_and_execute(args)
 
     def _handle_download_intercept(self, event: dict, cdp_session, download_data: dict) -> None:
         """Handle a CDP Network.requestIntercepted event for downloads."""

@@ -177,3 +177,117 @@ class TestRunCommandFormatChoice:
         mock_runner, _ = mock_modules
         runner.invoke(cli, ["run", "--usecase-id", "u1", "--format", "human"])
         mock_runner.run_usecase.assert_called_once()
+
+
+class TestBrowserFlagValidation:
+    """--browser / --cdp-endpoint-url / --cdp-headers-file validation."""
+
+    def test_browser_defaults_to_local(self, runner, mock_modules):
+        mock_runner, _ = mock_modules
+        result = runner.invoke(cli, ["run", "--usecase-id", "u1"])
+        assert result.exit_code == 0
+        mock_runner.run_usecase.assert_called_once()
+
+    def test_browser_invalid_choice_rejected(self, runner):
+        result = runner.invoke(
+            cli, ["run", "--usecase-id", "u1", "--browser", "firefox"]
+        )
+        assert result.exit_code != 0
+        # click produces its own "invalid choice" error
+        assert "Invalid value" in result.output or "invalid choice" in result.output.lower()
+
+    def test_cdp_external_requires_endpoint_url(self, runner):
+        result = runner.invoke(
+            cli, ["run", "--usecase-id", "u1", "--browser", "cdp-external"]
+        )
+        assert result.exit_code != 0
+        assert "--cdp-endpoint-url is required" in result.output
+
+    def test_cdp_flags_without_browser_choice_rejected(self, runner):
+        result = runner.invoke(
+            cli,
+            [
+                "run",
+                "--usecase-id",
+                "u1",
+                "--cdp-endpoint-url",
+                "wss://x.test/",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "require --browser=cdp-external" in result.output
+
+    def test_cdp_external_with_endpoint_passes_through(self, runner, mock_modules):
+        # T2.6 unblocked --browser=cdp-external — the flag now flows through
+        # to run_usecase, which constructs an ExecutionEngine with a matching
+        # BrowserSelection.  Here we just assert the dispatch happens cleanly.
+        mock_runner, _ = mock_modules
+        result = runner.invoke(
+            cli,
+            [
+                "run",
+                "--usecase-id", "u1",
+                "--browser", "cdp-external",
+                "--cdp-endpoint-url", "wss://x.test/",
+            ],
+        )
+        assert result.exit_code == 0
+        mock_runner.run_usecase.assert_called_once()
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["browser"] == "cdp-external"
+        assert kwargs["cdp_endpoint_url"] == "wss://x.test/"
+
+    def test_agentcore_passes_through(self, runner, mock_modules):
+        # T2.6 unblocked --browser=agentcore.  It goes through to
+        # run_usecase; the engine constructs the AgentCoreBrowserProvisioner
+        # only when the remote path actually provisions a browser.
+        mock_runner, _ = mock_modules
+        result = runner.invoke(
+            cli, ["run", "--usecase-id", "u1", "--browser", "agentcore"],
+        )
+        assert result.exit_code == 0
+        mock_runner.run_usecase.assert_called_once()
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["browser"] == "agentcore"
+
+
+class TestExecutionIdFlag:
+    """--execution-id validation + pass-through to run_usecase."""
+
+    def test_execution_id_requires_usecase_id(self, runner):
+        result = runner.invoke(
+            cli, ["run", "--suite-id", "s1", "--execution-id", "exec-1"]
+        )
+        assert result.exit_code != 0
+        # Either of the two UsageErrors is acceptable — the point is the
+        # combination is rejected before reaching the runner.
+        assert (
+            "--execution-id is not supported with --suite-id" in result.output
+            or "--execution-id requires --usecase-id" in result.output
+        )
+
+    def test_execution_id_alone_is_rejected(self, runner):
+        result = runner.invoke(cli, ["run", "--execution-id", "exec-1"])
+        assert result.exit_code != 0
+
+    def test_execution_id_passes_through_to_run_usecase(self, runner, mock_modules):
+        mock_runner, _ = mock_modules
+        result = runner.invoke(
+            cli,
+            [
+                "run",
+                "--usecase-id", "u1",
+                "--execution-id", "exec-42",
+            ],
+        )
+        assert result.exit_code == 0
+        mock_runner.run_usecase.assert_called_once()
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["execution_id"] == "exec-42"
+
+    def test_no_execution_id_passes_none(self, runner, mock_modules):
+        mock_runner, _ = mock_modules
+        result = runner.invoke(cli, ["run", "--usecase-id", "u1"])
+        assert result.exit_code == 0
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["execution_id"] is None

@@ -13,7 +13,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from nova_act import NovaAct, Workflow
 
@@ -21,8 +21,10 @@ from qa_studio_cli.api.executions import ExecutionAPI
 from qa_studio_cli.models.execution import StepResult
 from qa_studio_cli.runner.artifacts import ArtifactCapture
 from qa_studio_cli.runner.artifact_uploader import ArtifactUploader
+from qa_studio_cli.runner.browser import BrowserSelection, LocalBrowserProvisioner
 from qa_studio_cli.runner.step_executor import StepExecutor
-from qa_studio_cli.runner.workflow_manager import WorkflowManager
+from qa_studio_cli.runner.template_parser import TemplateParser
+from qa_studio_cli.runner.workflow_manager import WorkflowManager, NOVA_ACT_REGION
 from qa_studio_cli.utils.errors import sanitize_error_message
 from qa_studio_cli.validation import validate_step
 
@@ -33,6 +35,33 @@ logger = logging.getLogger(__name__)
 _replayable_supported = 'replayable' in inspect.signature(NovaAct.__init__).parameters
 
 
+def _extract_session_arn(actuator) -> Optional[str]:
+    """Return the current Device Farm remote-access session ARN, if any.
+
+    ``nova_act_mobile``'s ``DeviceFarmActuator`` exposes the ARN in two
+    places depending on lifecycle:
+
+    - ``session_result.arn`` while the session is live (after ``start()``)
+    - ``stopped_session_arn`` after ``stop()``
+
+    This helper checks both so callers don't have to branch on timing.
+    Returns ``None`` if neither is populated (e.g. actuator failed to
+    start, or the object shape changed in a newer SDK).
+    """
+    if actuator is None:
+        return None
+    stopped = getattr(actuator, "stopped_session_arn", None)
+    if stopped:
+        return stopped
+    session_result = getattr(actuator, "session_result", None)
+    if session_result is None:
+        return None
+    # session_result may be a dict or an object — tolerate both.
+    if isinstance(session_result, dict):
+        return session_result.get("arn")
+    return getattr(session_result, "arn", None)
+
+
 class ExecutionEngine:
     """Parallel test execution engine using real Nova Act SDK with local browsers."""
 
@@ -41,11 +70,18 @@ class ExecutionEngine:
         execution_api: ExecutionAPI = None,
         suite_execution_id: str = None,
         keep_artifacts: bool = False,
+        browser_selection: Optional[BrowserSelection] = None,
     ):
         self.execution_api = execution_api
         self.suite_execution_id = suite_execution_id
         self.keep_artifacts = keep_artifacts
-        logger.info("ExecutionEngine initialized")
+        # Default to the local browser so existing callers keep working.
+        # Set by main.py from the --browser flag.
+        self.browser_selection = browser_selection or BrowserSelection()
+        logger.info(
+            "ExecutionEngine initialized (browser=%s)",
+            self.browser_selection.mode,
+        )
 
     # ------------------------------------------------------------------
     # Local-only execution (no remote state management)
@@ -103,7 +139,11 @@ class ExecutionEngine:
                 nova_kwargs["ignore_screen_dims_check"] = True
                 nova_kwargs["ignore_https_errors"] = True
             else:
-                nova_kwargs["starting_page"] = starting_url
+                local_handle = LocalBrowserProvisioner().provision({
+                    "starting_url": starting_url,
+                    "usecase_id": usecase_id,
+                })
+                nova_kwargs.update(local_handle.nova_kwargs)
 
             # Enable trajectory recording for web tests when supported
             if not mobile_config and _replayable_supported:
@@ -117,7 +157,7 @@ class ExecutionEngine:
             with Workflow(
                 workflow_definition_name=workflow_name,
                 model_id=model_id or "nova-act-v1.0",
-                boto_session_kwargs={"region_name": region or "us-east-1"},
+                boto_session_kwargs={"region_name": NOVA_ACT_REGION},
             ) as workflow:
                 nova_kwargs["workflow"] = workflow
 
@@ -130,6 +170,12 @@ class ExecutionEngine:
 
                     executor = StepExecutor(nova, secrets_resolver=_local_secret_resolver)
                     runtime_variables: Dict[str, str] = {}
+                    template_parser = TemplateParser(
+                        execution_id=usecase_id,  # local path has no execution_id; reuse usecase_id
+                        created_at=datetime.utcnow().isoformat(),
+                        variables=variables,
+                        runtime_variables=runtime_variables,
+                    )
 
                     for step in steps:
                         step_id = step.get("step_id", step.get("sk", ""))
@@ -152,9 +198,7 @@ class ExecutionEngine:
                             overall_status = "failed"
                             break
 
-                        instruction = self._resolve_variables(
-                            step.get("instruction", ""), variables, runtime_variables,
-                        )
+                        instruction = template_parser.parse_instruction(step.get("instruction", ""))
                         resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id}
 
                         logger.info("[local] Executing step %d: %s", sort_order, instruction)
@@ -179,6 +223,12 @@ class ExecutionEngine:
                             and step_result.actual_value
                         ):
                             runtime_variables[step["capture_variable"]] = step_result.actual_value
+                            try:
+                                template_parser.add_runtime_variable(
+                                    step["capture_variable"], step_result.actual_value,
+                                )
+                            except ValueError as var_err:
+                                logger.warning("[local] Skipping runtime variable capture: %s", var_err)
 
                         if not step_result.success:
                             overall_status = "failed"
@@ -508,8 +558,12 @@ class ExecutionEngine:
         nova_kwargs: Dict[str, Any] = {
             "headless": headless,
             "logs_directory": logs_dir,
-            "record_video": True,
         }
+
+        # Video recording is not supported over CDP (agentcore / cdp-external).
+        # Only enable it for local browser mode.
+        if self.browser_selection.mode == "local":
+            nova_kwargs["record_video"] = True
 
         test_platform = execution_details.get("test_platform", "web")
         is_mobile = test_platform == "mobile"
@@ -544,7 +598,28 @@ class ExecutionEngine:
             nova_kwargs["ignore_screen_dims_check"] = True
             nova_kwargs["ignore_https_errors"] = True
         else:
-            nova_kwargs["starting_page"] = starting_url
+            # Remote-path browser provisioning.  For local/cdp-external this
+            # is a no-op resolver; for agentcore this creates and starts the
+            # remote browser and populates live_view_url.  The returned
+            # handle's teardown closure is invoked by the finally-block
+            # around _run_steps_with_nova below.
+            import secrets as _secrets
+
+            provisioner = self._build_browser_provisioner()
+            local_handle = provisioner.provision({
+                "starting_url": starting_url,
+                "usecase_id": usecase_id,
+                "execution_id": execution_id,
+                "region": os.getenv("AWS_REGION", "us-east-1"),
+                # Short unique id for the AgentCore browser resource name.
+                # Matches the worker's {{UniqueID}} style; irrelevant for
+                # local/cdp-external.
+                "unique_id": _secrets.token_hex(3),
+                "browser_policy_s3_path": execution_details.get(
+                    "browser_policy_s3_path",
+                ),
+            })
+            nova_kwargs.update(local_handle.nova_kwargs)
 
         # Enable trajectory recording for web tests when supported
         if not is_mobile and _replayable_supported:
@@ -552,29 +627,66 @@ class ExecutionEngine:
                 nova_kwargs["replayable"] = True
                 logger.info("Trajectory recording enabled (replayable=True)")
 
-        region = os.getenv("AWS_REGION", "us-east-1")
         wf_manager = WorkflowManager()
         workflow_name = wf_manager.ensure_workflow(usecase_id)
         model_id = execution_details.get("model_id") or "nova-act-v1.0"
 
+        # Browser handle for web paths; mobile uses an actuator instead.
+        # The handle (when present) carries an optional live-view URL and
+        # an optional teardown callable.  Published and torn down around
+        # the NovaAct workflow context below.
+        browser_handle = local_handle if not is_mobile else None
+
         with Workflow(
             workflow_definition_name=workflow_name,
             model_id=model_id,
-            boto_session_kwargs={"region_name": region},
+            boto_session_kwargs={"region_name": NOVA_ACT_REGION},
         ) as workflow:
             nova_kwargs["workflow"] = workflow
-            result = self._run_steps_with_nova(
-                nova_kwargs, steps, variables, headers,
-                starting_url, usecase_id, execution_id,
-                artifact_capture, artifact_uploader, logs_dir,
-                is_mobile=is_mobile,
+
+            live_view_published = self._publish_live_view(
+                browser_handle, usecase_id, execution_id,
             )
 
-            # Capture Device Farm session ARN for recording download
-            if is_mobile and hasattr(actuator, 'stopped_session_arn') and actuator.stopped_session_arn:
-                result["device_farm_session_arn"] = actuator.stopped_session_arn
+            try:
+                result = self._run_steps_with_nova(
+                    nova_kwargs, steps, variables, headers,
+                    starting_url, usecase_id, execution_id,
+                    artifact_capture, artifact_uploader, logs_dir,
+                    is_mobile=is_mobile,
+                    actuator=actuator if is_mobile else None,
+                )
 
-            return result
+                # Capture Device Farm session ARN for recording download
+                if is_mobile and hasattr(actuator, 'stopped_session_arn') and actuator.stopped_session_arn:
+                    result["device_farm_session_arn"] = actuator.stopped_session_arn
+
+                return result
+            finally:
+                # Persist the final DeviceFarm session ARN (R-API-3 consumer).
+                # Matches the stop-time update the worker does so the frontend
+                # can link to Device Farm even after the session ends.
+                if is_mobile:
+                    stopped_arn = getattr(actuator, "stopped_session_arn", None)
+                    if stopped_arn:
+                        self._persist_mobile_metadata(
+                            usecase_id, execution_id,
+                            device_farm_session_arn=stopped_arn,
+                        )
+                # Delete the live-view record iff we published one.  Avoids
+                # hammering the API with DELETE 404s when nothing is to clean up.
+                if live_view_published:
+                    self._delete_live_view(usecase_id, execution_id)
+                # Tear down the browser if the provisioner gave us a cleanup
+                # callable (AgentCore will; local/cdp-external won't).
+                if browser_handle is not None and browser_handle.teardown is not None:
+                    try:
+                        browser_handle.teardown()
+                    except Exception as teardown_err:
+                        logger.warning(
+                            "Browser teardown raised: %s",
+                            sanitize_error_message(str(teardown_err)),
+                        )
 
     def _run_steps_with_nova(
         self,
@@ -589,6 +701,7 @@ class ExecutionEngine:
         artifact_uploader: ArtifactUploader,
         logs_dir: str,
         is_mobile: bool = False,
+        actuator: Any = None,
     ) -> Dict[str, Any]:
         """Open NovaAct context and execute steps sequentially."""
         suite_id = self.suite_execution_id or "standalone"
@@ -610,18 +723,57 @@ class ExecutionEngine:
             except Exception as e:
                 logger.warning("Failed to capture Nova Act session ID: %s", sanitize_error_message(str(e)))
 
+            # Mobile start-time ARN persist (R-API-3 consumer).  Actuator
+            # has already called start() by the time NovaAct's context
+            # entered, so session_result is populated. Surface the ARN to
+            # the server right away so the frontend can link out.
+            if is_mobile and actuator is not None:
+                start_arn = _extract_session_arn(actuator)
+                if start_arn:
+                    self._persist_mobile_metadata(
+                        usecase_id, execution_id,
+                        device_farm_session_arn=start_arn,
+                    )
+
             # Headers and URL navigation are browser-only
+            template_parser = TemplateParser(
+                execution_id=execution_id,
+                created_at=datetime.utcnow().isoformat(),
+                variables=variables,
+            )
             if headers and not is_mobile:
                 parsed_headers = {
-                    k: self._resolve_variables(v, variables, {})
-                    for k, v in headers.items()
+                    k: template_parser.parse_instruction(v) for k, v in headers.items()
                 }
                 nova.page.set_extra_http_headers(parsed_headers)
                 nova.go_to_url(starting_url)
 
+            # Trajectory cache — web tests only.  Mobile runs skip cache
+            # because AgentCore's trajectory format doesn't apply.
+            trajectory_manager = None
+            enable_cache = False
+            if not is_mobile and self.execution_api is not None:
+                from qa_studio_cli.runner.trajectory import TrajectoryManager
+                replayable_supported = TrajectoryManager.detect_replayable_support(NovaAct)
+                enable_cache = (
+                    replayable_supported
+                    and os.getenv("ENABLE_TRAJECTORY_REPLAY", "true").lower() != "false"
+                )
+                if enable_cache:
+                    trajectory_manager = TrajectoryManager(
+                        execution_api=self.execution_api,
+                        usecase_id=usecase_id,
+                        execution_id=execution_id,
+                        logs_directory=logs_dir,
+                        replayable_supported=replayable_supported,
+                    )
+                    logger.info("Trajectory cache enabled for this execution")
+
             executor = StepExecutor(
                 nova, downloads_dir=downloads_dir,
                 secrets_resolver=self.execution_api.get_secret_value,
+                trajectory_manager=trajectory_manager,
+                enable_cache=enable_cache,
             )
             runtime_variables: Dict[str, str] = {}
 
@@ -648,15 +800,26 @@ class ExecutionEngine:
                     result = {"success": False, "error": error_msg}
                     break
 
-                instruction = self._resolve_variables(
-                    step.get("instruction", ""), variables, runtime_variables,
-                )
+                instruction = template_parser.parse_instruction(step.get("instruction", ""))
                 resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id, "execution_id": execution_id}
 
                 logger.info("Executing step %d: %s", sort_order, instruction)
                 step_result: StepResult = executor.execute(resolved_step, variables, runtime_variables)
 
                 step_status = "success" if step_result.success else "failed"
+                # Drain any cache-field cleanups the navigation-step tier 1
+                # fallback queued after replay failure.  Piggybacks the status
+                # update so no extra round-trip is needed (R-API-6).
+                clear_cache_fields: Optional[list] = None
+                step_def_id = step.get("step_id")
+                if trajectory_manager is not None and step_def_id:
+                    pending = trajectory_manager.drain_clear(step_def_id)
+                    if pending:
+                        clear_cache_fields = pending
+                        logger.info(
+                            "Clearing stale cache fields on step %s: %s",
+                            step_def_id, pending,
+                        )
                 try:
                     self._run_async(
                         self.execution_api.update_step_status(
@@ -666,6 +829,7 @@ class ExecutionEngine:
                             actual_value=step_result.actual_value or None,
                             act_id=step_result.act_id or None,
                             logs=sanitize_error_message(step_result.logs) if step_result.logs else None,
+                            clear_cache_fields=clear_cache_fields,
                         )
                     )
                 except Exception as e:
@@ -695,7 +859,33 @@ class ExecutionEngine:
                     and step_result.actual_value
                 ):
                     runtime_variables[step["capture_variable"]] = step_result.actual_value
+                    try:
+                        template_parser.add_runtime_variable(
+                            step["capture_variable"], step_result.actual_value,
+                        )
+                    except ValueError as var_err:
+                        logger.warning("Skipping runtime variable capture: %s", var_err)
                     logger.info("Captured runtime variable: %s = %s", step["capture_variable"], step_result.actual_value)
+
+                    # Persist the captured variable to the server so the UI can
+                    # display it immediately (R-API-1 consumer).  Fire-and-forget:
+                    # an API failure does not stop execution — in-memory state
+                    # is authoritative for the rest of this run.
+                    try:
+                        self._run_async(
+                            self.execution_api.create_runtime_variable(
+                                usecase_id=usecase_id,
+                                execution_id=execution_id,
+                                key=step["capture_variable"],
+                                value=step_result.actual_value,
+                            )
+                        )
+                    except Exception as persist_err:
+                        logger.warning(
+                            "Failed to persist runtime variable %s: %s",
+                            step["capture_variable"],
+                            sanitize_error_message(str(persist_err)),
+                        )
 
                 if not step_result.success:
                     sanitized_logs = sanitize_error_message(step_result.logs)
@@ -708,6 +898,122 @@ class ExecutionEngine:
         self._upload_trace_logs(logs_dir, usecase_id, execution_id, artifact_uploader)
         return result
 
+
+    def _build_browser_provisioner(self):
+        """Resolve a BrowserProvisioner from the engine's BrowserSelection.
+
+        Returns the provisioner instance.  Raises at call time (not at
+        engine construction) when an unsupported combination is chosen —
+        e.g. ``cdp-external`` without ``--cdp-endpoint-url``.
+        """
+        selection = self.browser_selection
+        mode = selection.mode
+        if mode == "local":
+            return LocalBrowserProvisioner()
+        if mode == "cdp-external":
+            if not selection.cdp_endpoint_url:
+                raise RuntimeError(
+                    "cdp-external browser mode requires --cdp-endpoint-url",
+                )
+            # Local import — cdp_external provisioner doesn't pull extra deps.
+            from qa_studio_cli.runner.browser import CdpExternalBrowserProvisioner
+            return CdpExternalBrowserProvisioner.from_flags(
+                cdp_endpoint_url=selection.cdp_endpoint_url,
+                cdp_headers_file=selection.cdp_headers_file,
+            )
+        if mode == "agentcore":
+            # Local import to keep bedrock_agentcore out of the base CLI's
+            # import path — only triggered when this code runs.
+            from qa_studio_cli.runner.browser.agentcore import (
+                AgentCoreBrowserProvisioner,
+            )
+            return AgentCoreBrowserProvisioner()
+        raise RuntimeError(f"Unknown browser mode: {mode!r}")
+
+    def _persist_mobile_metadata(
+        self,
+        usecase_id: str,
+        execution_id: str,
+        *,
+        device_farm_session_arn: Optional[str] = None,
+        device_name: Optional[str] = None,
+        device_os_version: Optional[str] = None,
+    ) -> None:
+        """Best-effort partial update of mobile metadata (R-API-3 consumer).
+
+        Called twice per mobile execution: right after the DeviceFarm
+        session starts (ARN only) and after it stops (final ARN + optional
+        device details).  An API failure is logged and swallowed — the
+        metadata is nice-to-have, not execution-blocking.
+        """
+        # No-op when every field is None: the API method would raise in
+        # that case, saving us the ValueError.
+        if not any((device_farm_session_arn, device_name, device_os_version)):
+            return
+        try:
+            self._run_async(
+                self.execution_api.update_mobile_metadata(
+                    usecase_id=usecase_id,
+                    execution_id=execution_id,
+                    device_farm_session_arn=device_farm_session_arn,
+                    device_name=device_name,
+                    device_os_version=device_os_version,
+                )
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to persist mobile metadata: %s",
+                sanitize_error_message(str(exc)),
+            )
+
+    def _publish_live_view(
+        self,
+        browser_handle,
+        usecase_id: str,
+        execution_id: str,
+    ) -> bool:
+        """Publish the live-view URL from a browser handle, if present.
+
+        Returns True when a URL was published (so the caller knows a matching
+        delete is needed on teardown), False otherwise.  Failures are logged
+        and swallowed — a missing live view is a UX regression, not a
+        correctness issue.  Local and cdp-external provisioners return
+        handles without a ``live_view_url`` and no-op here.  AgentCore
+        (T2.6) will populate it.
+        """
+        if browser_handle is None or not browser_handle.live_view_url:
+            return False
+        try:
+            self._run_async(
+                self.execution_api.create_live_view(
+                    usecase_id=usecase_id,
+                    execution_id=execution_id,
+                    live_view_url=browser_handle.live_view_url,
+                )
+            )
+            logger.info("Published live-view URL for execution %s", execution_id)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Failed to publish live-view URL: %s",
+                sanitize_error_message(str(exc)),
+            )
+            return False
+
+    def _delete_live_view(self, usecase_id: str, execution_id: str) -> None:
+        """Best-effort teardown of the live-view record."""
+        try:
+            self._run_async(
+                self.execution_api.delete_live_view(
+                    usecase_id=usecase_id,
+                    execution_id=execution_id,
+                )
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to delete live-view URL: %s",
+                sanitize_error_message(str(exc)),
+            )
 
     def _upload_trace_logs(
         self, logs_dir: str, usecase_id: str, execution_id: str,
@@ -746,14 +1052,17 @@ class ExecutionEngine:
     def _resolve_variables(
         text: str, variables: Dict[str, str], runtime_variables: Dict[str, str],
     ) -> str:
-        """Replace {{variable}} placeholders. Runtime vars take precedence."""
-        merged = {**variables, **runtime_variables}
+        """Replace {{variable}} placeholders.
 
-        def replace(match):
-            var_name = match.group(1)
-            if var_name in merged:
-                return merged[var_name]
-            logger.warning("Variable not found: %s", var_name)
-            return match.group(0)
+        Thin wrapper over ``TemplateParser`` — used when the execution-scoped
+        parser isn't available at the call site (e.g. utility paths). Prefer
+        passing a pre-built parser where possible so that ``{{UniqueID}}``
+        and ``{{Time}}`` are stable within one execution.
+        """
+        from qa_studio_cli.runner.template_parser import TemplateParser
 
-        return re.sub(r"\{\{(\w+)\}\}", replace, text)
+        parser = TemplateParser(
+            variables=variables,
+            runtime_variables=runtime_variables,
+        )
+        return parser.parse_instruction(text)

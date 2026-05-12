@@ -45,7 +45,7 @@ class TestUseCaseAPI:
         result = self.api.get_usecase("uc-1")
         assert result["id"] == "uc-1"
         call_args = self.client._session.request.call_args
-        assert call_args[0] == ("GET", "https://api.example.com/api/usecase/uc-1")
+        assert call_args[0] == ("GET", "https://api.example.com/usecase/uc-1")
 
     def test_get_steps(self):
         self.client._session.request.return_value = _mock_response(200, {"steps": [{"id": "s1"}]})
@@ -81,7 +81,7 @@ class TestUseCaseAPI:
         result = self.api.create_execution("uc-1")
         assert result["executionId"] == "ex-1"
         call_args = self.client._session.request.call_args
-        assert call_args[0] == ("POST", "https://api.example.com/api/usecase/uc-1/execute")
+        assert call_args[0] == ("POST", "https://api.example.com/usecase/uc-1/execute")
         assert call_args[1]["params"] == {"trigger-type": "ci_runner"}
 
     def test_create_execution_with_overrides(self):
@@ -139,7 +139,7 @@ class TestExecutionAPI:
         result = asyncio.run(self.api.update_status("uc-1", "ex-1", "failed", error_message="boom"))
         assert result == {"ok": True}
         call_args = self.client._session.request.call_args
-        assert call_args[0] == ("PATCH", "https://api.example.com/api/usecase/uc-1/executions/ex-1/status")
+        assert call_args[0] == ("PATCH", "https://api.example.com/usecase/uc-1/executions/ex-1/status")
         body = call_args[1]["json"]
         assert body["status"] == "failed"
         assert body["error_message"] == "boom"
@@ -148,7 +148,7 @@ class TestExecutionAPI:
         self.client._session.request.return_value = _mock_response(200, {"ok": True})
         result = asyncio.run(self.api.update_suite_status("suite-1", "se-1", "success"))
         call_args = self.client._session.request.call_args
-        assert call_args[0] == ("PATCH", "https://api.example.com/api/test-suites/suite-1/executions/se-1/status")
+        assert call_args[0] == ("PATCH", "https://api.example.com/test-suites/suite-1/executions/se-1/status")
 
     def test_update_step_status(self):
         self.client._session.request.return_value = _mock_response(200, {"ok": True})
@@ -172,6 +172,211 @@ class TestExecutionAPI:
         body = call_args[1]["json"]
         assert body["status"] == "running"
         assert body["nova_session_id"] == "sess-123"
+
+    def test_create_runtime_variable_sends_correct_request(self):
+        """R-API-1 consumer: POST {key, value} to the runtime-variables route."""
+        self.client._session.request.return_value = _mock_response(
+            200, {"status": "ok", "key": "orderId"},
+        )
+        result = asyncio.run(
+            self.api.create_runtime_variable("uc-1", "ex-1", "orderId", "ORD-42"),
+        )
+        assert result == {"status": "ok", "key": "orderId"}
+        call_args = self.client._session.request.call_args
+        assert call_args[0] == (
+            "POST",
+            "https://api.example.com/usecase/uc-1/executions/ex-1/runtime-variables",
+        )
+        assert call_args[1]["json"] == {"key": "orderId", "value": "ORD-42"}
+
+    def test_create_runtime_variable_propagates_server_errors(self):
+        """Server failure must raise so the caller can decide to log + continue."""
+        self.client._session.request.side_effect = Exception("500 Internal")
+        with pytest.raises(Exception, match="500 Internal"):
+            asyncio.run(
+                self.api.create_runtime_variable("uc-1", "ex-1", "k", "v"),
+            )
+
+    # ---- R-API-5 consumer: trajectory URLs ------------------------------
+
+    def test_get_trajectory_download_url_returns_url(self):
+        self.client._session.request.return_value = _mock_response(
+            200, {"download_url": "https://s3.example/get?sig=xyz", "expires_in": 900},
+        )
+        url = self.api.get_trajectory_download_url("uc-1", "step-1")
+        assert url == "https://s3.example/get?sig=xyz"
+        call_args = self.client._session.request.call_args
+        assert call_args[0] == (
+            "GET",
+            "https://api.example.com/usecase/uc-1/steps/step-1/trajectory/download-url",
+        )
+
+    def test_get_trajectory_download_url_returns_none_on_404(self):
+        """A missing trajectory is expected — callers skip replay, not error."""
+        self.client._session.request.side_effect = Exception("HTTP 404 Not Found")
+        url = self.api.get_trajectory_download_url("uc-1", "step-1")
+        assert url is None
+
+    def test_get_trajectory_download_url_reraises_non_404(self):
+        self.client._session.request.side_effect = Exception("500 Internal Server Error")
+        with pytest.raises(Exception, match="500"):
+            self.api.get_trajectory_download_url("uc-1", "step-1")
+
+    def test_create_trajectory_upload_url_returns_payload(self):
+        self.client._session.request.return_value = _mock_response(
+            200,
+            {
+                "upload_url": "https://s3.example/put",
+                "s3_key": "uc-1/trajectories/step-1.json",
+                "expires_in": 900,
+            },
+        )
+        payload = self.api.create_trajectory_upload_url("uc-1", "step-1")
+        assert payload is not None
+        assert payload["upload_url"] == "https://s3.example/put"
+        assert payload["s3_key"] == "uc-1/trajectories/step-1.json"
+        call_args = self.client._session.request.call_args
+        assert call_args[0] == (
+            "POST",
+            "https://api.example.com/usecase/uc-1/steps/step-1/trajectory/upload-url",
+        )
+        assert call_args[1]["json"] == {"content_type": "application/json"}
+
+    def test_create_trajectory_upload_url_returns_none_on_failure(self):
+        """Best-effort save: API failure yields None so save_trajectory skips."""
+        self.client._session.request.side_effect = Exception("503 Service Unavailable")
+        payload = self.api.create_trajectory_upload_url("uc-1", "step-1")
+        assert payload is None
+
+    # ---- R-API-6 consumer: clear_cache_fields on step status ------------
+
+    def test_update_step_status_passes_clear_cache_fields(self):
+        self.client._session.request.return_value = _mock_response(200, {"ok": True})
+        asyncio.run(
+            self.api.update_step_status(
+                "uc-1", "ex-1", "step-1", "failed",
+                clear_cache_fields=["trajectory_s3_key", "trajectory_last_updated"],
+            )
+        )
+        body = self.client._session.request.call_args[1]["json"]
+        assert body["clear_cache_fields"] == [
+            "trajectory_s3_key", "trajectory_last_updated",
+        ]
+
+    def test_update_step_status_omits_clear_cache_fields_when_empty(self):
+        self.client._session.request.return_value = _mock_response(200, {"ok": True})
+        asyncio.run(
+            self.api.update_step_status(
+                "uc-1", "ex-1", "step-1", "success", clear_cache_fields=[],
+            )
+        )
+        body = self.client._session.request.call_args[1]["json"]
+        assert "clear_cache_fields" not in body
+
+    def test_update_step_status_omits_clear_cache_fields_when_none(self):
+        self.client._session.request.return_value = _mock_response(200, {"ok": True})
+        asyncio.run(
+            self.api.update_step_status("uc-1", "ex-1", "step-1", "success"),
+        )
+        body = self.client._session.request.call_args[1]["json"]
+        assert "clear_cache_fields" not in body
+
+    # ---- R-API-2 consumer: live-view publish/delete ---------------------
+
+    def test_create_live_view_posts_url(self):
+        self.client._session.request.return_value = _mock_response(
+            200, {"status": "ok"},
+        )
+        result = asyncio.run(
+            self.api.create_live_view("uc-1", "ex-1", "https://live.example/abc"),
+        )
+        assert result == {"status": "ok"}
+        call_args = self.client._session.request.call_args
+        assert call_args[0] == (
+            "POST",
+            "https://api.example.com/usecase/uc-1/executions/ex-1/live-view",
+        )
+        assert call_args[1]["json"] == {"live_view_url": "https://live.example/abc"}
+
+    def test_create_live_view_propagates_server_errors(self):
+        self.client._session.request.side_effect = Exception("500 Internal")
+        with pytest.raises(Exception, match="500"):
+            asyncio.run(
+                self.api.create_live_view("uc-1", "ex-1", "https://x.test/"),
+            )
+
+    def test_delete_live_view_swallows_404(self):
+        """404 means nothing was published — treat as already-clean."""
+        self.client._session.request.side_effect = Exception("HTTP 404 Not Found")
+        # Should not raise.
+        asyncio.run(self.api.delete_live_view("uc-1", "ex-1"))
+
+    def test_delete_live_view_propagates_other_errors(self):
+        self.client._session.request.side_effect = Exception("500 Internal Server Error")
+        with pytest.raises(Exception, match="500"):
+            asyncio.run(self.api.delete_live_view("uc-1", "ex-1"))
+
+    def test_delete_live_view_sends_delete(self):
+        self.client._session.request.return_value = _mock_response(204, None)
+        asyncio.run(self.api.delete_live_view("uc-1", "ex-1"))
+        call_args = self.client._session.request.call_args
+        assert call_args[0] == (
+            "DELETE",
+            "https://api.example.com/usecase/uc-1/executions/ex-1/live-view",
+        )
+
+    # ---- R-API-3 consumer: update_mobile_metadata -----------------------
+
+    def test_update_mobile_metadata_session_arn_only(self):
+        self.client._session.request.return_value = _mock_response(
+            200, {"status": "ok"},
+        )
+        asyncio.run(
+            self.api.update_mobile_metadata(
+                "uc-1", "ex-1",
+                device_farm_session_arn="arn:aws:devicefarm:us-west-2:1:session:abc",
+            )
+        )
+        call_args = self.client._session.request.call_args
+        assert call_args[0] == (
+            "PATCH",
+            "https://api.example.com/usecase/uc-1/executions/ex-1/mobile-metadata",
+        )
+        assert call_args[1]["json"] == {
+            "device_farm_session_arn": "arn:aws:devicefarm:us-west-2:1:session:abc",
+        }
+
+    def test_update_mobile_metadata_all_fields(self):
+        self.client._session.request.return_value = _mock_response(200, {"status": "ok"})
+        asyncio.run(
+            self.api.update_mobile_metadata(
+                "uc-1", "ex-1",
+                device_farm_session_arn="arn:aws:devicefarm:us-west-2:1:session:a",
+                device_name="Pixel 6",
+                device_os_version="Android 13",
+            )
+        )
+        body = self.client._session.request.call_args[1]["json"]
+        assert body == {
+            "device_farm_session_arn": "arn:aws:devicefarm:us-west-2:1:session:a",
+            "device_name": "Pixel 6",
+            "device_os_version": "Android 13",
+        }
+
+    def test_update_mobile_metadata_empty_payload_raises(self):
+        """No kwargs given → ValueError before any request goes out."""
+        with pytest.raises(ValueError, match="at least one field"):
+            asyncio.run(self.api.update_mobile_metadata("uc-1", "ex-1"))
+        self.client._session.request.assert_not_called()
+
+    def test_update_mobile_metadata_propagates_server_errors(self):
+        self.client._session.request.side_effect = Exception("500 Internal")
+        with pytest.raises(Exception, match="500"):
+            asyncio.run(
+                self.api.update_mobile_metadata(
+                    "uc-1", "ex-1", device_name="Pixel 6",
+                )
+            )
 
     def test_get_secret_value(self):
         self.client._session.request.return_value = _mock_response(200, {"value": "secret-val"})
@@ -198,7 +403,7 @@ class TestTestSuiteAPI:
         result = self.api.get_suite("s-1")
         assert result["name"] == "Regression"
         call_args = self.client._session.request.call_args
-        assert call_args[0] == ("GET", "https://api.example.com/api/test-suites/s-1")
+        assert call_args[0] == ("GET", "https://api.example.com/test-suites/s-1")
 
     def test_execute_suite_minimal(self):
         self.client._session.request.return_value = _mock_response(200, {"suite_execution_id": "se-1"})
@@ -234,35 +439,38 @@ class TestTestSuiteAPI:
 
 
 # ---------------------------------------------------------------------------
-# Verify /api prefix in all paths
+# Verify paths match API Gateway routes (no /api prefix)
 # ---------------------------------------------------------------------------
 
-class TestApiPrefixInPaths:
-    """All runner API modules must use /api prefix in request paths."""
+class TestApiPathsMatchRoutes:
+    """All runner API modules must use paths matching API Gateway routes."""
 
-    def test_usecase_api_paths_have_api_prefix(self):
+    def test_usecase_api_paths_use_correct_prefix(self):
         client = _make_client()
         client._session.request.return_value = _mock_response(200, {"steps": [], "variables": [], "secrets": []})
         api = UseCaseAPI(client)
 
         api.get_usecase("uc-1")
         url = client._session.request.call_args[0][1]
-        assert "/api/usecase/" in url
+        assert "/usecase/" in url
+        assert "/api/usecase/" not in url
 
-    def test_execution_api_paths_have_api_prefix(self):
+    def test_execution_api_paths_use_correct_prefix(self):
         client = _make_client()
         client._session.request.return_value = _mock_response(200, {"ok": True})
         api = ExecutionAPI(client)
 
         asyncio.run(api.update_status("uc-1", "ex-1", "running"))
         url = client._session.request.call_args[0][1]
-        assert "/api/usecase/" in url
+        assert "/usecase/" in url
+        assert "/api/usecase/" not in url
 
-    def test_test_suite_api_paths_have_api_prefix(self):
+    def test_test_suite_api_paths_use_correct_prefix(self):
         client = _make_client()
         client._session.request.return_value = _mock_response(200, {"usecases": []})
         api = TestSuiteAPI(client)
 
         api.list_usecases("s-1")
         url = client._session.request.call_args[0][1]
-        assert "/api/test-suites/" in url
+        assert "/test-suites/" in url
+        assert "/api/test-suites/" not in url

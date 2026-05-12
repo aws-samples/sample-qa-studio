@@ -20,7 +20,7 @@ def list_suites(ctx):
     """List all test suites."""
     client = ctx.obj["client"]
     try:
-        data = client.get("/api/test-suites")
+        data = client.get("/test-suites")
         raw_items = data.get("suites", [])
         items = [SuiteModel.model_validate(item) for item in raw_items]
 
@@ -46,7 +46,7 @@ def get_suite(ctx, id):
     """Get suite details."""
     client = ctx.obj["client"]
     try:
-        data = client.get(f"/api/test-suites/{id}")
+        data = client.get(f"/test-suites/{id}")
         item = SuiteModel.model_validate(data)
 
         click.echo(f"Name:           {item.name}")
@@ -57,7 +57,7 @@ def get_suite(ctx, id):
         click.echo(f"Created At:     {item.created_at}")
 
         # Fetch and display usecases in the suite
-        uc_data = client.get(f"/api/test-suites/{id}/usecases")
+        uc_data = client.get(f"/test-suites/{id}/usecases")
         raw_usecases = uc_data.get("usecases", [])
         usecases = [SuiteUsecaseModel.model_validate(uc) for uc in raw_usecases]
 
@@ -91,7 +91,7 @@ def create_suite(ctx, name, description, tags):
         if tags:
             body["tags"] = list(tags)
 
-        data = client.post("/api/test-suites", json_body=body)
+        data = client.post("/test-suites", json_body=body)
         click.echo(f"✓ Suite created: {data.get('name', name)} (ID: {data['id']})")
 
     except ApiError as e:
@@ -109,7 +109,7 @@ def add_tests(ctx, suite_id, usecase_ids):
     client = ctx.obj["client"]
     try:
         data = client.post(
-            f"/api/test-suites/{suite_id}/usecases",
+            f"/test-suites/{suite_id}/usecases",
             json_body={"usecaseIds": list(usecase_ids)},
         )
         added = data.get("added", 0)
@@ -130,7 +130,7 @@ def remove_test(ctx, suite_id, usecase_id):
     """Remove a test from a suite."""
     client = ctx.obj["client"]
     try:
-        client.delete(f"/api/test-suites/{suite_id}/usecases/{usecase_id}")
+        client.delete(f"/test-suites/{suite_id}/usecases/{usecase_id}")
         click.echo(f"✓ Removed test {usecase_id} from suite {suite_id}.")
 
     except ApiError as e:
@@ -170,7 +170,7 @@ def run_suite(ctx, suite_id, base_url, variables, region, model_id):
         body["overrides"] = overrides
 
     try:
-        data = client.post(f"/api/test-suites/{suite_id}/execute", json_body=body)
+        data = client.post(f"/test-suites/{suite_id}/execute", json_body=body)
         result = SuiteExecutionResponse.model_validate(data)
         exec_count = len(result.execution_ids)
         click.echo(f"✓ Suite execution started: {result.suite_execution_id}")

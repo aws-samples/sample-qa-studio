@@ -4,6 +4,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Nova Act GA is only available in us-east-1.  All Nova Act API calls
+# (workflow definitions, CreateWorkflowRun) must target this region.
+# The --region CLI flag controls the *browser execution* region, not
+# the Nova Act API region.
 NOVA_ACT_REGION = "us-east-1"
 
 

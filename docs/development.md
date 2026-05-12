@@ -79,3 +79,64 @@ npm run deploy:frontend-build # Build React app
 - `npm run release:major`: Create major release (1.0.0 → 2.0.0)
 - `npm run release:prerelease`: Create pre-release (1.0.0 → 1.0.1-beta.0)
 - `npm run changelog`: Generate changelog from git commits
+
+
+## Running the Unified Runner Locally
+
+The cloud worker and the `qa-studio` CLI share a single execution runtime. In batch mode, ECS tasks invoke `qa-studio run` as their entrypoint (see `web-app/worker/entrypoint.sh`). That means you can reproduce a cloud execution on your laptop by running the same command with the right env.
+
+### Against a deployed stack
+
+```bash
+# 1. Install the CLI with the remote-execution extras
+pip install -e './qa-studio-cli[runner,agentcore]'
+
+# 2. Configure the CLI (interactive; uses the user-facing Cognito client)
+qa-studio configure
+
+# 3. Run a use case remotely (execution record created server-side)
+qa-studio run --usecase-id <uc-id>
+```
+
+### Attaching to a pre-created execution
+
+This is the shape the cloud worker uses: another actor (the web UI or the `execute_usecase` Lambda) creates the execution record first, then the runner attaches.
+
+```bash
+# Create the execution via the API however you normally would, then:
+qa-studio run \
+  --usecase-id <uc-id> \
+  --execution-id <exec-id> \
+  --browser agentcore          # or `local` / `cdp-external`
+```
+
+### Browser selection
+
+| `--browser` | When to use | Extras required |
+|---|---|---|
+| `local` (default) | Developer laptop runs against a locally launched Chromium | `[runner]` |
+| `agentcore` | Cloud worker, or developer with Bedrock AgentCore access | `[runner,agentcore]` |
+| `cdp-external` | Advanced: connect to a browser someone else provisioned via `--cdp-endpoint-url` / `--cdp-headers-file` | `[runner]` |
+
+### Reproducing the worker container locally
+
+```bash
+# Build the worker image the same way CDK does (context = repo root)
+docker build -f web-app/worker/Dockerfile -t qa-studio-worker .
+
+# Run it with the same env the task definition injects
+docker run --rm \
+  -e WORKER_MODE=batch \
+  -e USECASE_ID=<uc-id> \
+  -e EXECUTION_ID=<exec-id> \
+  -e QA_STUDIO_API_URL=https://<api>.execute-api.<region>.amazonaws.com/api/ \
+  -e OAUTH_TOKEN_ENDPOINT=https://<domain>.auth.<region>.amazoncognito.com/oauth2/token \
+  -e OAUTH_CLIENT_ID=<worker-m2m-client-id> \
+  -e OAUTH_CLIENT_SECRET=<worker-m2m-client-secret> \
+  -e BEDROCK_EXECUTION_ROLE=<role-arn> \
+  -e S3_BUCKET=<artifact-bucket> \
+  -e AWS_REGION=<region> \
+  qa-studio-worker
+```
+
+The CDK-deployed worker resolves `QA_STUDIO_API_URL` and `OAUTH_TOKEN_ENDPOINT` from SSM automatically (via `QA_STUDIO_API_URL_SSM` / `QA_STUDIO_TOKEN_ENDPOINT_SSM`). For a local run you can either set them explicitly as shown above, or point at the SSM parameters directly if your local AWS creds allow it.

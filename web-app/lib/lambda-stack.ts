@@ -70,6 +70,15 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly listSuiteArtifactsLambda: Function
   public readonly getStepTraceLambda: Function
 
+  // CLI-unified-runner endpoints (see .kiro/specs/cli-unified-runner/)
+  public readonly createRuntimeVariableLambda: Function
+  public readonly createLiveViewLambda: Function
+  public readonly deleteLiveViewLambda: Function
+  public readonly updateMobileMetadataLambda: Function
+  public readonly getExecutionHeadersLambda: Function
+  public readonly createTrajectoryUploadUrlLambda: Function
+  public readonly getTrajectoryDownloadUrlLambda: Function
+
   // Variables, Hooks, Headers Lambdas
   public readonly createUsecaseVariablesLambda: Function
   public readonly getUsecaseVariablesLambda: Function
@@ -359,6 +368,52 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
 
     this.getStepTraceLambda = this.createPythonLambda({
       path: 'get_step_trace',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
+    // ========== CLI-unified-runner endpoints ==========
+    // Endpoints consumed by the qa-studio CLI runner once the refactor in
+    // .kiro/specs/cli-unified-runner/ is complete. All use the existing
+    // api/executions.* scopes — no new scope names introduced.
+
+    this.createRuntimeVariableLambda = this.createPythonLambda({
+      path: 'create_runtime_variable',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.createLiveViewLambda = this.createPythonLambda({
+      path: 'create_live_view',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.deleteLiveViewLambda = this.createPythonLambda({
+      path: 'delete_live_view',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.updateMobileMetadataLambda = this.createPythonLambda({
+      path: 'update_mobile_metadata',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.getExecutionHeadersLambda = this.createPythonLambda({
+      path: 'get_execution_headers',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.createTrajectoryUploadUrlLambda = this.createPythonLambda({
+      path: 'create_trajectory_upload_url',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
+    this.getTrajectoryDownloadUrlLambda = this.createPythonLambda({
+      path: 'get_trajectory_download_url',
       environment: {
         TABLE_NAME: props.table.tableName,
         BUCKET_NAME: props.artefactsBucket.bucketName
@@ -1008,7 +1063,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.executeTestSuiteLambda,
       this.stopSuiteExecutionLambda,
       this.updateSuiteExecutionStatusLambda,
-      this.sendRecordingCommandLambda
+      this.sendRecordingCommandLambda,
+      // CLI-unified-runner endpoints
+      this.createLiveViewLambda,
+      this.updateMobileMetadataLambda,
+      this.createTrajectoryUploadUrlLambda
     ]
     writeLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableWritePolicy))
 
@@ -1048,6 +1107,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.generateStepArtifactUrlLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.confirmArtifactUploadLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.confirmArtifactUploadLambda.role?.addManagedPolicy(props.tableWritePolicy)
+
+    // CLI-unified-runner: create_runtime_variable does a get_item before the
+    // update to verify the execution variables record exists.
+    this.createRuntimeVariableLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.createRuntimeVariableLambda.role?.addManagedPolicy(props.tableWritePolicy)
 
     // S3 Bucket Permissions
     props.artefactsBucket.grantRead(this.listRecordingBatchesLambda)

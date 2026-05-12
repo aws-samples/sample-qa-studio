@@ -1,18 +1,34 @@
-"""JSON body matcher for network_assertion steps (CLI mirror).
+"""JSON body matcher for network_assertion steps.
 
-Mirrors ``web-app/worker/network_matcher.py`` so the CLI runner produces
-identical results to the worker.  A cross-package consistency test asserts
-the two implementations stay in sync.
+Canonical implementation shared by the CLI runner and — pending the
+completion of the CLI-unified-runner refactor (see
+``.kiro/specs/cli-unified-runner/``) — the cloud worker.  The worker
+currently ships its own copy at ``web-app/worker/network_matcher.py``
+that will be removed in phase 4 of the refactor (R-WORKER-5).  Until
+then, any change here MUST be mirrored to the worker copy.
 
-See the worker module docstring for the full design — three matching modes
-(exact, subset, schema), size/depth guards, and external ``$ref`` rejection
-for schemas.
+Three matching modes:
 
-The body-size cap is read from ``NETWORK_ASSERTION_BODY_MAX_BYTES`` the
-same way as the worker.  The CLI validation layer (``qa_studio_cli.validation``)
-keeps a hardcoded 1 MiB default because validation runs before any call to
-the server and cannot see per-deployment env.  The runner can honor the
-env if the user sets it locally.
+- ``match_exact``  — strict JSON equality between expected and captured.
+- ``match_subset`` — every key/value in the template must exist in the
+  captured body.  Lists must have equal length.
+- ``match_schema`` — validates the captured body against a JSON Schema
+  Draft 2020-12 document via the ``jsonschema`` library.  External
+  ``$ref`` targets (``http://``, ``https://``, ``file://``) are rejected
+  to prevent SSRF and file-system reads.
+
+Security guards:
+
+- ``MAX_BODY_SIZE`` — raw JSON bodies larger than this are rejected before
+  parsing.  Default 1 MiB; overridable via the
+  ``NETWORK_ASSERTION_BODY_MAX_BYTES`` environment variable (set at
+  deploy time from ``configuration.json``).
+- ``MAX_DEPTH`` (20) — recursive matchers refuse to descend deeper.
+- External ``$ref`` rejection — only local-pointer refs (``#/...``) are
+  accepted in schemas.
+
+Return convention: every public matcher returns ``(bool, str)`` where the
+string is empty on success and a short human-readable diff on failure.
 """
 
 from __future__ import annotations

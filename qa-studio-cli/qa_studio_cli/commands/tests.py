@@ -29,7 +29,7 @@ def list_tests(ctx):
     """List all tests."""
     client = ctx.obj["client"]
     try:
-        data = client.get("/api/usecases")
+        data = client.get("/usecases")
         raw_items = data.get("usecases", [])
         items = [UsecaseModel.model_validate(item) for item in raw_items]
 
@@ -57,7 +57,7 @@ def get_test(ctx, id):
     """Get test details including steps."""
     client = ctx.obj["client"]
     try:
-        data = client.get(f"/api/usecase/{id}")
+        data = client.get(f"/usecase/{id}")
         item = UsecaseModel.model_validate(data)
 
         click.echo(f"Name:         {item.name}")
@@ -70,7 +70,7 @@ def get_test(ctx, id):
         click.echo(f"Created At:   {item.created_at}")
 
         # Fetch and display steps
-        steps_data = client.get(f"/api/usecase/{id}/steps")
+        steps_data = client.get(f"/usecase/{id}/steps")
         raw_steps = steps_data.get("steps", [])
         steps = [StepModel.model_validate(s) for s in raw_steps]
         steps.sort(key=lambda s: s.sort)
@@ -102,7 +102,7 @@ def create_test(ctx, from_journey, title, starting_url, user_journey, region, ex
 
     try:
         # Step 1: Generate usecase from journey
-        gen_data = client.post("/api/generate-usecase", json_body={
+        gen_data = client.post("/generate-usecase", json_body={
             "title": title,
             "startingUrl": starting_url,
             "userJourney": user_journey,
@@ -116,7 +116,7 @@ def create_test(ctx, from_journey, title, starting_url, user_journey, region, ex
 
         # Step 2: Import the generated usecase
         usecase_data = json.loads(gen_response.usecase_data)
-        import_data = client.post("/api/import", json_body=usecase_data)
+        import_data = client.post("/import", json_body=usecase_data)
         import_response = ImportUsecaseResponse.model_validate(import_data)
 
         if not import_response.success:
@@ -156,7 +156,7 @@ def delete_test(ctx, id, yes):
             return
 
     try:
-        client.delete(f"/api/usecase/{id}")
+        client.delete(f"/usecase/{id}")
         click.echo(f"✓ Test {id} deleted.")
 
     except ApiError as e:
@@ -178,7 +178,7 @@ def run_test(ctx, id, trigger_type):
     client = ctx.obj["client"]
     try:
         data = client.post(
-            f"/api/usecase/{id}/execute",
+            f"/usecase/{id}/execute",
             params={"trigger-type": trigger_type},
         )
         result = ExecuteUsecaseResponse.model_validate(data)

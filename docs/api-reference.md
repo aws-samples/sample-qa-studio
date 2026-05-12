@@ -1097,6 +1097,210 @@ curl -X POST \
 
 ---
 
+### Runtime Variables
+
+Upsert a single captured runtime variable on an in-flight execution. Called by the CLI runner once per `retrieve_value` or `transform` step so the UI reflects captured values incrementally rather than only at completion.
+
+**Endpoint**: `POST /api/usecase/{id}/executions/{executionId}/runtime-variables`
+
+**Scope**: `api/executions.write`
+
+**Path Parameters**:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | string | Usecase ID |
+| `executionId` | string | Execution ID |
+
+**Request Body**:
+
+```json
+{
+  "key": "orderId",
+  "value": "ORD-42"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `key` | string | Yes | Variable name (≤128 chars, may be a DynamoDB reserved word) |
+| `value` | string / number / bool | Yes | Variable value. Coerced to string on storage (≤4096 chars) |
+
+**Responses**:
+
+| Status | Meaning |
+|---|---|
+| 200 | `{"status": "ok", "key": "<key>"}` |
+| 400 | Missing key/value, oversized value, or invalid body |
+| 403 | Missing `api/executions.write` scope |
+| 404 | Execution variables record not found |
+| 500 | DynamoDB error |
+
+---
+
+### Live View
+
+The live-view URL is the user-visible streaming URL of a running AgentCore browser session. The runner publishes it at provisioning time; the frontend polls `GET` and the runner cleans up with `DELETE` on teardown.
+
+#### Publish Live View
+
+**Endpoint**: `POST /api/usecase/{id}/executions/{executionId}/live-view`
+
+**Scope**: `api/executions.write`
+
+**Request Body**:
+
+```json
+{
+  "live_view_url": "https://live.example.com/session-abc"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `live_view_url` | string | Yes | HTTPS URL of the live view, ≤2048 chars |
+
+**Responses**: 200 (`{"status": "ok"}`), 400 (bad URL), 403, 500.
+
+#### Delete Live View
+
+**Endpoint**: `DELETE /api/usecase/{id}/executions/{executionId}/live-view`
+
+**Scope**: `api/executions.write`
+
+**Responses**:
+
+| Status | Meaning |
+|---|---|
+| 204 | Deleted |
+| 403 | Missing scope |
+| 404 | No live-view record to delete (callers may treat as already-clean) |
+| 500 | DynamoDB error |
+
+---
+
+### Mobile Metadata
+
+Partial update for Device Farm session metadata on a mobile execution. Called by the runner right after the session starts (session ARN only) and again after the session stops (final ARN + optional device details).
+
+**Endpoint**: `PATCH /api/usecase/{id}/executions/{executionId}/mobile-metadata`
+
+**Scope**: `api/executions.write`
+
+**Request Body** (at least one field required; missing fields are NOT cleared server-side):
+
+```json
+{
+  "device_farm_session_arn": "arn:aws:devicefarm:us-west-2:123456789012:session:abcdef",
+  "device_name": "Pixel 6",
+  "device_os_version": "Android 13"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `device_farm_session_arn` | string | No | Must start with `arn:aws:devicefarm:` |
+| `device_name` | string | No | ≤512 chars |
+| `device_os_version` | string | No | ≤512 chars |
+
+**Responses**: 200 (`{"status": "ok", "updated_fields": [...]}`), 400, 403, 404 (execution not found), 500.
+
+---
+
+### Get Execution Headers
+
+Read-only access to custom HTTP headers stored on an execution. The runner reads these and calls `nova.page.set_extra_http_headers(...)` before navigation. Returns `{"headers": {}}` (not 404) when no headers are configured.
+
+**Endpoint**: `GET /api/usecase/{id}/executions/{executionId}/headers`
+
+**Scope**: `api/executions.read`
+
+**Response**:
+
+```json
+{
+  "headers": {
+    "X-Custom": "value",
+    "Authorization": "Bearer …"
+  }
+}
+```
+
+---
+
+### Trajectory Upload/Download URLs
+
+Presigned S3 URLs for per-step trajectory JSONs used by Nova Act's trajectory-replay cache.
+
+#### Request Upload URL
+
+**Endpoint**: `POST /api/usecase/{id}/steps/{stepId}/trajectory/upload-url`
+
+**Scope**: `api/executions.write`
+
+**Request Body**:
+
+```json
+{
+  "content_type": "application/json"
+}
+```
+
+**Response**:
+
+```json
+{
+  "upload_url": "https://s3.example.com/…",
+  "s3_key": "uc-1/trajectories/step-1.json",
+  "expires_in": 900
+}
+```
+
+Calling this endpoint atomically writes `trajectory_s3_key` and `trajectory_last_updated` on the STEP record server-side. If the runner's subsequent PUT fails, the pointer is stale; the next replay attempt triggers cleanup via the `clear_cache_fields` extension on the step-status endpoint.
+
+#### Get Download URL
+
+**Endpoint**: `GET /api/usecase/{id}/steps/{stepId}/trajectory/download-url`
+
+**Scope**: `api/executions.write` (cache data is execution-flow-sensitive)
+
+**Response (200)**:
+
+```json
+{
+  "download_url": "https://s3.example.com/…",
+  "expires_in": 900
+}
+```
+
+**Response (404)**: when no trajectory has been recorded for the step — expected when the step hasn't been executed yet.
+
+---
+
+### Clear Cache Fields on Step Status
+
+The existing `PATCH /api/usecase/{id}/executions/{executionId}/steps/{stepId}/status` endpoint accepts an optional `clear_cache_fields` array that lets the runner clean up stale cache pointers in the same request.
+
+**Allow-listed field names** (anything else rejected 400):
+- `trajectory_s3_key`
+- `trajectory_last_updated`
+- `cached_steps`
+- `cache_last_updated`
+
+**Example**:
+
+```json
+{
+  "status": "failed",
+  "error_message": "step timed out",
+  "clear_cache_fields": ["trajectory_s3_key", "trajectory_last_updated"]
+}
+```
+
+The server does a combined `SET status = …, REMOVE trajectory_s3_key, trajectory_last_updated` in a single DynamoDB update. No extra round-trip.
+
+---
+
 ## Device Farm Endpoints
 
 ### List Devices

@@ -13,7 +13,7 @@ class TestSuiteAPI:
 
     def get_suite(self, suite_id: str) -> Dict[str, Any]:
         """Fetch test suite definition."""
-        return self.client.get(f"/api/test-suites/{suite_id}")
+        return self.client.get(f"/test-suites/{suite_id}")
 
     def execute_suite(
         self,
@@ -37,9 +37,9 @@ class TestSuiteAPI:
             payload["region"] = region
         if model_id is not None:
             payload["model_id"] = model_id
-        return self.client.post(f"/api/test-suites/{suite_id}/execute", json_body=payload)
+        return self.client.post(f"/test-suites/{suite_id}/execute", json_body=payload)
 
     def list_usecases(self, suite_id: str) -> List[Dict[str, Any]]:
         """List use cases belonging to a test suite."""
-        response = self.client.get(f"/api/test-suites/{suite_id}/usecases")
+        response = self.client.get(f"/test-suites/{suite_id}/usecases")
         return response.get("usecases", [])

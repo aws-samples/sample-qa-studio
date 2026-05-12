@@ -20,6 +20,41 @@ class StepResult:
     actual_value: str = ""
 
 
+@dataclass
+class ReplayResult:
+    """Outcome of a trajectory-replay attempt.
+
+    Mirrors ``web-app/worker/models.py::ReplayResult`` so the CLI and
+    worker share an identical contract around trajectory replay.
+    """
+
+    success: bool
+    duration_ms: int
+    trajectory_s3_key: str
+    error: Optional[str] = None
+
+
+class TrajectoryReplayError(Exception):
+    """Raised when trajectory replay fails.
+
+    Mirrors ``web-app/worker/models.py::TrajectoryReplayError``.  Raised
+    for every non-recoverable path in the replay pipeline — download
+    failure, malformed trajectory JSON, SDK internal error,
+    per-trajectory-step timeout — so the navigation-step logic can
+    uniformly catch and fall through to Nova Act.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        s3_key: str,
+        cause: Optional[Exception] = None,
+    ) -> None:
+        super().__init__(message)
+        self.s3_key = s3_key
+        self.cause = cause
+
+
 class UseCaseMetadata(BaseModel):
     """Use case definition fetched from the platform API."""
 

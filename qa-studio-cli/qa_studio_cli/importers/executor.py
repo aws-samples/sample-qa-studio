@@ -42,7 +42,7 @@ def import_single(
         payload_dict["regionOverride"] = region
 
     try:
-        data = client.post("/api/import", json_body=payload_dict)
+        data = client.post("/import", json_body=payload_dict)
         response = ImportUsecaseResponse.model_validate(data)
 
         if not response.success:
@@ -82,7 +82,7 @@ def set_secret_value(
     """Set a secret value via POST /api/usecase/{id}/secrets (create/update)."""
     try:
         client.post(
-            f"/api/usecase/{usecase_id}/secrets",
+            f"/usecase/{usecase_id}/secrets",
             json_body={"secrets": [{"key": secret_key, "value": secret_value}]},
         )
         return True
