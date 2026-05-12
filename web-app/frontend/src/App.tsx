@@ -41,6 +41,7 @@ const TestSuiteDetail = React.lazy(() => import('./components/TestSuiteDetail'))
 const AddUsecasesToSuite = React.lazy(() => import('./components/AddUsecasesToSuite'));
 const ConfigureSchedule = React.lazy(() => import('./components/ConfigureSchedule'));
 const SuiteExecutionDetail = React.lazy(() => import('./components/SuiteExecutionDetail'));
+const UnifiedWizard = React.lazy(() => import('./components/unified-wizard/UnifiedWizard'));
 const About = React.lazy(() => import('./components/About'));
 
 Amplify.configure(amplifyconfig);
@@ -133,6 +134,7 @@ function AppContent() {
         import('./components/UserJourneyWizard');
         import('./components/wizard/WizardSetup');
         import('./components/wizard/InteractiveWizard');
+        import('./components/unified-wizard/UnifiedWizard');
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
         import('./components/Users');
@@ -157,6 +159,7 @@ function AppContent() {
         import('./components/UserJourneyWizard');
         import('./components/wizard/WizardSetup');
         import('./components/wizard/InteractiveWizard');
+        import('./components/unified-wizard/UnifiedWizard');
         import('./components/UsecaseDetailRefactored');
         import('./components/ExecutionDetailRefactored');
         import('./components/Users');
@@ -202,6 +205,7 @@ function AppContent() {
           <Routes>
             <Route path="/" element={<HomeScreen />} />
             <Route path="/usecases" element={<Usecases />} />
+            <Route path="/create/new" element={<UnifiedWizard />} />
             <Route path="/create" element={<CreateUsecaseWizard />} />
             <Route path="/create/blank" element={<CreateUsecase />} />
             <Route path="/create/import" element={<ImportUsecase />} />

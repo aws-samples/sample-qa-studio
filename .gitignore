@@ -85,3 +85,6 @@ yarn-error.log*
 *.egg-info
 
 nova-act-recorder.zip
+
+# Local POC scratch area
+.poc/
