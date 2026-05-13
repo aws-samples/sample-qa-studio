@@ -15,6 +15,7 @@ from qa_studio_cli.auth.oauth import start_oauth_flow
 from qa_studio_cli.commands.tests import tests
 from qa_studio_cli.commands.suites import suites
 from qa_studio_cli.commands.run import run
+from qa_studio_cli.commands.tui import tui
 
 
 def require_config(fn):
@@ -53,6 +54,7 @@ def configure() -> None:
     existing_oauth_client_id = None
     existing_oauth_client_secret = None
     existing_oauth_token_endpoint = None
+    existing_web_url = None
 
     if config_exists():
         try:
@@ -63,6 +65,7 @@ def configure() -> None:
             existing_oauth_client_id = existing.oauth_client_id
             existing_oauth_client_secret = existing.oauth_client_secret
             existing_oauth_token_endpoint = existing.oauth_token_endpoint
+            existing_web_url = existing.web_url
         except Exception:
             pass  # Fall back to generic defaults
 
@@ -70,6 +73,12 @@ def configure() -> None:
         api_url = click.prompt("API URL", default=existing_api_url)
         cognito_domain = click.prompt("Cognito Domain", default=existing_cognito_domain)
         client_id = click.prompt("Cognito Client ID", default=existing_client_id or None)
+
+        # Optional web-app URL (enables the TUI's "Edit in browser" action).
+        click.echo("\nWeb App URL (optional — press Enter to skip)")
+        web_url = click.prompt(
+            "Web URL", default=existing_web_url or "", show_default=False
+        ).strip() or None
 
         # Optional M2M credentials for CI/runner auth
         click.echo("\nM2M Authentication (optional — press Enter to skip)")
@@ -88,6 +97,7 @@ def configure() -> None:
                 api_url=api_url,
                 cognito_domain=cognito_domain,
                 client_id=client_id,
+                web_url=web_url,
                 oauth_client_id=oauth_client_id,
                 oauth_client_secret=oauth_client_secret,
                 oauth_token_endpoint=oauth_token_endpoint,
@@ -134,6 +144,7 @@ def logout() -> None:
 cli.add_command(tests)
 cli.add_command(suites)
 cli.add_command(run)
+cli.add_command(tui)
 
 
 @cli.command()

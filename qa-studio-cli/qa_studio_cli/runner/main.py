@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from qa_studio_cli.api.client import ApiClient
+from qa_studio_cli.api.client import ApiClient, build_api_client
 from qa_studio_cli.api.executions import ExecutionAPI
 from qa_studio_cli.api.test_suites import TestSuiteAPI
 from qa_studio_cli.api.usecases import UseCaseAPI
@@ -32,10 +32,9 @@ logger = logging.getLogger(__name__)
 def _build_api_client(
     token_file: Optional[str] = None,
 ) -> ApiClient:
-    """Build an ApiClient using the TokenResolver chain."""
-    config = load_config()
-    resolver = TokenResolver(token_file=token_file, config=config)
-    return ApiClient(base_url=config.api_url, token_provider=resolver.get_token)
+    """Thin wrapper around the shared builder to preserve the runner's
+    historical function name and keep call sites unchanged."""
+    return build_api_client(token_file=token_file)
 
 
 def _validate_aws_session() -> None:
@@ -85,6 +84,8 @@ def run_usecase(
     browser: str = "local",
     cdp_endpoint_url: Optional[str] = None,
     cdp_headers_file: Optional[str] = None,
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
     """Execute a single use case (local-only or remote mode).
 
@@ -123,6 +124,8 @@ def run_usecase(
                 browser=browser,
                 cdp_endpoint_url=cdp_endpoint_url,
                 cdp_headers_file=cdp_headers_file,
+                local_browser=local_browser,
+                headful=headful,
             )
         else:
             _run_usecase_remote(
@@ -138,6 +141,8 @@ def run_usecase(
                 browser=browser,
                 cdp_endpoint_url=cdp_endpoint_url,
                 cdp_headers_file=cdp_headers_file,
+                local_browser=local_browser,
+                headful=headful,
             )
     except Exception as e:
         sanitized_error = sanitize_error_message(str(e))
@@ -159,6 +164,8 @@ def _run_usecase_local(
     browser: str = "local",
     cdp_endpoint_url: Optional[str] = None,
     cdp_headers_file: Optional[str] = None,
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
     """Local-only execution path: fetch data, execute locally, print result."""
     # --browser=agentcore is only valid on the remote path (needs the
@@ -214,6 +221,8 @@ def _run_usecase_local(
             mode=browser,
             cdp_endpoint_url=cdp_endpoint_url,
             cdp_headers_file=cdp_headers_file,
+            local_browser=local_browser,
+            headless=False if headful else None,
         ),
     )
     result = engine.execute_usecase_local(
@@ -252,6 +261,8 @@ def _run_usecase_remote(
     browser: str = "local",
     cdp_endpoint_url: Optional[str] = None,
     cdp_headers_file: Optional[str] = None,
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
     """Remote execution path: create execution record, execute with tracking.
 
@@ -302,6 +313,8 @@ def _run_usecase_remote(
             mode=browser,
             cdp_endpoint_url=cdp_endpoint_url,
             cdp_headers_file=cdp_headers_file,
+            local_browser=local_browser,
+            headless=False if headful else None,
         ),
     )
     result = asyncio.run(engine.execute_usecase(execution))
@@ -337,6 +350,8 @@ def run_runner(
     keep_artifacts: bool = False,
     token_file: Optional[str] = None,
     output_format: str = "json",
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
     """Main runner execution logic for suite mode."""
     variables = variables or {}
@@ -364,6 +379,8 @@ def run_runner(
                 region=region,
                 model_id=model_id,
                 output_format=output_format,
+                local_browser=local_browser,
+                headful=headful,
             )
         else:
             _run_suite_remote(
@@ -394,6 +411,8 @@ def _run_suite_local(
     region: Optional[str],
     model_id: Optional[str],
     output_format: str = "json",
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
     """Local-only suite execution."""
     start_time = datetime.utcnow()
@@ -407,7 +426,12 @@ def _run_suite_local(
         print("Suite has no usecases to execute.")
         sys.exit(0)
 
-    engine = ExecutionEngine()
+    engine = ExecutionEngine(
+        browser_selection=BrowserSelection(
+            local_browser=local_browser,
+            headless=False if headful else None,
+        ),
+    )
     results: List[Dict[str, Any]] = []
 
     for uc in suite_usecases:

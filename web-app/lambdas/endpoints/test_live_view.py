@@ -63,7 +63,14 @@ class TestCreateLiveView:
         item = patched_create_dynamodb.put_item.call_args.kwargs['Item']
         assert item['pk']['S'] == 'EXECUTION#exec-1'
         assert item['sk']['S'] == 'LIVE_VIEW'
-        assert item['live_view_url']['S'] == 'https://live.example/session/abc'
+        # The request body field is ``live_view_url`` (public API
+        # contract) but the DDB field is ``live_url`` — that's the
+        # name both readers (frontend hook, wizard worker) agree on.
+        assert item['live_url']['S'] == 'https://live.example/session/abc'
+        assert 'live_view_url' not in item, (
+            "regression: Lambda must not write ``live_view_url`` to DDB — "
+            "readers look for ``live_url``"
+        )
         assert 'created_at' in item
 
     def test_missing_scope_rejected(self, patched_create_dynamodb):
@@ -203,3 +210,105 @@ class TestDeleteLiveView:
 
         response = handler(_event(), None)
         assert response['statusCode'] == 500
+
+
+# ---------------------------------------------------------------------------
+# Wire-shape contract — write → DDB → read
+# ---------------------------------------------------------------------------
+#
+# This test class exists specifically because the live-view flow was
+# silently broken for every OnDemandHeadless execution: the write path
+# stored the URL under a different field name than the read path (and
+# the frontend) expected, so the UI showed "no live view" even though
+# the record existed. The tests here pin the full wire shape so a
+# future field rename on any single side will fail CI instead of
+# shipping silently broken.
+
+
+def _ddb_item_to_plain(item: dict) -> dict:
+    """Convert a low-level DDB-typed item (``{'S': 'foo'}``) to the
+    plain dict shape that the resource-level ``table.get_item`` API
+    returns — so we can feed the write output straight into the read
+    mock and exercise the round-trip in one test.
+    """
+    def _unwrap(value):
+        if not isinstance(value, dict) or len(value) != 1:
+            return value
+        (type_tag, inner), = value.items()
+        if type_tag in ('S', 'N'):
+            return inner
+        return value
+
+    return {key: _unwrap(value) for key, value in item.items()}
+
+
+class TestLiveViewWireShape:
+    def test_write_read_round_trip_exposes_live_url_to_frontend(
+        self, monkeypatch, patched_create_dynamodb,
+    ):
+        """The end-to-end contract the frontend depends on:
+
+        1. CLI POSTs ``{"live_view_url": "https://..."}``.
+        2. Lambda writes a DDB item containing ``live_url``.
+        3. GET handler returns that item as-is.
+        4. Frontend (``useLiveViewUrl``) reads ``response.live_url``.
+
+        If any link in that chain renames the field, the live view
+        silently disappears — this test locks the shape end to end.
+        """
+
+        # --- 1. Write ------------------------------------------------------
+        from create_live_view import handler as create_handler
+
+        patched_create_dynamodb.put_item.return_value = {}
+
+        create_response = create_handler(
+            _event({'live_view_url': 'https://live.example/session/xyz'}),
+            None,
+        )
+        assert create_response['statusCode'] == 200
+
+        written_item = patched_create_dynamodb.put_item.call_args.kwargs['Item']
+        # --- 2. DDB field presence ----------------------------------------
+        assert 'live_url' in written_item, (
+            "write-side regression: Lambda must store the URL under "
+            "``live_url`` so the frontend can read it"
+        )
+
+        # --- 3. Read — mock the resource-level get_item to return the
+        # same item shape DDB would produce on read.
+        plain_item = _ddb_item_to_plain(written_item)
+
+        mock_table = MagicMock()
+        mock_table.get_item.return_value = {'Item': plain_item}
+        mock_resource = MagicMock()
+        mock_resource.Table.return_value = mock_table
+        # Keep the read handler's ``boto3.resource`` call pointed at
+        # our mock without affecting any other tests in the module.
+        import boto3
+        monkeypatch.setattr(boto3, 'resource', lambda *_args, **_kwargs: mock_resource)
+
+        from get_live_view import handler as get_handler
+
+        get_event = {
+            'httpMethod': 'GET',
+            'pathParameters': {'id': 'uc-1', 'executionId': 'exec-1'},
+            'requestContext': {
+                'authorizer': {
+                    'client_id': 'test-client',
+                    'scope': 'api/executions.read',
+                },
+            },
+        }
+        get_response = get_handler(get_event, None)
+
+        assert get_response['statusCode'] == 200
+        body = json.loads(get_response['body'])
+
+        # --- 4. Frontend-visible field ------------------------------------
+        # ``useLiveViewUrl.ts`` specifically reads ``response.live_url``.
+        # Assert the field is present AND equals the URL we POSTed.
+        assert body.get('live_url') == 'https://live.example/session/xyz', (
+            "read-side regression: GET must return the URL under "
+            "``live_url`` — the frontend hook looks for exactly that key"
+        )

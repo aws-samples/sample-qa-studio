@@ -2,6 +2,8 @@
 
 import click
 
+from qa_studio_cli.runner.browser.local import list_local_browsers
+
 
 @click.command()
 @click.option("--suite-id", default=None, help="Test suite ID to execute")
@@ -49,6 +51,29 @@ import click
         "Delivered via file (not argv) to avoid leaking secrets."
     ),
 )
+@click.option(
+    "--local-browser",
+    type=click.Choice(list_local_browsers(), case_sensitive=False),
+    default="chromium",
+    help=(
+        "Browser flavour for local mode. 'chromium' (default) uses "
+        "NovaAct's bundled Chromium; 'chrome' uses your system Chrome "
+        "with a fresh profile; 'chrome-profile' uses your system Chrome "
+        "with your real user profile (cookies, sessions). "
+        "Only meaningful with --browser=local."
+    ),
+)
+@click.option(
+    "--headful",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run with a visible browser window. Without this the runner "
+        "defers to the HEADLESS env var (default 'true' → headless) "
+        "so CI behaviour stays unchanged. Only meaningful with "
+        "--browser=local."
+    ),
+)
 @click.option("--verbose", is_flag=True, help="Enable verbose logging")
 @click.option(
     "--timeout", type=int, default=3600, help="Global timeout in seconds",
@@ -77,6 +102,8 @@ def run(
     browser: str,
     cdp_endpoint_url: str,
     cdp_headers_file: str,
+    local_browser: str,
+    headful: bool,
     verbose: bool,
     timeout: int,
     keep_artifacts: bool,
@@ -103,6 +130,24 @@ def run(
     elif cdp_endpoint_url or cdp_headers_file:
         raise click.UsageError(
             "--cdp-endpoint-url and --cdp-headers-file require --browser=cdp-external"
+        )
+
+    # ``--local-browser`` is only meaningful with the local provisioner —
+    # for CDP / AgentCore modes the browser is external or cloud-side,
+    # so the flavour flag has no effect and silently accepting it would
+    # be a footgun. Reject explicitly.
+    local_browser = (local_browser or "chromium").lower()
+    if local_browser != "chromium" and browser != "local":
+        raise click.UsageError(
+            "--local-browser is only supported with --browser=local (default)."
+        )
+
+    # ``--headful`` also only applies to the local provisioner — remote
+    # browsers (AgentCore, cdp-external) don't have a visible window on
+    # the user's machine to toggle.
+    if headful and browser != "local":
+        raise click.UsageError(
+            "--headful is only supported with --browser=local (default)."
         )
 
     # Parse variables from key=value format
@@ -147,6 +192,8 @@ def run(
             browser=browser,
             cdp_endpoint_url=cdp_endpoint_url,
             cdp_headers_file=cdp_headers_file,
+            local_browser=local_browser,
+            headful=headful,
         )
     else:
         run_runner(
@@ -160,4 +207,6 @@ def run(
             keep_artifacts=keep_artifacts,
             token_file=token_file,
             output_format=output_format,
+            local_browser=local_browser,
+            headful=headful,
         )

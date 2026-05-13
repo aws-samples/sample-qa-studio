@@ -20,7 +20,7 @@ class TestConfigureCommand:
             runner = CliRunner()
             result = runner.invoke(
                 cli, ["configure"],
-                input="https://my-api.com\nhttps://my-auth.com\nmy-client-id\n\n\n\n",
+                input="https://my-api.com\nhttps://my-auth.com\nmy-client-id\n\n\n\n\n",
             )
 
         assert result.exit_code == 0
@@ -50,9 +50,9 @@ class TestConfigureCommand:
                 cognito_domain="https://existing-auth.com",
                 client_id="existing-client",
             )
-            # Press enter 6 times to accept all defaults (3 core + 3 M2M)
+            # Press enter 7 times to accept all defaults (3 core + 1 web + 3 M2M)
             runner = CliRunner()
-            result = runner.invoke(cli, ["configure"], input="\n\n\n\n\n\n")
+            result = runner.invoke(cli, ["configure"], input="\n\n\n\n\n\n\n")
 
         assert result.exit_code == 0
         mock_save.assert_called_once()
@@ -71,11 +71,11 @@ class TestConfigureCommand:
                 cognito_domain="https://old-auth.com",
                 client_id="old-client",
             )
-            # Override only the API URL, accept the rest (3 core + 3 M2M)
+            # Override only the API URL, accept the rest (3 core + 1 web + 3 M2M)
             runner = CliRunner()
             result = runner.invoke(
                 cli, ["configure"],
-                input="https://new-api.com\n\n\n\n\n\n",
+                input="https://new-api.com\n\n\n\n\n\n\n",
             )
 
         assert result.exit_code == 0
@@ -91,10 +91,68 @@ class TestConfigureCommand:
             runner = CliRunner()
             result = runner.invoke(
                 cli, ["configure"],
-                input="https://api.com\nhttps://auth.com\nclient-123\n\n\n\n",
+                input="https://api.com\nhttps://auth.com\nclient-123\n\n\n\n\n",
             )
 
         assert result.exit_code == 0
         assert "Configuration saved" in result.output
         saved = mock_save.call_args[0][0]
         assert saved.client_id == "client-123"
+
+
+
+class TestConfigureWebUrl:
+    """Tests for the optional web_url prompt used by the TUI."""
+
+    def test_empty_web_url_saved_as_none(self, tmp_path):
+        """User who doesn't care about the TUI can press Enter."""
+        with patch("qa_studio_cli.cli.config_exists", return_value=False), \
+             patch("qa_studio_cli.cli.save_config") as mock_save:
+            runner = CliRunner()
+            result = runner.invoke(
+                cli, ["configure"],
+                # core (3) + empty web_url (1) + empty M2M (3)
+                input="https://api.com\nhttps://auth.com\nclient-123\n\n\n\n\n",
+            )
+
+        assert result.exit_code == 0
+        saved = mock_save.call_args[0][0]
+        assert saved.web_url is None
+
+    def test_web_url_captured_when_entered(self, tmp_path):
+        with patch("qa_studio_cli.cli.config_exists", return_value=False), \
+             patch("qa_studio_cli.cli.save_config") as mock_save:
+            runner = CliRunner()
+            result = runner.invoke(
+                cli, ["configure"],
+                input=(
+                    "https://api.com\nhttps://auth.com\nclient-123\n"
+                    "https://app.example.com\n"  # web_url
+                    "\n\n\n"  # M2M all blank
+                ),
+            )
+
+        assert result.exit_code == 0
+        saved = mock_save.call_args[0][0]
+        assert saved.web_url == "https://app.example.com"
+
+    def test_existing_web_url_prepopulated(self, tmp_path):
+        """Reconfigure shows the stored web_url as the default."""
+        with patch("qa_studio_cli.cli.config_exists", return_value=True), \
+             patch("qa_studio_cli.cli.load_config") as mock_load, \
+             patch("qa_studio_cli.cli.save_config") as mock_save:
+            from qa_studio_cli.models.config import CLIConfig
+            mock_load.return_value = CLIConfig(
+                api_url="https://api.example.com",
+                cognito_domain="https://auth.example.com",
+                client_id="client-1",
+                web_url="https://app.example.com",
+            )
+            runner = CliRunner()
+            # Press Enter 7 times to accept all defaults including the
+            # existing web_url.
+            result = runner.invoke(cli, ["configure"], input="\n\n\n\n\n\n\n")
+
+        assert result.exit_code == 0
+        saved = mock_save.call_args[0][0]
+        assert saved.web_url == "https://app.example.com"

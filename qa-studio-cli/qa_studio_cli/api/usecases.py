@@ -11,6 +11,32 @@ class UseCaseAPI:
     def __init__(self, client: ApiClient):
         self.client = client
 
+    def list_usecases(self) -> List[Dict[str, Any]]:
+        """Fetch every use case the caller has read access to.
+
+        Returns the raw list from the API; consumers decide whether to
+        promote entries to a typed model (CLI commands use
+        :class:`UsecaseModel`, TUI uses a UI-shaped dataclass).
+        """
+        response = self.client.get("/usecases")
+        return response.get("usecases", []) or []
+
+    def list_executions(
+        self, usecase_id: str, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Fetch recent executions for a use case, newest first.
+
+        The server sorts by ``created_at`` descending and caps at
+        ``limit`` (default 20). Consumers render the raw dicts;
+        pagination is not supported yet and explicitly out of scope
+        for the TUI POC.
+        """
+        response = self.client.get(
+            f"/usecase/{usecase_id}/executions",
+            params={"limit": limit},
+        )
+        return response.get("executions", []) or []
+
     def get_usecase(self, usecase_id: str) -> Dict[str, Any]:
         """Fetch use case metadata."""
         return self.client.get(f"/usecase/{usecase_id}")

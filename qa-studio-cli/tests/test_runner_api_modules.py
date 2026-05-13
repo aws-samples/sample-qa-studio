@@ -40,6 +40,48 @@ class TestUseCaseAPI:
         self.client = _make_client()
         self.api = UseCaseAPI(self.client)
 
+    def test_list_usecases(self):
+        self.client._session.request.return_value = _mock_response(
+            200, {"usecases": [{"id": "uc-1"}, {"id": "uc-2"}]}
+        )
+        result = self.api.list_usecases()
+        assert [item["id"] for item in result] == ["uc-1", "uc-2"]
+        call_args = self.client._session.request.call_args
+        assert call_args[0] == ("GET", "https://api.example.com/usecases")
+
+    def test_list_usecases_missing_key(self):
+        self.client._session.request.return_value = _mock_response(200, {})
+        assert self.api.list_usecases() == []
+
+    def test_list_usecases_null_value(self):
+        self.client._session.request.return_value = _mock_response(200, {"usecases": None})
+        assert self.api.list_usecases() == []
+
+    def test_list_executions_default_limit(self):
+        self.client._session.request.return_value = _mock_response(
+            200, {"executions": [{"execution_id": "e-1"}, {"execution_id": "e-2"}]}
+        )
+        result = self.api.list_executions("uc-1")
+        assert [e["execution_id"] for e in result] == ["e-1", "e-2"]
+        call_args = self.client._session.request.call_args
+        assert call_args[0] == (
+            "GET", "https://api.example.com/usecase/uc-1/executions"
+        )
+        # Default limit=20 is sent as a query param.
+        assert call_args[1]["params"] == {"limit": 20}
+
+    def test_list_executions_explicit_limit(self):
+        self.client._session.request.return_value = _mock_response(
+            200, {"executions": []}
+        )
+        self.api.list_executions("uc-1", limit=5)
+        call_args = self.client._session.request.call_args
+        assert call_args[1]["params"] == {"limit": 5}
+
+    def test_list_executions_missing_key(self):
+        self.client._session.request.return_value = _mock_response(200, {})
+        assert self.api.list_executions("uc-1") == []
+
     def test_get_usecase(self):
         self.client._session.request.return_value = _mock_response(200, {"id": "uc-1", "name": "Test"})
         result = self.api.get_usecase("uc-1")
@@ -397,6 +439,19 @@ class TestTestSuiteAPI:
     def setup_method(self):
         self.client = _make_client()
         self.api = TestSuiteAPI(self.client)
+
+    def test_list_suites(self):
+        self.client._session.request.return_value = _mock_response(
+            200, {"suites": [{"id": "s-1"}, {"id": "s-2"}]}
+        )
+        result = self.api.list_suites()
+        assert [item["id"] for item in result] == ["s-1", "s-2"]
+        call_args = self.client._session.request.call_args
+        assert call_args[0] == ("GET", "https://api.example.com/test-suites")
+
+    def test_list_suites_missing_key(self):
+        self.client._session.request.return_value = _mock_response(200, {})
+        assert self.api.list_suites() == []
 
     def test_get_suite(self):
         self.client._session.request.return_value = _mock_response(200, {"id": "s-1", "name": "Regression"})

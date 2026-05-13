@@ -3,6 +3,7 @@
 import click
 
 from qa_studio_cli.api.client import require_auth
+from qa_studio_cli.api.test_suites import TestSuiteAPI
 from qa_studio_cli.models.api import SuiteExecutionResponse, SuiteModel, SuiteUsecaseModel
 from qa_studio_cli.models.errors import ApiError
 
@@ -20,8 +21,7 @@ def list_suites(ctx):
     """List all test suites."""
     client = ctx.obj["client"]
     try:
-        data = client.get("/test-suites")
-        raw_items = data.get("suites", [])
+        raw_items = TestSuiteAPI(client).list_suites()
         items = [SuiteModel.model_validate(item) for item in raw_items]
 
         if not items:

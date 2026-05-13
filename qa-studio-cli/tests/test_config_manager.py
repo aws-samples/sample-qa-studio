@@ -199,11 +199,12 @@ class TestConfigureCommandM2M:
         with patch("qa_studio_cli.cli.config_exists", return_value=False), \
              patch("qa_studio_cli.cli.save_config") as mock_save:
             runner = CliRunner()
-            # Core fields + M2M fields
+            # Core fields + (blank web_url) + M2M fields
             input_text = (
                 "https://api.example.com\n"
                 "https://auth.example.com\n"
                 "my-client\n"
+                "\n"  # web_url (blank)
                 "m2m-client-id\n"
                 "m2m-secret\n"
                 "https://auth.example.com/oauth2/token\n"
@@ -224,11 +225,12 @@ class TestConfigureCommandM2M:
         with patch("qa_studio_cli.cli.config_exists", return_value=False), \
              patch("qa_studio_cli.cli.save_config") as mock_save:
             runner = CliRunner()
-            # Core fields + empty M2M fields (press Enter to skip)
+            # Core fields + (blank web_url) + empty M2M fields (press Enter to skip)
             input_text = (
                 "https://api.example.com\n"
                 "https://auth.example.com\n"
                 "my-client\n"
+                "\n"
                 "\n"
                 "\n"
                 "\n"
@@ -257,8 +259,8 @@ class TestConfigureCommandM2M:
                 oauth_token_endpoint="https://existing-auth.com/oauth2/token",
             )
             runner = CliRunner()
-            # Press Enter 6 times to accept all defaults
-            result = runner.invoke(cli, ["configure"], input="\n\n\n\n\n\n")
+            # Press Enter 7 times to accept all defaults (3 core + 1 web + 3 M2M)
+            result = runner.invoke(cli, ["configure"], input="\n\n\n\n\n\n\n")
 
         assert result.exit_code == 0
         saved = mock_save.call_args[0][0]

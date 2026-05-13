@@ -116,3 +116,51 @@ class TestCLIConfigM2MFields:
                 cognito_domain="https://auth.example.com",
                 client_id="",
             )
+
+
+class TestCLIConfigWebUrl:
+    """Tests for the optional web_url field used by the TUI."""
+
+    def test_web_url_defaults_to_none(self):
+        config = CLIConfig(
+            api_url="https://api.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="my-client",
+        )
+        assert config.web_url is None
+
+    def test_web_url_accepts_https(self):
+        config = CLIConfig(
+            api_url="https://api.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="my-client",
+            web_url="https://app.example.com",
+        )
+        assert config.web_url == "https://app.example.com"
+
+    def test_web_url_strips_trailing_slash(self):
+        config = CLIConfig(
+            api_url="https://api.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="my-client",
+            web_url="https://app.example.com/",
+        )
+        assert config.web_url == "https://app.example.com"
+
+    def test_web_url_rejects_http(self):
+        with pytest.raises(ValidationError, match="https://"):
+            CLIConfig(
+                api_url="https://api.example.com",
+                cognito_domain="https://auth.example.com",
+                client_id="my-client",
+                web_url="http://insecure.example.com",
+            )
+
+    def test_web_url_none_roundtrips(self):
+        config = CLIConfig(
+            api_url="https://api.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="my-client",
+            web_url=None,
+        )
+        assert config.web_url is None

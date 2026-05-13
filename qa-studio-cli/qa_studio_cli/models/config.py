@@ -48,6 +48,14 @@ class CLIConfig(BaseModel):
         default=None, description="Cognito token endpoint URL"
     )
 
+    # Optional web-app URL used by ``qa-studio tui`` to open use cases
+    # for editing in the browser.  Unset ⇒ Edit action is disabled in
+    # the TUI with a hint to re-run ``qa-studio configure``.
+    web_url: Optional[str] = Field(
+        default=None,
+        description="QA Studio web app base URL (optional, TUI-only)",
+    )
+
     @field_validator("api_url")
     @classmethod
     def validate_https_url(cls, v: str) -> str:
@@ -71,3 +79,13 @@ class CLIConfig(BaseModel):
         if v is not None and not v.startswith("https://"):
             raise ValueError("Token endpoint must start with https://")
         return v
+
+    @field_validator("web_url")
+    @classmethod
+    def validate_optional_web_url(cls, v: Optional[str]) -> Optional[str]:
+        """Validate optional web URL uses HTTPS; strip trailing slash."""
+        if v is None:
+            return None
+        if not v.startswith("https://"):
+            raise ValueError("Web URL must start with https://")
+        return v.rstrip("/")

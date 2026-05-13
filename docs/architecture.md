@@ -313,7 +313,7 @@ sequenceDiagram
 
 ### Test Execution (ECS Workers)
 
-**Technology**: Amazon ECS with Fargate, Python 3.13, the `qa-studio` CLI (with `[runner,agentcore]` extras), Nova Act SDK, Playwright (browser execution runs in Bedrock AgentCore, not inside the container).
+**Technology**: Amazon ECS with Fargate, Python 3.13, the `qa-studio` CLI (with `[runner,agentcore]` extras), Nova Act SDK, Playwright, Appium (mobile). Browser execution runs in Bedrock AgentCore, not inside the container.
 
 **Trigger**: SQS messages from `execute_usecase` or `execute_test_suite` Lambdas.
 
@@ -343,6 +343,23 @@ sequenceDiagram
 **Recording Download (Mobile)**:
 - The `download_device_farm_recording` Lambda picks up the delayed SQS message, waits for the session to reach a terminal state, downloads the video, uploads it to S3, and creates a DynamoDB artifact record.
 - If the session hasn't finalized yet, the Lambda raises an error and SQS retries after the visibility timeout.
+
+**Execution Flow (Mobile)**:
+1. Receive execution message from SQS
+2. Fetch test steps from DynamoDB
+3. Provision a Device Farm remote access session (uploads app binary if needed)
+4. Connect to the device via Appium through the Device Farm endpoint
+5. Initialize Nova Act with [`DeviceFarmActuator`](https://github.com/amazon-agi-labs/nova-act-samples/blob/main/examples/actuation/mobile/nova_act_mobile/actuation/device_farm_actuator.py)
+6. Execute each step with `nova.act(instruction)`
+7. Stop the Device Farm session and enqueue a delayed SQS message for recording download
+8. Update execution status in DynamoDB
+9. Emit EventBridge event for downstream processing
+
+**Recording Download (Mobile)**:
+- After the worker stops the Device Farm session, it sends a delayed SQS message (5 min) to the recording download queue
+- A Lambda (`download_device_farm_recording`) picks up the message after the delay
+- The Lambda waits for the session to reach a terminal state, downloads the video artifact from Device Farm, uploads it to S3, and creates a DynamoDB artifact record
+- If the session hasn't finalized yet, the Lambda raises an error and SQS retries after the visibility timeout (3 min), up to 10 retries
 
 **Event Emission**:
 - `usecase.execution.completed` is emitted by the `update_execution_status` Lambda (`Source=qa-studio.api`) on every terminal status transition.

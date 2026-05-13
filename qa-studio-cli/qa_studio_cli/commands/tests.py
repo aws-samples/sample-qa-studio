@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from qa_studio_cli.api.client import require_auth
+from qa_studio_cli.api.usecases import UseCaseAPI
 from qa_studio_cli.models.api import (
     ExecuteUsecaseResponse,
     GenerateUsecaseResponse,
@@ -29,8 +30,7 @@ def list_tests(ctx):
     """List all tests."""
     client = ctx.obj["client"]
     try:
-        data = client.get("/usecases")
-        raw_items = data.get("usecases", [])
+        raw_items = UseCaseAPI(client).list_usecases()
         items = [UsecaseModel.model_validate(item) for item in raw_items]
 
         if not items:

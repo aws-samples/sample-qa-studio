@@ -29,6 +29,12 @@ setup(
         "agentcore": [
             "bedrock_agentcore>=1.4.0",
         ],
+        # Opt-in extra for the interactive terminal UI (``qa-studio tui``).
+        # Textual is pre-1.0 and ships breaking minor-version bumps, so
+        # we pin a narrow range deliberately.
+        "tui": [
+            "textual>=0.80,<0.90",
+        ],
     },
     python_requires=">=3.11",
     entry_points={

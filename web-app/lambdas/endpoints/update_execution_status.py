@@ -21,6 +21,7 @@ from test_suite_schema import (
     get_suite_execution_pk,
     get_execution_sk
 )
+from cache_invalidation import cleanup_cache_artifacts
 
 dynamodb = boto3.client('dynamodb')
 eventbridge = boto3.client('events')
@@ -170,7 +171,34 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except Exception as e:
             print(f'Error publishing Amazon EventBridge event: {str(e)}')
             # Don't fail the request if event publishing fails
-        
+
+        # Option C cache invalidation: when an execution transitions
+        # to ``failed``, wipe all cache/trajectory pointers + S3 blobs
+        # for the usecase so the NEXT execution starts from a clean
+        # slate. Coarse (clears even steps that weren't involved in
+        # the failure) but reliable — the alternative per-step
+        # cleanup paths have gaps, see the RCA for Option C. Best
+        # effort; any error is logged and we continue.
+        if status == 'failed':
+            try:
+                s3_bucket = os.environ.get('S3_BUCKET', '')
+                # cleanup_cache_artifacts expects a resource-style
+                # Table handle; this Lambda otherwise uses the
+                # low-level client for efficiency, so we build a
+                # resource here just for the helper.
+                dynamodb_resource = boto3.resource('dynamodb')
+                table = dynamodb_resource.Table(table_name)
+                cleanup_cache_artifacts(table, usecase_id, s3_bucket)
+                print(
+                    f'Cleared cache artifacts for usecase {usecase_id} '
+                    f'after failed execution {execution_id}'
+                )
+            except Exception as cleanup_exc:  # noqa: BLE001 — best-effort
+                print(
+                    f'Cache cleanup after failed execution {execution_id}: '
+                    f'{cleanup_exc}'
+                )
+
         # Update suite execution counters for terminal statuses
         item = get_response['Item']
         suite_execution_id = item.get('suite_execution_id', {}).get('S')

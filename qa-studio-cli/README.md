@@ -30,6 +30,16 @@ pip install -e "./qa-studio-cli[runner,agentcore]"
 
 The `[agentcore]` extra pulls in `bedrock_agentcore`. Without it, `--browser=agentcore` raises a clear install-hint error at runtime.
 
+### With Interactive Terminal UI
+
+Adds the `textual` dependency so `qa-studio tui` launches an interactive browser for use cases and test suites. Safe to combine with the runner extra.
+
+```bash
+pip install -e "./qa-studio-cli[runner,tui]"
+```
+
+Without this extra, `qa-studio tui` prints an install hint and exits non-zero.
+
 ## Quick Start
 
 ```bash
@@ -47,6 +57,9 @@ qa-studio run --usecase-id test-123
 
 # Run a test suite
 qa-studio run --suite-id suite-456
+
+# Launch the interactive terminal UI (requires the [tui] extra)
+qa-studio tui
 
 # Log out (delete stored tokens)
 qa-studio logout
@@ -259,6 +272,102 @@ qa-studio run --usecase-id test-123 --local-only
 # Run with custom region and model
 qa-studio run --usecase-id test-123 --region us-west-2 --model-id anthropic.claude-3-5-sonnet-20240620-v1:0
 ```
+
+### Runtime Header & Secret Overrides (local-only)
+
+For iterating locally with a different bearer token, a rotated
+secret, or a one-off feature-flag header — without editing the use
+case. These flags apply **only** with `--local-only`; using them on
+the remote path produces an error.
+
+```bash
+# Single inline header (non-sensitive values)
+qa-studio run --usecase-id test-123 --local-only \
+  --header X-Feature-Flag=debug
+
+# Sensitive headers via file (Bearer tokens, cookie headers) —
+# argv-safe so the value isn't visible in `ps` or shell history
+cat > /tmp/headers.json <<EOF
+{ "Authorization": "Bearer my-dev-token" }
+EOF
+qa-studio run --usecase-id test-123 --local-only \
+  --headers-file /tmp/headers.json
+
+# Secret overrides — file-only, never argv
+cat > /tmp/secrets.json <<EOF
+{ "admin_password": "newly-rotated-value" }
+EOF
+qa-studio run --usecase-id test-123 --local-only \
+  --secrets-file /tmp/secrets.json
+```
+
+**Precedence on header collisions:** `API stored headers ← --headers-file ← --header flags`. The
+right-most source wins. Secret overrides short-circuit the API
+secret lookup by key — keys not listed in `--secrets-file` fall
+through to the normal `GET /usecase/{id}/secrets/{key}/value` path.
+
+## Interactive Terminal UI
+
+`qa-studio tui` launches a [Textual](https://github.com/Textualize/textual)-based terminal UI for browsing use cases and test suites, inspecting their detail, and triggering **local** runs with a live log tail. It reuses the same API client and authentication chain as every other subcommand; existing CLI commands stay unchanged.
+
+### Requirements
+
+Install the `[tui]` extra (see Installation above). Without it the subcommand prints a pip-install hint and exits non-zero.
+
+The TUI requires a valid token — run `qa-studio login` first. An expired token surfaces as a clear `Authentication required` message, not a stack trace.
+
+### Launch
+
+```bash
+qa-studio tui
+```
+
+### Navigation
+
+| Key      | Scope          | Action                                  |
+|----------|----------------|-----------------------------------------|
+| `q`      | Global         | Quit                                    |
+| `1`      | Global         | Jump to Use cases list                  |
+| `2`      | Global         | Jump to Test suites list                |
+| `?`      | Global         | Help overlay (placeholder)              |
+| `/`      | List screens   | Focus the client-side filter input      |
+| `Enter`  | List screens   | Open the selected item's detail         |
+| `r`      | List & detail  | Refresh from the API                    |
+| `R`      | Use case detail| Open the Run form                       |
+| `e`      | Use case detail| Open the use case in the web app        |
+| `Esc`    | Detail / form  | Go back (confirm when a run is active)  |
+| `k`/`^C` | Live tail      | Terminate the subprocess                |
+
+### Features
+
+| Feature                       | Notes                                                                                       |
+|-------------------------------|---------------------------------------------------------------------------------------------|
+| Use-case + suite lists        | Full lists with client-side substring filter on name + id (instant, no extra HTTP)          |
+| Use-case detail header        | Name, active status, platform, region, model, URL, description, tags, creator, timestamps  |
+| Steps tab                     | Vertical split (60/40): table left, live detail pane right. Cursor moves update the pane   |
+| Step detail pane              | Empty fields hidden; nested `dict`/`list` values pretty-printed as JSON                    |
+| Suite detail                  | Metadata + member use-cases table, Enter drills into the corresponding use case             |
+| Run form                      | Pre-filled from the API; variables, headers, and secrets rendered as inputs (secrets masked)|
+| Runtime overrides             | Changed fields become overrides; secrets delivered via `0600` tempfile, never argv          |
+| Local-only / remote toggle    | Default **on**. Untick to create a remote execution record visible in the web app           |
+| Verbose toggle                | Off by default — runner logs at INFO. Tick for DEBUG                                        |
+| Live tail                     | Streams stdout/stderr line-by-line with `[stderr]` prefix; final status shows exit code     |
+| Terminate                     | SIGTERM to the process group (kills Chromium/Playwright descendants); SIGKILL after 5 s     |
+| Edit in browser               | `e` on the use case detail opens `{web_url}/usecase/{id}` via the default browser           |
+
+### Configuring "Edit in browser"
+
+The Edit action opens `{web_url}/usecase/<id>` in your default browser. Set `web_url` in `~/.qa-studio/config.json` — the interactive `qa-studio configure` prompt asks for it, or you can edit the JSON directly.
+
+If `web_url` is unset, pressing `e` shows a notification pointing at `qa-studio configure` rather than silently failing.
+
+### Out of scope for the POC
+
+- In-TUI editing of use cases / suites / steps — use the web app via `e`
+- Templates list / detail
+- Live monitor for cloud-worker executions
+- Pagination or server-side search (filter is client-side over the full result)
+- Header / secret overrides with `Local only` unticked — enforced at submit time with a clear error
 
 ## Development
 

@@ -21,7 +21,11 @@ from qa_studio_cli.api.executions import ExecutionAPI
 from qa_studio_cli.models.execution import StepResult
 from qa_studio_cli.runner.artifacts import ArtifactCapture
 from qa_studio_cli.runner.artifact_uploader import ArtifactUploader
-from qa_studio_cli.runner.browser import BrowserSelection, LocalBrowserProvisioner
+from qa_studio_cli.runner.browser import (
+    BrowserSelection,
+    LocalBrowserProvisioner,
+    record_video_supported,
+)
 from qa_studio_cli.runner.step_executor import StepExecutor
 from qa_studio_cli.runner.template_parser import TemplateParser
 from qa_studio_cli.runner.workflow_manager import WorkflowManager, NOVA_ACT_REGION
@@ -127,7 +131,6 @@ class ExecutionEngine:
             nova_kwargs: Dict[str, Any] = {
                 "headless": headless,
                 "logs_directory": logs_dir,
-                "record_video": True,
             }
 
             # Build mobile actuator if this is a mobile use case
@@ -139,11 +142,29 @@ class ExecutionEngine:
                 nova_kwargs["ignore_screen_dims_check"] = True
                 nova_kwargs["ignore_https_errors"] = True
             else:
-                local_handle = LocalBrowserProvisioner().provision({
+                local_handle = LocalBrowserProvisioner(
+                    browser_key=self.browser_selection.local_browser,
+                    headless=self.browser_selection.headless,
+                ).provision({
                     "starting_url": starting_url,
                     "usecase_id": usecase_id,
                 })
                 nova_kwargs.update(local_handle.nova_kwargs)
+
+            # Enable video recording only when the resolved kwargs
+            # support it. NovaAct rejects ``record_video=True`` over
+            # CDP — see ``record_video_supported`` for the rule. The
+            # mobile path flows through Appium and is supported; the
+            # local web path depends on the chosen browser (chrome-profile
+            # disables CDP-safe video recording).
+            if record_video_supported(nova_kwargs):
+                nova_kwargs["record_video"] = True
+            else:
+                logger.info(
+                    "[local] Video recording disabled — the selected "
+                    "browser uses CDP, which NovaAct does not support "
+                    "for record_video.",
+                )
 
             # Enable trajectory recording for web tests when supported
             if not mobile_config and _replayable_supported:
@@ -560,11 +581,6 @@ class ExecutionEngine:
             "logs_directory": logs_dir,
         }
 
-        # Video recording is not supported over CDP (agentcore / cdp-external).
-        # Only enable it for local browser mode.
-        if self.browser_selection.mode == "local":
-            nova_kwargs["record_video"] = True
-
         test_platform = execution_details.get("test_platform", "web")
         is_mobile = test_platform == "mobile"
 
@@ -620,6 +636,22 @@ class ExecutionEngine:
                 ),
             })
             nova_kwargs.update(local_handle.nova_kwargs)
+
+        # Enable video recording only after the browser provisioner's
+        # kwargs are merged in, so the helper sees the final combination.
+        # NovaAct rejects ``record_video`` over CDP — this rule fires for
+        # agentcore / cdp-external (both set ``cdp_endpoint_url``) and
+        # for the local ``chrome-profile`` option (which sets
+        # ``use_default_chrome_browser``). See ``record_video_supported``.
+        if record_video_supported(nova_kwargs):
+            nova_kwargs["record_video"] = True
+        else:
+            logger.info(
+                "[%s] Video recording disabled — the selected browser "
+                "uses CDP, which NovaAct does not support for "
+                "record_video.",
+                execution_id,
+            )
 
         # Enable trajectory recording for web tests when supported
         if not is_mobile and _replayable_supported:
@@ -830,6 +862,7 @@ class ExecutionEngine:
                             act_id=step_result.act_id or None,
                             logs=sanitize_error_message(step_result.logs) if step_result.logs else None,
                             clear_cache_fields=clear_cache_fields,
+                            step_definition_id=step_def_id if clear_cache_fields else None,
                         )
                     )
                 except Exception as e:
@@ -909,7 +942,10 @@ class ExecutionEngine:
         selection = self.browser_selection
         mode = selection.mode
         if mode == "local":
-            return LocalBrowserProvisioner()
+            return LocalBrowserProvisioner(
+                browser_key=selection.local_browser,
+                headless=selection.headless,
+            )
         if mode == "cdp-external":
             if not selection.cdp_endpoint_url:
                 raise RuntimeError(

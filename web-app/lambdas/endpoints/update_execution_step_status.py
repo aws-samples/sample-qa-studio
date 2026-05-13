@@ -192,18 +192,23 @@ def handler(event, context):
             for field in clear_cache_fields:
                 if field not in seen:
                     seen.append(field)
+            # The step_definition_id identifies the canonical STEP record.
+            # The URL's step_id is the execution-step UUID which is different.
+            # Fall back to step_id for backward compatibility with older
+            # CLI versions that don't send step_definition_id.
+            definition_id = body.get('step_definition_id') or step_id
             try:
                 dynamodb.update_item(
                     TableName=table_name,
                     Key={
                         'pk': {'S': f'USECASE#{usecase_id}'},
-                        'sk': {'S': f'STEP#{step_id}'},
+                        'sk': {'S': f'STEP#{definition_id}'},
                     },
                     UpdateExpression='REMOVE ' + ', '.join(seen),
                 )
             except Exception as cleanup_exc:  # noqa: BLE001 — best-effort
                 print(
-                    f'Failed to clear cache fields {seen} for step {step_id}: '
+                    f'Failed to clear cache fields {seen} for step {definition_id}: '
                     f'{cleanup_exc}'
                 )
         

@@ -105,6 +105,7 @@ class ExecutionAPI:
         act_id: Optional[str] = None,
         logs: Optional[str] = None,
         clear_cache_fields: Optional[list] = None,
+        step_definition_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Update individual step status via API.
 
@@ -113,6 +114,11 @@ class ExecutionAPI:
         same API round-trip as a status update.  Valid entries are
         ``trajectory_s3_key``, ``trajectory_last_updated``, ``cached_steps``,
         ``cache_last_updated``; anything else is rejected server-side.
+
+        ``step_definition_id`` identifies the canonical STEP record to clear
+        fields from.  Required when ``clear_cache_fields`` is set because
+        the URL's ``step_id`` is the execution-step UUID, not the step
+        definition UUID.
         """
         payload: Dict[str, Any] = {"status": status}
         if error_message is not None:
@@ -125,6 +131,8 @@ class ExecutionAPI:
             payload["logs"] = logs
         if clear_cache_fields:
             payload["clear_cache_fields"] = list(clear_cache_fields)
+            if step_definition_id:
+                payload["step_definition_id"] = step_definition_id
         return await asyncio.to_thread(
             self.client.patch,
             f"/usecase/{usecase_id}/executions/{execution_id}/steps/{step_id}/status",

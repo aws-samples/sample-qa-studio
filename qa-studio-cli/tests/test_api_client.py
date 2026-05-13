@@ -424,3 +424,53 @@ class TestRequireAuth:
         client = captured_client["client"]
         assert client._token_provider is not None
         assert callable(client._token_provider)
+
+
+
+class TestBuildApiClient:
+    """Tests for :func:`qa_studio_cli.api.client.build_api_client`."""
+
+    def test_uses_provided_config(self):
+        from qa_studio_cli.api.client import build_api_client
+        from qa_studio_cli.models.config import CLIConfig
+
+        config = CLIConfig(
+            api_url="https://api.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="cid",
+        )
+        client = build_api_client(config=config)
+        assert client.base_url == "https://api.example.com"
+        assert callable(client._token_provider)
+
+    def test_loads_config_when_none_provided(self):
+        from unittest.mock import patch
+
+        from qa_studio_cli.api.client import build_api_client
+        from qa_studio_cli.models.config import CLIConfig
+
+        cfg = CLIConfig(
+            api_url="https://loaded.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="cid",
+        )
+        with patch("qa_studio_cli.api.client.load_config", return_value=cfg):
+            client = build_api_client()
+        assert client.base_url == "https://loaded.example.com"
+
+    def test_passes_token_file_through_to_resolver(self):
+        """--token-file path should be handed to TokenResolver so the
+        file provider wins over env / config / stored-user sources."""
+        from unittest.mock import patch
+
+        from qa_studio_cli.api.client import build_api_client
+        from qa_studio_cli.models.config import CLIConfig
+
+        cfg = CLIConfig(
+            api_url="https://api.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="cid",
+        )
+        with patch("qa_studio_cli.auth.resolver.TokenResolver") as mock_cls:
+            build_api_client(token_file="/tmp/token.json", config=cfg)
+        mock_cls.assert_called_once_with(token_file="/tmp/token.json", config=cfg)

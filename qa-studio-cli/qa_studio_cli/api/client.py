@@ -2,7 +2,7 @@
 
 import functools
 import logging
-from typing import Callable
+from typing import Callable, Optional
 
 import click
 import requests
@@ -10,8 +10,41 @@ import requests
 from qa_studio_cli.auth.token_manager import get_valid_token
 from qa_studio_cli.models.errors import ApiError, AuthError, ConfigError
 from qa_studio_cli.config.manager import config_exists, load_config
+from qa_studio_cli.models.config import CLIConfig
 
 logger = logging.getLogger(__name__)
+
+
+def build_api_client(
+    *,
+    token_file: Optional[str] = None,
+    config: Optional[CLIConfig] = None,
+) -> "ApiClient":
+    """Construct an ``ApiClient`` using the full token-resolution chain.
+
+    Used by the runner and the TUI; the interactive Click commands go
+    through :func:`require_auth` instead, which is bound to the Click
+    context and uses the stored-user-token path directly.
+
+    Args:
+        token_file: Optional path to a pre-generated token JSON file
+            (``--token-file`` in the runner).
+        config: Optional pre-loaded :class:`CLIConfig`; loads from
+            ``~/.qa-studio/config.json`` when ``None``.
+
+    Returns:
+        An authenticated :class:`ApiClient` pointed at the configured
+        API URL.
+    """
+    # Imported here (not at module top) because ``auth.resolver``
+    # imports providers that only make sense when called, and we want
+    # the import cost to land with the function call, not at module
+    # import time.
+    from qa_studio_cli.auth.resolver import TokenResolver
+
+    cfg = config or load_config()
+    resolver = TokenResolver(token_file=token_file, config=cfg)
+    return ApiClient(base_url=cfg.api_url, token_provider=resolver.get_token)
 
 
 class ApiClient:

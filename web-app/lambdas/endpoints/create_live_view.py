@@ -7,9 +7,13 @@ Route: ``POST /api/usecase/{id}/executions/{executionId}/live-view``
 Scope: ``api/executions.write``
 Body:  ``{"live_view_url": "https://..."}``
 
-DynamoDB item: ``(pk='EXECUTION#{exec}', sk='LIVE_VIEW')`` with the URL
-and a created_at timestamp.  If a record already exists it is replaced
-(last-writer-wins — the browser has restarted mid-execution).
+DynamoDB item: ``(pk='EXECUTION#{exec}', sk='LIVE_VIEW')`` with the
+URL stored under ``live_url`` (note: the request-body field name is
+``live_view_url``; the DDB field is ``live_url`` because that is the
+name both the frontend's ``useLiveViewUrl`` hook and the wizard
+worker's direct writer already agree on).  If a record already
+exists it is replaced (last-writer-wins — the browser has restarted
+mid-execution).
 """
 
 from __future__ import annotations
@@ -84,6 +88,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return create_response(400, {'error': 'live_view_url must include a host'})
 
     # --- Write -------------------------------------------------------------
+    #
+    # The request body field is named ``live_view_url`` — that's the
+    # public API contract and the CLI runner sends it that way. In
+    # DynamoDB we store it under ``live_url`` because that's what
+    # both readers (the frontend's ``useLiveViewUrl`` hook and the
+    # wizard worker's direct writer) already expect. Historically
+    # this Lambda wrote ``live_view_url`` to the item, which silently
+    # broke the live-view panel for every OnDemandHeadless execution
+    # triggered from the web app.
     table_name = get_table_name()
     timestamp = get_current_timestamp()
     try:
@@ -92,7 +105,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             Item={
                 'pk': {'S': f'EXECUTION#{execution_id}'},
                 'sk': {'S': 'LIVE_VIEW'},
-                'live_view_url': {'S': live_view_url},
+                'live_url': {'S': live_view_url},
                 'created_at': {'S': timestamp},
             },
         )
