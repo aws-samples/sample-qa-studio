@@ -117,6 +117,7 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
       case 'success': return 'success';
       case 'error':
       case 'failed': return 'error';
+      case 'running':
       case 'executing': return 'in-progress';
       default: return 'pending';
     }

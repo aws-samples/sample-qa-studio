@@ -84,7 +84,7 @@ def main_batch():
     
     try:
         # Update execution status to executing
-        db_client.update_execution_status(usecase_id, execution_id, "executing", executing_at=get_time())
+        db_client.update_execution_status(usecase_id, execution_id, "running", executing_at=get_time())
 
         boto_session = boto3.Session()
 

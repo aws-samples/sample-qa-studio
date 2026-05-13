@@ -19,6 +19,7 @@ function getStatusType(status: string) {
     case 'success': return 'success';
     case 'error': 
     case 'failed': return 'error';
+    case 'running':
     case 'executing': return 'in-progress';
     case 'pending': return 'pending';
     case 'stopped': return 'stopped';

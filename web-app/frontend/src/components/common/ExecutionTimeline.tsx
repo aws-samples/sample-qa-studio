@@ -99,7 +99,7 @@ export default function ExecutionTimeline({ execution }: ExecutionTimelineProps)
         : `Execution failed after ${executionTime}`,
       status: isSuccess ? 'success' as const : 'error' as const
     });
-  } else if (execution.status === 'executing' || execution.status === 'in-progress') {
+  } else if (execution.status === 'running' || execution.status === 'executing' || execution.status === 'in-progress') {
     const currentTime = executingAt
       ? calculateDuration(executingAt, new Date().toISOString())
       : calculateDuration(createdAt!, new Date().toISOString());

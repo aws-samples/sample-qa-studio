@@ -185,7 +185,7 @@ def main():
     
     try:
         # Update execution status
-        db_client.update_execution_status(usecase_id, session_id, "executing", executing_at=get_time())
+        db_client.update_execution_status(usecase_id, session_id, "running", executing_at=get_time())
         
         # Load execution data
         execution = db_client.get_execution(usecase_id, session_id)
