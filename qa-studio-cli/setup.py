@@ -19,6 +19,7 @@ setup(
             "tenacity>=8.2.0",
             "playwright",
             "Appium-Python-Client>=4.0.0",
+            "mypy-boto3-devicefarm",
             "requests>=2.32.0",
             "jsonschema>=4.18.0",
         ],

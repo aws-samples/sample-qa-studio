@@ -1,27 +1,37 @@
 """Mobile observation utilities for screenshots and UI hierarchy extraction."""
 
+import math
 import xml.etree.ElementTree as ET
 
 from appium.webdriver.webdriver import WebDriver
 from nova_act.types.api.step import BboxTLWH
 from nova_act.util.logging import setup_logging
 
-from nova_act_mobile.platform import Platform
+from nova_act_mobile.actuation.util import get_platform
 
 _LOGGER = setup_logging(__name__)
 
 
-def take_mobile_screenshot(driver: WebDriver) -> str:
-    """Take a screenshot and return it as a base64-encoded data URL.
+# Target pixel budget matching the Nova Act browser default (1600 × 813).
+_TARGET_PIXELS = 1600 * 813  # ~1,300,800
 
-    Returns a JPEG data URL to avoid RGBA/JPEG incompatibility in downstream
-    image processing (JPEG does not support alpha channel).
+
+def take_mobile_screenshot(
+    driver: WebDriver,
+) -> tuple[str, int, int]:
+    """Take a screenshot, resize to the model's expected pixel budget, and return as JPEG.
+
+    The screenshot is resized so its total pixel count approximates the Nova Act
+    browser default (1600 × 813 ≈ 1.3 M pixels) while preserving the original
+    aspect ratio.  If the source image is already at or below the target budget
+    the image is returned unchanged.
 
     Args:
         driver: Appium WebDriver instance.
 
     Returns:
-        Base64-encoded JPEG screenshot with data URL prefix.
+        Tuple of (data_url, width, height) where width/height are the
+        dimensions of the (possibly resized) image in pixels.
 
     Raises:
         ValueError: If screenshot cannot be captured.
@@ -35,10 +45,20 @@ def take_mobile_screenshot(driver: WebDriver) -> str:
         screenshot_base64 = driver.get_screenshot_as_base64()
         png_bytes = base64.b64decode(screenshot_base64)
         img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+
+        # Resize to target pixel budget if the source exceeds it.
+        src_pixels = img.width * img.height
+        if src_pixels > _TARGET_PIXELS:
+            scale = math.sqrt(_TARGET_PIXELS / src_pixels)
+            new_w = round(img.width * scale)
+            new_h = round(img.height * scale)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
         jpeg_buffer = io.BytesIO()
         img.save(jpeg_buffer, format="JPEG", quality=85)
         jpeg_base64 = base64.b64encode(jpeg_buffer.getvalue()).decode("utf-8")
-        return f"data:image/jpeg;base64,{jpeg_base64}"
+        data_url = f"data:image/jpeg;base64,{jpeg_base64}"
+        return data_url, img.width, img.height
 
     except Exception as e:
         _LOGGER.error(f"Failed to take screenshot: {e}")
@@ -66,13 +86,13 @@ def get_ui_hierarchy(driver: WebDriver) -> str:
 
 
 def parse_ui_hierarchy(
-    xml_source: str, platform: Platform
+    xml_source: str, driver: WebDriver
 ) -> tuple[dict[int, BboxTLWH], str]:
     """Parse XML UI hierarchy into a simplified format with bounding boxes.
 
     Args:
         xml_source: XML string of the UI hierarchy.
-        platform: Platform name (iOS or Android) for platform-specific parsing.
+        driver: Appium WebDriver instance (used to derive platform).
 
     Returns:
         Tuple of (id_to_bbox_map, simplified_dom) where:
@@ -82,6 +102,8 @@ def parse_ui_hierarchy(
     Raises:
         ValueError: If XML cannot be parsed.
     """
+    platform = get_platform(driver)
+
     try:
         root = ET.fromstring(xml_source)
 
@@ -94,7 +116,7 @@ def parse_ui_hierarchy(
             nonlocal element_id
 
             # Extract element information based on platform
-            if platform == Platform.ANDROID:
+            if platform == "android":
                 elem_type = elem.tag
                 elem_name = elem.get("content-desc", "")
                 elem_label = elem.get("text", "")
@@ -114,7 +136,7 @@ def parse_ui_hierarchy(
                 # Android bounds format: [x1,y1][x2,y2]
                 bounds_str = elem.get("bounds", "")
 
-            elif platform == Platform.IOS:
+            elif platform == "ios":
                 elem_type = elem.get("type", "")
                 elem_name = elem.get("name", "")
                 elem_label = elem.get("label", "")
@@ -199,18 +221,18 @@ def parse_ui_hierarchy(
         raise ValueError(f"Could not parse UI hierarchy: {e}") from e
 
 
-def _parse_bounds(bounds_str: str, platform: Platform) -> BboxTLWH | None:
+def _parse_bounds(bounds_str: str, platform: str) -> BboxTLWH | None:
     """Parse bounds string into BboxTLWH format.
 
     Args:
         bounds_str: Bounds string in platform-specific format.
-        platform: Platform type.
+        platform: Platform name (``"android"`` or ``"ios"``).
 
     Returns:
         BboxTLWH dictionary or None if bounds cannot be parsed.
     """
     try:
-        if platform == Platform.ANDROID:
+        if platform == "android":
             # Android format: "[x1,y1][x2,y2]"
             if not bounds_str or "][" not in bounds_str:
                 return None
@@ -226,7 +248,7 @@ def _parse_bounds(bounds_str: str, platform: Platform) -> BboxTLWH | None:
             x1, y1, x2, y2 = coords
             return {"y": y1, "x": x1, "width": x2 - x1, "height": y2 - y1}
 
-        elif platform == Platform.IOS:
+        elif platform == "ios":
             # iOS format: "x,y,width,height"
             if not bounds_str or bounds_str.count(",") != 3:
                 return None
