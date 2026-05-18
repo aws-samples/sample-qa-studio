@@ -1178,11 +1178,13 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [secretsArnPattern]
     }))
 
-    // ListSecrets requires * for resource (list operation), scoped to account
+    // ListSecrets is a list operation that does not support resource-level
+    // permissions — the resource must be "*".  Filtering is done via the
+    // Filters parameter in the API call itself (by tag/name prefix).
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:ListSecrets'],
-      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
+      resources: ['*']
     }))
     
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({

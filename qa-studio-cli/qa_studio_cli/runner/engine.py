@@ -221,6 +221,10 @@ class ExecutionEngine:
 
                         instruction = template_parser.parse_instruction(step.get("instruction", ""))
                         resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id}
+                        if resolved_step.get("validation_value"):
+                            resolved_step["validation_value"] = template_parser.parse_instruction(
+                                resolved_step["validation_value"]
+                            )
 
                         logger.info("[local] Executing step %d: %s", sort_order, instruction)
                         step_result: StepResult = executor.execute(resolved_step, variables, runtime_variables)
@@ -834,6 +838,12 @@ class ExecutionEngine:
 
                 instruction = template_parser.parse_instruction(step.get("instruction", ""))
                 resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id, "execution_id": execution_id}
+                # Also resolve templates in validation_value so runtime
+                # variables (e.g. {{LAST_EXECUTION}}) work in assertions.
+                if resolved_step.get("validation_value"):
+                    resolved_step["validation_value"] = template_parser.parse_instruction(
+                        resolved_step["validation_value"]
+                    )
 
                 logger.info("Executing step %d: %s", sort_order, instruction)
                 step_result: StepResult = executor.execute(resolved_step, variables, runtime_variables)

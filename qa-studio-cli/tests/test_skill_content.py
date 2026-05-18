@@ -205,7 +205,7 @@ class TestReferenceTOC:
     def test_validation_operators_grouped_by_category(self):
         val_ops_file = REFERENCE_DIR / "validation-operators.md"
         content = val_ops_file.read_text()
-        for category in ["String", "Number", "Boolean"]:
+        for category in ["String", "Number", "Boolean", "Date"]:
             assert f"## {category}" in content, (
                 f"validation-operators.md missing category group: '{category}'"
             )

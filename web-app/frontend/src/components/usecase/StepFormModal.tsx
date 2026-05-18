@@ -19,6 +19,20 @@ import ExpandableSection from "@cloudscape-design/components/expandable-section"
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Alert from "@cloudscape-design/components/alert";
 import { api } from '../../utils/api';
+import DateFormatSelect from './DateFormatSelect';
+import DateValidationEditor from './DateValidationEditor';
+import {
+  buildDateOpArgs,
+  loadDateOpFields,
+  isDateOpValid,
+  DATE_OPERATIONS,
+  DURATION_UNITS,
+  EPOCH_UNITS,
+  type DateOpFields,
+  type DateOperation,
+  EMPTY_DATE_FIELDS,
+} from './transformDateArgs';
+import { isDateValidationValid } from './dateValidationArgs';
 
 interface StepFormModalProps {
   visible: boolean;
@@ -69,7 +83,12 @@ const TRANSFORM_OPERATION_OPTIONS = [
   { label: 'To String', value: 'to_string', description: 'Convert to string' },
   { label: 'To Integer', value: 'to_int', description: 'Convert to integer' },
   { label: 'Regex Extract', value: 'regex_extract', description: 'Extract with a regex pattern' },
-  { label: 'Format', value: 'format', description: 'Format a template string' }
+  { label: 'Format', value: 'format', description: 'Format a template string' },
+  { label: 'Parse Date', value: 'parse_date', description: 'Parse a date string into canonical UTC ISO 8601' },
+  { label: 'Format Date', value: 'format_date', description: 'Render a canonical date in a target strftime format' },
+  { label: 'Add Duration', value: 'add_duration', description: 'Add or subtract a duration from a date' },
+  { label: 'Date Diff', value: 'date_diff', description: 'Compute the signed difference between two dates' },
+  { label: 'To Epoch', value: 'to_epoch', description: 'Convert a date to a Unix epoch integer' }
 ];
 const NETWORK_METHOD_OPTIONS = [
   { label: 'Any method', value: '' },
@@ -111,13 +130,15 @@ const NETWORK_STATUS_MAX = 599;
 const VALIDATION_TYPE_OPTIONS = [
   { label: 'Boolean (True/False)', value: 'bool' },
   { label: 'String Comparison', value: 'string' },
-  { label: 'Number Comparison', value: 'number' }
+  { label: 'Number Comparison', value: 'number' },
+  { label: 'Date Comparison', value: 'date' }
 ];
 
 const VALUE_TYPE_OPTIONS = [
   { label: 'String', value: 'string' },
   { label: 'Number', value: 'number' },
-  { label: 'Boolean', value: 'bool' }
+  { label: 'Boolean', value: 'bool' },
+  { label: 'Date', value: 'date' }
 ];
 
 const VALIDATION_OPERATOR_OPTIONS = {
@@ -168,6 +189,7 @@ export default function StepFormModal({
   const [saving, setSaving] = useState(false);
   const [captureVariable, setCaptureVariable] = useState('');
   const [valueType, setValueType] = useState('string');
+  const [valueFormat, setValueFormat] = useState('');
   const [valueSource, setValueSource] = useState('screen');
   const [assertionVariable, setAssertionVariable] = useState('');
   const [booleanInputMode, setBooleanInputMode] = useState('true');
@@ -190,6 +212,8 @@ export default function StepFormModal({
   const [transformTemplate, setTransformTemplate] = useState('');
   const [transformFormatArgs, setTransformFormatArgs] = useState('');
   const [transformValues, setTransformValues] = useState('');
+  // Date transform state — see transformDateArgs.ts for the field shape.
+  const [transformDateFields, setTransformDateFields] = useState<DateOpFields>(EMPTY_DATE_FIELDS);
   const [templateStep, setTemplateStep] = useState<any>(null);
   const [loadingTemplateStep, setLoadingTemplateStep] = useState(false);
   const [templateDifferences, setTemplateDifferences] = useState<Array<{field: string, current: any, template: any}>>([]);
@@ -241,6 +265,7 @@ export default function StepFormModal({
       setValidationValue(step.validation_value || '');
       setCaptureVariable(step.capture_variable || '');
       setValueType(step.value_type || 'string');
+      setValueFormat(step.value_format || '');
       setValueSource(step.value_source || 'screen');
       setAssertionVariable(step.assertion_variable || '');
       setEnableAdvancedClickTypes(step.enable_advanced_click_types || false);
@@ -270,6 +295,11 @@ export default function StepFormModal({
           setTransformTemplate(args.template || '');
           setTransformFormatArgs((args.args || []).join(', '));
           setTransformValues((args.values || []).join(', '));
+          if (DATE_OPERATIONS.has(step.transform_operation as DateOperation)) {
+            setTransformDateFields(loadDateOpFields(step.transform_operation as DateOperation, args));
+          } else {
+            setTransformDateFields(EMPTY_DATE_FIELDS);
+          }
         } catch {}
       }
       setNetworkUrlPattern(step.network_url_pattern || '');
@@ -307,6 +337,7 @@ export default function StepFormModal({
       setValidationValue('');
       setCaptureVariable('');
       setValueType('string');
+      setValueFormat('');
       setValueSource('screen');
       setAssertionVariable('');
       setBooleanInputMode('true');
@@ -327,6 +358,7 @@ export default function StepFormModal({
       setTransformTemplate('');
       setTransformFormatArgs('');
       setTransformValues('');
+      setTransformDateFields(EMPTY_DATE_FIELDS);
       setNetworkUrlPattern('');
       setNetworkMethod('');
       setNetworkRequestBody('');
@@ -522,6 +554,9 @@ export default function StepFormModal({
   };
 
   const buildTransformArgs = (): Record<string, any> => {
+    if (DATE_OPERATIONS.has(transformOperation as DateOperation)) {
+      return buildDateOpArgs(transformOperation as DateOperation, transformDateFields);
+    }
     switch (transformOperation) {
       case 'math': return { expression: transformExpression.trim() };
       case 'round': return { value: transformValue.trim(), digits: parseInt(transformDigits) || 0 };
@@ -556,6 +591,8 @@ export default function StepFormModal({
     if (stepType === 'assertion' && validationType === 'string' && !validationValue.trim()) return;
     if (stepType === 'assertion' && validationType === 'number' && !validationValue.trim()) return;
     if (stepType === 'assertion' && validationType === 'bool' && !validationValue.trim()) return;
+    if ((stepType === 'validation' || stepType === 'assertion') && validationType === 'date'
+        && !isDateValidationValid(validationOperator, validationValue)) return;
 
     setSaving(true);
     try {
@@ -593,6 +630,9 @@ export default function StepFormModal({
         stepData.capture_variable = captureVariable.trim();
         stepData.value_type = valueType;
         stepData.value_source = valueSource;
+        if (valueType === 'date') {
+          stepData.value_format = valueFormat;
+        }
       } else if (stepType === 'assertion') {
         stepData.assertion_variable = assertionVariable.trim();
         stepData.validation_type = validationType;
@@ -648,6 +688,9 @@ export default function StepFormModal({
     }
     if (stepType === 'transform') {
       if (!captureVariable.trim()) return false;
+      if (DATE_OPERATIONS.has(transformOperation as DateOperation)) {
+        return isDateOpValid(transformOperation as DateOperation, transformDateFields);
+      }
       if (transformOperation === 'math' && !transformExpression.trim()) return false;
       if (['floor', 'ceil', 'abs', 'upper', 'lower', 'trim', 'length', 'to_number', 'to_string', 'to_int'].includes(transformOperation) && !transformValue.trim()) return false;
       if (transformOperation === 'round' && !transformValue.trim()) return false;
@@ -668,6 +711,8 @@ export default function StepFormModal({
     if (stepType === 'assertion' && validationType === 'string' && !validationValue.trim()) return false;
     if (stepType === 'assertion' && validationType === 'number' && !validationValue.trim()) return false;
     if (stepType === 'assertion' && validationType === 'bool' && !validationValue.trim()) return false;
+    if ((stepType === 'validation' || stepType === 'assertion') && validationType === 'date'
+        && !isDateValidationValid(validationOperator, validationValue)) return false;
     if (stepType === 'network_assertion') {
       if (!networkUrlPattern.trim()) return false;
       // Size cap — counted as UTF-8 bytes to match server-side check.
@@ -936,6 +981,110 @@ export default function StepFormModal({
                 />
               </FormField>
             )}
+            {transformOperation === 'parse_date' && (
+              <>
+                <FormField label="Value" stretch description="Date string to parse. Use {{ variable }} to reference captured values.">
+                  <Input
+                    value={transformDateFields.primary}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, primary: detail.value }))}
+                    placeholder="{{ order_date }}"
+                  />
+                </FormField>
+                <DateFormatSelect
+                  value={transformDateFields.format}
+                  onChange={(format) => setTransformDateFields(f => ({ ...f, format }))}
+                />
+              </>
+            )}
+            {transformOperation === 'format_date' && (
+              <>
+                <FormField label="Canonical Date" stretch description="ISO 8601 date string. Use parse_date first if your value isn't canonical.">
+                  <Input
+                    value={transformDateFields.primary}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, primary: detail.value }))}
+                    placeholder="{{ order_date_iso }}"
+                  />
+                </FormField>
+                <DateFormatSelect
+                  value={transformDateFields.format}
+                  onChange={(format) => setTransformDateFields(f => ({ ...f, format }))}
+                  disableAutoDetect
+                  label="Output Format"
+                />
+              </>
+            )}
+            {transformOperation === 'add_duration' && (
+              <>
+                <FormField label="Canonical Date" stretch description="ISO 8601 date string.">
+                  <Input
+                    value={transformDateFields.primary}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, primary: detail.value }))}
+                    placeholder="{{ start_date }}"
+                  />
+                </FormField>
+                <FormField label="Amount" stretch description="Signed integer. Negative values subtract.">
+                  <Input
+                    value={transformDateFields.amount}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, amount: detail.value }))}
+                    placeholder="30"
+                    type="number"
+                  />
+                </FormField>
+                <FormField label="Unit" stretch description="Months and years are not supported in v1 — their arithmetic is policy-dependent.">
+                  <Select
+                    selectedOption={transformDateFields.unit ? { label: transformDateFields.unit, value: transformDateFields.unit } : null}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, unit: detail.selectedOption?.value || '' }))}
+                    options={DURATION_UNITS.map(u => ({ label: u, value: u }))}
+                    placeholder="Select a unit"
+                  />
+                </FormField>
+              </>
+            )}
+            {transformOperation === 'date_diff' && (
+              <>
+                <FormField label="Date A" stretch description="ISO 8601 date string. The difference is computed as A − B.">
+                  <Input
+                    value={transformDateFields.primary}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, primary: detail.value }))}
+                    placeholder="{{ end_date }}"
+                  />
+                </FormField>
+                <FormField label="Date B" stretch description="ISO 8601 date string.">
+                  <Input
+                    value={transformDateFields.secondary}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, secondary: detail.value }))}
+                    placeholder="{{ start_date }}"
+                  />
+                </FormField>
+                <FormField label="Unit" stretch description="Result is the difference in this unit, truncated toward zero.">
+                  <Select
+                    selectedOption={transformDateFields.unit ? { label: transformDateFields.unit, value: transformDateFields.unit } : null}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, unit: detail.selectedOption?.value || '' }))}
+                    options={DURATION_UNITS.map(u => ({ label: u, value: u }))}
+                    placeholder="Select a unit"
+                  />
+                </FormField>
+              </>
+            )}
+            {transformOperation === 'to_epoch' && (
+              <>
+                <FormField label="Value" stretch description="Date string. Auto-detected as ISO or epoch — use parse_date first if the value isn't canonical.">
+                  <Input
+                    value={transformDateFields.primary}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, primary: detail.value }))}
+                    placeholder="{{ order_date_iso }}"
+                  />
+                </FormField>
+                <FormField label="Unit" stretch description="Use seconds for compatibility with the existing number assertion operators.">
+                  <Select
+                    selectedOption={transformDateFields.unit ? { label: transformDateFields.unit, value: transformDateFields.unit } : null}
+                    onChange={({ detail }) => setTransformDateFields(f => ({ ...f, unit: detail.selectedOption?.value || '' }))}
+                    options={EPOCH_UNITS.map(u => ({ label: u, value: u }))}
+                    placeholder="seconds"
+                  />
+                </FormField>
+              </>
+            )}
           </>
         )}
 
@@ -1041,175 +1190,7 @@ export default function StepFormModal({
                     setValidationOperator('exact');
                   } else if (newType === 'number') {
                     setValidationOperator('equals');
-                  }
-                }}
-                options={VALIDATION_TYPE_OPTIONS}
-              />
-            </FormField>
-
-            {validationType === 'bool' && (
-              <>
-                <FormField
-                  stretch
-                  label="Expected Boolean Value"
-                  description="Select true/false or use a variable"
-                >
-                  <Select
-                    selectedOption={BOOLEAN_OPTIONS.find(opt => opt.value === booleanInputMode) || null}
-                    onChange={({ detail }) => {
-                      const mode = detail.selectedOption?.value || 'true';
-                      setBooleanInputMode(mode);
-                      if (mode === 'true' || mode === 'false') {
-                        setValidationValue(mode);
-                      } else {
-                        setValidationValue('');
-                      }
-                    }}
-                    options={BOOLEAN_OPTIONS}
-                  />
-                </FormField>
-                {booleanInputMode === 'variable' && (
-                  <FormField
-                    stretch
-                    label="Variable Expression"
-                    description="Enter a variable that evaluates to a boolean (e.g., {{myBooleanVar}})"
-                  >
-                    <Input
-                      value={validationValue}
-                      onChange={({ detail }) => setValidationValue(detail.value)}
-                      placeholder="{{myBooleanVar}}"
-                    />
-                  </FormField>
-                )}
-              </>
-            )}
-
-            {(validationType === 'string' || validationType === 'number') && (
-              <>
-                <FormField label="Comparison Operator" stretch>
-                  <Select
-                    selectedOption={
-                      VALIDATION_OPERATOR_OPTIONS[validationType as keyof typeof VALIDATION_OPERATOR_OPTIONS]
-                        ?.find(opt => opt.value === validationOperator) || null
-                    }
-                    onChange={({ detail }) => setValidationOperator(detail.selectedOption?.value ||
-                      (validationType === 'string' ? 'exact' : 'equals'))}
-                    options={VALIDATION_OPERATOR_OPTIONS[validationType as keyof typeof VALIDATION_OPERATOR_OPTIONS] || []}
-                  />
-                </FormField>
-
-                <FormField
-                  stretch
-                  label="Expected Value"
-                  description={
-                    validationType === 'number'
-                      ? 'Enter a numeric value. You can use variables like {{UniqueID}}, {{Time}}, {{ExecutionID}}, or custom variables.'
-                      : 'Enter the expected text value. You can use variables like {{UniqueID}}, {{Time}}, {{ExecutionID}}, or custom variables.'
-                  }
-                >
-                  <Input
-                    value={validationValue}
-                    onChange={({ detail }) => {
-                      console.log(typeof detail.value.toString())
-                      setValidationValue(detail.value.toString())
-                    }}
-                    placeholder={
-                      validationType === 'number'
-                        ? 'Enter a number (e.g., 42, 3.14) or use variables like {{UniqueID}}'
-                        : 'Enter expected value or use variables like {{UniqueID}}, {{Time}}'
-                    }
-                    type="text"
-                  />
-                </FormField>
-              </>
-            )}
-          </>
-        )}
-
-        {stepType === 'retrieve_value' && (
-          <>
-            <FormField
-              stretch
-              label="Value Source"
-              description="Where to read the value from"
-            >
-              <Select
-                selectedOption={{ label: valueSource === 'url' ? 'Page URL' : 'Screen (AI vision)', value: valueSource }}
-                onChange={({ detail }) => setValueSource(detail.selectedOption?.value || 'screen')}
-                options={[
-                  { label: 'Screen (AI vision)', value: 'screen', description: 'Nova Act reads the value from the page visually' },
-                  { label: 'Page URL', value: 'url', description: 'Extract from the current page URL using an optional regex pattern' },
-                ]}
-              />
-            </FormField>
-
-            {valueSource === 'url' && (
-              <Alert type="info">
-                The instruction field becomes a regex pattern. Use a capture group to extract a substring
-                (e.g., <code>confirmationId=([A-Z0-9]+)</code>). Leave empty to capture the full URL.
-              </Alert>
-            )}
-
-            <FormField
-              stretch
-              label="Variable Name"
-              description="Name for the captured variable (will be available as {{variableName}} in subsequent steps)"
-            >
-              <Input
-                value={captureVariable}
-                onChange={({ detail }) => setCaptureVariable(detail.value)}
-                placeholder="e.g., product_price, user_id, status"
-              />
-            </FormField>
-
-            <FormField
-              stretch
-              label="Value Type"
-              description="Expected type of the retrieved value"
-            >
-              <Select
-                selectedOption={VALUE_TYPE_OPTIONS.find(opt => opt.value === valueType) || null}
-                onChange={({ detail }) => setValueType(detail.selectedOption?.value || 'string')}
-                options={VALUE_TYPE_OPTIONS}
-              />
-            </FormField>
-          </>
-        )}
-
-        {stepType === 'assertion' && (
-          <>
-            <FormField
-              stretch
-              label="Runtime Variable"
-              description="Name of the runtime variable to compare (captured from previous retrieve_value steps)"
-            >
-              <Select
-                selectedOption={
-                  assertionVariable ?
-                    { label: assertionVariable, value: assertionVariable } :
-                    null
-                }
-                onChange={({ detail }) => setAssertionVariable(detail.selectedOption?.value || '')}
-                options={getAvailableRuntimeVariables()}
-                placeholder="Select a runtime variable"
-                empty="No runtime variables available. Add retrieve_value steps first."
-                filteringType="auto"
-                expandToViewport={true}
-              />
-            </FormField>
-
-            <FormField label="Validation Type" stretch>
-              <Select
-                selectedOption={VALIDATION_TYPE_OPTIONS.find(opt => opt.value === validationType) || null}
-                onChange={({ detail }) => {
-                  const newType = detail.selectedOption?.value || 'bool';
-                  setValidationType(newType);
-                  setValidationValue('');
-                  setBooleanInputMode('true');
-                  // Reset operator to first available option for the new type
-                  if (newType === 'string') {
-                    setValidationOperator('exact');
-                  } else if (newType === 'number') {
+                  } else if (newType === 'date') {
                     setValidationOperator('equals');
                   }
                 }}
@@ -1292,6 +1273,202 @@ export default function StepFormModal({
                   />
                 </FormField>
               </>
+            )}
+            {validationType === 'date' && (
+              <DateValidationEditor
+                validationOperator={validationOperator}
+                setValidationOperator={setValidationOperator}
+                validationValue={validationValue}
+                setValidationValue={setValidationValue}
+              />
+            )}
+          </>
+        )}
+
+        {stepType === 'retrieve_value' && (
+          <>
+            <FormField
+              stretch
+              label="Value Source"
+              description="Where to read the value from"
+            >
+              <Select
+                selectedOption={{ label: valueSource === 'url' ? 'Page URL' : 'Screen (AI vision)', value: valueSource }}
+                onChange={({ detail }) => setValueSource(detail.selectedOption?.value || 'screen')}
+                options={[
+                  { label: 'Screen (AI vision)', value: 'screen', description: 'Nova Act reads the value from the page visually' },
+                  { label: 'Page URL', value: 'url', description: 'Extract from the current page URL using an optional regex pattern' },
+                ]}
+              />
+            </FormField>
+
+            {valueSource === 'url' && (
+              <Alert type="info">
+                The instruction field becomes a regex pattern. Use a capture group to extract a substring
+                (e.g., <code>confirmationId=([A-Z0-9]+)</code>). Leave empty to capture the full URL.
+              </Alert>
+            )}
+
+            <FormField
+              stretch
+              label="Variable Name"
+              description="Name for the captured variable (will be available as {{variableName}} in subsequent steps)"
+            >
+              <Input
+                value={captureVariable}
+                onChange={({ detail }) => setCaptureVariable(detail.value)}
+                placeholder="e.g., product_price, user_id, status"
+              />
+            </FormField>
+
+            <FormField
+              stretch
+              label="Value Type"
+              description="Expected type of the retrieved value"
+            >
+              <Select
+                selectedOption={VALUE_TYPE_OPTIONS.find(opt => opt.value === valueType) || null}
+                onChange={({ detail }) => setValueType(detail.selectedOption?.value || 'string')}
+                options={VALUE_TYPE_OPTIONS}
+              />
+            </FormField>
+
+            {valueType === 'date' && (
+              <DateFormatSelect
+                value={valueFormat}
+                onChange={setValueFormat}
+                label="Date Format"
+              />
+            )}
+          </>
+        )}
+
+        {stepType === 'assertion' && (
+          <>
+            <FormField
+              stretch
+              label="Runtime Variable"
+              description="Name of the runtime variable to compare (captured from previous retrieve_value steps)"
+            >
+              <Select
+                selectedOption={
+                  assertionVariable ?
+                    { label: assertionVariable, value: assertionVariable } :
+                    null
+                }
+                onChange={({ detail }) => setAssertionVariable(detail.selectedOption?.value || '')}
+                options={getAvailableRuntimeVariables()}
+                placeholder="Select a runtime variable"
+                empty="No runtime variables available. Add retrieve_value steps first."
+                filteringType="auto"
+                expandToViewport={true}
+              />
+            </FormField>
+
+            <FormField label="Validation Type" stretch>
+              <Select
+                selectedOption={VALIDATION_TYPE_OPTIONS.find(opt => opt.value === validationType) || null}
+                onChange={({ detail }) => {
+                  const newType = detail.selectedOption?.value || 'bool';
+                  setValidationType(newType);
+                  setValidationValue('');
+                  setBooleanInputMode('true');
+                  // Reset operator to first available option for the new type
+                  if (newType === 'string') {
+                    setValidationOperator('exact');
+                  } else if (newType === 'number') {
+                    setValidationOperator('equals');
+                  } else if (newType === 'date') {
+                    setValidationOperator('equals');
+                  }
+                }}
+                options={VALIDATION_TYPE_OPTIONS}
+              />
+            </FormField>
+
+            {validationType === 'bool' && (
+              <>
+                <FormField
+                  stretch
+                  label="Expected Boolean Value"
+                  description="Select true/false or use a variable"
+                >
+                  <Select
+                    selectedOption={BOOLEAN_OPTIONS.find(opt => opt.value === booleanInputMode) || null}
+                    onChange={({ detail }) => {
+                      const mode = detail.selectedOption?.value || 'true';
+                      setBooleanInputMode(mode);
+                      if (mode === 'true' || mode === 'false') {
+                        setValidationValue(mode);
+                      } else {
+                        setValidationValue('');
+                      }
+                    }}
+                    options={BOOLEAN_OPTIONS}
+                  />
+                </FormField>
+                {booleanInputMode === 'variable' && (
+                  <FormField
+                    stretch
+                    label="Variable Expression"
+                    description="Enter a variable that evaluates to a boolean (e.g., {{myBooleanVar}})"
+                  >
+                    <Input
+                      value={validationValue}
+                      onChange={({ detail }) => setValidationValue(detail.value)}
+                      placeholder="{{myBooleanVar}}"
+                    />
+                  </FormField>
+                )}
+              </>
+            )}
+
+            {(validationType === 'string' || validationType === 'number') && (
+              <>
+                <FormField label="Comparison Operator" stretch>
+                  <Select
+                    selectedOption={
+                      VALIDATION_OPERATOR_OPTIONS[validationType as keyof typeof VALIDATION_OPERATOR_OPTIONS]
+                        ?.find(opt => opt.value === validationOperator) || null
+                    }
+                    onChange={({ detail }) => setValidationOperator(detail.selectedOption?.value ||
+                      (validationType === 'string' ? 'exact' : 'equals'))}
+                    options={VALIDATION_OPERATOR_OPTIONS[validationType as keyof typeof VALIDATION_OPERATOR_OPTIONS] || []}
+                  />
+                </FormField>
+
+                <FormField
+                  stretch
+                  label="Expected Value"
+                  description={
+                    validationType === 'number'
+                      ? 'Enter a numeric value. You can use variables like {{UniqueID}}, {{Time}}, {{ExecutionID}}, or custom variables.'
+                      : 'Enter the expected text value. You can use variables like {{UniqueID}}, {{Time}}, {{ExecutionID}}, or custom variables.'
+                  }
+                >
+                  <Input
+                    value={validationValue}
+                    onChange={({ detail }) => {
+                      console.log(typeof detail.value.toString())
+                      setValidationValue(detail.value.toString())
+                    }}
+                    placeholder={
+                      validationType === 'number'
+                        ? 'Enter a number (e.g., 42, 3.14) or use variables like {{UniqueID}}'
+                        : 'Enter expected value or use variables like {{UniqueID}}, {{Time}}'
+                    }
+                    type="text"
+                  />
+                </FormField>
+              </>
+            )}
+            {validationType === 'date' && (
+              <DateValidationEditor
+                validationOperator={validationOperator}
+                setValidationOperator={setValidationOperator}
+                validationValue={validationValue}
+                setValidationValue={setValidationValue}
+              />
             )}
           </>
         )}

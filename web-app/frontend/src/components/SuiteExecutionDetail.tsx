@@ -14,6 +14,7 @@ import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import PieChart from "@cloudscape-design/components/pie-chart";
 import { testSuites, SuiteArtifact } from '../utils/api';
+import { formatDateTime } from '../utils/dateFormat';
 import { SuiteExecution } from '../utils/api';
 import Breadcrumb from './common/Breadcrumb';
 import LogViewer from './common/LogViewer';
@@ -35,8 +36,7 @@ function formatDuration(seconds?: number): string {
 }
 
 function formatTimestamp(timestamp?: string): string {
-  if (!timestamp) return '-';
-  return new Date(timestamp).toLocaleString();
+  return formatDateTime(timestamp);
 }
 
 function getStatusIndicator(status: string) {

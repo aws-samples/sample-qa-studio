@@ -4,6 +4,8 @@ from nova_act import NovaAct, BOOL_SCHEMA
 from models import ExecutionStep
 
 from utils import STRING_SCHEMA, NUMBER_SCHEMA
+from transform.date_compare import evaluate_date_assertion
+from transform.date_parser import DateParseError
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +116,23 @@ def execute_validation_step(nova: NovaAct, step: ExecutionStep):
       
       if actual_value > expected_value:
         success = False
+
+    elif step.validation_type == 'date':
+      # Extract the page value as a string; date parsing happens on our side
+      # (Nova has no date schema). The date_compare helper handles operator
+      # dispatch, equals_within JSON payload, and the naive-vs-aware warning.
+      result = nova.act_get(step.instruction, schema=STRING_SCHEMA)
+      actual_value = str(result.parsed_response) if result.parsed_response is not None else ""
+      expected_value = step.validation_value
+      try:
+        success, logs = evaluate_date_assertion(
+          actual=actual_value,
+          validation_value=expected_value,
+          operator=step.validation_operator,
+        )
+      except (DateParseError, ValueError) as exc:
+        success = False
+        logs = f"Date validation error: {exc}"
 
     else:
       logger.error(f"Unknown validation type '{step.validation_type}' for step {step.sort}")

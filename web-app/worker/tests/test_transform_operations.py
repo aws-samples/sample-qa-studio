@@ -235,6 +235,7 @@ class TestRegistry:
         "math", "round", "floor", "ceil", "abs", "min", "max",
         "concat", "upper", "lower", "trim", "replace", "substring", "length",
         "to_number", "to_string", "to_int", "regex_extract", "format",
+        "parse_date", "format_date", "add_duration", "date_diff", "to_epoch",
     }
 
     def test_all_operations_registered(self):

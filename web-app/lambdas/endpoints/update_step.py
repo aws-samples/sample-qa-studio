@@ -64,6 +64,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'capture_variable': body.get('capture_variable'),
             'assertion_variable': body.get('assertion_variable'),
             'value_type': body.get('value_type'),
+            'value_format': body.get('value_format'),
             'enable_advanced_click_types': body.get('enable_advanced_click_types'),
             'value_source': body.get('value_source'),
             'browser_action': body.get('browser_action'),

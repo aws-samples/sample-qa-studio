@@ -61,6 +61,10 @@ class ExecutionStep:
     browser_args: Optional[str] = None
     transform_operation: Optional[str] = None
     transform_args: Optional[str] = None
+    # value_format is consumed by retrieve_value steps when value_type='date'.
+    # It is the strptime format passed to transform.date_parser.parse_to_utc;
+    # when empty, the parser auto-detects ISO 8601 / Unix epoch only.
+    value_format: Optional[str] = None
     # network_assertion step fields
     network_url_pattern: Optional[str] = None
     network_method: Optional[str] = None

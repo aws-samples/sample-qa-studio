@@ -1,3 +1,4 @@
+import { formatDateTime } from "../utils/dateFormat";
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Link from "@cloudscape-design/components/link";
@@ -416,7 +417,7 @@ export default function HomeScreen() {
               }
 
               const timeAgo = formatTimeAgo(item.last_execution_time);
-              const fullDate = new Date(item.last_execution_time).toLocaleString();
+              const fullDate = formatDateTime(item.last_execution_time);
 
               return (
                 <span title={fullDate} style={{ fontSize: '0.9em' }}>

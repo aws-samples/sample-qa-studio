@@ -191,3 +191,228 @@ class TestValidateTransformStep:
         }
         is_valid, errors = validate_transform_step(step)
         assert is_valid, f"Operation '{op}' should be valid but got errors: {errors}"
+
+
+# ── validation_type = "date" ────────────────────────────────────────────
+
+
+from qa_studio_cli.validation import (
+    VALID_DATE_OPERATORS,
+    VALID_DATE_DURATION_UNITS,
+    validate_date_validation_type,
+)
+
+
+def _date_step(operator: str, validation_value: str = "2024-01-02") -> dict:
+    return {
+        "step_type": "assertion",
+        "validation_type": "date",
+        "validation_operator": operator,
+        "validation_value": validation_value,
+        "assertion_variable": "captured",
+    }
+
+
+class TestValidateStepDispatchesToDate:
+    def test_dispatches_when_validation_type_is_date(self):
+        step = _date_step(operator="banana")
+        is_valid, errors = validate_step(step)
+        assert is_valid is False
+        assert any("date" in e and "banana" in e for e in errors)
+
+    def test_does_not_dispatch_when_validation_type_is_string(self):
+        # Existing string assertion; should not be touched by date validator.
+        step = {
+            "step_type": "assertion",
+            "validation_type": "string",
+            "validation_operator": "exact",
+            "validation_value": "hello",
+            "assertion_variable": "captured",
+        }
+        is_valid, _ = validate_step(step)
+        assert is_valid is True
+
+    def test_step_type_validators_take_precedence_over_date(self):
+        # A transform step with validation_type=date should still be validated
+        # as a transform — the per-step-type validators run first.
+        step = {
+            "step_type": "transform",
+            "validation_type": "date",  # nonsensical here but shouldn't matter
+            # ... missing transform_operation
+        }
+        is_valid, errors = validate_step(step)
+        assert is_valid is False
+        # Errors should be about transform shape, not date shape.
+        assert any("transform_operation" in e for e in errors)
+
+
+class TestValidateDateOperator:
+    @pytest.mark.parametrize("op", sorted(VALID_DATE_OPERATORS - {"equals_within"}))
+    def test_each_simple_operator_with_value_is_valid(self, op):
+        is_valid, errors = validate_date_validation_type(_date_step(operator=op))
+        assert is_valid, f"Expected '{op}' to validate; got: {errors}"
+
+    def test_unknown_operator_rejected(self):
+        is_valid, errors = validate_date_validation_type(_date_step(operator="banana"))
+        assert is_valid is False
+        assert any("banana" in e for e in errors)
+        assert any(o in errors[0] for o in VALID_DATE_OPERATORS)
+
+    def test_missing_operator_rejected(self):
+        step = _date_step(operator="")
+        is_valid, errors = validate_date_validation_type(step)
+        assert is_valid is False
+
+    @pytest.mark.parametrize("op", sorted(VALID_DATE_OPERATORS - {"equals_within"}))
+    def test_simple_operators_require_non_empty_value(self, op):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator=op, validation_value="")
+        )
+        assert is_valid is False
+        assert any("validation_value is required" in e for e in errors)
+
+    def test_simple_operator_whitespace_only_value_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator="equals", validation_value="   ")
+        )
+        assert is_valid is False
+
+    def test_simple_operator_does_not_parse_date_at_validation_time(self):
+        # validation_value may be a {{ var }} reference; must not be parsed here.
+        step = _date_step(operator="equals", validation_value="{{ order_date }}")
+        is_valid, errors = validate_date_validation_type(step)
+        assert is_valid, f"Variable reference should pass client validation; got: {errors}"
+
+
+class TestValidateEqualsWithinPayload:
+    def _payload(self, **overrides):
+        base = {"date": "2024-01-02T15:00:00+00:00", "tolerance": 5, "unit": "minutes"}
+        base.update(overrides)
+        return json.dumps(base)
+
+    def test_valid_payload_accepted(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value=self._payload())
+        )
+        assert is_valid, errors
+
+    def test_zero_tolerance_accepted(self):
+        is_valid, _ = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value=self._payload(tolerance=0))
+        )
+        assert is_valid is True
+
+    def test_missing_value_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value="")
+        )
+        assert is_valid is False
+        assert any("required" in e for e in errors)
+
+    def test_malformed_json_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value="not-json{{{")
+        )
+        assert is_valid is False
+        assert any("valid JSON" in e for e in errors)
+
+    def test_top_level_array_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(
+                operator="equals_within",
+                validation_value=json.dumps(["2024-01-02", 5, "minutes"]),
+            )
+        )
+        assert is_valid is False
+        assert any("must be a JSON object" in e for e in errors)
+
+    def test_missing_date_field_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(
+                operator="equals_within",
+                validation_value=json.dumps({"tolerance": 5, "unit": "minutes"}),
+            )
+        )
+        assert is_valid is False
+        assert any("'date'" in e for e in errors)
+
+    def test_empty_date_field_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value=self._payload(date=""))
+        )
+        assert is_valid is False
+        assert any("'date'" in e for e in errors)
+
+    def test_missing_tolerance_field_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(
+                operator="equals_within",
+                validation_value=json.dumps({"date": "2024-01-02", "unit": "minutes"}),
+            )
+        )
+        assert is_valid is False
+        assert any("'tolerance'" in e for e in errors)
+
+    def test_negative_tolerance_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value=self._payload(tolerance=-1))
+        )
+        assert is_valid is False
+        assert any("non-negative" in e for e in errors)
+
+    def test_non_integer_tolerance_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value=self._payload(tolerance=1.5))
+        )
+        assert is_valid is False
+        assert any("integer" in e for e in errors)
+
+    def test_bool_tolerance_rejected(self):
+        # bool is a subclass of int in Python; we explicitly exclude it.
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value=self._payload(tolerance=True))
+        )
+        assert is_valid is False
+        assert any("integer" in e for e in errors)
+
+    def test_missing_unit_field_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(
+                operator="equals_within",
+                validation_value=json.dumps({"date": "2024-01-02", "tolerance": 5}),
+            )
+        )
+        assert is_valid is False
+        assert any("'unit'" in e for e in errors)
+
+    def test_unsupported_unit_rejected(self):
+        is_valid, errors = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value=self._payload(unit="months"))
+        )
+        assert is_valid is False
+        assert any("'unit'" in e for e in errors)
+
+    @pytest.mark.parametrize("unit", sorted(VALID_DATE_DURATION_UNITS))
+    def test_each_supported_unit_accepted(self, unit):
+        is_valid, _ = validate_date_validation_type(
+            _date_step(operator="equals_within", validation_value=self._payload(unit=unit))
+        )
+        assert is_valid, f"Unit '{unit}' should be accepted"
+
+
+# ── Transform op registry includes date ops ─────────────────────────────
+
+
+class TestDateOpsInTransformRegistry:
+    @pytest.mark.parametrize("op", [
+        "parse_date", "format_date", "add_duration", "date_diff", "to_epoch",
+    ])
+    def test_date_ops_accepted_by_transform_validator(self, op):
+        step = {
+            "step_type": "transform",
+            "transform_operation": op,
+            "transform_args": json.dumps({"value": "x"}),  # shape varies but JSON-valid
+            "capture_variable": "result",
+        }
+        is_valid, errors = validate_transform_step(step)
+        assert is_valid, f"Date op '{op}' should be in transform registry; got: {errors}"

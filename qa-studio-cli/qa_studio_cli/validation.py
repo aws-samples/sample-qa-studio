@@ -26,14 +26,30 @@ VALID_TRANSFORM_OPERATIONS = {
     "math", "round", "floor", "ceil", "abs", "min", "max",
     "concat", "upper", "lower", "trim", "replace", "substring", "length",
     "to_number", "to_string", "to_int", "regex_extract", "format",
+    "parse_date", "format_date", "add_duration", "date_diff", "to_epoch",
 }
+
+# Operators allowed when ``validation_type == "date"``. Mirrors
+# ``transform.date_compare.DATE_OPERATORS``; the cross-package consistency
+# test in ``test_transform_registry_consistency.py`` verifies the runtime
+# helper stays in sync. This client-side set is intentionally hardcoded for
+# pre-submit validation without requiring the runner package.
+VALID_DATE_OPERATORS = {"before", "after", "equals", "not_equals", "equals_within"}
+
+# Duration units accepted by ``equals_within`` and the ``add_duration`` /
+# ``date_diff`` transform ops. Months / years deliberately excluded — see
+# the ``transform-dates`` spec, R1.
+VALID_DATE_DURATION_UNITS = {"seconds", "minutes", "hours", "days", "weeks"}
 
 
 def validate_step(step: dict) -> tuple[bool, list[str]]:
     """Validate a step dict based on its step_type.
 
     Returns (is_valid, errors).  Only validates step types that have
-    dedicated validators; other step types pass through.
+    dedicated validators; other step types pass through. Steps that
+    declare ``validation_type == "date"`` (typically assertion or
+    validation steps) get an additional date-shape check on top of any
+    step-type validation.
     """
     step_type = step.get("step_type", "")
     if step_type == "browser":
@@ -42,6 +58,8 @@ def validate_step(step: dict) -> tuple[bool, list[str]]:
         return validate_transform_step(step)
     if step_type == "network_assertion":
         return validate_network_assertion_step(step)
+    if step.get("validation_type") == "date":
+        return validate_date_validation_type(step)
     return True, []
 
 
@@ -92,6 +110,93 @@ def validate_transform_step(step: dict) -> tuple[bool, list[str]]:
         except (json.JSONDecodeError, TypeError):
             errors.append("transform_args must be valid JSON")
     return len(errors) == 0, errors
+
+
+def validate_date_validation_type(step: dict) -> tuple[bool, list[str]]:
+    """Validate a step with ``validation_type == "date"``.
+
+    Pre-submit checks only. Date string parsing happens at runtime via
+    ``transform.date_compare`` because ``{{ var }}`` references in
+    ``validation_value`` cannot be resolved client-side.
+
+    Rules:
+      - ``validation_operator`` must be in :data:`VALID_DATE_OPERATORS`.
+      - For ``equals_within``: ``validation_value`` must parse as a JSON
+        object with the shape ``{date: str, tolerance: int >= 0,
+        unit: <duration-unit>}``.
+      - For other operators: ``validation_value`` must be a non-empty
+        string. The string itself is not parsed here because it may be a
+        ``{{ var }}`` reference that only resolves at runtime.
+    """
+    errors: list[str] = []
+
+    operator = step.get("validation_operator", "")
+    if operator not in VALID_DATE_OPERATORS:
+        errors.append(
+            f"Invalid validation_operator '{operator}' for validation_type='date'. "
+            f"Must be one of: {', '.join(sorted(VALID_DATE_OPERATORS))}"
+        )
+        # Bail early — the rest of the validation depends on the operator.
+        return False, errors
+
+    validation_value = step.get("validation_value", "")
+
+    if operator == "equals_within":
+        errors.extend(_validate_equals_within_payload(validation_value))
+    else:
+        if not validation_value or not str(validation_value).strip():
+            errors.append(
+                f"validation_value is required for date '{operator}' operator "
+                "(must be a date string or {{ variable }} reference)"
+            )
+
+    return len(errors) == 0, errors
+
+
+def _validate_equals_within_payload(validation_value) -> list[str]:
+    """Shape-check the JSON payload for the ``equals_within`` operator.
+
+    Returns a list of error messages (empty if valid).
+    """
+    errors: list[str] = []
+
+    if not validation_value:
+        return ["validation_value is required for equals_within operator"]
+
+    try:
+        payload = (
+            json.loads(validation_value)
+            if isinstance(validation_value, str)
+            else validation_value
+        )
+    except (json.JSONDecodeError, TypeError):
+        return [
+            'equals_within validation_value must be valid JSON with shape '
+            '{"date": str, "tolerance": int, "unit": str}'
+        ]
+
+    if not isinstance(payload, dict):
+        return ["equals_within validation_value must be a JSON object"]
+
+    date_value = payload.get("date")
+    if not isinstance(date_value, str) or not date_value.strip():
+        errors.append("equals_within payload requires non-empty 'date' string field")
+
+    tolerance = payload.get("tolerance")
+    # bool is a subclass of int — exclude it explicitly.
+    if tolerance is None or isinstance(tolerance, bool) or not isinstance(tolerance, int):
+        errors.append("equals_within payload 'tolerance' must be an integer")
+    elif tolerance < 0:
+        errors.append("equals_within payload 'tolerance' must be non-negative")
+
+    unit = payload.get("unit")
+    if unit not in VALID_DATE_DURATION_UNITS:
+        errors.append(
+            "equals_within payload 'unit' must be one of: "
+            f"{', '.join(sorted(VALID_DATE_DURATION_UNITS))}"
+        )
+
+    return errors
 
 # Step-level validation — network_assertion
 # ---------------------------------------------------------------------------

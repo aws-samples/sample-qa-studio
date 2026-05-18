@@ -9,6 +9,7 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Box from "@cloudscape-design/components/box";
 import Flashbar from "@cloudscape-design/components/flashbar";
 import { api, ExecutionModel } from '../../utils/api';
+import { formatDateTime } from '../../utils/dateFormat';
 import { batchedPromiseAll } from '../../utils/batchedPromiseAll';
 import { useApiData } from '../common/useAsyncData';
 import { ContainerLoading } from '../common/LoadingStates';
@@ -182,7 +183,7 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
           { 
             id: 'created_at', 
             header: 'Created', 
-            cell: item => new Date(item.created_at).toLocaleString(),
+            cell: item => formatDateTime(item.created_at),
           },
           { 
             id: 'trigger_type', 

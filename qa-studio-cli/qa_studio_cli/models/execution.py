@@ -79,6 +79,10 @@ class UseCaseStep(BaseModel):
     browser_args: Optional[str] = None
     transform_operation: Optional[str] = None
     transform_args: Optional[str] = None
+    # value_format is consumed by retrieve_value steps when value_type='date'.
+    # Empty / missing means auto-detect ISO 8601 / Unix epoch; otherwise it's
+    # a strptime format string passed to transform.date_parser.parse_to_utc.
+    value_format: Optional[str] = None
     # network_assertion step fields
     network_url_pattern: Optional[str] = None
     network_method: Optional[str] = None

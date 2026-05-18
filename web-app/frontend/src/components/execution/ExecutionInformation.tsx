@@ -6,6 +6,7 @@ import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import Link from "@cloudscape-design/components/link";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import { RecordingPlayer } from '../RecordingPlayer';
+import { formatDateTime } from '../../utils/dateFormat';
 
 interface ExecutionInformationProps {
   execution: any;
@@ -61,7 +62,7 @@ export default function ExecutionInformation({
           },
           {
             label: "Created",
-            value: new Date(execution.created_at).toLocaleString(),
+            value: formatDateTime(execution.created_at),
           },
           {
             label: "Execution Region",

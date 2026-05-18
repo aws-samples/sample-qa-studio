@@ -108,6 +108,7 @@ class DynamoDBClient:
                         browser_args=item.get('browser_args', None),
                         transform_operation=item.get('transform_operation', None),
                         transform_args=item.get('transform_args', None),
+                        value_format=item.get('value_format', None),
                         network_url_pattern=item.get('network_url_pattern', None),
                         network_method=item.get('network_method', None),
                         network_request_body=item.get('network_request_body', None),
@@ -654,6 +655,7 @@ class DynamoDBClient:
                 browser_args=item.get('browser_args', None),
                 transform_operation=item.get('transform_operation', None),
                 transform_args=item.get('transform_args', None),
+                value_format=item.get('value_format', None),
 
             )
         except ClientError as e:

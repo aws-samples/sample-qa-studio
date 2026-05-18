@@ -155,6 +155,99 @@ Verify checkbox_state exact true
 
 ---
 
+## Date Operators
+
+Use these with `validation_type: "date"` on `validation` and `assertion` steps. Both sides of the comparison are parsed by QA Studio (Nova returns the page text as a string; we parse it on our side). Inputs may be:
+
+- ISO 8601 / RFC 3339 (auto-detected, e.g. `2024-01-02`, `2024-01-02T15:04:05Z`, `2024-01-02T15:04:05+02:00`)
+- Unix epoch seconds (10-digit) or milliseconds (13-digit)
+- A regional format if you ran `parse_date` upstream and reference the canonical capture variable
+
+A naive datetime (no offset) is treated as a UTC anchor for comparison. When one side is naive and the other is TZ-aware, the step succeeds (or fails normally) but logs a warning so the mismatch is visible.
+
+### before
+
+**Description:** actual date is strictly before expected
+
+**Example:**
+```
+Verify order_date before {{cutoff_date}}
+```
+
+**Use when:** Time-ordering checks (e.g. "was this created before the deadline")
+
+---
+
+### after
+
+**Description:** actual date is strictly after expected
+
+**Example:**
+```
+Verify last_login_date after {{first_login_date}}
+```
+
+**Use when:** Time-ordering checks (e.g. "was this updated after the previous version")
+
+---
+
+### equals
+
+**Description:** actual date equals expected (millisecond precision)
+
+**Example:**
+```
+Verify published_on equals 2024-01-02
+```
+
+**Use when:** Exact-match against a known date literal or another captured date.
+
+---
+
+### not_equals
+
+**Description:** actual date is not equal to expected
+
+**Example:**
+```
+Verify last_modified not_equals {{snapshot_modified}}
+```
+
+**Use when:** Confirming a mutation occurred without depending on a specific new value.
+
+---
+
+### equals_within
+
+**Description:** absolute difference between actual and expected is within a tolerance
+
+`validation_value` for this operator is **JSON-encoded** with three fields. The form builder in the web UI handles this automatically; if you author tests by hand, the shape is:
+
+```json
+{
+  "date": "2024-01-02T15:00:00+00:00",
+  "tolerance": 5,
+  "unit": "minutes"
+}
+```
+
+`unit` accepts `seconds`, `minutes`, `hours`, `days`, or `weeks`. `tolerance` must be a non-negative integer.
+
+**Example (raw step JSON):**
+```json
+{
+  "step_type": "assertion",
+  "validation_type": "date",
+  "validation_operator": "equals_within",
+  "assertion_variable": "displayed_created_at",
+  "validation_value": "{\"date\": \"{{server_created_at}}\", \"tolerance\": 5, \"unit\": \"minutes\"}"
+}
+```
+
+**Use when:** Comparing dates with small expected drift (e.g. server-recorded vs client-displayed timestamp).
+
+---
+
 ## Operator Selection Guide
 
 | Data Type | Comparison | Operator |
@@ -170,6 +263,11 @@ Verify checkbox_state exact true
 | Number | Less than or equal | `less_or_equal_then` |
 | Number | Greater than or equal | `greater_or_equal_then` |
 | Boolean | Equal | `exact` |
+| Date | Strictly before | `before` |
+| Date | Strictly after | `after` |
+| Date | Exact match | `equals` |
+| Date | Not equal | `not_equals` |
+| Date | Within a tolerance | `equals_within` |
 
 ---
 

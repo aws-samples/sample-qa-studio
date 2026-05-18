@@ -41,6 +41,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         capture_variable = body.get('capture_variable', '')
         assertion_variable = body.get('assertion_variable', '')
         value_type = body.get('value_type', '')
+        value_format = body.get('value_format', '')
         enable_advanced_click_types = body.get('enable_advanced_click_types', False)
         value_source = body.get('value_source', '')
         network_url_pattern = body.get('network_url_pattern')
@@ -80,6 +81,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'capture_variable': capture_variable,
             'assertion_variable': assertion_variable,
             'value_type': value_type,
+            'value_format': value_format,
             'enable_advanced_click_types': enable_advanced_click_types,
             'value_source': value_source,
             'created_at': now

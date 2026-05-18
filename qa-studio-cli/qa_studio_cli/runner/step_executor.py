@@ -23,6 +23,8 @@ from urllib.parse import urlparse
 from nova_act import NovaAct, BOOL_SCHEMA
 
 from qa_studio_cli.models.execution import StepResult
+from qa_studio_cli.runner.transform.date_compare import evaluate_date_assertion
+from qa_studio_cli.runner.transform.date_parser import DateParseError, parse_to_utc
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +267,17 @@ class StepExecutor:
         operator = step.get("validation_operator", "exact")
         expected_raw = step.get("validation_value", "")
         instruction = step.get("instruction", "")
+        if validation_type == "date":
+            schema = STRING_SCHEMA  # Nova has no date schema; we parse on our side.
+            try:
+                result = self.nova.act_get(instruction, schema=schema)
+                act_id = self._extract_act_id(result)
+                actual_str = str(result.parsed_response) if result.parsed_response is not None else ""
+                success, logs = self._compare_dates(actual_str, expected_raw, operator)
+                return StepResult(success=success, act_id=act_id, logs=logs, actual_value=actual_str)
+            except Exception as e:
+                act_id = self._extract_act_id_from_exception(e)
+                return StepResult(success=False, act_id=act_id, logs=str(e))
         schema = self._schema_for_type(validation_type)
         try:
             result = self.nova.act_get(instruction, schema=schema)
@@ -303,6 +316,10 @@ class StepExecutor:
 
         value_type = step.get("value_type", "string")
         instruction = step.get("instruction", "")
+        # Date type uses STRING_SCHEMA (Nova has no native date schema) and
+        # post-parses on our side via transform.date_parser. _schema_for_type
+        # already maps unknown types to STRING_SCHEMA, but we pass value_type
+        # through here so the post-extraction date parse can run below.
         schema = self._schema_for_type(value_type)
         try:
             result = self.nova.act_get(instruction, schema=schema)
@@ -313,6 +330,19 @@ class StepExecutor:
             actual_str = str(raw_value)
             if value_type in ("string", ""):
                 actual_str = actual_str.strip().strip('"').strip("'")
+            if value_type == "date":
+                stripped = actual_str.strip().strip('"').strip("'")
+                value_format = step.get("value_format") or None
+                try:
+                    dt, _was_naive = parse_to_utc(stripped, value_format)
+                    actual_str = dt.isoformat()
+                except DateParseError as exc:
+                    return StepResult(
+                        success=False,
+                        act_id=act_id,
+                        logs=f"Date parse failed for retrieve_value: {exc}",
+                        actual_value=stripped,
+                    )
             return StepResult(success=True, act_id=act_id, actual_value=actual_str)
         except Exception as e:
             act_id = self._extract_act_id_from_exception(e)
@@ -337,6 +367,9 @@ class StepExecutor:
                 actual_value="VARIABLE_NOT_FOUND",
             )
         actual_value = runtime_variables[var_name]
+        if validation_type == "date":
+            success, logs = self._compare_dates(str(actual_value), expected_raw, operator)
+            return StepResult(success=success, logs=logs, actual_value=str(actual_value))
         success = self._compare(validation_type, operator, expected_raw, actual_value)
         logs = "" if success else (
             f"Assertion failed: {var_name} ({operator}) expected '{expected_raw}', got '{actual_value}'"
@@ -935,6 +968,24 @@ class StepExecutor:
         elif type_name == "bool":
             return BOOL_SCHEMA
         return STRING_SCHEMA
+
+    @staticmethod
+    def _compare_dates(actual: str, expected_raw, operator: str) -> tuple[bool, str]:
+        """Run a ``validation_type=date`` comparison via the shared helper.
+
+        Returns ``(success, logs)`` where ``logs`` includes the
+        naive-vs-aware warning when applicable. Date parse and operator
+        errors are surfaced as failed steps with descriptive logs rather
+        than re-raised, mirroring the worker's behavior.
+        """
+        try:
+            return evaluate_date_assertion(
+                actual=actual,
+                validation_value=str(expected_raw),
+                operator=operator,
+            )
+        except (DateParseError, ValueError) as exc:
+            return False, f"Date assertion error: {exc}"
 
     @staticmethod
     def _compare(validation_type: str, operator: str, expected_raw, actual_raw) -> bool:

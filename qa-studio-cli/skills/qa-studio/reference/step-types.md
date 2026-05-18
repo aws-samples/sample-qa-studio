@@ -75,7 +75,24 @@ QA Studio supports 8 step types for building tests. Each step type serves a spec
 - "Capture the order ID into variable 'order_id'"
 - "Store the username into variable 'current_user'"
 
-**When to use:** Need to use a value from one step in a later step
+**Value types:** `string` (default), `number`, `bool`, `date`.
+
+When `value_type: "date"`, the AI-extracted string is parsed on QA Studio's side and the **canonical UTC ISO 8601** representation is stored in the capture variable — ready to feed directly into `validation_type: "date"` assertions or any of the date transform ops without an intermediate `parse_date` step. The optional `value_format` field on the step holds a Python `strptime` pattern (e.g. `%d/%m/%Y`); when empty, the parser auto-detects ISO 8601 and Unix epoch only. Pass an explicit format whenever the page renders a regional date — the parser deliberately rejects ambiguous input like `01/02/2024` so tests don't silently produce wrong dates depending on locale.
+
+**Storage:** `step_type='retrieve_value'`, `value_type=<type>`, `capture_variable=<var_name>`, plus `value_format=<strptime>` when `value_type='date'`.
+
+**Example (date capture with explicit format):**
+```json
+{
+  "step_type": "retrieve_value",
+  "instruction": "Return the order date shown on the page",
+  "value_type": "date",
+  "value_format": "%d/%m/%Y",
+  "capture_variable": "order_date"
+}
+```
+
+**When to use:** Need to use a value from one step in a later step.
 
 ---
 
@@ -172,7 +189,7 @@ Navigate to a URL (replaces the deprecated `url` step type):
 
 **Purpose:** Transform a captured variable value using a built-in operation. Always outputs to `capture_variable`.
 
-**Operations (19):**
+**Operations (24):**
 
 | Operation | Description | Example args |
 |-----------|-------------|-------------|
@@ -195,6 +212,11 @@ Navigate to a URL (replaces the deprecated `url` step type):
 | `to_int` | Convert to integer | `{"value": "{{float_val}}"}` |
 | `regex_extract` | Extract via regex | `{"value": "{{text}}", "pattern": "\\d+"}` |
 | `format` | Format string template | `{"template": "Hello, {{name}}!"}` |
+| `parse_date` | Parse a date string into canonical UTC ISO 8601 | `{"value": "02/01/2024", "format": "%d/%m/%Y"}` |
+| `format_date` | Render a canonical date in a target format | `{"iso_value": "{{order_iso}}", "format": "%d %B %Y"}` |
+| `add_duration` | Add a signed duration to a date | `{"iso_value": "{{start_date}}", "amount": 30, "unit": "days"}` |
+| `date_diff` | Compute the signed difference `a − b` in a unit | `{"a": "{{end}}", "b": "{{start}}", "unit": "days"}` |
+| `to_epoch` | Convert a date to Unix epoch seconds or millis | `{"value": "{{order_date_iso}}", "unit": "seconds"}` |
 
 **Storage:** `step_type='transform'`, `transform_operation=<name>`, `transform_args=JSON`, `capture_variable=<output_var>`
 
@@ -227,6 +249,64 @@ Extract digits from text:
   "transform_operation": "regex_extract",
   "transform_args": "{\"value\": \"Order #12345\", \"pattern\": \"\\\\d+\"}",
   "capture_variable": "order_number"
+}
+```
+
+**Date operations (`parse_date`, `format_date`, `add_duration`, `date_diff`, `to_epoch`):**
+
+All five operations work on dates and produce canonical UTC ISO 8601 strings (or, in the case of `to_epoch`, integer epoch values). Date inputs are auto-detected as ISO 8601 or Unix epoch when no `format` is provided. For regional human-readable formats (`02/01/2024`, `January 2, 2024`, etc.), pass an explicit `format` argument using Python `strptime` syntax — auto-detection deliberately rejects ambiguous formats like `01/02/2024` so tests don't silently pass with wrong dates depending on locale.
+
+The frontend transform editor exposes a curated dropdown of common formats (ISO, US slash/long-month/short-month, EU slash/dot/dash, with-time variants) plus a "Custom…" option for free-form strptime patterns; each curated entry shows an example and a regional-convention note. See `docs/user-guide.md`'s "Working with dates" section for guidance.
+
+Months and years are deliberately excluded from `add_duration` and `date_diff` units in v1 because their arithmetic is policy-dependent (e.g., `Jan 31 + 1 month` has multiple valid answers). Only `seconds`, `minutes`, `hours`, `days`, `weeks` are supported.
+
+Parse a regional date into canonical UTC:
+```json
+{
+  "step_type": "transform",
+  "transform_operation": "parse_date",
+  "transform_args": "{\"value\": \"02/01/2024\", \"format\": \"%d/%m/%Y\"}",
+  "capture_variable": "order_date_iso"
+}
+```
+
+Render a canonical date as `dd MMMM yyyy`:
+```json
+{
+  "step_type": "transform",
+  "transform_operation": "format_date",
+  "transform_args": "{\"iso_value\": \"{{order_date_iso}}\", \"format\": \"%d %B %Y\"}",
+  "capture_variable": "order_date_display"
+}
+```
+
+Add 30 days to a captured start date:
+```json
+{
+  "step_type": "transform",
+  "transform_operation": "add_duration",
+  "transform_args": "{\"iso_value\": \"{{start_date}}\", \"amount\": 30, \"unit\": \"days\"}",
+  "capture_variable": "expected_expiry"
+}
+```
+
+Compute days between two captured dates (`a − b`):
+```json
+{
+  "step_type": "transform",
+  "transform_operation": "date_diff",
+  "transform_args": "{\"a\": \"{{expiry_date}}\", \"b\": \"{{start_date}}\", \"unit\": \"days\"}",
+  "capture_variable": "subscription_length_days"
+}
+```
+
+Convert a date to Unix epoch seconds (so it can be compared via the existing number assertion operators):
+```json
+{
+  "step_type": "transform",
+  "transform_operation": "to_epoch",
+  "transform_args": "{\"value\": \"{{order_date_iso}}\"}",
+  "capture_variable": "order_epoch"
 }
 ```
 

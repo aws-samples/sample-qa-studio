@@ -2,6 +2,7 @@ import logging
 from nova_act import NovaAct
 from models import ExecutionStep
 from utils import STRING_SCHEMA, NUMBER_SCHEMA, BOOL_SCHEMA
+from transform.date_parser import DateParseError, parse_to_utc
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,10 @@ def execute_retrieve_value_step(nova: NovaAct, step: ExecutionStep):
                 schema = NUMBER_SCHEMA
             elif step.value_type == 'bool':
                 schema = BOOL_SCHEMA
+            elif step.value_type == 'date':
+                # Nova has no native date schema; extract as string and
+                # parse on our side via the centralized date parser.
+                schema = STRING_SCHEMA
             # Default to STRING_SCHEMA for 'string' or unknown types
         
         # Execute the instruction to retrieve the value
@@ -65,6 +70,20 @@ def execute_retrieve_value_step(nova: NovaAct, step: ExecutionStep):
             # Strip surrounding quotes if present (for string values)
             if step.value_type == 'string' or not hasattr(step, 'value_type'):
                 retrieved_value = retrieved_value.strip().strip('"').strip("'")
+            # Date types: parse to canonical UTC ISO 8601 so downstream
+            # validation_type=date and transform date ops can consume the
+            # captured value directly without an intermediate parse_date step.
+            if step.value_type == 'date':
+                stripped = retrieved_value.strip().strip('"').strip("'")
+                try:
+                    fmt = getattr(step, 'value_format', None) or None
+                    dt, _was_naive = parse_to_utc(stripped, fmt)
+                    retrieved_value = dt.isoformat()
+                except DateParseError as exc:
+                    success = False
+                    logs = f"Date parse failed for retrieve_value: {exc}"
+                    retrieved_value = stripped
+                    logger.error(f"Step {step.sort}: {logs}")
             logger.info(f"Retrieved value: {retrieved_value}")
         else:
             success = False
