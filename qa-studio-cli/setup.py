@@ -9,8 +9,6 @@ setup(
     author="QA Studio Team",
     description="QA Studio CLI — authenticate, manage, and execute QA Studio tests",
     packages=find_packages(),
-    package_data={"": ["skills/**/*.md"]},
-    include_package_data=True,
     install_requires=requirements,
     extras_require={
         "runner": [

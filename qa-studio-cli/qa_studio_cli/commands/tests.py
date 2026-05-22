@@ -202,6 +202,21 @@ def run_test(ctx, id, trigger_type):
 @click.argument("path", type=click.Path(exists=True))
 @click.option("--dry-run", is_flag=True, help="Validate only, do not import")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+@click.option(
+    "--non-interactive", is_flag=True,
+    help=(
+        "Run without any prompts. Implies -y. Fails with exit code 2 if any "
+        "secret value is missing — supply via --secret KEY=VALUE, or use "
+        "--skip-secrets to defer setting."
+    ),
+)
+@click.option(
+    "--secret", "secret_args", multiple=True, metavar="KEY=VALUE",
+    help=(
+        "Pre-supply a secret value (repeatable). Suppresses the interactive "
+        "prompt for that key. Errors if KEY is not declared by any imported test."
+    ),
+)
 @click.option("--base-url", default=None, help="Override starting_url for all imports")
 @click.option("--region", default=None, help="Override executing_region for all imports")
 @click.option("--skip-secrets", is_flag=True, help="Skip interactive secret prompts")
@@ -211,13 +226,19 @@ def run_test(ctx, id, trigger_type):
     default="human", help="Output format (default: human)",
 )
 @click.pass_context
-def import_tests(ctx, path, dry_run, yes, base_url, region, skip_secrets, output_format):
+def import_tests(
+    ctx, path, dry_run, yes, non_interactive, secret_args, base_url, region,
+    skip_secrets, output_format,
+):
     """Import test cases from a JSON file or folder."""
     from qa_studio_cli.importers.scanner import scan_all
     from qa_studio_cli.importers.executor import execute_imports, set_secret_value
 
     client = ctx.obj["client"]
     is_json = output_format == "json"
+
+    # Parse --secret KEY=VALUE args up front (raises click.BadParameter on malformed)
+    cli_secrets = _parse_cli_secrets(secret_args)
 
     # Phase 1: Scan & Validate
     results = scan_all(Path(path))
@@ -253,49 +274,92 @@ def import_tests(ctx, path, dry_run, yes, base_url, region, skip_secrets, output
             click.echo("\nNo valid files to import.", err=True)
         raise SystemExit(1)
 
+    # Build the set of unique secret keys referenced across all valid files
+    unique_secret_keys: set[str] = set()
+    for scan_result in valid:
+        for s in scan_result.payload.secrets:
+            unique_secret_keys.add(s.key)
+
+    # Hard error: --secret references a key that no imported test declares
+    unknown_keys = sorted(set(cli_secrets) - unique_secret_keys)
+    if unknown_keys:
+        available = ", ".join(sorted(unique_secret_keys)) or "(none)"
+        msg = (
+            f"--secret references unknown key(s): {', '.join(unknown_keys)}. "
+            f"Available secret key(s): {available}."
+        )
+        if is_json:
+            click.echo(json.dumps({"error": msg}))
+        else:
+            click.echo(f"Error: {msg}", err=True)
+        raise SystemExit(2)
+
+    # --non-interactive implies --yes for the import confirmation
+    effective_yes = yes or non_interactive
+
     # Confirmation
-    if not is_json and not yes:
+    if not is_json and not effective_yes:
         if not click.confirm(f"\nImport {len(valid)} test(s)?"):
             click.echo("Aborted.")
             raise SystemExit(0)
 
-    # Collect secrets interactively (unless skipped or JSON mode)
-    # Deduplicate: prompt once per unique secret key, reuse across files
-    secret_values: dict[str, dict[str, str]] = {}
-    should_prompt_secrets = not skip_secrets and not is_json
+    # Determine which declared secrets are not yet supplied via --secret
+    unsupplied_keys = sorted(unique_secret_keys - set(cli_secrets))
+
+    # Hard error: non-interactive mode with missing values and no --skip-secrets
+    if non_interactive and unsupplied_keys and not skip_secrets:
+        msg = (
+            f"--non-interactive set but missing secret values for: "
+            f"{', '.join(unsupplied_keys)}. "
+            f"Provide via --secret KEY=VALUE, or use --skip-secrets to defer setting."
+        )
+        if is_json:
+            click.echo(json.dumps({"error": msg}))
+        else:
+            click.echo(f"Error: {msg}", err=True)
+        raise SystemExit(2)
+
+    # Build prompted_values: start with --secret args, prompt for the rest if interactive
+    prompted_values: dict[str, str] = dict(cli_secrets)
+    should_prompt_secrets = (
+        not skip_secrets
+        and not is_json
+        and not non_interactive
+        and bool(unsupplied_keys)
+    )
 
     if should_prompt_secrets:
-        # Build unique secret map: key -> description (first seen wins)
-        unique_secrets: dict[str, str] = {}
+        # Build description map for unsupplied keys (first-seen description wins)
+        unsupplied_descriptions: dict[str, str] = {}
         for scan_result in valid:
-            for secret in scan_result.payload.secrets:
-                if secret.key not in unique_secrets:
-                    unique_secrets[secret.key] = secret.description
+            for s in scan_result.payload.secrets:
+                if s.key in unsupplied_keys and s.key not in unsupplied_descriptions:
+                    unsupplied_descriptions[s.key] = s.description
 
-        if unique_secrets:
-            click.echo("\nSecrets (shared across all imported tests):")
-            prompted_values: dict[str, str] = {}
-            for key, description in unique_secrets.items():
-                desc = f" ({description})" if description else ""
-                value = click.prompt(
-                    f"  {key}{desc}",
-                    hide_input=True,
-                    default="",
-                    show_default=False,
-                )
-                if value:
-                    prompted_values[key] = value
+        click.echo("\nSecrets (shared across all imported tests):")
+        for key in unsupplied_keys:
+            description = unsupplied_descriptions.get(key, "")
+            desc = f" ({description})" if description else ""
+            value = click.prompt(
+                f"  {key}{desc}",
+                hide_input=True,
+                default="",
+                show_default=False,
+            )
+            if value:
+                prompted_values[key] = value
 
-            # Distribute prompted values to each file that needs them
-            if prompted_values:
-                for scan_result in valid:
-                    file_secrets = {
-                        s.key: prompted_values[s.key]
-                        for s in scan_result.payload.secrets
-                        if s.key in prompted_values
-                    }
-                    if file_secrets:
-                        secret_values[scan_result.file_name] = file_secrets
+    # Distribute supplied values to each file that needs them
+    secret_values: dict[str, dict[str, str]] = {}
+    if prompted_values:
+        for scan_result in valid:
+            file_secrets = {
+                s.key: prompted_values[s.key]
+                for s in scan_result.payload.secrets
+                if s.key in prompted_values
+            }
+            if file_secrets:
+                secret_values[scan_result.file_name] = file_secrets
 
     # Phase 2: Import
     import_results = execute_imports(
@@ -421,3 +485,36 @@ def _build_import_json(import_results):
             for r in import_results
         ],
     }
+
+
+
+def _parse_cli_secrets(secret_args: tuple[str, ...]) -> dict[str, str]:
+    """Parse --secret KEY=VALUE arguments into a dict.
+
+    Rejects malformed arguments (missing '='), empty keys, empty values, and
+    duplicate keys. Raises click.BadParameter so Click handles the error and
+    exits with code 2.
+    """
+    result: dict[str, str] = {}
+    for arg in secret_args:
+        if "=" not in arg:
+            raise click.BadParameter(
+                f"--secret must be in KEY=VALUE form, got: {arg!r}"
+            )
+        key, _, value = arg.partition("=")
+        key = key.strip()
+        if not key:
+            raise click.BadParameter(
+                f"--secret has empty key: {arg!r}"
+            )
+        if not value:
+            raise click.BadParameter(
+                f"--secret value for '{key}' is empty. "
+                f"Use --skip-secrets to defer setting a key."
+            )
+        if key in result:
+            raise click.BadParameter(
+                f"--secret '{key}' supplied more than once"
+            )
+        result[key] = value
+    return result

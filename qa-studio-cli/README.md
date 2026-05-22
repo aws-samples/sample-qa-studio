@@ -129,6 +129,8 @@ The `qa-studio tests import` command imports test case JSON files (QA Studio exp
 | `path` | positional | required | File or directory path to import |
 | `--dry-run` | flag | `false` | Validate only, do not import |
 | `--yes` / `-y` | flag | `false` | Skip confirmation prompt |
+| `--non-interactive` | flag | `false` | Run without any prompts. Implies `-y`. Exits with code 2 if any secret value is missing — supply via `--secret KEY=VALUE` or use `--skip-secrets` to defer. |
+| `--secret` | `KEY=VALUE` (repeatable) | none | Pre-supply a secret value. Suppresses the interactive prompt for that key. Errors if `KEY` is not declared by any imported test. |
 | `--base-url` | string | `None` | Override `starting_url` for all imports |
 | `--skip-secrets` | flag | `false` | Skip interactive secret prompts |
 | `--format` | choice | `human` | Output format: `human` or `json` |
@@ -153,7 +155,22 @@ qa-studio tests import ./testcases/ --format json --skip-secrets
 
 # Skip secrets and configure them later in the UI
 qa-studio tests import ./login_test.json --skip-secrets
+
+# Fully non-interactive with values supplied (e.g. agent flow, dev/local credentials)
+qa-studio tests import ./tests/auth/login.json \
+  --non-interactive \
+  --secret admin_email=admin@dev.local \
+  --secret admin_password=devpass123
+
+# Non-interactive deferring secret config to the UI
+qa-studio tests import ./tests/auth/login.json --non-interactive --skip-secrets
 ```
+
+#### Exit codes
+
+- `0` — every file imported successfully.
+- `1` — at least one file failed to import (or no valid files found).
+- `2` — input validation failure: malformed `--secret KEY=VALUE`, `--secret` referencing an unknown key, or `--non-interactive` set with required secrets unsupplied. The error message lists the missing/unknown keys and the recovery flag.
 
 ### Two-Phase Flow
 

@@ -83,6 +83,7 @@ yarn-error.log*
 .kiro/design
 .kiro/specs
 *.egg-info
+skill-workspace
 
 nova-act-recorder.zip
 

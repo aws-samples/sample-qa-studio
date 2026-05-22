@@ -223,21 +223,34 @@ qa-studio tests import ./testcases/ --base-url https://staging.example.com --yes
 
 # CI pipeline usage: JSON output, no prompts
 qa-studio tests import ./testcases/ --format json --skip-secrets
+
+# Fully non-interactive with values supplied (dev/local credentials only)
+qa-studio tests import ./tests/auth/login.json \
+  --non-interactive \
+  --secret admin_email=admin@dev.local \
+  --secret admin_password=devpass123
+
+# Non-interactive deferring secret config to the UI
+qa-studio tests import ./tests/auth/login.json --non-interactive --skip-secrets
 ```
 
 The import follows a two-phase flow:
 
 1. **Scan & Validate** — All JSON files are discovered and validated against the export schema. A summary table shows which files are valid.
-2. **Import** — After confirmation, valid files are sent to the API. If any file contains secrets, you'll be prompted to enter values (use `--skip-secrets` to configure them later in the UI).
+2. **Import** — After confirmation, valid files are sent to the API. If any file contains secrets, you'll be prompted to enter values (use `--skip-secrets` to configure them later in the UI, or `--secret KEY=VALUE` to supply values inline).
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `path` | positional | required | File or directory path to import |
 | `--dry-run` | flag | `false` | Validate only, do not import |
 | `--yes` / `-y` | flag | `false` | Skip confirmation prompt |
+| `--non-interactive` | flag | `false` | Run without any prompts. Implies `-y`. Exits with code 2 if any secret value is missing — supply via `--secret KEY=VALUE` or use `--skip-secrets` to defer. |
+| `--secret` | `KEY=VALUE` (repeatable) | none | Pre-supply a secret value. Suppresses the interactive prompt for that key. Errors if `KEY` is not declared by any imported test. |
 | `--base-url` | string | `None` | Override `starting_url` for all imports |
 | `--skip-secrets` | flag | `false` | Skip interactive secret prompts |
 | `--format` | choice | `human` | Output format: `human` or `json` |
+
+Exit codes: `0` on success, `1` if any file failed to import, `2` for input-validation errors (malformed `--secret KEY=VALUE`, `--secret` referencing an unknown key, or `--non-interactive` set with required secrets unsupplied).
 
 See the [CLI README](../qa-studio-cli/README.md#importing-test-cases) for the full reference.
 
