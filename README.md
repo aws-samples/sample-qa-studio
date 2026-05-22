@@ -148,17 +148,28 @@ qa-studio run --usecase-id test-123
 
 ### Agent Skill Installation
 
-QA Studio includes an agent skill for Kiro IDE and other coding agents. Install it using the open [skills CLI](https://github.com/vercel-labs/skills):
+QA Studio includes an agent skill at [`skill/`](skill/) that teaches AI coding agents how to author and execute browser-based UI tests. The skill entry point is `skill/SKILL.md` and contains reference documentation for step types, validation operators, variable wiring, and worked examples — everything an agent needs to hand-author test JSON or run existing tests on your behalf.
+
+Install using the open [skills CLI](https://github.com/vercel-labs/skills):
 
 ```bash
-# Install the QA Studio skill for Kiro
+# Install for Kiro IDE
 npx skills add <repository-url> --skill qa-studio -a kiro-cli
 
-# Or install for all detected agents
+# Install for Claude Code
+npx skills add <repository-url> --skill qa-studio -a claude-code
+
+# Install for all detected agents in the workspace
 npx skills add <repository-url> --skill qa-studio
 ```
 
-See the [CLI README →](qa-studio-cli/README.md) for detailed skill setup instructions.
+If you're working inside this repository, install from the local path:
+
+```bash
+npx skills add . --skill qa-studio -a kiro-cli
+```
+
+Once installed, the skill activates when you ask your agent to create, run, or troubleshoot browser-based test cases.
 
 **Detailed Guide**: See [CLI README →](qa-studio-cli/README.md) for complete installation, configuration, and usage instructions.
 
