@@ -20,6 +20,7 @@ export const defaultBasicInfo: BasicInfo = {
   modelId: null,
   startingUrl: '',
   active: true,
+  applicationId: '',
 };
 
 export const defaultBlankConfig: BlankConfig = {

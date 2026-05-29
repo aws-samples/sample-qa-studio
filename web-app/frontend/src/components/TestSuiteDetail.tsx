@@ -180,11 +180,12 @@ const TestSuiteDetail: React.FC = () => {
     return date.toLocaleString();
   };
 
-  // Format duration
-  const formatDuration = (seconds?: number): string => {
-    if (!seconds) return 'N/A';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+  // Format duration from milliseconds
+  const formatDuration = (ms?: number): string => {
+    if (!ms) return 'N/A';
+    const totalSeconds = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
     return `${mins}m ${secs}s`;
   };
 
@@ -519,7 +520,7 @@ const TestSuiteDetail: React.FC = () => {
               {
                 id: 'duration',
                 header: 'Duration',
-                cell: (item: SuiteExecution) => formatDuration(item.duration_seconds)
+                cell: (item: SuiteExecution) => formatDuration(item.duration_ms)
               },
               {
                 id: 'trigger',

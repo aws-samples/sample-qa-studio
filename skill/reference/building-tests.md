@@ -57,7 +57,7 @@ Top-level shape (validated client-side; rejection at submit time if malformed):
 | `usecase` | Test metadata: name, description, starting_url, region, etc. |
 | `steps` | Ordered list. Each step has a `sort` (1-based), `step_type`, `instruction`, plus type-specific fields. See [`step-types/`](./step-types/). |
 | `variables` | Pre-defined variables available at runtime. Each `{key, value, description}`. Overridable via `--var KEY=VALUE`. |
-| `secrets` | Names of secrets the test references. Values are *not* in the JSON; they're resolved at execution time from `--secrets-file` or the configured resolver. |
+| `secrets` | Names of secrets the test references. Values are *not* in the JSON; they're configured at import time (via the interactive prompt or `--non-interactive --secret KEY=VALUE`) or in the web UI, then resolved at execution time by the configured resolver. |
 | `hooks` | Optional `{beforeScript, afterScript}` for setup/teardown. |
 
 Steps run in `sort` order; gaps are allowed but every `sort` must be a positive integer. `instruction` is required on every step; per-step extra fields are optional and step-type-specific.

@@ -43,20 +43,14 @@ const ConfigureSchedule = React.lazy(() => import('./components/ConfigureSchedul
 const SuiteExecutionDetail = React.lazy(() => import('./components/SuiteExecutionDetail'));
 const UnifiedWizard = React.lazy(() => import('./components/unified-wizard/UnifiedWizard'));
 const About = React.lazy(() => import('./components/About'));
+const DashboardOverview = React.lazy(() => import('./components/dashboard/DashboardOverview'));
+const ApplicationSettings = React.lazy(() => import('./components/ApplicationSettings'));
+const ApplicationDetailView = React.lazy(() => import('./components/dashboard/ApplicationDetailView'));
+const AddUsecasesToApplication = React.lazy(() => import('./components/AddUsecasesToApplication'));
+const AddTestSuitesToApplication = React.lazy(() => import('./components/AddTestSuitesToApplication'));
+const EditApplication = React.lazy(() => import('./components/EditApplication'));
 
 Amplify.configure(amplifyconfig);
-
-
-
-function Usecases() {
-  return (
-    <div>
-      <h1>Use cases</h1>
-      <p>This is the usecases page.</p>
-    </div>
-  );
-}
-
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -94,7 +88,9 @@ function AppContent() {
   // Build navigation items based on user scopes
   const navigationItems = React.useMemo(() => {
     const items: any[] = [
-      { type: "link", text: "Use cases", href: "/" },
+      { type: "link", text: "Dashboard", href: "/" },
+      { type: "link", text: "Applications", href: "/applications" },
+      { type: "link", text: "Use cases", href: "/usecases" },
       { type: "link", text: "Test Suites", href: "/test-suites" },
       { type: "link", text: "Templates", href: "/templates" },
     ];
@@ -105,11 +101,11 @@ function AppContent() {
 
     if (hasAdminAccess || hasOAuthAccess) {
       items.push({ type: "divider" });
-      
+
       if (hasAdminAccess) {
         items.push({ type: "link", text: "Users", href: "/users" });
       }
-      
+
       if (hasOAuthAccess || hasAdminAccess) {
         items.push({ type: "link", text: "OAuth Clients", href: "/oauth-clients" });
       }
@@ -126,6 +122,9 @@ function AppContent() {
     // Simple idle preloading
     if ('requestIdleCallback' in window) {
       (window as any).requestIdleCallback(() => {
+        import('./components/dashboard/DashboardOverview');
+        import('./components/dashboard/ApplicationDetailView');
+        import('./components/ApplicationSettings');
         import('./components/CreateUsecaseWizard');
         import('./components/CreateUsecase');
         import('./components/CreateFromTemplate');
@@ -151,6 +150,9 @@ function AppContent() {
       });
     } else {
       setTimeout(() => {
+        import('./components/dashboard/DashboardOverview');
+        import('./components/dashboard/ApplicationDetailView');
+        import('./components/ApplicationSettings');
         import('./components/CreateUsecaseWizard');
         import('./components/CreateUsecase');
         import('./components/CreateFromTemplate');
@@ -203,8 +205,13 @@ function AppContent() {
           </Box>
         }>
           <Routes>
-            <Route path="/" element={<HomeScreen />} />
-            <Route path="/usecases" element={<Usecases />} />
+            <Route path="/" element={<DashboardOverview />} />
+            <Route path="/applications" element={<ApplicationSettings />} />
+            <Route path="/applications/:id" element={<ApplicationDetailView />} />
+            <Route path="/applications/:id/add-usecases" element={<AddUsecasesToApplication />} />
+            <Route path="/applications/:id/add-test-suites" element={<AddTestSuitesToApplication />} />
+            <Route path="/applications/:id/edit" element={<EditApplication />} />
+            <Route path="/usecases" element={<HomeScreen />} />
             <Route path="/create/new" element={<UnifiedWizard />} />
             <Route path="/create" element={<CreateUsecaseWizard />} />
             <Route path="/create/blank" element={<CreateUsecase />} />

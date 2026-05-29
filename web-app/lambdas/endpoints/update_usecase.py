@@ -116,6 +116,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 update_expression_parts.append(f'{field_name} = :{field_name}')
                 expression_attribute_values[f':{field_name}'] = field_value
         
+        # Application association
+        application_id = body.get('application_id')
+        if application_id is not None:
+            if application_id:
+                update_expression_parts.append('application_id = :application_id')
+                expression_attribute_values[':application_id'] = application_id
+            else:
+                # Clear application_id when explicitly set to empty string
+                update_expression_parts.append('application_id = :application_id')
+                expression_attribute_values[':application_id'] = ''
+
         # Only update tags if provided and not empty (DynamoDB String Sets cannot be empty)
         if tags:
             update_expression_parts.append('tags = :tags')

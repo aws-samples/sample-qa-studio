@@ -498,6 +498,42 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const suiteSchedule = this.addResource(testSuite, 'schedule')
     this.addMethod(suiteSchedule, HttpMethod.PUT, l.updateSuiteScheduleLambda)
 
+    // /applications - Application management (router Lambda)
+    const applications = this.addResource(this.api.root, 'applications')
+    this.addMethod(applications, HttpMethod.GET, l.applicationRouterLambda)
+    this.addMethod(applications, HttpMethod.POST, l.applicationRouterLambda)
+
+    // /applications/{id} - Get, update, delete application
+    const application = this.addResource(applications, '{id}')
+    this.addMethod(application, HttpMethod.GET, l.applicationRouterLambda)
+    this.addMethod(application, HttpMethod.PATCH, l.applicationRouterLambda)
+    this.addMethod(application, HttpMethod.DELETE, l.applicationRouterLambda)
+
+    // /applications/{id}/usecases - Associate usecases
+    const applicationUsecases = this.addResource(application, 'usecases')
+    this.addMethod(applicationUsecases, HttpMethod.POST, l.applicationRouterLambda)
+
+    // /applications/{id}/usecases/{usecaseId} - Remove association
+    const applicationUsecase = this.addResource(applicationUsecases, '{usecaseId}')
+    this.addMethod(applicationUsecase, HttpMethod.DELETE, l.applicationRouterLambda)
+
+    // /applications/{id}/metrics - Get metrics
+    const applicationMetrics = this.addResource(application, 'metrics')
+    this.addMethod(applicationMetrics, HttpMethod.GET, l.applicationRouterLambda)
+
+    // /applications/{id}/failures - Get failures
+    const applicationFailures = this.addResource(application, 'failures')
+    this.addMethod(applicationFailures, HttpMethod.GET, l.applicationRouterLambda)
+
+    // /applications/{id}/flaky - Get flaky usecases
+    const applicationFlaky = this.addResource(application, 'flaky')
+    this.addMethod(applicationFlaky, HttpMethod.GET, l.applicationRouterLambda)
+
+    // /dashboard/overview - Dashboard overview
+    const dashboard = this.addResource(this.api.root, 'dashboard')
+    const dashboardOverview = this.addResource(dashboard, 'overview')
+    this.addMethod(dashboardOverview, HttpMethod.GET, l.applicationRouterLambda)
+
     // Associate a UsagePlan with the API stage
     new UsagePlan(this, 'ApiUsagePlan', {
       name: this.cdkName('usage-plan'),

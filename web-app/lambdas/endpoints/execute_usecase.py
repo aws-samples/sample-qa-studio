@@ -1,7 +1,9 @@
 import json
 import os
+import time
 import uuid
 import boto3
+from botocore.exceptions import ClientError
 from urllib.parse import quote
 from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7, allow_m2m_token, validate_path_id
 
@@ -111,10 +113,15 @@ def handler(event, context):
     - 500: Error starting execution
     """
     # Validate authentication (allow both user and M2M tokens)
-    user_identity, error_response = allow_m2m_token(event)
-    if error_response:
-        return error_response
-    
+    # EventBridge Scheduler invokes directly (no requestContext) — allow these
+    # since they're already authenticated via IAM role permission on this Lambda.
+    if not event.get('requestContext'):
+        user_identity = {'identity': 'scheduler', 'identity_type': 'scheduler', 'sub': '', 'scopes': []}
+    else:
+        user_identity, error_response = allow_m2m_token(event)
+        if error_response:
+            return error_response
+
     print(f"Execution requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
     
     usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
@@ -441,24 +448,42 @@ def handler(event, context):
                         if env_value:
                             container_env.append({'name': env_name.upper(), 'value': env_value})
 
-                task_result = ecs.run_task(
-                    cluster=os.environ['ECS_CLUSTER'],
-                    taskDefinition=os.environ['ECS_TASK_DEFINITION'],
-                    launchType='FARGATE',
-                    networkConfiguration={
-                        'awsvpcConfiguration': {
-                            'subnets': [os.environ['SUBNET_ID']],
-                            'securityGroups': [os.environ['SECURITY_GROUP_ID']],
-                            'assignPublicIp': 'ENABLED'
-                        }
-                    },
-                    overrides={
-                        'containerOverrides': [{
-                            'name': 'container',
-                            'environment': container_env
-                        }]
-                    }
-                )
+                task_result = None
+                for attempt in range(3):
+                    try:
+                        task_result = ecs.run_task(
+                            cluster=os.environ['ECS_CLUSTER'],
+                            taskDefinition=os.environ['ECS_TASK_DEFINITION'],
+                            launchType='FARGATE',
+                            networkConfiguration={
+                                'awsvpcConfiguration': {
+                                    'subnets': [os.environ['SUBNET_ID']],
+                                    'securityGroups': [os.environ['SECURITY_GROUP_ID']],
+                                    'assignPublicIp': 'ENABLED'
+                                }
+                            },
+                            overrides={
+                                'containerOverrides': [{
+                                    'name': 'container',
+                                    'environment': container_env
+                                }]
+                            }
+                        )
+                        break
+                    except ClientError as e:
+                        error_code = e.response['Error']['Code']
+                        if error_code == 'ThrottlingException' and attempt < 2:
+                            wait = 2 ** attempt
+                            print(f'ECS run_task throttled, retry {attempt + 1}/3 in {wait}s')
+                            time.sleep(wait)
+                        else:
+                            raise
+
+                if not task_result:
+                    error_msg = 'ECS run_task failed after retries'
+                    print(f'ECS error: {error_msg}')
+                    update_execution_status_with_error(usecase_id, execution_id, 'failed', error_msg)
+                    return create_response(500, {'error': error_msg})
                 
                 # Check for task failures
                 if task_result.get('failures'):

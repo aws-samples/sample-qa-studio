@@ -99,9 +99,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if not isinstance(tags, list):
                 return create_response(400, {'error': 'tags must be an array'})
         
+        # Handle application_id (can be set or cleared)
+        application_id = body.get('application_id')
+
         # Check if there are any fields to update
-        if name is None and description is None and tags is None:
-            return create_response(400, {'error': 'At least one field (name, description, tags) must be provided'})
+        if name is None and description is None and tags is None and application_id is None:
+            return create_response(400, {'error': 'At least one field (name, description, tags, application_id) must be provided'})
         
         # Update timestamp
         now = get_current_timestamp()
@@ -113,6 +116,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             tags=tags,
             updated_at=now
         )
+
+        # Handle application_id separately (not part of the schema helper)
+        if application_id is not None:
+            if update_expression:
+                update_expression += ', application_id = :application_id'
+            else:
+                update_expression = 'SET application_id = :application_id'
+            expression_values[':application_id'] = application_id
         
         # Update the suite in DynamoDB
         update_kwargs = {

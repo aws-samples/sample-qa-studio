@@ -6,6 +6,7 @@ from typing import Callable, Optional
 
 import click
 import requests
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from qa_studio_cli.auth.token_manager import get_valid_token
 from qa_studio_cli.models.errors import ApiError, AuthError, ConfigError
@@ -13,6 +14,14 @@ from qa_studio_cli.config.manager import config_exists, load_config
 from qa_studio_cli.models.config import CLIConfig
 
 logger = logging.getLogger(__name__)
+
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+class _RetryableError(Exception):
+    """Internal: triggers tenacity retry, never surfaces to callers."""
+    def __init__(self, api_error: ApiError):
+        self.api_error = api_error
 
 
 def build_api_client(
@@ -89,7 +98,19 @@ class ApiClient:
         return response.json()
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
-        """Send request with auth headers, raise ApiError on failure."""
+        """Send request with auth headers, retry on transient failures."""
+        try:
+            return self._request_with_retry(method, path, **kwargs)
+        except _RetryableError as e:
+            raise e.api_error
+
+    @retry(
+        retry=retry_if_exception_type(_RetryableError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=4),
+        reraise=True,
+    )
+    def _request_with_retry(self, method: str, path: str, **kwargs) -> requests.Response:
         url = f"{self.base_url}{path}"
         token = self._token_provider()
         headers = {
@@ -99,14 +120,20 @@ class ApiClient:
         logger.info("→ %s %s", method, url)
         try:
             response = self._session.request(method, url, headers=headers, **kwargs)
-        except requests.ConnectionError as e:
-            raise ApiError(0, f"Connection error: {e}")
-        except requests.Timeout as e:
-            raise ApiError(0, f"Request timed out: {e}")
+        except (requests.ConnectionError, requests.Timeout) as e:
+            logger.warning("Transient error, will retry: %s", e)
+            raise _RetryableError(ApiError(0, f"Connection error: {e}"))
 
         logger.debug("← %s %s", response.status_code, response.text[:500])
 
         if not response.ok:
+            if response.status_code in RETRYABLE_STATUS_CODES:
+                logger.warning("Retryable %s from %s %s", response.status_code, method, url)
+                try:
+                    body = response.json()
+                except Exception:
+                    body = {}
+                raise _RetryableError(ApiError(response.status_code, body.get("message", response.text), response_data=body))
             self._handle_error(response)
 
         return response

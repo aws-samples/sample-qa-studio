@@ -528,7 +528,7 @@ export interface SuiteExecution {
   status: 'pending' | 'running' | 'completed' | 'partial' | 'failed';
   started_at: string;
   completed_at?: string;
-  duration_seconds?: number;
+  duration_ms?: number;
   triggered_by: string;
   trigger_type: 'manual' | 'scheduled' | 'ci_runner';
   total_usecases: number;
@@ -546,7 +546,7 @@ export interface SuiteExecutionResult {
   usecase_execution_id: string;
   started_at?: string;
   completed_at?: string;
-  duration_seconds?: number;
+  duration_ms?: number;
   error_message?: string;
   recording_url?: string;
 }

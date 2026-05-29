@@ -18,6 +18,7 @@ export interface BasicInfo {
   modelId: string | null;
   startingUrl: string;
   active: boolean;
+  applicationId: string;
 }
 
 export interface BlankConfig {

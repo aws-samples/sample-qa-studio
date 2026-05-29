@@ -112,9 +112,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             schedule_timezone=schedule_timezone
         )
         
+        # Application association (required)
+        application_id = body.get('application_id', '').strip()
+        if not application_id:
+            return create_response(400, {'error': 'application_id is required'})
+        suite_item['application_id'] = application_id
+
         # Write to DynamoDB
         table.put_item(Item=suite_item)
-        
+
         logger.info(f"Successfully created test suite {suite_id}")
         
         # Return the created suite (remove pk/sk from response)

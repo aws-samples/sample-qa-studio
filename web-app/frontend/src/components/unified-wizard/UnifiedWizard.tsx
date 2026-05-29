@@ -1,5 +1,5 @@
-import { useReducer, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useReducer, useState, useMemo, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Wizard from "@cloudscape-design/components/wizard";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -21,7 +21,15 @@ import { getStepValidation } from './validation';
  */
 export default function UnifiedWizard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
+
+  useEffect(() => {
+    const appId = searchParams.get('applicationId');
+    if (appId && !state.basicInfo.applicationId) {
+      dispatch({ type: 'UPDATE_BASIC_INFO', payload: { applicationId: appId } });
+    }
+  }, [searchParams]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitTrigger, setSubmitTrigger] = useState(0);
 

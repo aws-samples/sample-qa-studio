@@ -220,6 +220,42 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     this.log('executionStatusRule', executionStatusRule.ruleName);
 
+    // Aggregation Lambda - publishes CloudWatch metrics + updates DynamoDB for dashboard
+    const aggregateExecutionLambda = this.createPythonLambda({
+      path: 'aggregate_execution',
+      timeout: Duration.seconds(15),
+      memorySize: 256,
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    aggregateExecutionLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    aggregateExecutionLambda.role?.addManagedPolicy(props.tableWritePolicy);
+
+    aggregateExecutionLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*']
+    }));
+
+    const aggregationRule = new Rule(this, 'aggregate_execution_rule', {
+      ruleName: this.cdkName('aggregate-execution'),
+      description: 'Triggers dashboard aggregation on terminal execution status',
+      eventBus: eventBus,
+      eventPattern: {
+        source: ['nova-act-qa-studio.execution'],
+        detailType: ['nova-act-qa-studio.execution.status.changed'],
+        detail: {
+          status: ['success', 'failed']
+        }
+      }
+    });
+
+    aggregationRule.addTarget(new LambdaFunction(aggregateExecutionLambda));
+
+    this.log('aggregationRule', aggregationRule.ruleName);
+
     // Cache Builder Lambda - builds step caches from Nova Act responses
     const buildCacheLambda = this.createPythonLambda({
       path: 'build_cache',
@@ -832,6 +868,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     this.executeUsecaseLambda = this.createPythonLambda({
       path: 'execute_usecase',
+      timeout: Duration.seconds(30),
       environment: {
         ECS_CLUSTER: this.cluster.clusterArn,
         ECS_TASK_DEFINITION: this.taskDefinition.taskDefinitionArn,

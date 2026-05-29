@@ -1,12 +1,15 @@
 ---
 name: qa-studio
 description: >
-  Create and execute browser-based UI tests using QA Studio and Amazon Nova Act.
-  Use when the developer wants to build a test case (in JSON or via the CLI) or
-  run an existing test case locally. Covers test authoring, importing test cases,
-  finding existing tests and suites, and running them with variable / header /
-  secret overrides. NOT for unit tests, API tests, or CI/CD pipeline configuration —
-  only browser-based UI test authoring and execution.
+  Create, edit, and execute browser-based UI tests using QA Studio and Amazon Nova Act.
+  Use when the developer wants to build a test case (in JSON or via the CLI), modify
+  an existing test, or run an existing test case locally. Covers test authoring,
+  editing, importing test cases, finding existing tests and suites, and running them
+  with variable / header / secret overrides. Also trigger when the user asks about
+  browser regression testing, UI test coverage, verifying user flows after a code change,
+  or anything that sounds like "make sure this page still works" or "write me a
+  regression test for this flow." NOT for unit tests, API tests, or CI/CD pipeline
+  configuration — only browser-based UI test authoring and execution.
 ---
 
 # QA Studio — Browser Test Automation
@@ -33,7 +36,7 @@ Out of scope here: CI/CD pipeline setup, cloud deployment, the web interface, sc
 - **Hand-author the JSON** *(preferred when an agent is helping)* — write the JSON to a file under `./tests/`, then push to the cloud via Importing tests. The agent IS the AI; calling Nova Act through the CLI to generate steps adds an unnecessary layer.
 - **Generate from a user-journey description** *(fallback)* — `qa-studio tests create --from-journey ... --export-to ./tests/`. Use when the user explicitly wants the CLI's draft, or when the agent's context isn't enough to author the test directly.
 - **Import an existing JSON or push edits to the cloud** — `qa-studio tests import <path>`. Validates and uploads. Same command for both authoring paths above. See [Importing tests](./reference/building-tests.md#importing-tests) for flags (`--dry-run`, `--base-url`, `--skip-secrets`, `--format json`) and the secret-prompt behavior.
-- **Import end-to-end through chat (ready-to-run)** — `qa-studio tests import <path> --non-interactive --secret KEY=VALUE [--secret KEY=VALUE]...`. Use only for non-prod / dev / dummy credentials. Whenever you import with values inline (whether the user volunteers them or you ask), the agent's reply MUST surface a transcript caveat naming all three exposure surfaces — the **chat transcript**, the **model context**, and the **shell command line**. See [Agent flow: ready-to-run import](./reference/building-tests.md#agent-flow-ready-to-run-import) for the full decision logic and the template wording.
+- **Import end-to-end through chat (ready-to-run)** — `qa-studio tests import <path> --non-interactive --secret KEY=VALUE [--secret KEY=VALUE]...`. Use only for non-prod / dev / dummy credentials. **Mandatory caveat:** whenever you import with values inline (whether the user volunteers them or you ask), you MUST warn the user that credentials will appear in the **chat transcript**, the **model context**, and the **shell command line** — all three keywords are required. Use this template: "Heads up: anything you paste in this chat lands in the **chat transcript**, the **model context**, and the **shell command line** I'll execute. That's fine for dev or local accounts, but don't paste production credentials — for those, I'll use `--skip-secrets` and you can set them in the QA Studio UI." See [Agent flow: ready-to-run import](./reference/building-tests.md#agent-flow-ready-to-run-import) for the full decision logic.
 - **Pick the right step type for a goal** — see [🎯 Step Types](./reference/step-types/) (one file per type).
 - **Choose a validation operator** — see [✅ Validation Operators](./reference/validation-operators.md).
 
@@ -46,6 +49,17 @@ Out of scope here: CI/CD pipeline setup, cloud deployment, the web interface, sc
 - **Run a suite locally** — `qa-studio run --suite-id <id>`
 - **Override variables and base URL at runtime** — `--var KEY=VALUE` (repeatable), `--base-url <url>`. Per-run secret/header/cookie overrides are NOT supported on `qa-studio run` today; secrets are configured per-use-case at import time. See [▶️ Executing Tests](./reference/executing-tests.md#runtime-overrides) for the full surface.
 - **Choose the browser provisioner** — `--browser local|agentcore|cdp-external`
+
+### The user wants to edit an existing test
+
+When the UI changed, a step is broken, or the user wants to add/remove steps from an already-imported test:
+
+1. **Get the test JSON locally.** If the file is already on disk under `./tests/`, edit it there. If not, use `qa-studio tests get <id>` to inspect the current steps, then recreate the JSON on disk (there is no `qa-studio tests export` command yet — the local file is the source of truth).
+2. **Edit the steps.** Apply the fix — update instructions, change step types, add/remove steps, renumber `sort` values. Use the [🎯 Step Types](./reference/step-types/) reference for per-step guidance.
+3. **Re-import.** `qa-studio tests import <path>` pushes the updated version to the cloud, overwriting the previous version for that use case name.
+4. **Re-run.** `qa-studio run --usecase-id <id>` to verify the fix.
+
+Common edit scenarios: tightening a vague step instruction, replacing a hardcoded value with a variable, converting a `navigation` step to a `secret` step for a credential field, updating a `validation_value` after a UI text change.
 
 ### The test is failing
 

@@ -166,6 +166,7 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
       model_id: basicInfo.modelId,
       tags: basicInfo.tags.split(',').map((t) => t.trim()).filter(Boolean),
       test_platform: testPlatform,
+      application_id: basicInfo.applicationId,
     };
 
     if (testPlatform === 'mobile') {

@@ -10,9 +10,11 @@ Endpoint: POST /api/test-suites/{id}/execute
 """
 import json
 import os
+import time
 import boto3
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
+from botocore.exceptions import ClientError
 
 # Import from local modules in endpoints directory
 from utils import (
@@ -696,15 +698,20 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         500: Internal server error
     """
     # Validate authentication and authorization
-    user_identity, error_response = require_scopes(
-        event,
-        ['api/suite.write', 'api/executions.write']
-    )
-    if error_response:
-        return error_response
-    
+    # EventBridge Scheduler invokes directly (no requestContext) — allow these
+    # since they're already authenticated via IAM role permission on this Lambda.
+    if not event.get('requestContext'):
+        user_identity = {'identity': 'scheduler', 'identity_type': 'scheduler', 'sub': '', 'scopes': []}
+    else:
+        user_identity, error_response = require_scopes(
+            event,
+            ['api/suite.write', 'api/executions.write']
+        )
+        if error_response:
+            return error_response
+
     print(f"Suite execution requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
-    
+
     # Parse path parameters
     suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')
     if error:
@@ -718,7 +725,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     # Validate trigger_type
     trigger_type = body.get('trigger_type', 'OnDemand')
-    valid_trigger_types = ['ci_runner', 'OnDemand']
+    valid_trigger_types = ['ci_runner', 'OnDemand', 'scheduled']
     if trigger_type not in valid_trigger_types:
         return create_response(400, {
             'error': 'Invalid trigger type',
@@ -828,8 +835,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # 4. Loop through all usecases and create execution records
         execution_ids = []
         
-        # Get execute_usecase Lambda ARN for OnDemand invocations
-        execute_usecase_arn = os.environ.get('EXECUTE_USECASE_LAMBDA_ARN') if trigger_type == 'OnDemand' else None
+        # Get execute_usecase Lambda ARN for OnDemand/scheduled invocations
+        execute_usecase_arn = os.environ.get('EXECUTE_USECASE_LAMBDA_ARN') if trigger_type in ('OnDemand', 'scheduled') else None
         
         for usecase_mapping in usecases:
             usecase_id = usecase_mapping['usecase_id']
@@ -862,10 +869,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 )
                 execution_model_id = model_id_override if model_id_override else usecase['model_id']
                 
-                if trigger_type == 'OnDemand' and execute_usecase_arn:
-                    # Invoke execute_usecase Lambda to create records AND spawn ECS task
-                    # Use OnDemandHeadless to directly spawn ECS (OnDemand sends to deprecated SQS queue)
-                    # execute_usecase reads trigger_type, suite IDs from query params
+                if trigger_type in ('OnDemand', 'scheduled') and execute_usecase_arn:
                     invoke_payload = {
                         'pathParameters': {'id': usecase_id},
                         'queryStringParameters': {
@@ -875,19 +879,49 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         },
                         'requestContext': event.get('requestContext', {}),
                     }
-                    
-                    response = lambda_client.invoke(
-                        FunctionName=execute_usecase_arn,
-                        InvocationType='RequestResponse',
-                        Payload=json.dumps(invoke_payload),
-                    )
-                    
-                    resp_payload = json.loads(response['Payload'].read().decode('utf-8'))
-                    resp_body = json.loads(resp_payload.get('body', '{}'))
-                    execution_id = resp_body.get('executionId', '')
-                    
-                    if response.get('StatusCode') != 200 or resp_payload.get('statusCode', 0) >= 400:
-                        print(f'WARNING: execute_usecase invocation failed for {usecase_id}: {resp_body}')
+
+                    max_retries = 3
+                    execution_id = ''
+                    invocation_succeeded = False
+
+                    for attempt in range(max_retries):
+                        try:
+                            response = lambda_client.invoke(
+                                FunctionName=execute_usecase_arn,
+                                InvocationType='RequestResponse',
+                                Payload=json.dumps(invoke_payload),
+                            )
+
+                            status_code = response.get('StatusCode', 0)
+                            if status_code == 429:
+                                wait = 2 ** attempt
+                                print(f'Throttled invoking execute_usecase for {usecase_id}, retry {attempt + 1}/{max_retries} in {wait}s')
+                                time.sleep(wait)
+                                continue
+
+                            resp_payload = json.loads(response['Payload'].read().decode('utf-8'))
+                            resp_body = json.loads(resp_payload.get('body', '{}'))
+                            execution_id = resp_body.get('executionId', '')
+
+                            if resp_payload.get('statusCode', 0) >= 400:
+                                print(f'WARNING: execute_usecase returned error for {usecase_id}: {resp_body}')
+                                break
+
+                            invocation_succeeded = True
+                            break
+
+                        except ClientError as e:
+                            error_code = e.response['Error']['Code']
+                            if error_code in ('TooManyRequestsException', 'ServiceException'):
+                                wait = 2 ** attempt
+                                print(f'ClientError {error_code} invoking execute_usecase for {usecase_id}, retry {attempt + 1}/{max_retries} in {wait}s')
+                                time.sleep(wait)
+                            else:
+                                print(f'ERROR: Unretryable error invoking execute_usecase for {usecase_id}: {e}')
+                                break
+
+                    if not invocation_succeeded:
+                        print(f'WARNING: execute_usecase invocation failed for {usecase_id} after {max_retries} attempts')
                         continue
                 else:
                     # ci_runner: create execution record only, no ECS task

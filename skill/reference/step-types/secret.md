@@ -87,9 +87,10 @@ Both `admin_email` and `admin_password` are declared in the test's top-level `se
 
 When the test runs, the `secret_key` is resolved through one of these mechanisms (in priority order):
 
-1. **`--secrets-file <path>`** on the CLI — a JSON file `{"secret_key": "value"}` with mode `0600`.
-2. **The use case's `secrets` array** — defined at authoring time, persisted with the test.
-3. **The configured secret resolver** for the deployment (e.g., AWS Secrets Manager).
+1. **The use case's stored secret values** — configured at import time (via the interactive prompt during `qa-studio tests import`, or via `--non-interactive --secret KEY=VALUE`) or set in the web UI.
+2. **The configured secret resolver** for the deployment (e.g., AWS Secrets Manager).
+
+There is no per-run `--secrets-file` flag on `qa-studio run`. If a secret value needs to change, re-import the test or update via the web UI.
 
 If the secret can't be resolved, the step fails before any value is typed. The error log identifies the missing secret by name only — the value is never echoed.
 

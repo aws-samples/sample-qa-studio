@@ -166,6 +166,9 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly getScheduleLambda: Function
   public readonly deleteScheduleLambda: Function
 
+  // Application Dashboard Lambdas
+  public readonly applicationRouterLambda: Function
+
   // Browser Recording Lambdas
   public readonly sendRecordingCommandLambda: Function
   public readonly getRecordingDataLambda: Function
@@ -983,6 +986,29 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
         `arn:aws:scheduler:${Aws.REGION}:${Aws.ACCOUNT_ID}:schedule/${props.schedulerGroupName}/*`
       ]
     }));
+
+    // ========== Application Dashboard Lambdas ==========
+
+    this.applicationRouterLambda = this.createPythonLambda({
+      path: 'application_router',
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 256,
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    // Router handles all /applications/* and /dashboard/* routes — parallel requests
+    // from the detail page exceed the default reserved concurrency, so remove the limit.
+    const routerCfn = this.applicationRouterLambda.node.defaultChild as cdk.aws_lambda.CfnFunction;
+    routerCfn.addPropertyDeletionOverride('ReservedConcurrentExecutions');
+
+    this.applicationRouterLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['cloudwatch:GetMetricData'],
+      resources: ['*']
+    }))
+
+    this.applicationRouterLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.applicationRouterLambda.role?.addManagedPolicy(props.tableWritePolicy)
 
     // ========== Browser Recording Lambdas ==========
 

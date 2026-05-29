@@ -19,13 +19,14 @@ import { SuiteExecution } from '../utils/api';
 import Breadcrumb from './common/Breadcrumb';
 import LogViewer from './common/LogViewer';
 
-function formatDuration(seconds?: number): string {
-  if (!seconds) return '-';
-  
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  
+function formatDuration(ms?: number): string {
+  if (!ms) return '-';
+
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+
   if (hours > 0) {
     return `${hours}h ${minutes}m ${secs}s`;
   } else if (minutes > 0) {
@@ -226,7 +227,7 @@ export default function SuiteExecutionDetail() {
                   },
                   {
                     label: "Duration",
-                    value: formatDuration(execution.duration_seconds),
+                    value: formatDuration(execution.duration_ms),
                   },
                   {
                     label: "Triggered By",
