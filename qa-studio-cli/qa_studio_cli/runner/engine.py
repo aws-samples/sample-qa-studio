@@ -10,12 +10,14 @@ import inspect
 import logging
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from nova_act import NovaAct, Workflow
+from nova_act.types.errors import StartFailed
 
 from qa_studio_cli.api.executions import ExecutionAPI
 from qa_studio_cli.models.execution import StepResult
@@ -550,15 +552,36 @@ class ExecutionEngine:
     ) -> Dict[str, Any]:
         """Synchronous entry point for Nova Act execution."""
         artifact_capture.bind_to_current_thread()
-        try:
-            return self._execute_with_nova_act(
-                execution_details, usecase_id, execution_id,
-                artifact_capture, artifact_uploader,
-            )
-        except Exception as e:
-            sanitized = sanitize_error_message(str(e))
-            logger.error("Nova Act execution failed: %s", sanitized)
-            return {"success": False, "error": f"Nova Act execution failed: {sanitized}"}
+
+        # Nova Act's Playwright/browser startup occasionally fails transiently
+        # with StartFailed. Retry up to 3 attempts with linear backoff
+        # (3s, 6s, 9s). All other exceptions fail immediately.
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return self._execute_with_nova_act(
+                    execution_details, usecase_id, execution_id,
+                    artifact_capture, artifact_uploader,
+                )
+            except StartFailed as e:
+                sanitized = sanitize_error_message(str(e))
+                if attempt < max_attempts:
+                    delay = 3 * attempt
+                    logger.warning(
+                        "Nova Act startup failed (attempt %d/%d), retrying in %ds: %s",
+                        attempt, max_attempts, delay, sanitized,
+                    )
+                    time.sleep(delay)
+                    continue
+                logger.error(
+                    "Nova Act startup failed after %d attempts: %s",
+                    max_attempts, sanitized,
+                )
+                return {"success": False, "error": f"Nova Act execution failed: {sanitized}"}
+            except Exception as e:
+                sanitized = sanitize_error_message(str(e))
+                logger.error("Nova Act execution failed: %s", sanitized)
+                return {"success": False, "error": f"Nova Act execution failed: {sanitized}"}
 
     def _execute_with_nova_act(
         self,
