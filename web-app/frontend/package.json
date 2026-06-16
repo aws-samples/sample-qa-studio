@@ -16,7 +16,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-oidc-context": "^3.3.0",
-    "react-router-dom": "^7.6.2",
+    "react-router-dom": "^7.18.0",
     "rrweb": "^2.0.0-alpha.4",
     "rrweb-player": "^1.0.0-alpha.4",
     "typescript": "^4.9.5",
