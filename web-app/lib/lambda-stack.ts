@@ -70,6 +70,15 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly listSuiteArtifactsLambda: Function
   public readonly getStepTraceLambda: Function
 
+  // CLI-unified-runner endpoints (see .kiro/specs/cli-unified-runner/)
+  public readonly createRuntimeVariableLambda: Function
+  public readonly createLiveViewLambda: Function
+  public readonly deleteLiveViewLambda: Function
+  public readonly updateMobileMetadataLambda: Function
+  public readonly getExecutionHeadersLambda: Function
+  public readonly createTrajectoryUploadUrlLambda: Function
+  public readonly getTrajectoryDownloadUrlLambda: Function
+
   // Variables, Hooks, Headers Lambdas
   public readonly createUsecaseVariablesLambda: Function
   public readonly getUsecaseVariablesLambda: Function
@@ -156,6 +165,9 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly rejectWizardStepLambda: Function
   public readonly getScheduleLambda: Function
   public readonly deleteScheduleLambda: Function
+
+  // Application Dashboard Lambdas
+  public readonly applicationRouterLambda: Function
 
   // Browser Recording Lambdas
   public readonly sendRecordingCommandLambda: Function
@@ -359,6 +371,52 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
 
     this.getStepTraceLambda = this.createPythonLambda({
       path: 'get_step_trace',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
+    // ========== CLI-unified-runner endpoints ==========
+    // Endpoints consumed by the qa-studio CLI runner once the refactor in
+    // .kiro/specs/cli-unified-runner/ is complete. All use the existing
+    // api/executions.* scopes — no new scope names introduced.
+
+    this.createRuntimeVariableLambda = this.createPythonLambda({
+      path: 'create_runtime_variable',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.createLiveViewLambda = this.createPythonLambda({
+      path: 'create_live_view',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.deleteLiveViewLambda = this.createPythonLambda({
+      path: 'delete_live_view',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.updateMobileMetadataLambda = this.createPythonLambda({
+      path: 'update_mobile_metadata',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.getExecutionHeadersLambda = this.createPythonLambda({
+      path: 'get_execution_headers',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    this.createTrajectoryUploadUrlLambda = this.createPythonLambda({
+      path: 'create_trajectory_upload_url',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        BUCKET_NAME: props.artefactsBucket.bucketName
+      }
+    })
+
+    this.getTrajectoryDownloadUrlLambda = this.createPythonLambda({
+      path: 'get_trajectory_download_url',
       environment: {
         TABLE_NAME: props.table.tableName,
         BUCKET_NAME: props.artefactsBucket.bucketName
@@ -929,6 +987,29 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       ]
     }));
 
+    // ========== Application Dashboard Lambdas ==========
+
+    this.applicationRouterLambda = this.createPythonLambda({
+      path: 'application_router',
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 256,
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    // Router handles all /applications/* and /dashboard/* routes — parallel requests
+    // from the detail page exceed the default reserved concurrency, so remove the limit.
+    const routerCfn = this.applicationRouterLambda.node.defaultChild as cdk.aws_lambda.CfnFunction;
+    routerCfn.addPropertyDeletionOverride('ReservedConcurrentExecutions');
+
+    this.applicationRouterLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['cloudwatch:GetMetricData'],
+      resources: ['*']
+    }))
+
+    this.applicationRouterLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.applicationRouterLambda.role?.addManagedPolicy(props.tableWritePolicy)
+
     // ========== Browser Recording Lambdas ==========
 
     this.sendRecordingCommandLambda = this.createPythonLambda({
@@ -1008,7 +1089,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.executeTestSuiteLambda,
       this.stopSuiteExecutionLambda,
       this.updateSuiteExecutionStatusLambda,
-      this.sendRecordingCommandLambda
+      this.sendRecordingCommandLambda,
+      // CLI-unified-runner endpoints
+      this.createLiveViewLambda,
+      this.updateMobileMetadataLambda,
+      this.createTrajectoryUploadUrlLambda
     ]
     writeLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableWritePolicy))
 
@@ -1029,6 +1114,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.importTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.applyTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.removeUsecaseFromSuiteLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.updateSuiteScheduleLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.applyTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.updateStepFromTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
@@ -1048,6 +1134,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.generateStepArtifactUrlLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.confirmArtifactUploadLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.confirmArtifactUploadLambda.role?.addManagedPolicy(props.tableWritePolicy)
+
+    // CLI-unified-runner: create_runtime_variable does a get_item before the
+    // update to verify the execution variables record exists.
+    this.createRuntimeVariableLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.createRuntimeVariableLambda.role?.addManagedPolicy(props.tableWritePolicy)
 
     // S3 Bucket Permissions
     props.artefactsBucket.grantRead(this.listRecordingBatchesLambda)
@@ -1113,11 +1204,13 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [secretsArnPattern]
     }))
 
-    // ListSecrets requires * for resource (list operation), scoped to account
+    // ListSecrets is a list operation that does not support resource-level
+    // permissions — the resource must be "*".  Filtering is done via the
+    // Filters parameter in the API call itself (by tag/name prefix).
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:ListSecrets'],
-      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
+      resources: ['*']
     }))
     
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
@@ -1148,14 +1241,14 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.cloneUsecaseLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:ListSecrets', 'secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
-      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
+      resources: [`*`]
     }))
 
     // ListSecrets requires * for resource, scoped to account
     this.exportUsecaseLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:ListSecrets'],
-      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
+      resources: [`*`]
     }))
     
     this.exportUsecaseLambda.addToRolePolicy(new PolicyStatement({

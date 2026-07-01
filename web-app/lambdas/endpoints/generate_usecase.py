@@ -66,7 +66,7 @@ USECASE_EXPORT_SCHEMA = {
                     },
                     'step_type': {
                         'type': 'string',
-                        'enum': ['navigation', 'validation', 'secret', 'retrieve_value', 'assertion', 'url', 'download'],
+                        'enum': ['navigation', 'validation', 'secret', 'retrieve_value', 'assertion', 'url', 'download', 'network_assertion'],
                         'description': 'Type of test step',
                     },
                     'secret_key': {
@@ -108,6 +108,68 @@ USECASE_EXPORT_SCHEMA = {
                         'type': 'string',
                         'enum': ['string', 'number', 'bool', ''],
                         'description': 'Data type for retrieve_value steps, empty string otherwise',
+                    },
+                    # network_assertion step fields — optional; only populated
+                    # when step_type == 'network_assertion'.
+                    'network_url_pattern': {
+                        'type': 'string',
+                        'description': 'Playwright glob URL pattern (e.g. **/api/users) for network_assertion steps.',
+                    },
+                    'network_method': {
+                        'type': 'string',
+                        'enum': ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', ''],
+                        'description': 'Expected HTTP method for network_assertion steps. Empty string means no method check.',
+                    },
+                    'network_request_body': {
+                        'type': 'string',
+                        'description': 'Expected request body as JSON string for network_assertion steps. Empty if no body check.',
+                    },
+                    'network_body_match_type': {
+                        'type': 'string',
+                        'enum': ['exact', 'subset', 'schema', ''],
+                        'description': (
+                            'How to match the expected body against the captured request body. '
+                            '"schema" treats network_request_body as a JSON Schema Draft 2020-12 '
+                            'document; external $ref (http/https/file) is rejected.'
+                        ),
+                    },
+                    'network_mock_response': {
+                        'type': 'string',
+                        'description': 'Optional mock response as JSON string with shape {status, body, headers}.',
+                    },
+                    'network_mock_passthrough': {
+                        'type': 'boolean',
+                        'description': 'If true, fetch the real response and merge with network_mock_response overrides.',
+                    },
+                    'network_timeout': {
+                        'type': 'integer',
+                        'description': 'Timeout in seconds (1-120) for waiting on the matching request. Default 15.',
+                    },
+                    # Response-side assertion fields — all optional.
+                    'network_response_body': {
+                        'type': 'string',
+                        'description': (
+                            'Optional expected response body as JSON string. '
+                            'Interpreted per network_response_body_match_type (subset or schema). '
+                            'Empty string means no response body check.'
+                        ),
+                    },
+                    'network_response_body_match_type': {
+                        'type': 'string',
+                        'enum': ['subset', 'schema', ''],
+                        'description': (
+                            'How to match the expected response body against the captured response. '
+                            '"exact" is NOT permitted on the response side — response payloads commonly '
+                            'contain non-deterministic values (timestamps, generated ids). '
+                            'Defaults to "subset" when network_response_body is set without an explicit type.'
+                        ),
+                    },
+                    'network_response_status': {
+                        'type': 'integer',
+                        'description': (
+                            'Optional expected HTTP status code (100-599). Exact match only; '
+                            'omit to skip the status check.'
+                        ),
                     },
                 },
                 'required': [

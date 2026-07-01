@@ -6,6 +6,7 @@ import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { UserPool } from 'aws-cdk-lib/aws-cognito';
 import { Function } from 'aws-cdk-lib/aws-lambda';
 import { Role, ServicePrincipal, ManagedPolicy } from 'aws-cdk-lib/aws-iam';
+import { StringParameter } from 'aws-cdk-lib/aws-ssm';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 import { NovaActQAStudioLambdaStack } from './lambda-stack';
 
@@ -166,6 +167,16 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const updateFromTemplate = this.addResource(step, 'update-from-template')
     this.addMethod(updateFromTemplate, HttpMethod.POST, l.updateStepFromTemplateLambda)
 
+    // /usecase/{id}/steps/{stepId}/trajectory - Trajectory replay support
+    //   POST /upload-url: vend a presigned PUT URL and set trajectory_s3_key
+    //   GET  /download-url: vend a presigned GET URL for replay
+    // See R-API-5 in .kiro/specs/cli-unified-runner/requirements.md
+    const trajectory = this.addResource(step, 'trajectory')
+    const trajectoryUpload = this.addResource(trajectory, 'upload-url')
+    this.addMethod(trajectoryUpload, HttpMethod.POST, l.createTrajectoryUploadUrlLambda)
+    const trajectoryDownload = this.addResource(trajectory, 'download-url')
+    this.addMethod(trajectoryDownload, HttpMethod.GET, l.getTrajectoryDownloadUrlLambda)
+
     // /usecase/{id}/execute - Execute usecase
     const execute = this.addResource(usecaseId, 'execute')
     this.addMethod(execute, HttpMethod.POST, props.executeUsecaseLambda)
@@ -262,9 +273,32 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const executionVariables = this.addResource(execution, 'variables')
     this.addMethod(executionVariables, HttpMethod.GET, l.getExecutionVariablesLambda)
 
-    // /usecase/{id}/executions/{executionId}/live-view - Get live view
+    // /usecase/{id}/executions/{executionId}/live-view - Live view management
+    //   GET: fetch existing live-view URL (worker path)
+    //   POST: create a new live-view record (CLI + agentcore provisioner)
+    //   DELETE: remove on teardown (CLI + agentcore teardown)
     const liveView = this.addResource(execution, 'live-view')
     this.addMethod(liveView, HttpMethod.GET, l.getLiveViewLambda)
+    this.addMethod(liveView, HttpMethod.POST, l.createLiveViewLambda)
+    this.addMethod(liveView, HttpMethod.DELETE, l.deleteLiveViewLambda)
+
+    // /usecase/{id}/executions/{executionId}/runtime-variables - Upsert a
+    // captured runtime variable during execution.  Called per-capture by the
+    // CLI runner so the UI reflects variables incrementally.
+    const runtimeVariables = this.addResource(execution, 'runtime-variables')
+    this.addMethod(runtimeVariables, HttpMethod.POST, l.createRuntimeVariableLambda)
+
+    // /usecase/{id}/executions/{executionId}/mobile-metadata - Partial update
+    // of device_farm_session_arn, device_name, device_os_version during and
+    // after a mobile execution.
+    const mobileMetadata = this.addResource(execution, 'mobile-metadata')
+    this.addMethod(mobileMetadata, HttpMethod.PATCH, l.updateMobileMetadataLambda)
+
+    // /usecase/{id}/executions/{executionId}/headers - Read-only headers the
+    // frontend configured on the execution; the runner sets them via
+    // nova.page.set_extra_http_headers before navigation.
+    const executionHeaders = this.addResource(execution, 'headers')
+    this.addMethod(executionHeaders, HttpMethod.GET, l.getExecutionHeadersLambda)
 
     // /usecase/{id}/executions/{executionId}/downloads - List downloads
     const downloads = this.addResource(execution, 'downloads')
@@ -464,6 +498,42 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const suiteSchedule = this.addResource(testSuite, 'schedule')
     this.addMethod(suiteSchedule, HttpMethod.PUT, l.updateSuiteScheduleLambda)
 
+    // /applications - Application management (router Lambda)
+    const applications = this.addResource(this.api.root, 'applications')
+    this.addMethod(applications, HttpMethod.GET, l.applicationRouterLambda)
+    this.addMethod(applications, HttpMethod.POST, l.applicationRouterLambda)
+
+    // /applications/{id} - Get, update, delete application
+    const application = this.addResource(applications, '{id}')
+    this.addMethod(application, HttpMethod.GET, l.applicationRouterLambda)
+    this.addMethod(application, HttpMethod.PATCH, l.applicationRouterLambda)
+    this.addMethod(application, HttpMethod.DELETE, l.applicationRouterLambda)
+
+    // /applications/{id}/usecases - Associate usecases
+    const applicationUsecases = this.addResource(application, 'usecases')
+    this.addMethod(applicationUsecases, HttpMethod.POST, l.applicationRouterLambda)
+
+    // /applications/{id}/usecases/{usecaseId} - Remove association
+    const applicationUsecase = this.addResource(applicationUsecases, '{usecaseId}')
+    this.addMethod(applicationUsecase, HttpMethod.DELETE, l.applicationRouterLambda)
+
+    // /applications/{id}/metrics - Get metrics
+    const applicationMetrics = this.addResource(application, 'metrics')
+    this.addMethod(applicationMetrics, HttpMethod.GET, l.applicationRouterLambda)
+
+    // /applications/{id}/failures - Get failures
+    const applicationFailures = this.addResource(application, 'failures')
+    this.addMethod(applicationFailures, HttpMethod.GET, l.applicationRouterLambda)
+
+    // /applications/{id}/flaky - Get flaky usecases
+    const applicationFlaky = this.addResource(application, 'flaky')
+    this.addMethod(applicationFlaky, HttpMethod.GET, l.applicationRouterLambda)
+
+    // /dashboard/overview - Dashboard overview
+    const dashboard = this.addResource(this.api.root, 'dashboard')
+    const dashboardOverview = this.addResource(dashboard, 'overview')
+    this.addMethod(dashboardOverview, HttpMethod.GET, l.applicationRouterLambda)
+
     // Associate a UsagePlan with the API stage
     new UsagePlan(this, 'ApiUsagePlan', {
       name: this.cdkName('usage-plan'),
@@ -483,6 +553,15 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
       value: apiUrl,
       description: 'API Gateway URL',
       exportName: `${props.baseName}-api-url`
+    });
+
+    // SSM parameter the worker container reads at startup to discover
+    // the API URL (CLI-unified-runner T3.2).  Stack-local name is
+    // deterministic so the worker IAM policy can scope by it.
+    new StringParameter(this, 'ApiUrlParameter', {
+      parameterName: `/qa-studio/${this.baseName}/api-url`,
+      stringValue: apiUrl,
+      description: 'API Gateway URL for the QA Studio worker entrypoint',
     });
   }
 }

@@ -6,6 +6,7 @@ import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
 export interface NovaActQAStudioBaseStackCreateProps extends StackProps {
   baseName: string
   lambdaConcurrency?: number
+  networkAssertionBodyMaxBytes?: number
 }
 
 export interface createPythonLambdaProps {
@@ -21,6 +22,7 @@ export interface createPythonLambdaProps {
 export class NovaActQAStudioBaseStack extends Stack {
   protected baseName: string = ""
   protected lambdaConcurrency: number = 5
+  protected networkAssertionBodyMaxBytes: number = 1_048_576
 
   protected cdkName(name: string): string {
     return `${this.baseName}-${name.toLocaleLowerCase().replace("_", "-")}`
@@ -43,6 +45,11 @@ export class NovaActQAStudioBaseStack extends Stack {
   protected createPythonLambda(props: createPythonLambdaProps): Function {
     const name = this.cdkName(this.snakeToPascal(props.path))
     const codeDirectory = props.codeDirectory || 'lambdas/endpoints'
+    // Common environment variables injected into every Lambda built via this
+    // helper.  Per-call environment wins on key collision.
+    const baseEnvironment: { [key: string]: string } = {
+      NETWORK_ASSERTION_BODY_MAX_BYTES: this.networkAssertionBodyMaxBytes.toString(),
+    }
     const fn = new Function(this, `lambda_${name}`, {
       functionName: name,
       runtime: props.runtime || Runtime.PYTHON_3_13,
@@ -51,7 +58,7 @@ export class NovaActQAStudioBaseStack extends Stack {
       code: Code.fromAsset(codeDirectory),
       timeout: props.timeout || Duration.seconds(5),
       handler: props.handler || `${props.path}.handler`,
-      environment: props.environment,
+      environment: { ...baseEnvironment, ...(props.environment || {}) },
       logRetention: 5,
       reservedConcurrentExecutions: this.lambdaConcurrency || undefined,
     });
@@ -77,5 +84,6 @@ export class NovaActQAStudioBaseStack extends Stack {
 
     this.baseName = props.baseName
     this.lambdaConcurrency = props.lambdaConcurrency ?? 5
+    this.networkAssertionBodyMaxBytes = props.networkAssertionBodyMaxBytes ?? 1_048_576
   }
 }

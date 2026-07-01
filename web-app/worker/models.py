@@ -55,6 +55,28 @@ class ExecutionStep:
     value_source: str = ''
     cached_steps: Optional[str] = None
     cache_last_updated: Optional[str] = None
+    trajectory_s3_key: Optional[str] = None
+    trajectory_last_updated: Optional[str] = None
+    browser_action: Optional[str] = None
+    browser_args: Optional[str] = None
+    transform_operation: Optional[str] = None
+    transform_args: Optional[str] = None
+    # value_format is consumed by retrieve_value steps when value_type='date'.
+    # It is the strptime format passed to transform.date_parser.parse_to_utc;
+    # when empty, the parser auto-detects ISO 8601 / Unix epoch only.
+    value_format: Optional[str] = None
+    # network_assertion step fields
+    network_url_pattern: Optional[str] = None
+    network_method: Optional[str] = None
+    network_request_body: Optional[str] = None
+    network_body_match_type: Optional[str] = None
+    network_mock_response: Optional[str] = None
+    network_mock_passthrough: bool = False
+    network_timeout: Optional[int] = None
+    # network_assertion response-side assertion fields
+    network_response_body: Optional[str] = None
+    network_response_body_match_type: Optional[str] = None
+    network_response_status: Optional[int] = None
 
 @dataclass
 class ExecutionVariables:
@@ -70,6 +92,23 @@ class ExecutionHeaders:
     sk: str
     headers: Dict[str, str]
     created_at: str
+
+
+@dataclass
+class ReplayResult:
+    """Result of a trajectory replay attempt."""
+    success: bool
+    duration_ms: int
+    trajectory_s3_key: str
+    error: Optional[str] = None
+
+
+class TrajectoryReplayError(Exception):
+    """Raised when trajectory replay fails."""
+    def __init__(self, message: str, s3_key: str, cause: Optional[Exception] = None):
+        super().__init__(message)
+        self.s3_key = s3_key
+        self.cause = cause
 
 
 from pydantic import BaseModel

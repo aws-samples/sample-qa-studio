@@ -61,6 +61,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         variables_data = body.get('variables', [])
         secrets_data = body.get('secrets', [])
         hooks_data = body.get('hooks')
+        region_override = body.get('regionOverride')
         
         # Create new usecase with proper pk/sk
         usecase_tags = usecase_data.get('tags', [])
@@ -76,7 +77,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'description': usecase_data.get('description', ''),
             'starting_url': usecase_data.get('starting_url', ''),
             'active': usecase_data.get('active', False),
-            'executing_region': usecase_data.get('executing_region', ''),
+            'executing_region': region_override or usecase_data.get('executing_region', ''),
             'tags': usecase_tags,
             'created_at': now,
             'test_platform': usecase_data.get('test_platform', 'web'),
@@ -132,6 +133,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 new_step['value_step'] = step['value_step']
             if step.get('value_type'):
                 new_step['value_type'] = step['value_type']
+
+            for network_field in (
+                'network_url_pattern', 'network_method', 'network_request_body',
+                'network_body_match_type', 'network_mock_response',
+                'network_mock_passthrough', 'network_timeout',
+                'network_response_body', 'network_response_body_match_type',
+                'network_response_status',
+            ):
+                if network_field in step:
+                    new_step[network_field] = step[network_field]
             
             try:
                 table.put_item(Item=new_step)

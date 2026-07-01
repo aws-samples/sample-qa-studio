@@ -6,6 +6,7 @@ import Button from "@cloudscape-design/components/button";
 import Alert from "@cloudscape-design/components/alert";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { api } from '../../utils/api';
+import { formatDateTime } from '../../utils/dateFormat';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
 interface DownloadedFile {
@@ -84,10 +85,6 @@ export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleString();
-  };
 
   if (loading) {
     return null;
@@ -124,7 +121,7 @@ export default function DownloadedFiles({ usecaseId, executionId, refreshTrigger
           {
             id: 'lastModified',
             header: 'Downloaded At',
-            cell: item => formatDate(item.lastModified),
+            cell: item => formatDateTime(item.lastModified),
             width: 200,
           },
           {

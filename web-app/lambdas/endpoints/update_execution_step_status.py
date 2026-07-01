@@ -4,6 +4,17 @@ from utils import create_response, get_table_name, require_scopes, validate_path
 
 dynamodb = boto3.client('dynamodb')
 
+# Fields the CLI runner may clear on the step-definition record during
+# cache-cleanup after a failed trajectory replay (R-API-6).  The allow-list
+# is closed: anything outside it is rejected to prevent the endpoint from
+# doubling as an arbitrary-attribute deleter.
+_ALLOWED_CLEAR_FIELDS = {
+    'trajectory_s3_key',
+    'trajectory_last_updated',
+    'cached_steps',
+    'cache_last_updated',
+}
+
 
 def handler(event, context):
     """
@@ -63,6 +74,29 @@ def handler(event, context):
     actual_value = body.get('actual_value')
     act_id = body.get('act_id')
     logs = body.get('logs')
+    clear_cache_fields = body.get('clear_cache_fields')
+
+    # Validate clear_cache_fields shape + allow-list before any writes.
+    if clear_cache_fields is not None:
+        if not isinstance(clear_cache_fields, list):
+            return create_response(
+                400, {'error': 'clear_cache_fields must be a list of strings'},
+            )
+        if not all(isinstance(f, str) for f in clear_cache_fields):
+            return create_response(
+                400, {'error': 'clear_cache_fields must be a list of strings'},
+            )
+        unknown = [f for f in clear_cache_fields if f not in _ALLOWED_CLEAR_FIELDS]
+        if unknown:
+            return create_response(
+                400,
+                {
+                    'error': (
+                        'clear_cache_fields contains unknown fields: '
+                        + ', '.join(sorted(unknown))
+                    ),
+                },
+            )
     
     # Validate required fields
     if not status:
@@ -143,6 +177,40 @@ def handler(event, context):
             ExpressionAttributeNames=expression_attribute_names,
             ExpressionAttributeValues=expression_attribute_values
         )
+
+        # Clear stale cache fields on the step-definition record when
+        # requested. Cache fields live on ``USECASE#{uc}/STEP#{step}``
+        # (the step's canonical record), NOT on the execution-step record
+        # we just updated. See R-API-6 in the spec — used by the runner
+        # when trajectory replay failed and the pointer is now stale.
+        # Best-effort: a DynamoDB failure here does not fail the status
+        # update, which is the primary action the caller asked for.
+        if clear_cache_fields:
+            # De-duplicate while preserving order for a deterministic
+            # REMOVE expression.
+            seen = []
+            for field in clear_cache_fields:
+                if field not in seen:
+                    seen.append(field)
+            # The step_definition_id identifies the canonical STEP record.
+            # The URL's step_id is the execution-step UUID which is different.
+            # Fall back to step_id for backward compatibility with older
+            # CLI versions that don't send step_definition_id.
+            definition_id = body.get('step_definition_id') or step_id
+            try:
+                dynamodb.update_item(
+                    TableName=table_name,
+                    Key={
+                        'pk': {'S': f'USECASE#{usecase_id}'},
+                        'sk': {'S': f'STEP#{definition_id}'},
+                    },
+                    UpdateExpression='REMOVE ' + ', '.join(seen),
+                )
+            except Exception as cleanup_exc:  # noqa: BLE001 — best-effort
+                print(
+                    f'Failed to clear cache fields {seen} for step {definition_id}: '
+                    f'{cleanup_exc}'
+                )
         
         print(f'Updated step {step_id} status to {status} for execution {execution_id}')
         

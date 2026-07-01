@@ -1,3 +1,4 @@
+import { formatDateTime } from "../utils/dateFormat";
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Link from "@cloudscape-design/components/link";
@@ -8,18 +9,14 @@ import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import Table from "@cloudscape-design/components/table";
 import TextFilter from "@cloudscape-design/components/text-filter";
 import { api } from '../utils/api';
+import { batchedPromiseAll } from '../utils/batchedPromiseAll';
+import { useBatchExecute } from '../hooks/useBatchExecute';
 import Badge from "@cloudscape-design/components/badge";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import DeleteUsecaseModal from './DeleteUsecaseModal';
 import Flashbar from "@cloudscape-design/components/flashbar";
 // import { usePreloadOnHover } from './common/ComponentPreloader';
 
-interface BatchExecutionResult {
-  usecaseId: string;
-  usecaseName: string;
-  success: boolean;
-  error?: string;
-}
 
 interface Usecase {
   id: string;
@@ -55,6 +52,7 @@ function getStatusType(status: string) {
     case 'success': return 'success';
     case 'error':
     case 'failed': return 'error';
+    case 'running':
     case 'executing': return 'in-progress';
     case 'pending': return 'pending';
     case 'stopped': return 'stopped';
@@ -69,7 +67,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
-  const [batchExecuting, setBatchExecuting] = useState(false);
+  const { executeBatch, executing: batchExecuting } = useBatchExecute();
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [flashbarItems, setFlashbarItems] = useState<any[]>([]);
   const [sortingColumn, setSortingColumn] = useState<any>({ sortingField: 'name' });
@@ -112,38 +110,17 @@ export default function HomeScreen() {
       return;
     }
 
-    setBatchExecuting(true);
     setFlashbarItems([{
       type: 'info',
       content: `Starting batch execution for ${selectedItems.length} use case(s)...`,
       loading: true
     }]);
 
-    // Execute all selected use cases in parallel
-    const executionPromises = selectedItems.map(async (usecase) => {
-      try {
-        await api.post(`usecase/${usecase.id}/execute?trigger-type=OnDemandHeadless`, {});
-        return {
-          usecaseId: usecase.id,
-          usecaseName: usecase.name,
-          success: true
-        } as BatchExecutionResult;
-      } catch (error) {
-        return {
-          usecaseId: usecase.id,
-          usecaseName: usecase.name,
-          success: false,
-          error: (error as Error).message
-        } as BatchExecutionResult;
-      }
-    });
-
-    const results = await Promise.all(executionPromises);
+    const results = await executeBatch(selectedItems);
 
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;
 
-    // Show results
     const resultItems = [];
 
     if (successCount > 0) {
@@ -170,7 +147,6 @@ export default function HomeScreen() {
     }
 
     setFlashbarItems(resultItems);
-    setBatchExecuting(false);
     setSelectedItems([]);
   };
 
@@ -196,8 +172,8 @@ export default function HomeScreen() {
       loading: true
     }]);
 
-    // Delete all selected use cases in parallel
-    const deletePromises = selectedItems.map(async (usecase) => {
+    // Delete selected use cases in batches matching Lambda concurrency limit
+    const results = await batchedPromiseAll(selectedItems, async (usecase) => {
       try {
         await api.delete(`usecase/${usecase.id}`);
         return {
@@ -214,8 +190,6 @@ export default function HomeScreen() {
         } as BatchExecutionResult;
       }
     });
-
-    const results = await Promise.all(deletePromises);
 
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;
@@ -416,7 +390,7 @@ export default function HomeScreen() {
               }
 
               const timeAgo = formatTimeAgo(item.last_execution_time);
-              const fullDate = new Date(item.last_execution_time).toLocaleString();
+              const fullDate = formatDateTime(item.last_execution_time);
 
               return (
                 <span title={fullDate} style={{ fontSize: '0.9em' }}>

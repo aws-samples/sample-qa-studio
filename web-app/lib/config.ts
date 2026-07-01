@@ -24,6 +24,10 @@ export interface NovaActQAStudioConfig {
   cliCallbackUrl?: string;
   /** Reserved concurrent executions per Lambda function (default: 5) */
   lambdaConcurrency?: number;
+  /** Maximum bytes accepted for a single network_assertion body / schema field
+   * (applies to request template, response template, mock response, and
+   * captured request/response bodies). Default 1_048_576 (1 MiB). */
+  networkAssertionBodyMaxBytes?: number;
 }
 
 const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
@@ -39,6 +43,7 @@ const DEFAULT_CONFIG: Partial<NovaActQAStudioConfig> = {
   useNovaActGa: true,
   agentCoreVPC: false,
   lambdaConcurrency: 5,
+  networkAssertionBodyMaxBytes: 1_048_576,
 };
 
 /**
@@ -118,6 +123,16 @@ export function loadConfig(configPath?: string): NovaActQAStudioConfig {
   // Validate Security Group ID format if provided
   if (config.workerSecurityGroupId && !config.workerSecurityGroupId.startsWith('sg-')) {
     throw new Error(`Configuration error: workerSecurityGroupId "${config.workerSecurityGroupId}" must start with "sg-"`);
+  }
+
+  // Validate networkAssertionBodyMaxBytes — positive integer when present
+  if (
+    config.networkAssertionBodyMaxBytes !== undefined &&
+    (!Number.isInteger(config.networkAssertionBodyMaxBytes) || config.networkAssertionBodyMaxBytes <= 0)
+  ) {
+    throw new Error(
+      `Configuration error: networkAssertionBodyMaxBytes "${config.networkAssertionBodyMaxBytes}" must be a positive integer`,
+    );
   }
 
   return config;

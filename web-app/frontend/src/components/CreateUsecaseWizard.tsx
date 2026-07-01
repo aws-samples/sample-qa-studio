@@ -6,6 +6,7 @@ import Box from "@cloudscape-design/components/box";
 import Icon from "@cloudscape-design/components/icon";
 import Link from "@cloudscape-design/components/link";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
+import Alert from "@cloudscape-design/components/alert";
 
 interface CreationOption {
   id: string;
@@ -75,6 +76,14 @@ export default function CreateUsecaseWizard() {
           navigate(event.detail.href);
         }}
       />
+
+      <Alert
+        type="info"
+        header="Try the new unified wizard"
+      >
+        A new guided wizard consolidates all creation paths into one flow.{' '}
+        <Link onFollow={() => navigate('/create/new')}>Try it out</Link>
+      </Alert>
 
       <Header
         variant="h1"

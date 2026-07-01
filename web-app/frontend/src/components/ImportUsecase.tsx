@@ -11,7 +11,9 @@ import ExpandableSection from "@cloudscape-design/components/expandable-section"
 import Table from "@cloudscape-design/components/table";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
 import Input from "@cloudscape-design/components/input";
+import Select, { SelectProps } from "@cloudscape-design/components/select";
 import { exportImportApi, api } from '../utils/api';
+import { regionOptions, findRegionOptions } from '../utils/browser_regions';
 
 export default function ImportUsecase() {
   const navigate = useNavigate();
@@ -24,6 +26,7 @@ export default function ImportUsecase() {
   const [showSecretsForm, setShowSecretsForm] = useState(false);
   const [secretValues, setSecretValues] = useState<Record<string, string>>({});
   const [savingSecrets, setSavingSecrets] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState<SelectProps.Option | null>(findRegionOptions() as SelectProps.Option);
 
   // Preview file content when file is selected
   useEffect(() => {
@@ -67,6 +70,10 @@ export default function ImportUsecase() {
       const fileContent = await file[0].text();
       const importData = JSON.parse(fileContent);
       
+      if (selectedRegion?.value) {
+        importData.regionOverride = selectedRegion.value;
+      }
+
       const result = await exportImportApi.importUsecase(importData);
       setImportResult(result);
       
@@ -176,6 +183,17 @@ export default function ImportUsecase() {
               showFileThumbnail
               tokenLimit={3}
               accept=".json"
+            />
+          </FormField>
+
+          <FormField
+            label="Execution region"
+            description="AWS region where the browser will run during test execution"
+          >
+            <Select
+              selectedOption={selectedRegion}
+              onChange={({ detail }) => setSelectedRegion(detail.selectedOption)}
+              options={regionOptions()}
             />
           </FormField>
 

@@ -13,8 +13,8 @@ export function useModels() {
       try {
         setLoading(true);
         const response = await modelsApi.list();
-        setModels(response.models);
-        setDefaultModel(response.defaultModel);
+        setModels(response.models || []);
+        setDefaultModel(response.defaultModel || 'nova-act-v1.0');
       } catch (err) {
         console.error('Failed to fetch models:', err);
         setError('Failed to load models');
@@ -34,7 +34,7 @@ export function useModels() {
   }, []);
 
   const modelOptions = (): SelectProps.Option[] => {
-    return models.map(model => ({
+    return (models || []).map(model => ({
       label: model.modelName,
       value: model.modelId,
       description: model.description,
@@ -44,7 +44,7 @@ export function useModels() {
 
   const findModelOption = (modelId?: string): SelectProps.Option => {
     const targetModelId = modelId || defaultModel;
-    const model = models.find(m => m.modelId === targetModelId);
+    const model = (models || []).find(m => m.modelId === targetModelId);
     
     if (model) {
       return {

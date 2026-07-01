@@ -7,7 +7,6 @@ import Badge from "@cloudscape-design/components/badge";
 import Button from "@cloudscape-design/components/button";
 import { RemoteBrowser } from '../dcv/DCVViewer';
 import { useLiveViewUrl } from '../../hooks/useLiveViewUrl';
-import './WizardLiveView.css';
 
 interface WizardLiveViewProps {
   sessionId: string;

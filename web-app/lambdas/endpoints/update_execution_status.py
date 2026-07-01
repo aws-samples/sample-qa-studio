@@ -21,6 +21,7 @@ from test_suite_schema import (
     get_suite_execution_pk,
     get_execution_sk
 )
+from cache_invalidation import cleanup_cache_artifacts
 
 dynamodb = boto3.client('dynamodb')
 eventbridge = boto3.client('events')
@@ -170,7 +171,34 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except Exception as e:
             print(f'Error publishing Amazon EventBridge event: {str(e)}')
             # Don't fail the request if event publishing fails
-        
+
+        # Option C cache invalidation: when an execution transitions
+        # to ``failed``, wipe all cache/trajectory pointers + S3 blobs
+        # for the usecase so the NEXT execution starts from a clean
+        # slate. Coarse (clears even steps that weren't involved in
+        # the failure) but reliable — the alternative per-step
+        # cleanup paths have gaps, see the RCA for Option C. Best
+        # effort; any error is logged and we continue.
+        if status == 'failed':
+            try:
+                s3_bucket = os.environ.get('S3_BUCKET', '')
+                # cleanup_cache_artifacts expects a resource-style
+                # Table handle; this Lambda otherwise uses the
+                # low-level client for efficiency, so we build a
+                # resource here just for the helper.
+                dynamodb_resource = boto3.resource('dynamodb')
+                table = dynamodb_resource.Table(table_name)
+                cleanup_cache_artifacts(table, usecase_id, s3_bucket)
+                print(
+                    f'Cleared cache artifacts for usecase {usecase_id} '
+                    f'after failed execution {execution_id}'
+                )
+            except Exception as cleanup_exc:  # noqa: BLE001 — best-effort
+                print(
+                    f'Cache cleanup after failed execution {execution_id}: '
+                    f'{cleanup_exc}'
+                )
+
         # Update suite execution counters for terminal statuses
         item = get_response['Item']
         suite_execution_id = item.get('suite_execution_id', {}).get('S')
@@ -183,19 +211,81 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 else:
                     counter_update_expr = 'ADD completed_usecases :inc, failed_usecases :inc, running_usecases :dec'
                 
-                dynamodb.update_item(
+                suite_key = {
+                    'pk': {'S': get_suite_execution_pk(suite_id)},
+                    'sk': {'S': get_execution_sk(suite_execution_id)}
+                }
+                update_response = dynamodb.update_item(
                     TableName=table_name,
-                    Key={
-                        'pk': {'S': get_suite_execution_pk(suite_id)},
-                        'sk': {'S': get_execution_sk(suite_execution_id)}
-                    },
+                    Key=suite_key,
                     UpdateExpression=counter_update_expr,
                     ExpressionAttributeValues={
                         ':inc': {'N': '1'},
                         ':dec': {'N': '-1'}
-                    }
+                    },
+                    ReturnValues='ALL_NEW'
                 )
                 print(f'Updated suite execution counters for suite_execution={suite_execution_id}, status={status}')
+
+                # Check if all usecases completed — if so, finalize suite execution status
+                suite_exec = update_response.get('Attributes', {})
+                total = int(suite_exec.get('total_usecases', {}).get('N', '0'))
+                completed = int(suite_exec.get('completed_usecases', {}).get('N', '0'))
+
+                if total > 0 and completed >= total:
+                    failed_count = int(suite_exec.get('failed_usecases', {}).get('N', '0'))
+                    final_status = 'failed' if failed_count > 0 else 'completed'
+                    completed_at = get_current_timestamp()
+
+                    # Compute duration from started_at to now
+                    duration_ms = 0
+                    started_at = suite_exec.get('started_at', {}).get('S', '')
+                    if started_at:
+                        try:
+                            from datetime import datetime, timezone
+                            start = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+                            end = datetime.now(timezone.utc)
+                            duration_ms = int((end - start).total_seconds() * 1000)
+                        except (ValueError, TypeError):
+                            pass
+
+                    dynamodb.update_item(
+                        TableName=table_name,
+                        Key=suite_key,
+                        UpdateExpression='SET #status = :status, completed_at = :completed_at, duration_ms = :duration',
+                        ExpressionAttributeNames={'#status': 'status'},
+                        ExpressionAttributeValues={
+                            ':status': {'S': final_status},
+                            ':completed_at': {'S': completed_at},
+                            ':duration': {'N': str(duration_ms)}
+                        }
+                    )
+                    print(f'Suite execution {suite_execution_id} finalized as {final_status} (duration: {duration_ms}ms)')
+
+                    # Propagate to test suite summary record
+                    successful_count = int(suite_exec.get('successful_usecases', {}).get('N', '0'))
+                    dynamodb.update_item(
+                        TableName=table_name,
+                        Key={
+                            'pk': {'S': 'TEST_SUITES'},
+                            'sk': {'S': f'SUITE#{suite_id}'}
+                        },
+                        UpdateExpression=(
+                            'SET last_execution_status = :status, '
+                            'last_execution_time = :time, '
+                            'last_execution_id = :exec_id, '
+                            'last_successful_count = :successful, '
+                            'last_failed_count = :failed'
+                        ),
+                        ExpressionAttributeValues={
+                            ':status': {'S': final_status},
+                            ':time': {'S': completed_at},
+                            ':exec_id': {'S': suite_execution_id},
+                            ':successful': {'N': str(successful_count)},
+                            ':failed': {'N': str(failed_count)},
+                        }
+                    )
+                    print(f'Updated test suite {suite_id} summary')
             except Exception as e:
                 print(f'Error updating suite execution counters: {str(e)}')
                 # Don't fail the request if suite counter update fails

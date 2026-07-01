@@ -20,6 +20,7 @@ function getStatusType(status: string) {
     case 'success': return 'success';
     case 'error':
     case 'failed': return 'error';
+    case 'running':
     case 'executing': return 'in-progress';
     case 'pending': return 'pending';
     case 'cached': return 'success';
@@ -88,10 +89,6 @@ export default function ExecutionSteps({
             header: 'Status',
             width: 100,
             cell: (item: any) => {
-              const actId = item.actId || item.act_id;
-              if (actId === 'cached') {
-                return <StatusIndicator type="success">cached</StatusIndicator>;
-              }
               return (
                 <StatusIndicator type={getStatusType(item.status)}>
                   {item.status}
@@ -118,7 +115,7 @@ export default function ExecutionSteps({
                         Trace
                       </Button>
                     )}
-                    {actId && (
+                    {hasTrace && actId && (
                       <CopyToClipboard
                         copyButtonAriaLabel="Copy Act ID"
                         copyErrorText="failed to copy"
@@ -126,6 +123,9 @@ export default function ExecutionSteps({
                         textToCopy={actId}
                         variant="inline"
                       />
+                    )}
+                    {!hasTrace && actId === 'cached' && (
+                      <Box fontSize="body-s" color="text-body-secondary">Executed from cache</Box>
                     )}
                   </SpaceBetween>
                   {item.logs && item.logs.length > 0 && (

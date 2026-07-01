@@ -486,7 +486,7 @@ class TestSuiteRemoveTestCommand:
         assert "Removed" in result.output
         assert "uc-aaa" in result.output
         mock_client.delete.assert_called_once_with(
-            "/api/test-suites/suite-001/usecases/uc-aaa"
+            "/test-suites/suite-001/usecases/uc-aaa"
         )
 
     def test_shows_not_found_on_404(self):

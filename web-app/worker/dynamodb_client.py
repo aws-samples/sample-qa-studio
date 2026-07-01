@@ -101,7 +101,24 @@ class DynamoDBClient:
                         enable_advanced_click_types=item.get('enable_advanced_click_types', False),
                         value_source=item.get('value_source', ''),
                         cached_steps=item.get('cached_steps', None),
-                        cache_last_updated=item.get('cache_last_updated', None)
+                        cache_last_updated=item.get('cache_last_updated', None),
+                        trajectory_s3_key=item.get('trajectory_s3_key', None),
+                        trajectory_last_updated=item.get('trajectory_last_updated', None),
+                        browser_action=item.get('browser_action', None),
+                        browser_args=item.get('browser_args', None),
+                        transform_operation=item.get('transform_operation', None),
+                        transform_args=item.get('transform_args', None),
+                        value_format=item.get('value_format', None),
+                        network_url_pattern=item.get('network_url_pattern', None),
+                        network_method=item.get('network_method', None),
+                        network_request_body=item.get('network_request_body', None),
+                        network_body_match_type=item.get('network_body_match_type', None),
+                        network_mock_response=item.get('network_mock_response', None),
+                        network_mock_passthrough=item.get('network_mock_passthrough', False),
+                        network_timeout=int(item['network_timeout']) if item.get('network_timeout') is not None else None,
+                        network_response_body=item.get('network_response_body', None),
+                        network_response_body_match_type=item.get('network_response_body_match_type', None),
+                        network_response_status=int(item['network_response_status']) if item.get('network_response_status') is not None else None,
                     )
                     steps.append(step)
                 except Exception as e:
@@ -630,6 +647,16 @@ class DynamoDBClient:
                 assertion_variable=item.get('assertion_variable', ''),
                 enable_advanced_click_types=item.get('enable_advanced_click_types', False),
                 value_source=item.get('value_source', ''),
+                cached_steps=item.get('cached_steps', None),
+                cache_last_updated=item.get('cache_last_updated', None),
+                trajectory_s3_key=item.get('trajectory_s3_key', None),
+                trajectory_last_updated=item.get('trajectory_last_updated', None),
+                browser_action=item.get('browser_action', None),
+                browser_args=item.get('browser_args', None),
+                transform_operation=item.get('transform_operation', None),
+                transform_args=item.get('transform_args', None),
+                value_format=item.get('value_format', None),
+
             )
         except ClientError as e:
             logger.error(f"Error getting execution step {step_id}: {e}")
@@ -669,6 +696,15 @@ class DynamoDBClient:
                     assertion_variable=item.get('assertion_variable', ''),
                     enable_advanced_click_types=item.get('enable_advanced_click_types', False),
                     value_source=item.get('value_source', ''),
+                    cached_steps=item.get('cached_steps', None),
+                    cache_last_updated=item.get('cache_last_updated', None),
+                    trajectory_s3_key=item.get('trajectory_s3_key', None),
+                    trajectory_last_updated=item.get('trajectory_last_updated', None),
+                    browser_action=item.get('browser_action', None),
+                    browser_args=item.get('browser_args', None),
+                    transform_operation=item.get('transform_operation', None),
+                    transform_args=item.get('transform_args', None),
+
                 )
                 steps.append(step)
             

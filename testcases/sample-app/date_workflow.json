@@ -1,0 +1,72 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-05-18T10:00:00Z",
+  "usecase": {
+    "name": "[Sample App] Date Workflow — Compare two blog post dates",
+    "description": "End-to-end exercise of the v1 date feature: visit two blog posts, capture each rendered date directly as a canonical UTC ISO string via retrieve_value with value_type=date, compute the day difference, add a 7-day duration, and assert the first post is after the second using validation_type=date. Note: this test lives under sample-app rather than app/ (see spec Task 11) because the sample-app blog renders predictable dates we can author against; the QA Studio dashboard's dates depend on dynamic execution state.",
+    "starting_url": "/blog/getting-started-cloud",
+    "active": true,
+    "executing_region": "",
+    "tags": ["sample-app", "transform", "date", "validation_type=date", "value_type=date", "e2e"]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "instruction": "Wait for the blog post detail page to load and the post date to be visible near the post title",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 2,
+      "instruction": "Return the post's published date as it appears on the page (e.g. 'March 15, 2026')",
+      "step_type": "retrieve_value",
+      "capture_variable": "post1_date",
+      "value_type": "date",
+      "value_format": "%B %d, %Y"
+    },
+    {
+      "sort": 3,
+      "instruction": "Click the back arrow / Back to Blog link",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 4,
+      "instruction": "Click the second blog post card",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 5,
+      "instruction": "Return the post's published date as it appears on the page",
+      "step_type": "retrieve_value",
+      "capture_variable": "post2_date",
+      "value_type": "date",
+      "value_format": "%B %d, %Y"
+    },
+    {
+      "sort": 6,
+      "instruction": "Compute the difference between the two captured dates in days (post1 - post2)",
+      "step_type": "transform",
+      "transform_operation": "date_diff",
+      "transform_args": "{\"a\": \"{{post1_date}}\", \"b\": \"{{post2_date}}\", \"unit\": \"days\"}",
+      "capture_variable": "days_between"
+    },
+    {
+      "sort": 7,
+      "instruction": "Add 7 days to the second post's date to demonstrate add_duration",
+      "step_type": "transform",
+      "transform_operation": "add_duration",
+      "transform_args": "{\"iso_value\": \"{{post2_date}}\", \"amount\": 7, \"unit\": \"days\"}",
+      "capture_variable": "post2_plus_a_week"
+    },
+    {
+      "sort": 8,
+      "instruction": "Assert that the first post's date is strictly after the second post's date",
+      "step_type": "assertion",
+      "assertion_variable": "post1_date",
+      "validation_type": "date",
+      "validation_operator": "after",
+      "validation_value": "{{post2_date}}"
+    }
+  ],
+  "variables": [],
+  "secrets": []
+}

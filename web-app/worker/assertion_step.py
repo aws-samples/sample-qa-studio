@@ -1,6 +1,8 @@
 import re
 import logging
 from models import ExecutionStep
+from transform.date_compare import evaluate_date_assertion
+from transform.date_parser import DateParseError
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +156,17 @@ def execute_assertion_step(step: ExecutionStep, runtime_variables: dict):
             except ValueError as e:
                 success = False
                 logs = f"Number conversion failed: {str(e)}"
+
+        elif step.validation_type == 'date':
+            try:
+                success, logs = evaluate_date_assertion(
+                    actual=str(actual_value),
+                    validation_value=expected_value,
+                    operator=step.validation_operator,
+                )
+            except (DateParseError, ValueError) as exc:
+                success = False
+                logs = f"Date assertion error: {exc}"
 
         else:
             logger.error(f"Unknown validation type '{step.validation_type}' or operator '{step.validation_operator}' for assertion step {step.sort}")

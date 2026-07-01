@@ -98,6 +98,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'enable_cache': body.get('enableCache', False),
             'test_platform': test_platform,
         }
+
+        # Application association (required)
+        application_id = body.get('application_id', '')
+        if not application_id:
+            return create_response(400, {'error': 'application_id is required'})
+        usecase['application_id'] = application_id
         
         # Store mobile config fields only when non-empty
         mobile_fields = {

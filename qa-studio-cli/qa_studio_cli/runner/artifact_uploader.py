@@ -89,7 +89,7 @@ class ArtifactUploader:
         """Upload single suite-level artifact with retry."""
         response = await asyncio.to_thread(
             self.api_client.post,
-            f"/api/test-suites/{suite_id}/executions/{suite_execution_id}/artifacts",
+            f"/test-suites/{suite_id}/executions/{suite_execution_id}/artifacts",
             json_body={
                 "type": artifact_type,
                 "filename": artifact_path.name,
@@ -126,7 +126,7 @@ class ArtifactUploader:
 
         response = await asyncio.to_thread(
             self.api_client.post,
-            f"/api/usecase/{usecase_id}/executions/{execution_id}/artifacts",
+            f"/usecase/{usecase_id}/executions/{execution_id}/artifacts",
             json_body=payload,
         )
         upload_url = response["upload_url"]
@@ -145,7 +145,7 @@ class ArtifactUploader:
             try:
                 await asyncio.to_thread(
                     self.api_client.patch,
-                    f"/api/usecase/{usecase_id}/executions/{execution_id}/artifacts/{artifact_id}",
+                    f"/usecase/{usecase_id}/executions/{execution_id}/artifacts/{artifact_id}",
                     json_body={},
                 )
             except Exception as e:
@@ -163,7 +163,7 @@ class ArtifactUploader:
         """Upload single step-level artifact with retry."""
         response = await asyncio.to_thread(
             self.api_client.post,
-            f"/api/usecase/{usecase_id}/executions/{execution_id}/steps/{step_id}/artifacts",
+            f"/usecase/{usecase_id}/executions/{execution_id}/steps/{step_id}/artifacts",
             json_body={
                 "filename": artifact_path.name,
                 "content_type": self._get_content_type(artifact_path),
@@ -185,7 +185,7 @@ class ArtifactUploader:
             try:
                 await asyncio.to_thread(
                     self.api_client.patch,
-                    f"/api/usecase/{usecase_id}/executions/{execution_id}/artifacts/{artifact_id}",
+                    f"/usecase/{usecase_id}/executions/{execution_id}/artifacts/{artifact_id}",
                     json_body={},
                 )
             except Exception as e:

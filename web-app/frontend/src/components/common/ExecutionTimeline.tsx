@@ -3,6 +3,7 @@ import Header from "@cloudscape-design/components/header";
 import Box from "@cloudscape-design/components/box";
 import Steps from "@cloudscape-design/components/steps";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { formatDateTime } from '../../utils/dateFormat';
 
 interface ExecutionTimelineProps {
   execution: {
@@ -58,7 +59,7 @@ export default function ExecutionTimeline({ execution }: ExecutionTimelineProps)
   if (createdAt) {
     steps.push({
       header: 'Created',
-      info: new Date(createdAt).toLocaleString(),
+      info: formatDateTime(createdAt),
       description: 'Execution request created and queued',
       status: 'success' as const
     });
@@ -69,7 +70,7 @@ export default function ExecutionTimeline({ execution }: ExecutionTimelineProps)
     const queueTime = calculateDuration(createdAt, executingAt);
     steps.push({
       header: 'Started Executing',
-      info: new Date(executingAt).toLocaleString(),
+      info: formatDateTime(executingAt),
       description: `Execution began processing after ${queueTime} in queue`,
       status: 'success' as const
     });
@@ -93,13 +94,13 @@ export default function ExecutionTimeline({ execution }: ExecutionTimelineProps)
 
     steps.push({
       header: isSuccess ? 'Completed Successfully' : 'Failed',
-      info: new Date(completedAt).toLocaleString(),
+      info: formatDateTime(completedAt),
       description: isSuccess
         ? `Execution completed successfully after ${executionTime}`
         : `Execution failed after ${executionTime}`,
       status: isSuccess ? 'success' as const : 'error' as const
     });
-  } else if (execution.status === 'executing' || execution.status === 'in-progress') {
+  } else if (execution.status === 'running' || execution.status === 'executing' || execution.status === 'in-progress') {
     const currentTime = executingAt
       ? calculateDuration(executingAt, new Date().toISOString())
       : calculateDuration(createdAt!, new Date().toISOString());

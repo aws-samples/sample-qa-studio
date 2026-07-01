@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any, Dict, Optional, Tuple, List
 import boto3
 
@@ -9,6 +10,7 @@ from test_suite_schema import (
     get_suite_execution_pk,
     get_execution_sk
 )
+from cache_invalidation import cleanup_cache_artifacts
 
 # Configure logging
 logger = logging.getLogger()
@@ -104,7 +106,29 @@ def handler(event: Dict[str, Any], context: Any) -> None:
                     dynamodb_client, table_name, execution_id, usecase_id, 'failed', 
                     completed_at, error_message
                 )
-                
+
+                # Option C cache invalidation: the ECS task crashed/
+                # exited with failure; wipe cache + trajectory pointers
+                # for the usecase so the next execution starts clean.
+                # Matches the behaviour of update_execution_status.py
+                # when a runner reports ``failed`` directly. Best
+                # effort; logged but not raised.
+                try:
+                    s3_bucket = os.environ.get('S3_BUCKET', '')
+                    dynamodb_resource = boto3.resource('dynamodb')
+                    table = dynamodb_resource.Table(table_name)
+                    cleanup_cache_artifacts(table, usecase_id, s3_bucket)
+                    logger.info(
+                        "Cleared cache artifacts for usecase %s after "
+                        "ECS-reported failure on execution %s",
+                        usecase_id, execution_id,
+                    )
+                except Exception as cleanup_exc:  # noqa: BLE001 — best-effort
+                    logger.warning(
+                        "Cache cleanup after ECS failure on execution %s: %s",
+                        execution_id, cleanup_exc,
+                    )
+
             except Exception as e:
                 logger.error(f"Error updating execution status: {str(e)}")
                 raise

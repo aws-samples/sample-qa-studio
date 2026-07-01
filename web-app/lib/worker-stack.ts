@@ -6,7 +6,7 @@ import { PolicyStatement, Policy, Effect, Role, ServicePrincipal } from 'aws-cdk
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { CfnScheduleGroup } from 'aws-cdk-lib/aws-scheduler';
 import { Repository } from 'aws-cdk-lib/aws-ecr';
-import { OperatingSystemFamily, FargateTaskDefinition, Cluster, CpuArchitecture, ContainerImage, LogDrivers } from 'aws-cdk-lib/aws-ecs';
+import { OperatingSystemFamily, FargateTaskDefinition, Cluster, CpuArchitecture, ContainerImage, LogDrivers, Secret as EcsSecret } from 'aws-cdk-lib/aws-ecs';
 import { Vpc, IVpc, GatewayVpcEndpointAwsService, InterfaceVpcEndpointAwsService, SecurityGroup, ISecurityGroup } from 'aws-cdk-lib/aws-ec2';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { Function } from 'aws-cdk-lib/aws-lambda';
@@ -29,6 +29,19 @@ interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStack
   baseName: string
   table: Table
   novaActApiKeySecret: Secret
+  /**
+   * Secrets Manager secret carrying the worker OAuth M2M credentials
+   * (JSON: client_id, client_secret).  Built in the auth stack by the
+   * CLI-unified-runner refactor.
+   */
+  workerCredentialsSecret: Secret
+  /**
+   * API Gateway deployment stage (e.g. "api").  Combined with the stack's
+   * own region + the api-stack's deployed RestApi id (looked up at runtime
+   * via SSM) to form the CLI's QA_STUDIO_API_URL.  The stage name itself
+   * is part of the URL path and lives in config, so we pass it in.
+   */
+  apiDeploymentStage: string
   tableReadPolicy: ManagedPolicy
   tableWritePolicy: ManagedPolicy
   version: string
@@ -62,7 +75,6 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
   public readonly artefactsBucket: Bucket
   public readonly taskDefinition: FargateTaskDefinition
   public readonly schedulerGroup: CfnScheduleGroup
-  public readonly executionQueue: Queue
   public readonly cluster: Cluster
   public readonly vpc: IVpc
   public readonly subnetId: string
@@ -129,11 +141,19 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     });
 
     // Create cross-region buckets for enabled regions and collect all bucket ARNs
+    // When Nova Act GA is enabled, us-east-1 is always needed (Nova Act requires a same-region bucket)
+    const crossRegionTargets = new Set(
+      enabledRegions.filter((region: string) => region !== defaultRegion)
+    );
+    if (config.useNovaActGa) {
+      crossRegionTargets.add('us-east-1');
+    }
+    // Remove default region in case it was added by the Nova Act check
+    crossRegionTargets.delete(defaultRegion);
+
     this.regionalBucketArns = [
       this.artefactsBucket.bucketArn,
-      ...enabledRegions
-        .filter((region: string) => region !== defaultRegion)
-        .map((region: string) => this.createCrossRegionBucket(region)),
+      ...[...crossRegionTargets].map((region: string) => this.createCrossRegionBucket(region)),
     ];
 
     // Notification infrastructure
@@ -199,6 +219,42 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     executionStatusRule.addTarget(new LambdaFunction(updateUsecaseLastExecutionLambda));
 
     this.log('executionStatusRule', executionStatusRule.ruleName);
+
+    // Aggregation Lambda - publishes CloudWatch metrics + updates DynamoDB for dashboard
+    const aggregateExecutionLambda = this.createPythonLambda({
+      path: 'aggregate_execution',
+      timeout: Duration.seconds(15),
+      memorySize: 256,
+      environment: {
+        TABLE_NAME: props.table.tableName
+      }
+    });
+
+    aggregateExecutionLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    aggregateExecutionLambda.role?.addManagedPolicy(props.tableWritePolicy);
+
+    aggregateExecutionLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*']
+    }));
+
+    const aggregationRule = new Rule(this, 'aggregate_execution_rule', {
+      ruleName: this.cdkName('aggregate-execution'),
+      description: 'Triggers dashboard aggregation on terminal execution status',
+      eventBus: eventBus,
+      eventPattern: {
+        source: ['nova-act-qa-studio.execution'],
+        detailType: ['nova-act-qa-studio.execution.status.changed'],
+        detail: {
+          status: ['success', 'failed']
+        }
+      }
+    });
+
+    aggregationRule.addTarget(new LambdaFunction(aggregateExecutionLambda));
+
+    this.log('aggregationRule', aggregationRule.ruleName);
 
     // Cache Builder Lambda - builds step caches from Nova Act responses
     const buildCacheLambda = this.createPythonLambda({
@@ -281,13 +337,6 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     this.log('recordingQueue', recordingQueue.queueName);
     this.recordingQueueUrl = recordingQueue.queueUrl;
     this.recordingQueueArn = recordingQueue.queueArn;
-
-    // TODO: Remove this as the local queue feature is not needed anymore
-    this.executionQueue = new Queue(this, 'queue', {
-      queueName: this.cdkName('workhorse'),
-      visibilityTimeout: Duration.minutes(10),
-      removalPolicy: RemovalPolicy.DESTROY
-    });
 
     // Wizard mode queue (deprecated - will be replaced by EventBridge)
     this.wizardQueue = new Queue(this, 'wizard_queue', {
@@ -411,7 +460,6 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // Prepare base environment variables
     const baseEnvironment = {
       DYNAMO_TABLE: props.table.tableName,
-      QUEUE_URL: this.executionQueue.queueUrl,
       S3_BUCKET: this.artefactsBucket.bucketName,
       NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
       NOTIFICATION_QUEUE_URL: notificationQueue.queueUrl,
@@ -424,6 +472,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       DEVICE_FARM_REGION: 'us-west-2',
       // SQS queue for async Device Farm recording downloads
       RECORDING_QUEUE_URL: recordingQueue.queueUrl,
+      // Maximum body size accepted by network_assertion steps — read at
+      // worker boot.  See lib/config.ts networkAssertionBodyMaxBytes.
+      NETWORK_ASSERTION_BODY_MAX_BYTES: this.networkAssertionBodyMaxBytes.toString(),
     };
 
     // Add VPC environment variables if agentCoreVPC is enabled
@@ -436,6 +487,21 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       AC_SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
     } : baseEnvironment;
 
+    // CLI-unified-runner additions.  Injected as plain env:
+    //   QA_STUDIO_API_URL_SSM — SSM parameter name the entrypoint reads
+    //     to resolve the API Gateway URL.  api-stack writes the parameter
+    //     post-deploy; worker grants read access on it via IAM below.
+    // And as ECS-managed secrets (populated at container start, not
+    // baked into the image):
+    //   QA_STUDIO_CLIENT_ID
+    //   QA_STUDIO_CLIENT_SECRET
+    const runnerEnvironment = {
+      ...containerEnvironment,
+      QA_STUDIO_API_URL_SSM: `/qa-studio/${this.baseName}/api-url`,
+      QA_STUDIO_API_STAGE: props.apiDeploymentStage,
+      QA_STUDIO_TOKEN_ENDPOINT_SSM: `/qa-studio/${this.baseName}/cognito-token-endpoint`,
+    };
+
     // Add container to task definition
     this.taskDefinition.addContainer('container', {
       image: ContainerImage.fromEcrRepository(registry, props.version),
@@ -443,8 +509,47 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         streamPrefix: this.cdkName('logs'),
         logRetention: RetentionDays.FIVE_DAYS,
       }),
-      environment: containerEnvironment
+      environment: runnerEnvironment,
+      secrets: {
+        // ECS injects these as env vars at container start.  The
+        // SecretString on workerCredentialsSecret is stored as a JSON
+        // object {"client_id": "...", "client_secret": "..."}; the
+        // second argument picks the field.  Names chosen to match the
+        // CLI's TokenResolver env-var contract (OAUTH_CLIENT_ID /
+        // OAUTH_CLIENT_SECRET in qa_studio_cli/auth/resolver.py), so
+        // the entrypoint does not need to rename them.
+        OAUTH_CLIENT_ID: EcsSecret.fromSecretsManager(
+          props.workerCredentialsSecret, 'client_id',
+        ),
+        OAUTH_CLIENT_SECRET: EcsSecret.fromSecretsManager(
+          props.workerCredentialsSecret, 'client_secret',
+        ),
+      },
     });
+
+    // Grant the ECS execution role read access on the M2M credentials
+    // secret so ECS can populate the `secrets:` fields above.
+    props.workerCredentialsSecret.grantRead(this.taskDefinition.executionRole!);
+
+    // Grant the ECS task role read access on the SSM parameter the
+    // entrypoint consults to discover the API URL.  The parameter is
+    // written by the api-stack post-deploy.
+    // Grant the ECS task role read access on the SSM parameters the
+    // entrypoint consults (API URL + Cognito token endpoint).  Both are
+    // written by other stacks: the api-stack writes the api-url; the
+    // auth-stack writes the cognito-token-endpoint.
+    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_ssm_runner_params', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['ssm:GetParameter'],
+          resources: [
+            `arn:aws:ssm:${Aws.REGION}:${Aws.ACCOUNT_ID}:parameter/qa-studio/${this.baseName}/api-url`,
+            `arn:aws:ssm:${Aws.REGION}:${Aws.ACCOUNT_ID}:parameter/qa-studio/${this.baseName}/cognito-token-endpoint`,
+          ],
+        }),
+      ],
+    }));
 
     // Grant the ECS task role permission to send messages to the recording queue
     // (moved here because taskDefinition is created later in the stack)
@@ -460,7 +565,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             'sqs:ReceiveMessage', 'sqs:DeleteMessage', 'sqs:GetQueueAttributes',
             'sqs:GetQueueUrl', 'sqs:ChangeMessageVisibility',
           ],
-          resources: [this.executionQueue.queueArn, this.wizardQueue.queueArn],
+          resources: [this.wizardQueue.queueArn],
         }),
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -689,7 +794,12 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     });
 
     const workerImage = new DockerImageAsset(this, 'MyDockerImage', {
-      directory: 'worker',
+      // Build context is the repo root so the Dockerfile can COPY both
+      // web-app/worker/ and the sibling qa-studio-cli/ source (needed
+      // to pip install the unified runner).  A .dockerignore at the
+      // repo root keeps the context small.
+      directory: '..',
+      file: 'web-app/worker/Dockerfile',
       platform: Platform.LINUX_ARM64
     });
 
@@ -738,6 +848,14 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       ]
     }));
 
+    // Inject the AgentCore execution role ARN into the container so the
+    // CLI's AgentCore browser provisioner can pass it to create_browser().
+    // Done here (not in runnerEnvironment above) because the role is
+    // created after the container definition.
+    this.taskDefinition.defaultContainer!.addEnvironment(
+      'BEDROCK_EXECUTION_ROLE', this.agentCoreExecutionRole.roleArn,
+    );
+
     this.schedulerRole = new Role(this, 'event_bridge_scheduler_role', {
       roleName: this.cdkName('scheduler-role'),
       assumedBy: new ServicePrincipal('scheduler.amazonaws.com'),
@@ -750,8 +868,8 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     this.executeUsecaseLambda = this.createPythonLambda({
       path: 'execute_usecase',
+      timeout: Duration.seconds(30),
       environment: {
-        QUEUE_URL: this.executionQueue.queueUrl,
         ECS_CLUSTER: this.cluster.clusterArn,
         ECS_TASK_DEFINITION: this.taskDefinition.taskDefinitionArn,
         SUBNET_ID: this.vpc.privateSubnets[0].subnetId,
@@ -910,9 +1028,6 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       actions: ['iam:PassRole'],
       resources: [this.schedulerRole.roleArn]
     }));
-
-    // TODO: remove
-    this.executionQueue.grantSendMessages(this.executeUsecaseLambda);
 
     // Grant ECS RunTask permissions to executeUsecaseLambda
     this.executeUsecaseLambda.addToRolePolicy(new PolicyStatement({

@@ -11,9 +11,17 @@ class TestSuiteAPI:
     def __init__(self, client: ApiClient):
         self.client = client
 
+    def list_suites(self) -> List[Dict[str, Any]]:
+        """Fetch every test suite the caller has read access to.
+
+        Returns the raw list from the API; consumers decide typing.
+        """
+        response = self.client.get("/test-suites")
+        return response.get("suites", []) or []
+
     def get_suite(self, suite_id: str) -> Dict[str, Any]:
         """Fetch test suite definition."""
-        return self.client.get(f"/api/test-suites/{suite_id}")
+        return self.client.get(f"/test-suites/{suite_id}")
 
     def execute_suite(
         self,
@@ -37,9 +45,26 @@ class TestSuiteAPI:
             payload["region"] = region
         if model_id is not None:
             payload["model_id"] = model_id
-        return self.client.post(f"/api/test-suites/{suite_id}/execute", json_body=payload)
+        return self.client.post(f"/test-suites/{suite_id}/execute", json_body=payload)
 
     def list_usecases(self, suite_id: str) -> List[Dict[str, Any]]:
         """List use cases belonging to a test suite."""
-        response = self.client.get(f"/api/test-suites/{suite_id}/usecases")
+        response = self.client.get(f"/test-suites/{suite_id}/usecases")
         return response.get("usecases", [])
+
+    def list_executions(
+        self, suite_id: str, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Fetch recent executions for a test suite, newest first.
+
+        The server sorts by ``started_at`` descending and caps at
+        ``limit`` (default 20; the backend enforces a hard ceiling
+        of 100). Consumers render the raw dicts — each carries the
+        suite-execution status plus per-run counters
+        (``total_usecases`` / ``completed_usecases`` / ...).
+        """
+        response = self.client.get(
+            f"/test-suites/{suite_id}/executions",
+            params={"limit": limit},
+        )
+        return response.get("executions", []) or []

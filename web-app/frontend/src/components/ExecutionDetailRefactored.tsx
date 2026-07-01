@@ -113,7 +113,7 @@ export default function ExecutionDetailRefactored() {
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
-    if (execution?.status === 'executing' || execution?.status === 'pending') {
+    if (execution?.status === 'running' || execution?.status === 'pending') {
       intervalId = setInterval(() => {
         fetchData();
       }, 10000); // 10 seconds
@@ -149,7 +149,7 @@ export default function ExecutionDetailRefactored() {
 
     // Only fetch logs for ci_runner executions in terminal state
     const isCiRunner = execution?.trigger_type === 'ci_runner';
-    const isTerminal = execution && execution.status !== 'executing' && execution.status !== 'pending';
+    const isTerminal = execution && execution.status !== 'running' && execution.status !== 'pending';
     if (isCiRunner && isTerminal) {
       fetchLogArtifact();
     } else if (execution) {
@@ -196,15 +196,15 @@ export default function ExecutionDetailRefactored() {
             variant="h1"
             actions={
               <SpaceBetween direction="horizontal" size="xs">
-                {execution?.cloudWatchLogsUrl && (
+                {execution?.cloudwatch_logs_url && (
                   <Button
                     iconName="external"
-                    onClick={() => window.open(execution.cloudWatchLogsUrl, '_blank')}
+                    onClick={() => window.open(execution.cloudwatch_logs_url, '_blank')}
                   >
                     CloudWatch Logs
                   </Button>
                 )}
-                {(execution?.status === 'executing' || execution?.status === 'pending') && (
+                {(execution?.status === 'running' || execution?.status === 'pending') && (
                   <Button
                     iconName="status-stopped"
                     onClick={() => setStopModalVisible(true)}
@@ -267,7 +267,7 @@ export default function ExecutionDetailRefactored() {
           </Grid>
 
           {/* Live View Panel - Full width above steps table (web only, not available for mobile/Device Farm) */}
-          {(execution?.status === 'executing') && execution?.test_platform !== 'mobile' && (
+          {(execution?.status === 'running') && execution?.test_platform !== 'mobile' && (
             <LiveViewPanel
               usecaseId={usecaseId}
               executionId={executionId}

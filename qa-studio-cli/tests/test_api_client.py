@@ -9,7 +9,7 @@ from click.testing import CliRunner
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from qa_studio_cli.api.client import ApiClient, require_auth
+from qa_studio_cli.api.client import ApiClient, require_auth, RETRYABLE_STATUS_CODES
 from qa_studio_cli.models.errors import ApiError, AuthError, ConfigError
 
 
@@ -424,3 +424,140 @@ class TestRequireAuth:
         client = captured_client["client"]
         assert client._token_provider is not None
         assert callable(client._token_provider)
+
+
+
+class TestBuildApiClient:
+    """Tests for :func:`qa_studio_cli.api.client.build_api_client`."""
+
+    def test_uses_provided_config(self):
+        from qa_studio_cli.api.client import build_api_client
+        from qa_studio_cli.models.config import CLIConfig
+
+        config = CLIConfig(
+            api_url="https://api.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="cid",
+        )
+        client = build_api_client(config=config)
+        assert client.base_url == "https://api.example.com"
+        assert callable(client._token_provider)
+
+    def test_loads_config_when_none_provided(self):
+        from unittest.mock import patch
+
+        from qa_studio_cli.api.client import build_api_client
+        from qa_studio_cli.models.config import CLIConfig
+
+        cfg = CLIConfig(
+            api_url="https://loaded.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="cid",
+        )
+        with patch("qa_studio_cli.api.client.load_config", return_value=cfg):
+            client = build_api_client()
+        assert client.base_url == "https://loaded.example.com"
+
+    def test_passes_token_file_through_to_resolver(self):
+        """--token-file path should be handed to TokenResolver so the
+        file provider wins over env / config / stored-user sources."""
+        from unittest.mock import patch
+
+        from qa_studio_cli.api.client import build_api_client
+        from qa_studio_cli.models.config import CLIConfig
+
+        cfg = CLIConfig(
+            api_url="https://api.example.com",
+            cognito_domain="https://auth.example.com",
+            client_id="cid",
+        )
+        with patch("qa_studio_cli.auth.resolver.TokenResolver") as mock_cls:
+            build_api_client(token_file="/tmp/token.json", config=cfg)
+        mock_cls.assert_called_once_with(token_file="/tmp/token.json", config=cfg)
+
+
+# ---------------------------------------------------------------------------
+# Retry behavior tests
+# ---------------------------------------------------------------------------
+
+class TestRetryBehavior:
+    """Verify retry logic for transient errors."""
+
+    def test_429_triggers_retry_then_succeeds(self):
+        client = _make_client()
+        throttled = _mock_response(429, {"message": "Too many requests"}, text="Too many requests")
+        success = _mock_response(200, {"ok": True})
+        with patch.object(client._session, "request", side_effect=[throttled, success]):
+            result = client.get("/test")
+            assert result == {"ok": True}
+            assert client._session.request.call_count == 2
+
+    def test_500_triggers_retry_then_succeeds(self):
+        client = _make_client()
+        error = _mock_response(500, {"message": "Internal server error"}, text="error")
+        success = _mock_response(200, {"data": 1})
+        with patch.object(client._session, "request", side_effect=[error, success]):
+            result = client.get("/test")
+            assert result == {"data": 1}
+            assert client._session.request.call_count == 2
+
+    def test_502_503_504_trigger_retry(self):
+        client = _make_client()
+        for code in (502, 503, 504):
+            error = _mock_response(code, {"message": "gateway error"}, text="err")
+            success = _mock_response(200, {"ok": True})
+            with patch.object(client._session, "request", side_effect=[error, success]):
+                result = client.get("/test")
+                assert result == {"ok": True}
+
+    def test_400_does_not_retry(self):
+        client = _make_client()
+        bad_request = _mock_response(400, {"message": "Bad request"}, text="Bad request")
+        with patch.object(client._session, "request", return_value=bad_request):
+            with pytest.raises(ApiError) as exc_info:
+                client.get("/test")
+            assert exc_info.value.status_code == 400
+            assert client._session.request.call_count == 1
+
+    def test_401_does_not_retry(self):
+        client = _make_client()
+        unauthorized = _mock_response(401, {"message": "Unauthorized"}, text="Unauthorized")
+        with patch.object(client._session, "request", return_value=unauthorized):
+            with pytest.raises(ApiError) as exc_info:
+                client.get("/test")
+            assert exc_info.value.status_code == 401
+            assert client._session.request.call_count == 1
+
+    def test_403_does_not_retry(self):
+        client = _make_client()
+        forbidden = _mock_response(403, {"message": "Forbidden"}, text="Forbidden")
+        with patch.object(client._session, "request", return_value=forbidden):
+            with pytest.raises(ApiError) as exc_info:
+                client.get("/test")
+            assert exc_info.value.status_code == 403
+            assert client._session.request.call_count == 1
+
+    def test_connection_error_triggers_retry(self):
+        client = _make_client()
+        success = _mock_response(200, {"ok": True})
+        with patch.object(client._session, "request", side_effect=[requests.ConnectionError("reset"), success]):
+            result = client.get("/test")
+            assert result == {"ok": True}
+            assert client._session.request.call_count == 2
+
+    def test_timeout_error_triggers_retry(self):
+        client = _make_client()
+        success = _mock_response(200, {"ok": True})
+        with patch.object(client._session, "request", side_effect=[requests.Timeout("timed out"), success]):
+            result = client.get("/test")
+            assert result == {"ok": True}
+            assert client._session.request.call_count == 2
+
+    def test_max_retries_exhausted_raises_api_error(self):
+        client = _make_client()
+        error = _mock_response(500, {"message": "Internal server error"}, text="error")
+        with patch.object(client._session, "request", return_value=error):
+            with pytest.raises(ApiError) as exc_info:
+                client.get("/test")
+            assert exc_info.value.status_code == 500
+            assert client._session.request.call_count == 3

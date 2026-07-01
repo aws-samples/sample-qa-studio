@@ -179,102 +179,115 @@ class TestRunCommandFormatChoice:
         mock_runner.run_usecase.assert_called_once()
 
 
-class TestRunCommandHeaders:
-    """--header parsing and duplicate key rejection."""
+class TestBrowserFlagValidation:
+    """--browser / --cdp-endpoint-url / --cdp-headers-file validation."""
 
-    def test_rejects_malformed_header(self, runner):
+    def test_browser_defaults_to_local(self, runner, mock_modules):
+        mock_runner, _ = mock_modules
+        result = runner.invoke(cli, ["run", "--usecase-id", "u1"])
+        assert result.exit_code == 0
+        mock_runner.run_usecase.assert_called_once()
+
+    def test_browser_invalid_choice_rejected(self, runner):
         result = runner.invoke(
-            cli, ["run", "--usecase-id", "u1", "--header", "no-equals-sign"]
+            cli, ["run", "--usecase-id", "u1", "--browser", "firefox"]
         )
         assert result.exit_code != 0
-        assert "key=value" in result.output
+        # click produces its own "invalid choice" error
+        assert "Invalid value" in result.output or "invalid choice" in result.output.lower()
 
-    def test_rejects_duplicate_header_key(self, runner):
+    def test_cdp_external_requires_endpoint_url(self, runner):
+        result = runner.invoke(
+            cli, ["run", "--usecase-id", "u1", "--browser", "cdp-external"]
+        )
+        assert result.exit_code != 0
+        assert "--cdp-endpoint-url is required" in result.output
+
+    def test_cdp_flags_without_browser_choice_rejected(self, runner):
         result = runner.invoke(
             cli,
             [
-                "run", "--usecase-id", "u1",
-                "--header", "X-Api-Key=abc",
-                "--header", "X-Api-Key=def",
+                "run",
+                "--usecase-id",
+                "u1",
+                "--cdp-endpoint-url",
+                "wss://x.test/",
             ],
         )
         assert result.exit_code != 0
-        assert "Duplicate header key" in result.output
+        assert "require --browser=cdp-external" in result.output
 
-    def test_accepts_single_header(self, runner, mock_modules):
+    def test_cdp_external_with_endpoint_passes_through(self, runner, mock_modules):
+        # T2.6 unblocked --browser=cdp-external — the flag now flows through
+        # to run_usecase, which constructs an ExecutionEngine with a matching
+        # BrowserSelection.  Here we just assert the dispatch happens cleanly.
         mock_runner, _ = mock_modules
-        runner.invoke(
-            cli, ["run", "--usecase-id", "u1", "--header", "X-Api-Key=abc123"],
-        )
-        mock_runner.run_usecase.assert_called_once()
-        assert mock_runner.run_usecase.call_args[1]["headers"] == {"X-Api-Key": "abc123"}
-
-    def test_accepts_multiple_headers(self, runner, mock_modules):
-        mock_runner, _ = mock_modules
-        runner.invoke(
+        result = runner.invoke(
             cli,
             [
-                "run", "--usecase-id", "u1",
-                "--header", "X-Api-Key=abc",
-                "--header", "Authorization=Bearer tok",
+                "run",
+                "--usecase-id", "u1",
+                "--browser", "cdp-external",
+                "--cdp-endpoint-url", "wss://x.test/",
             ],
         )
+        assert result.exit_code == 0
         mock_runner.run_usecase.assert_called_once()
-        assert mock_runner.run_usecase.call_args[1]["headers"] == {
-            "X-Api-Key": "abc",
-            "Authorization": "Bearer tok",
-        }
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["browser"] == "cdp-external"
+        assert kwargs["cdp_endpoint_url"] == "wss://x.test/"
 
-    def test_header_value_with_equals(self, runner, mock_modules):
-        """Header value containing '=' should be preserved."""
+    def test_agentcore_passes_through(self, runner, mock_modules):
+        # T2.6 unblocked --browser=agentcore.  It goes through to
+        # run_usecase; the engine constructs the AgentCoreBrowserProvisioner
+        # only when the remote path actually provisions a browser.
         mock_runner, _ = mock_modules
-        runner.invoke(
-            cli, ["run", "--usecase-id", "u1", "--header", "Authorization=Basic dXNlcj1wYXNz"],
+        result = runner.invoke(
+            cli, ["run", "--usecase-id", "u1", "--browser", "agentcore"],
         )
-        assert mock_runner.run_usecase.call_args[1]["headers"] == {
-            "Authorization": "Basic dXNlcj1wYXNz",
-        }
+        assert result.exit_code == 0
+        mock_runner.run_usecase.assert_called_once()
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["browser"] == "agentcore"
 
-    def test_headers_passed_to_run_runner(self, runner, mock_modules):
+
+class TestExecutionIdFlag:
+    """--execution-id validation + pass-through to run_usecase."""
+
+    def test_execution_id_requires_usecase_id(self, runner):
+        result = runner.invoke(
+            cli, ["run", "--suite-id", "s1", "--execution-id", "exec-1"]
+        )
+        assert result.exit_code != 0
+        # Either of the two UsageErrors is acceptable — the point is the
+        # combination is rejected before reaching the runner.
+        assert (
+            "--execution-id is not supported with --suite-id" in result.output
+            or "--execution-id requires --usecase-id" in result.output
+        )
+
+    def test_execution_id_alone_is_rejected(self, runner):
+        result = runner.invoke(cli, ["run", "--execution-id", "exec-1"])
+        assert result.exit_code != 0
+
+    def test_execution_id_passes_through_to_run_usecase(self, runner, mock_modules):
         mock_runner, _ = mock_modules
-        runner.invoke(
+        result = runner.invoke(
             cli,
             [
-                "run", "--suite-id", "s1",
-                "--header", "X-Custom=val",
+                "run",
+                "--usecase-id", "u1",
+                "--execution-id", "exec-42",
             ],
         )
-        mock_runner.run_runner.assert_called_once()
-        assert mock_runner.run_runner.call_args[1]["headers"] == {"X-Custom": "val"}
-
-    def test_empty_headers_when_none_provided(self, runner, mock_modules):
-        mock_runner, _ = mock_modules
-        runner.invoke(cli, ["run", "--usecase-id", "u1"])
-        assert mock_runner.run_usecase.call_args[1]["headers"] == {}
-
-
-class TestRunCommandUserAgent:
-    """--user-agent flag dispatch."""
-
-    def test_user_agent_passed_to_run_usecase(self, runner, mock_modules):
-        mock_runner, _ = mock_modules
-        runner.invoke(
-            cli,
-            ["run", "--usecase-id", "u1", "--user-agent", "MyBot/1.0"],
-        )
+        assert result.exit_code == 0
         mock_runner.run_usecase.assert_called_once()
-        assert mock_runner.run_usecase.call_args[1]["user_agent"] == "MyBot/1.0"
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["execution_id"] == "exec-42"
 
-    def test_user_agent_passed_to_run_runner(self, runner, mock_modules):
+    def test_no_execution_id_passes_none(self, runner, mock_modules):
         mock_runner, _ = mock_modules
-        runner.invoke(
-            cli,
-            ["run", "--suite-id", "s1", "--user-agent", "MyBot/1.0"],
-        )
-        mock_runner.run_runner.assert_called_once()
-        assert mock_runner.run_runner.call_args[1]["user_agent"] == "MyBot/1.0"
-
-    def test_user_agent_defaults_to_none(self, runner, mock_modules):
-        mock_runner, _ = mock_modules
-        runner.invoke(cli, ["run", "--usecase-id", "u1"])
-        assert mock_runner.run_usecase.call_args[1]["user_agent"] is None
+        result = runner.invoke(cli, ["run", "--usecase-id", "u1"])
+        assert result.exit_code == 0
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["execution_id"] is None

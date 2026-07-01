@@ -21,10 +21,14 @@ from mobile_actuator import create_mobile_session, cleanup_mobile_session
 from validation_step import execute_validation_step
 from secret_step import execute_secret_step
 from navigation_step import execute_navigation_step
+from trajectory_manager import TrajectoryManager
 from retrieve_value_step import execute_retrieve_value_step
 from assertion_step import execute_assertion_step
 from url_step import execute_url_step
 from download_step import execute_download_step
+from transform_step import execute_transform_step
+from browser_step import execute_browser_step
+from network_assertion_step import execute_network_assertion_step
 from event_emitter import emit_execution_completed_event
 
 # MobileActuator is only available in the Docker image with nova_act_mobile
@@ -69,6 +73,9 @@ def main_batch():
         logger.error("S3_BUCKET environment variable is required")
         return False
     
+    # Trajectory replay feature flag (default: enabled)
+    enable_trajectory_replay = os.getenv('ENABLE_TRAJECTORY_REPLAY', 'true').lower() != 'false'
+    
     logger.info(f"Starting worker for usecase: {usecase_id}, execution: {execution_id}")
     
     # Initialize DynamoDB and Secrets clients
@@ -77,7 +84,7 @@ def main_batch():
     
     try:
         # Update execution status to executing
-        db_client.update_execution_status(usecase_id, execution_id, "executing", executing_at=get_time())
+        db_client.update_execution_status(usecase_id, execution_id, "running", executing_at=get_time())
 
         boto_session = boto3.Session()
 
@@ -143,6 +150,27 @@ def main_batch():
         # Create execution-specific logs directory
         execution_logs_dir = os.path.join(logs_directory, execution_id)
         os.makedirs(execution_logs_dir, exist_ok=True)
+        
+        # Detect trajectory replay support and initialize TrajectoryManager
+        replayable_supported = False
+        trajectory_manager = None
+        if enable_trajectory_replay and execution.enable_cache:
+            replayable_supported = TrajectoryManager.detect_replayable_support(NovaAct)
+            logger.info(f"Trajectory replay: replayable_supported={replayable_supported}, enable_trajectory_replay={enable_trajectory_replay}")
+            
+            s3_client = boto3.client('s3', region_name=region_name)
+            dynamo_table = db_client.table
+            trajectory_manager = TrajectoryManager(
+                s3_client=s3_client,
+                s3_bucket=s3_bucket_name,
+                usecase_id=usecase_id,
+                execution_id=execution_id,
+                dynamo_table=dynamo_table,
+                logs_directory=execution_logs_dir,
+                replayable_supported=replayable_supported,
+            )
+        else:
+            logger.info(f"Trajectory replay disabled: enable_trajectory_replay={enable_trajectory_replay}, enable_cache={execution.enable_cache}")
         
         # Execute Nova Act directly in the same shell
         logger.info("Starting execution...")
@@ -359,7 +387,8 @@ def main_batch():
                         "region_name": NOVA_ACT_REGION
                     }
                 ) as workflow:
-                    with NovaAct(
+                    # Build NovaAct kwargs, conditionally adding replayable
+                    nova_kwargs = dict(
                         cdp_endpoint_url=ws_url,
                         cdp_headers=headers,
                         starting_page=execution.starting_url,
@@ -368,15 +397,20 @@ def main_batch():
                         logs_directory=execution_logs_dir,
                         ignore_https_errors=True,
                         chrome_channel="chromium",
-                        stop_hooks=[s3_writer]
-                        #user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
-                    ) as nova:
-                            all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
+                        stop_hooks=[s3_writer],
+                    )
+                    if replayable_supported and enable_trajectory_replay and execution.enable_cache:
+                        nova_kwargs['replayable'] = True
+                        logger.info("Trajectory recording enabled: passing replayable=True to NovaAct (GA)")
+                    
+                    with NovaAct(**nova_kwargs) as nova:
+                            all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps, trajectory_manager)
             else:
                 # Nova Act Preview API
                 logger.info("Using Nova Act Preview API")
                 
-                with NovaAct(
+                # Build NovaAct kwargs, conditionally adding replayable
+                nova_kwargs = dict(
                     cdp_endpoint_url=ws_url,
                     cdp_headers=headers,
                     starting_page=execution.starting_url,
@@ -385,10 +419,14 @@ def main_batch():
                     ignore_https_errors=True,
                     chrome_channel="chromium",
                     stop_hooks=[s3_writer],
-                    nova_act_api_key=nova_api_key
-                    #user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36')
-                ) as nova:
-                    all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps)
+                    nova_act_api_key=nova_api_key,
+                )
+                if replayable_supported and enable_trajectory_replay and execution.enable_cache:
+                    nova_kwargs['replayable'] = True
+                    logger.info("Trajectory recording enabled: passing replayable=True to NovaAct (Preview)")
+                
+                with NovaAct(**nova_kwargs) as nova:
+                    all_success = _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps, trajectory_manager)
         
         except Exception as nova_error:
             logger.error(f"Nova Act execution failed: {nova_error}")
@@ -441,7 +479,7 @@ def main_batch():
     return True
 
 
-def _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps):
+def _execute_steps(nova, execution, execution_headers, template_parser, usecase_id, execution_id, s3_bucket_name, db_client, steps, trajectory_manager=None):
     """Execute all steps - extracted to avoid code duplication"""
     all_success = True
 
@@ -496,13 +534,19 @@ def _execute_steps(nova, execution, execution_headers, template_parser, usecase_
                             result, success, logs = execute_url_step(nova, parsed_step)
                         case 'download':
                             result, success, logs, actual_value = execute_download_step(nova, parsed_step, usecase_id, execution_id, s3_bucket_name)
+                        case 'transform':
+                            result, success, logs, actual_value = execute_transform_step(parsed_step, template_parser)
+                        case 'browser':
+                            result, success, logs = execute_browser_step(nova, parsed_step)
+                        case 'network_assertion':
+                            result, success, logs, actual_value = execute_network_assertion_step(nova, parsed_step)
                         case _:
-                            result, success, logs = execute_navigation_step(nova, parsed_step, execution.enable_cache)
+                            result, success, logs = execute_navigation_step(nova, parsed_step, execution.enable_cache, trajectory_manager)
 
                     # Safely extract act_id from result
                     if result and hasattr(result, 'metadata') and hasattr(result.metadata, 'act_id'):
                         act_id = result.metadata.act_id
-                    elif parsed_step.step_type == 'url':
+                    elif parsed_step.step_type in ('url', 'transform', 'browser'):
                         act_id = ""
                     else:
                         act_id = ""
@@ -514,8 +558,8 @@ def _execute_steps(nova, execution, execution_headers, template_parser, usecase_
                         status = "error"
                         all_success = False
                     
-                    # Capture runtime variables only for retrieve_value steps
-                    if success and parsed_step.step_type == "retrieve_value" and parsed_step.capture_variable and actual_value:
+                    # Capture runtime variables for retrieve_value and transform steps
+                    if success and parsed_step.step_type in ("retrieve_value", "transform") and parsed_step.capture_variable and actual_value:
                         runtime_var_name = parsed_step.capture_variable
                         try:
                             template_parser.add_runtime_variable(runtime_var_name, actual_value)

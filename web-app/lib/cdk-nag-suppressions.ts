@@ -81,6 +81,14 @@ export function applyCdkNagSuppressions(_app: App, stacks: CdkNagStacks): void {
       id: 'AwsSolutions-COG3',
       reason: 'AdvancedSecurityMode is not enabled — this is a non-regulated internal workload. Standard Cognito security features are sufficient.',
     },
+    {
+      id: 'AwsSolutions-SMG4',
+      reason: 'Worker M2M OAuth credentials secret is populated once from the Cognito-generated client_secret via a deploy-time custom resource. Rotation is driven by re-running `npm run deploy` (which mints a fresh client and rewrites the secret) — not by Secrets Manager automatic rotation.',
+    },
+    {
+      id: 'AwsSolutions-IAM5',
+      reason: 'AwsCustomResource constructs managing the worker M2M credentials secret use CDK-scoped wildcards on CloudWatch Logs and the specific cognito user pool ARN.',
+    },
   ]);
 
   // ──────────────────────────────────────────────

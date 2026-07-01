@@ -31,9 +31,9 @@ export default function LiveViewPanel({
     isLoading, 
     error, 
     isExpired, 
-  } = useLiveViewUrl(usecaseId, executionId, executionStatus === 'executing');
+  } = useLiveViewUrl(usecaseId, executionId, executionStatus === 'running');
 
-  const isExecutionActive = executionStatus === 'executing';
+  const isExecutionActive = executionStatus === 'running';
   const hasLiveView = liveViewUrl && !isExpired;
   
   // For execution mode, treat "not found" as "still loading" rather than an error

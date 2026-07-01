@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -19,6 +19,7 @@ import { api } from '../utils/api';
 import { devicesApi, DeviceFarmDevice } from '../utils/api';
 import { regionOptions, findRegionOptions } from '../utils/browser_regions';
 import { useModels } from '../hooks/useModels';
+import { useApplications } from '../hooks/useApplications';
 
 const platformOptions: SelectProps.Options = [
   { label: 'Android', value: 'ANDROID' },
@@ -27,6 +28,17 @@ const platformOptions: SelectProps.Options = [
 
 export default function CreateUsecase() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { options: applicationOptions, loading: appsLoading } = useApplications();
+  const [selectedApplication, setSelectedApplication] = useState<SelectProps.Option | null>(null);
+
+  useEffect(() => {
+    const appId = searchParams.get('applicationId');
+    if (appId && applicationOptions.length > 0 && !selectedApplication) {
+      const match = applicationOptions.find(o => o.value === appId);
+      if (match) setSelectedApplication(match);
+    }
+  }, [applicationOptions, searchParams]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [starting_url, setStartingUrl] = useState('');
@@ -147,6 +159,12 @@ export default function CreateUsecase() {
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      if (!selectedApplication) {
+        setError('Application is required');
+        setLoading(false);
+        return;
+      }
+
       const payload: Record<string, any> = {
         name,
         description,
@@ -156,6 +174,7 @@ export default function CreateUsecase() {
         model_id: selectedModel?.value,
         tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
         test_platform: testPlatform,
+        application_id: selectedApplication.value,
       };
 
       if (isMobile) {
@@ -225,6 +244,19 @@ export default function CreateUsecase() {
 
       <Container>
         <SpaceBetween direction="vertical" size="l">
+          <FormField label="Application" constraintText="Required">
+            <Select
+              selectedOption={selectedApplication}
+              onChange={({ detail }) => setSelectedApplication(detail.selectedOption)}
+              options={applicationOptions}
+              placeholder="Select an application"
+              loadingText="Loading applications..."
+              statusType={appsLoading ? 'loading' : 'finished'}
+              filteringType="auto"
+              disabled={loading}
+            />
+          </FormField>
+
           {/* 10.1: Platform selector */}
           <FormField label="Test platform">
             <RadioGroup

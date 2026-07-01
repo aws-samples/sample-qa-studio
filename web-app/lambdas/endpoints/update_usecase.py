@@ -1,12 +1,16 @@
 import json
 import logging
+import os
 from typing import Any, Dict
 import boto3
 from utils import get_table_name, create_response, require_scopes, validate_path_id
+from cache_invalidation import cleanup_cache_artifacts
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -41,7 +45,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         executing_region = body.get('executing_region', '').strip()
         # Use default region if empty
         if not executing_region:
-            import os
             executing_region = os.environ.get('DEFAULT_REGION', 'us-east-1')
         model_id = body.get('model_id', '')
         tags = body.get('tags', [])
@@ -113,6 +116,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 update_expression_parts.append(f'{field_name} = :{field_name}')
                 expression_attribute_values[f':{field_name}'] = field_value
         
+        # Application association
+        application_id = body.get('application_id')
+        if application_id is not None:
+            if application_id:
+                update_expression_parts.append('application_id = :application_id')
+                expression_attribute_values[':application_id'] = application_id
+            else:
+                # Clear application_id when explicitly set to empty string
+                update_expression_parts.append('application_id = :application_id')
+                expression_attribute_values[':application_id'] = ''
+
         # Only update tags if provided and not empty (DynamoDB String Sets cannot be empty)
         if tags:
             update_expression_parts.append('tags = :tags')
@@ -120,6 +134,20 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         update_expression = 'SET ' + ', '.join(update_expression_parts)
         
+        # Detect enable_cache true → false transition and trigger cleanup
+        if enable_cache is not None:
+            try:
+                current_item_response = table.get_item(
+                    Key={'pk': 'USECASES', 'sk': f'USECASE#{usecase_id}'}
+                )
+                current_item = current_item_response.get('Item', {})
+                previous_enable_cache = current_item.get('enable_cache')
+                if previous_enable_cache is True and enable_cache is False:
+                    s3_bucket = os.environ.get('S3_BUCKET', '')
+                    cleanup_cache_artifacts(table, usecase_id, s3_bucket)
+            except Exception as e:
+                logger.warning(f"Cache cleanup: failed to read current usecase {usecase_id} for transition detection: {e}")
+
         # Update the use case
         table.update_item(
             Key={

@@ -1,0 +1,59 @@
+# Repo-root .dockerignore.
+#
+# The worker image (web-app/worker/Dockerfile) is built with the entire
+# repo root as its Docker context (CDK DockerImageAsset sets directory=".."
+# in web-app/lib/worker-stack.ts) so it can COPY both the worker sources
+# and the sibling qa-studio-cli/ package.
+#
+# To keep the context small we start from a blanket deny and then
+# explicitly include the two directories that matter.
+
+# ── Blanket exclusions ─────────────────────────────────────────────
+# Ignore absolutely everything at the top level, including dotfiles.
+*
+**/.*
+.*
+
+# ── Explicit allows ────────────────────────────────────────────────
+# Include the worker source tree.
+!web-app
+web-app/*
+!web-app/worker
+!web-app/worker/**
+
+# Include the CLI source tree (pip-installed by the Dockerfile).
+!qa-studio-cli
+!qa-studio-cli/**
+
+# ── Re-exclude junk inside the allowed trees ───────────────────────
+# Python artefacts.
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+**/*.egg-info
+
+# Virtual environments.
+**/.venv
+**/venv
+**/env
+**/ENV
+
+# Test caches + coverage.
+**/.pytest_cache
+**/.hypothesis
+**/.coverage
+
+# IDE.
+**/.vscode
+**/.idea
+**/*.swp
+**/*.swo
+
+# OS.
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Logs.
+**/*.log
+**/logs

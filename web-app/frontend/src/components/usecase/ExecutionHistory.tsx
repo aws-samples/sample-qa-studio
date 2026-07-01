@@ -9,6 +9,8 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Box from "@cloudscape-design/components/box";
 import Flashbar from "@cloudscape-design/components/flashbar";
 import { api, ExecutionModel } from '../../utils/api';
+import { formatDateTime } from '../../utils/dateFormat';
+import { batchedPromiseAll } from '../../utils/batchedPromiseAll';
 import { useApiData } from '../common/useAsyncData';
 import { ContainerLoading } from '../common/LoadingStates';
 import { SpaceBetween } from '@cloudscape-design/components';
@@ -60,7 +62,7 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
       loading: true
     }]);
 
-    const deletePromises = selectedItems.map(async (execution) => {
+    const results = await batchedPromiseAll(selectedItems, async (execution) => {
       try {
         const cleanExecutionId = execution.sk.replace('EXECUTION#', '');
         await api.delete(`usecase/${usecaseId}/executions/${cleanExecutionId}`);
@@ -76,8 +78,6 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
         } as BatchDeleteResult;
       }
     });
-
-    const results = await Promise.all(deletePromises);
     
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.filter(r => !r.success).length;
@@ -118,6 +118,7 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
       case 'success': return 'success';
       case 'error':
       case 'failed': return 'error';
+      case 'running':
       case 'executing': return 'in-progress';
       default: return 'pending';
     }
@@ -182,7 +183,7 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
           { 
             id: 'created_at', 
             header: 'Created', 
-            cell: item => new Date(item.created_at).toLocaleString(),
+            cell: item => formatDateTime(item.created_at),
           },
           { 
             id: 'trigger_type', 

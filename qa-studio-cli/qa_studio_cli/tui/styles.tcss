@@ -1,0 +1,238 @@
+/* QA Studio TUI stylesheet. */
+
+/* Landing-screen ASCII banner. Auto-sized so the 6-row art doesn't
+ * pad out to full screen height, centered horizontally, and tinted
+ * with the active theme's primary colour so it stays coherent if
+ * the theme ever changes. */
+#qa-banner {
+    width: 100%;
+    height: auto;
+    content-align: center middle;
+    text-align: center;
+    color: $primary;
+    padding: 1 0 0 0;
+}
+
+#usecases-status,
+#suites-status,
+#detail-status,
+#suite-status {
+    padding: 1 2;
+    color: $text-muted;
+}
+
+#usecases-filter-row,
+#suites-filter-row {
+    /* ``height: 4`` — Textual's ``Input`` widget is 3 rows with its
+     * own top/bottom border, and without an extra row the widget
+     * visibly clips against the row below. Small-but-deliberate
+     * breathing space keeps the search field legible. */
+    height: 4;
+    padding: 0 2;
+}
+
+#usecases-filter,
+#suites-filter {
+    width: 100%;
+}
+
+#usecases-table,
+#suites-table,
+#suite-usecases-table,
+#steps-table,
+#variables-table,
+#headers-table,
+#secrets-table {
+    height: 1fr;
+}
+
+#detail-body,
+#suite-body {
+    height: 1fr;
+}
+
+#detail-metadata,
+#suite-metadata {
+    padding: 1 2;
+    /* Structural divider only — the load pulse now lives on the
+     * top-level AppHeader, so a lighter solid line is enough here. */
+    border-bottom: solid $accent;
+    height: auto;
+}
+
+#suite-usecases-label {
+    padding: 1 2;
+    color: $text-muted;
+    height: 2;
+}
+
+#executions-status {
+    padding: 1 2 0 2;
+    height: auto;
+    color: $text-muted;
+}
+
+#executions-table {
+    height: 1fr;
+}
+
+/* ----------  Execution detail  ---------- */
+
+#execution-status {
+    padding: 1 2;
+    color: $text-muted;
+    height: auto;
+}
+
+#execution-body {
+    height: 1fr;
+}
+
+#execution-metadata {
+    padding: 1 2;
+    /* Structural divider only — pulse lives on AppHeader now. */
+    border-bottom: solid $accent;
+    height: auto;
+}
+
+#execution-error {
+    padding: 1 2;
+    height: auto;
+    display: none;
+}
+
+#execution-steps-split {
+    height: 1fr;
+    width: 100%;
+}
+
+#execution-steps-split #execution-steps-table {
+    width: 3fr;
+    height: 100%;
+}
+
+#execution-step-detail-scroll {
+    width: 2fr;
+    height: 100%;
+    border-left: solid $accent;
+    padding: 1 2;
+}
+
+#execution-step-detail-text {
+    width: 100%;
+}
+
+/* Steps tab — vertical split: table on the left, detail pane on the right.
+ * 60/40 — table keeps a slight edge so long instructions stay readable,
+ * while the detail pane has enough room for pretty-printed JSON. */
+
+#steps-split {
+    height: 1fr;
+    width: 100%;
+}
+
+#steps-split #steps-table {
+    width: 3fr;
+    height: 100%;
+}
+
+#step-detail-scroll {
+    width: 2fr;
+    height: 100%;
+    border-left: solid $accent;
+    padding: 1 2;
+}
+
+#step-detail-text {
+    width: 100%;
+}
+
+/* ----------  Run form (single usecase + suite share the shape)  ---------- */
+
+#run-form-title,
+#suite-run-title {
+    padding: 1 2;
+    height: auto;
+    border-bottom: solid $accent;
+}
+
+#run-form-hint,
+#suite-run-hint {
+    padding: 0 2 1 2;
+    height: auto;
+    color: $text-muted;
+}
+
+#run-form-scroll,
+#suite-run-scroll {
+    height: 1fr;
+    padding: 0 2;
+}
+
+#run-form-fields,
+#suite-run-fields {
+    height: auto;
+}
+
+.form-row {
+    height: 3;
+    margin-bottom: 1;
+}
+
+.form-label {
+    width: 20;
+    padding-top: 1;
+    content-align: left middle;
+}
+
+#suite-variables-label {
+    padding: 1 0 0 0;
+    color: $text-muted;
+    height: auto;
+}
+
+#suite-input-variables {
+    height: 8;
+    margin-bottom: 1;
+}
+
+#run-form-actions,
+#suite-run-actions {
+    height: 3;
+    padding: 0 2;
+    align-horizontal: right;
+}
+
+#run-form-actions Button,
+#suite-run-actions Button {
+    margin-left: 2;
+}
+
+#browser-select-label {
+    padding: 1 0 0 0;
+    color: $text-muted;
+    height: auto;
+}
+
+#browser-select {
+    margin-bottom: 1;
+}
+
+/* ----------  Live tail  ---------- */
+
+#livetail-status {
+    padding: 1 2;
+    height: auto;
+    border-bottom: solid $accent;
+}
+
+#livetail-command {
+    padding: 0 2 1 2;
+    height: auto;
+    color: $text-muted;
+}
+
+#livetail-log {
+    height: 1fr;
+    padding: 0 2;
+}

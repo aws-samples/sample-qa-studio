@@ -115,6 +115,22 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             updated_step['assertion_variable'] = template_step['assertion_variable']
         if template_step.get('value_type'):
             updated_step['value_type'] = template_step['value_type']
+
+        for network_field in (
+            'network_url_pattern', 'network_method', 'network_request_body',
+            'network_body_match_type', 'network_mock_response',
+            'network_mock_passthrough', 'network_timeout',
+            'network_response_body', 'network_response_body_match_type',
+            'network_response_status',
+        ):
+            if network_field in template_step:
+                updated_step[network_field] = template_step[network_field]
+        
+        # Add browser/transform fields from template if present
+        for field in ['browser_action', 'browser_args', 'transform_operation', 'transform_args',
+                      'enable_advanced_click_types', 'value_source']:
+            if template_step.get(field):
+                updated_step[field] = template_step[field]
         
         # Save updated step
         table.put_item(Item=updated_step)

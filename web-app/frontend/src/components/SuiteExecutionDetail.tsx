@@ -14,17 +14,19 @@ import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import PieChart from "@cloudscape-design/components/pie-chart";
 import { testSuites, SuiteArtifact } from '../utils/api';
+import { formatDateTime } from '../utils/dateFormat';
 import { SuiteExecution } from '../utils/api';
 import Breadcrumb from './common/Breadcrumb';
 import LogViewer from './common/LogViewer';
 
-function formatDuration(seconds?: number): string {
-  if (!seconds) return '-';
-  
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  
+function formatDuration(ms?: number): string {
+  if (!ms) return '-';
+
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+
   if (hours > 0) {
     return `${hours}h ${minutes}m ${secs}s`;
   } else if (minutes > 0) {
@@ -35,8 +37,7 @@ function formatDuration(seconds?: number): string {
 }
 
 function formatTimestamp(timestamp?: string): string {
-  if (!timestamp) return '-';
-  return new Date(timestamp).toLocaleString();
+  return formatDateTime(timestamp);
 }
 
 function getStatusIndicator(status: string) {
@@ -45,6 +46,7 @@ function getStatusIndicator(status: string) {
       case 'success': return 'success';
       case 'error':
       case 'failed': return 'error';
+      case 'running':
       case 'executing': return 'in-progress';
       case 'pending': return 'pending';
       case 'completed': return 'success';
@@ -225,7 +227,7 @@ export default function SuiteExecutionDetail() {
                   },
                   {
                     label: "Duration",
-                    value: formatDuration(execution.duration_seconds),
+                    value: formatDuration(execution.duration_ms),
                   },
                   {
                     label: "Triggered By",

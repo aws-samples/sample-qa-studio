@@ -20,6 +20,41 @@ class StepResult:
     actual_value: str = ""
 
 
+@dataclass
+class ReplayResult:
+    """Outcome of a trajectory-replay attempt.
+
+    Mirrors ``web-app/worker/models.py::ReplayResult`` so the CLI and
+    worker share an identical contract around trajectory replay.
+    """
+
+    success: bool
+    duration_ms: int
+    trajectory_s3_key: str
+    error: Optional[str] = None
+
+
+class TrajectoryReplayError(Exception):
+    """Raised when trajectory replay fails.
+
+    Mirrors ``web-app/worker/models.py::TrajectoryReplayError``.  Raised
+    for every non-recoverable path in the replay pipeline — download
+    failure, malformed trajectory JSON, SDK internal error,
+    per-trajectory-step timeout — so the navigation-step logic can
+    uniformly catch and fall through to Nova Act.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        s3_key: str,
+        cause: Optional[Exception] = None,
+    ) -> None:
+        super().__init__(message)
+        self.s3_key = s3_key
+        self.cause = cause
+
+
 class UseCaseMetadata(BaseModel):
     """Use case definition fetched from the platform API."""
 
@@ -40,6 +75,26 @@ class UseCaseStep(BaseModel):
     expected_value: Optional[str] = None
     capture_variable: Optional[str] = None
     operator: Optional[str] = None
+    browser_action: Optional[str] = None
+    browser_args: Optional[str] = None
+    transform_operation: Optional[str] = None
+    transform_args: Optional[str] = None
+    # value_format is consumed by retrieve_value steps when value_type='date'.
+    # Empty / missing means auto-detect ISO 8601 / Unix epoch; otherwise it's
+    # a strptime format string passed to transform.date_parser.parse_to_utc.
+    value_format: Optional[str] = None
+    # network_assertion step fields
+    network_url_pattern: Optional[str] = None
+    network_method: Optional[str] = None
+    network_request_body: Optional[str] = None
+    network_body_match_type: Optional[str] = None
+    network_mock_response: Optional[str] = None
+    network_mock_passthrough: bool = False
+    network_timeout: Optional[int] = None
+    # network_assertion response-side assertion fields
+    network_response_body: Optional[str] = None
+    network_response_body_match_type: Optional[str] = None
+    network_response_status: Optional[int] = None
 
 
 class StepResultDetail(BaseModel):

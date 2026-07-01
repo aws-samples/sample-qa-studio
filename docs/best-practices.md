@@ -143,6 +143,58 @@ Step: "Enter the password from secret 'test-user-password'"
 - Centralized secret management
 - Easy rotation without updating tests
 
+### When to Use Network Assertion vs Validation
+
+Both step types verify behaviour, but they look at different layers of the app:
+
+- **Validation** reads from the live DOM. Use it to check what the user sees on the page.
+- **Network Assertion** reads from the outgoing HTTP request. Use it to verify the contract between the UI and the backend.
+
+Use `network_assertion` when:
+- A button click must trigger a specific API call with specific data.
+- You need to test the UI against an error or edge-case response the real backend doesn't produce.
+- Your test depends on a downstream system that isn't reliable in your test environment — mock it.
+
+Cautions:
+- Avoid mocking endpoints that transmit secrets (login, token refresh). The mock response bodies you define live in the test definition and are visible to anyone with access to the use case.
+- The step type is not cached. If your test suite is slow, cache the navigation steps around it rather than trying to cache the network observation.
+- The 15 s default timeout fits most click-then-request flows. Raise it only when the underlying call is known to take longer.
+
+### When to Use `subset` vs `schema` for Body Matching
+
+Network assertions support three body-match modes. The right one depends on what you're actually testing:
+
+- **`exact`** — the parsed JSON equals the expected body exactly. Extra keys fail. Good for small, stable payloads where every key matters. **Request side only** — response bodies frequently contain non-deterministic values and are rejected as `exact` targets by design.
+- **`subset`** — every key/value in the template must be in the captured body; extra keys are ignored. Use this when you know the specific values you expect for the keys you care about (e.g. `{"status": "active"}`). Arrays match element-by-element, so lengths must align.
+- **`schema`** — a JSON Schema Draft 2020-12 document validates the captured body structurally. Use this when you care about types and required keys but not specific values, especially for variable-length responses (lists, paginated data). A schema with `"items": {...}` checks every element of a list against the same shape, decoupling the test from the list length.
+
+Rule of thumb: if your assertion would break whenever the real response adds a valid field or timestamp, you're using `exact` or over-specified `subset` — reach for `schema` instead.
+
+### Cautions for Response-Side Assertions
+
+- Response bodies are captured after any mock/passthrough merge runs, not before. If your mock replaces the response, you are asserting against the merged response.
+- Non-JSON response bodies (HTML, binary downloads) cannot be verified with `subset` or `schema`. Use a `download` step or a DOM-level `validation` step instead.
+- A captured response larger than the configured cap fails the step even when no body assertion is configured. Use `network_response_body_match_type: schema` with a schema that ignores large fields, or narrow the URL pattern to a smaller endpoint.
+- External `$ref` (`http://`, `https://`, `file://`) in schemas is rejected at submit time. Keep schemas self-contained or use local `#/$defs/...` references.
+
+### Working with dates
+
+Dates are a known footgun in test automation. The QA Studio date operations and the `validation_type: "date"` operators are designed around two principles: **be strict about format** and **never silently guess**. Some patterns to follow:
+
+- **Use the format dropdown over manual strptime.** The transform editor's dropdown labels each format with its regional convention (US vs EU) so you don't accidentally pick `%m/%d/%Y` when the page actually renders `%d/%m/%Y`. Reach for "Custom…" only when the page uses a format that isn't in the curated list.
+
+- **Capture dates with `retrieve_value` value_type=date when you can.** This collapses the "capture a date from the page" pattern into one step: the AI extracts the rendered string, QA Studio parses it on its side using the format you set on the step, and the canonical UTC ISO 8601 form is stored in your variable. Downstream `validation_type=date` assertions and transform date ops can consume that variable directly. The two-step `retrieve_value (string) → transform.parse_date` flow is still available — reach for it when you need to construct a date from multiple captures or when the format isn't fixed at authoring time.
+
+- **Prefer comparing two captured dates over a hardcoded literal.** A test that captures the "before" state and the "after" state and asserts `after > before` keeps working forever. A test with a hardcoded date goes stale.
+
+- **Reach for `to_epoch` when you already have number assertions in the test.** The existing `validation_type: "number"` operators (`equals`, `greater_then`, `less_then`, etc.) work directly on epoch integers — no new vocabulary to learn. The first-class `validation_type: "date"` operators are nicer for new tests, but `to_epoch` keeps composability open if you've built up a test with number-based comparisons already.
+
+- **Use `equals_within` for displayed-vs-server timestamps.** Pages often render timestamps that are slightly different from the server-recorded value (clock drift, polling latency, formatting truncation). Hardcoding `equals` will be flaky; `equals_within` with a tolerance of a few seconds or minutes captures the real intent.
+
+- **Watch the naive-vs-aware warning.** If a step succeeds but its logs include "Comparing naive datetime (assumed UTC) with TZ-aware datetime", check whether one side has a timezone offset and the other doesn't. The comparison still ran, but you may have intended both sides to be in the same frame.
+
+- **No clock in v1.** If you find yourself wishing for a "now" reference in a date comparison, you're stepping outside the current scope. The fix is to capture the freshness check from the page itself (a server-rendered "Last updated: …" line) and compare it with `equals_within` against another captured value, not against the wall clock. Real freshness-vs-now checks may land in a future spec.
+
 ---
 
 ## Test Maintenance

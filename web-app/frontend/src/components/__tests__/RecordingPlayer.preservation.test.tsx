@@ -32,7 +32,7 @@ import { listRecordingBatches, getRecordingBatch, getVideoPlayback } from '../..
 // ── Arbitraries ──────────────────────────────────────────────────────────────
 
 const TERMINAL_STATUSES = ['success', 'failed', 'error', 'stopped'] as const;
-const NON_TERMINAL_STATUSES = ['executing', 'pending'] as const;
+const NON_TERMINAL_STATUSES = ['running', 'executing', 'pending'] as const;
 
 /**
  * Generates a Nova Act execution with nova_session_id present and terminal status.

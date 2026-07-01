@@ -20,6 +20,26 @@ pip install -e ./qa-studio-cli
 pip install -e "./qa-studio-cli[runner]"
 ```
 
+### With Bedrock AgentCore Browser Support
+
+Use this when you want to provision remote browsers via Amazon Bedrock AgentCore — either locally against your own AgentCore setup, or inside the cloud worker image (which installs this extra at build time).
+
+```bash
+pip install -e "./qa-studio-cli[runner,agentcore]"
+```
+
+The `[agentcore]` extra pulls in `bedrock_agentcore`. Without it, `--browser=agentcore` raises a clear install-hint error at runtime.
+
+### With Interactive Terminal UI
+
+Adds the `textual` dependency so `qa-studio tui` launches an interactive browser for use cases and test suites. Safe to combine with the runner extra.
+
+```bash
+pip install -e "./qa-studio-cli[runner,tui]"
+```
+
+Without this extra, `qa-studio tui` prints an install hint and exits non-zero.
+
 ## Quick Start
 
 ```bash
@@ -37,6 +57,9 @@ qa-studio run --usecase-id test-123
 
 # Run a test suite
 qa-studio run --suite-id suite-456
+
+# Launch the interactive terminal UI (requires the [tui] extra)
+qa-studio tui
 
 # Log out (delete stored tokens)
 qa-studio logout
@@ -58,6 +81,7 @@ qa-studio logout
 - `qa-studio tests get <id>` - Get test details
 - `qa-studio tests update <id>` - Update a test
 - `qa-studio tests delete <id>` - Delete a test
+- `qa-studio tests import <path>` - Import test cases from a JSON file or folder
 
 ### Suite Management
 
@@ -89,39 +113,71 @@ qa-studio run --usecase-id test-123 --local-only
 qa-studio run --usecase-id test-123 --verbose
 ```
 
-### Kiro IDE Skill Installation
+### Kiro IDE Integration
 
-QA Studio ships an agent skill for Kiro IDE (and other supported agents). Install it using the open [skills CLI](https://github.com/vercel-labs/skills):
+- `qa-studio setup` - Install QA Studio skills for Kiro IDE
+- `qa-studio uninstall` - Remove QA Studio skills from Kiro IDE
 
-**Prerequisites:**
-- Node.js 18+ (for `npx`)
+## Importing Test Cases
 
-```bash
-# Install the QA Studio skill into Kiro
-npx skills add <repository-url> --skill qa-studio -a kiro-cli
+The `qa-studio tests import` command imports test case JSON files (QA Studio export format) from a file or folder.
 
-# Or install globally (available across all projects)
-npx skills add <repository-url> --skill qa-studio -a kiro-cli -g
+### Import Options
 
-# Verify installation
-npx skills list
-```
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `path` | positional | required | File or directory path to import |
+| `--dry-run` | flag | `false` | Validate only, do not import |
+| `--yes` / `-y` | flag | `false` | Skip confirmation prompt |
+| `--non-interactive` | flag | `false` | Run without any prompts. Implies `-y`. Exits with code 2 if any secret value is missing — supply via `--secret KEY=VALUE` or use `--skip-secrets` to defer. |
+| `--secret` | `KEY=VALUE` (repeatable) | none | Pre-supply a secret value. Suppresses the interactive prompt for that key. Errors if `KEY` is not declared by any imported test. |
+| `--base-url` | string | `None` | Override `starting_url` for all imports |
+| `--skip-secrets` | flag | `false` | Skip interactive secret prompts |
+| `--format` | choice | `human` | Output format: `human` or `json` |
 
-After installation, add the skill to your Kiro agent resources in `.kiro/agents/<agent>.json`:
-
-```json
-{
-  "resources": ["skill://.kiro/skills/**/SKILL.md"]
-}
-```
-
-To remove the skill:
+### Examples
 
 ```bash
-npx skills remove qa-studio
+# Import a single test file
+qa-studio tests import ./login_test.json
+
+# Import all tests from a folder (recursive)
+qa-studio tests import ./testcases/
+
+# Dry-run: validate files without importing
+qa-studio tests import ./testcases/ --dry-run
+
+# Import with base URL override (e.g. staging)
+qa-studio tests import ./testcases/ --base-url https://staging.example.com --yes
+
+# CI pipeline: JSON output, skip secrets, no prompts
+qa-studio tests import ./testcases/ --format json --skip-secrets
+
+# Skip secrets and configure them later in the UI
+qa-studio tests import ./login_test.json --skip-secrets
+
+# Fully non-interactive with values supplied (e.g. agent flow, dev/local credentials)
+qa-studio tests import ./tests/auth/login.json \
+  --non-interactive \
+  --secret admin_email=admin@dev.local \
+  --secret admin_password=devpass123
+
+# Non-interactive deferring secret config to the UI
+qa-studio tests import ./tests/auth/login.json --non-interactive --skip-secrets
 ```
 
-The skill is also compatible with other agents (Claude Code, Cursor, Codex, etc.). See the [skills CLI docs](https://github.com/vercel-labs/skills) for the full list of supported agents.
+#### Exit codes
+
+- `0` — every file imported successfully.
+- `1` — at least one file failed to import (or no valid files found).
+- `2` — input validation failure: malformed `--secret KEY=VALUE`, `--secret` referencing an unknown key, or `--non-interactive` set with required secrets unsupplied. The error message lists the missing/unknown keys and the recovery flag.
+
+### Two-Phase Flow
+
+1. **Scan & Validate**: All JSON files are discovered and validated against the export schema. A summary table shows valid/invalid files.
+2. **Import**: After confirmation, valid files are sent to the API. Results are displayed per file.
+
+In `--format json` mode, all prompts are suppressed and output is a single JSON object suitable for CI parsing.
 
 ## Configuration
 
@@ -211,10 +267,8 @@ pip install -e "./qa-studio-cli[runner]"
 | `--local-only` | Local-only execution (no remote records) |
 | `--base-url` | Override base URL for all tests |
 | `--var` | Override variable (key=value, repeatable) |
-| `--header` | Set HTTP header (key=value, repeatable, each key allowed once) |
 | `--region` | Override AWS region for browser |
 | `--model-id` | Override Nova Act model ID |
-| `--user-agent` | Override browser User-Agent string |
 | `--verbose` | Enable verbose logging |
 | `--timeout` | Global timeout in seconds |
 | `--keep-artifacts` | Keep local artifact files after upload |
@@ -233,14 +287,104 @@ qa-studio run --suite-id suite-456 --var env=staging --var user=testuser
 qa-studio run --usecase-id test-123 --local-only
 
 # Run with custom region and model
-qa-studio run --usecase-id test-123 --region us-west-2 --model-id us.amazon.nova-2-lite-v1:0
-
-# Run with custom HTTP headers
-qa-studio run --usecase-id test-123 --header "X-Api-Key=my-key" --header "X-Custom-Header=value"
-
-# Run with custom User-Agent
-qa-studio run --usecase-id test-123 --user-agent "MyBot/1.0"
+qa-studio run --usecase-id test-123 --region us-west-2 --model-id anthropic.claude-3-5-sonnet-20240620-v1:0
 ```
+
+### Runtime Header & Secret Overrides (local-only)
+
+For iterating locally with a different bearer token, a rotated
+secret, or a one-off feature-flag header — without editing the use
+case. These flags apply **only** with `--local-only`; using them on
+the remote path produces an error.
+
+```bash
+# Single inline header (non-sensitive values)
+qa-studio run --usecase-id test-123 --local-only \
+  --header X-Feature-Flag=debug
+
+# Sensitive headers via file (Bearer tokens, cookie headers) —
+# argv-safe so the value isn't visible in `ps` or shell history
+cat > /tmp/headers.json <<EOF
+{ "Authorization": "Bearer my-dev-token" }
+EOF
+qa-studio run --usecase-id test-123 --local-only \
+  --headers-file /tmp/headers.json
+
+# Secret overrides — file-only, never argv
+cat > /tmp/secrets.json <<EOF
+{ "admin_password": "newly-rotated-value" }
+EOF
+qa-studio run --usecase-id test-123 --local-only \
+  --secrets-file /tmp/secrets.json
+```
+
+**Precedence on header collisions:** `API stored headers ← --headers-file ← --header flags`. The
+right-most source wins. Secret overrides short-circuit the API
+secret lookup by key — keys not listed in `--secrets-file` fall
+through to the normal `GET /usecase/{id}/secrets/{key}/value` path.
+
+## Interactive Terminal UI
+
+`qa-studio tui` launches a [Textual](https://github.com/Textualize/textual)-based terminal UI for browsing use cases and test suites, inspecting their detail, and triggering **local** runs with a live log tail. It reuses the same API client and authentication chain as every other subcommand; existing CLI commands stay unchanged.
+
+### Requirements
+
+Install the `[tui]` extra (see Installation above). Without it the subcommand prints a pip-install hint and exits non-zero.
+
+The TUI requires a valid token — run `qa-studio login` first. An expired token surfaces as a clear `Authentication required` message, not a stack trace.
+
+### Launch
+
+```bash
+qa-studio tui
+```
+
+### Navigation
+
+| Key      | Scope          | Action                                  |
+|----------|----------------|-----------------------------------------|
+| `q`      | Global         | Quit                                    |
+| `1`      | Global         | Jump to Use cases list                  |
+| `2`      | Global         | Jump to Test suites list                |
+| `?`      | Global         | Help overlay (placeholder)              |
+| `/`      | List screens   | Focus the client-side filter input      |
+| `Enter`  | List screens   | Open the selected item's detail         |
+| `r`      | List & detail  | Refresh from the API                    |
+| `R`      | Use case detail| Open the Run form                       |
+| `e`      | Use case detail| Open the use case in the web app        |
+| `Esc`    | Detail / form  | Go back (confirm when a run is active)  |
+| `k`/`^C` | Live tail      | Terminate the subprocess                |
+
+### Features
+
+| Feature                       | Notes                                                                                       |
+|-------------------------------|---------------------------------------------------------------------------------------------|
+| Use-case + suite lists        | Full lists with client-side substring filter on name + id (instant, no extra HTTP)          |
+| Use-case detail header        | Name, active status, platform, region, model, URL, description, tags, creator, timestamps  |
+| Steps tab                     | Vertical split (60/40): table left, live detail pane right. Cursor moves update the pane   |
+| Step detail pane              | Empty fields hidden; nested `dict`/`list` values pretty-printed as JSON                    |
+| Suite detail                  | Metadata + member use-cases table, Enter drills into the corresponding use case             |
+| Run form                      | Pre-filled from the API; variables, headers, and secrets rendered as inputs (secrets masked)|
+| Runtime overrides             | Changed fields become overrides; secrets delivered via `0600` tempfile, never argv          |
+| Local-only / remote toggle    | Default **on**. Untick to create a remote execution record visible in the web app           |
+| Verbose toggle                | Off by default — runner logs at INFO. Tick for DEBUG                                        |
+| Live tail                     | Streams stdout/stderr line-by-line with `[stderr]` prefix; final status shows exit code     |
+| Terminate                     | SIGTERM to the process group (kills Chromium/Playwright descendants); SIGKILL after 5 s     |
+| Edit in browser               | `e` on the use case detail opens `{web_url}/usecase/{id}` via the default browser           |
+
+### Configuring "Edit in browser"
+
+The Edit action opens `{web_url}/usecase/<id>` in your default browser. Set `web_url` in `~/.qa-studio/config.json` — the interactive `qa-studio configure` prompt asks for it, or you can edit the JSON directly.
+
+If `web_url` is unset, pressing `e` shows a notification pointing at `qa-studio configure` rather than silently failing.
+
+### Out of scope for the POC
+
+- In-TUI editing of use cases / suites / steps — use the web app via `e`
+- Templates list / detail
+- Live monitor for cloud-worker executions
+- Pagination or server-side search (filter is client-side over the full result)
+- Header / secret overrides with `Local only` unticked — enforced at submit time with a clear error
 
 ## Development
 
@@ -249,6 +393,22 @@ Install dev dependencies:
 ```bash
 pip install -e ./qa-studio-cli
 pip install -r qa-studio-cli/requirements-dev.txt
+```
+
+Run tests:
+
+```bash
+cd qa-studio-cli
+pytest tests/
+```
+
+Run tests with coverage:
+
+```bash
+cd qa-studio-cli
+pytest --cov=qa_studio_cli tests/
+```
+r qa-studio-cli/requirements-dev.txt
 ```
 
 Run tests:

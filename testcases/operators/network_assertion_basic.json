@@ -1,0 +1,28 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-04-29T07:00:00Z",
+  "usecase": {
+    "name": "[QA Network Operators] Network Assertion Basic",
+    "description": "Verify a POST to /api/users carries the expected payload and mock the response",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": ["network", "assertion", "test"]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "instruction": "Click the Create User button",
+      "step_type": "network_assertion",
+      "network_url_pattern": "**/api/users",
+      "network_method": "POST",
+      "network_request_body": "{\"user\": {\"name\": \"John\"}}",
+      "network_body_match_type": "subset",
+      "network_mock_response": "{\"status\": 201, \"body\": {\"id\": \"abc-123\", \"user\": {\"name\": \"John\"}}}",
+      "network_mock_passthrough": false,
+      "network_timeout": 15
+    }
+  ],
+  "variables": [],
+  "secrets": []
+}

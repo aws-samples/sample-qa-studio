@@ -1,5 +1,5 @@
 import logging
-from nova_act import NovaAct, BOOL_SCHEMA
+from nova_act import NovaAct
 from models import ExecutionStep
 from secrets_client import SecretsClient, SecretsMissingException
 from utils import get_region
@@ -20,18 +20,13 @@ def execute_secret_step(nova: NovaAct, step: ExecutionStep, usecase_id: str):
         raise SecretsMissingException(f"Secret key '{step.secret_key}' not found")
     
     # Execute the instruction first, then type the secret
-    result = nova.act(f"{step.instruction} you must return true if the action was successful", schema=BOOL_SCHEMA)
-    print("RESULT")
-    print(result)
+    result = nova.act(step.instruction)
+    #print("RESULT")
+    #print(result)
     
     # Type the secret value
     nova.page.keyboard.type(secret_value)
-    
-    # Check if the action was successful
-    if not result.parsed_response:
-      success = False
-      logs = f"Secret step failed: Action was not successful. Got: {result.parsed_response}"
-        
+         
   except SecretsMissingException as e:
     logger.error(f"Secret missing for step {step.sort}: {str(e)}")
     success = False

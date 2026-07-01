@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { LiveViewer } from './viewer';
+import './DCVViewer.css';
 
 export interface RemoteBrowserProps {
   presignedUrl: string;

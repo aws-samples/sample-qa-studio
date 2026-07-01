@@ -1,0 +1,40 @@
+{
+  "skill_name": "qa-studio",
+  "evals": [
+    {
+      "id": 1,
+      "name": "eval-01-login-test",
+      "prompt": "I'm building a customer portal at https://portal.acme.test. There's a login form with an email field and a password field. I need a QA Studio test that:\n\n- Visits the login page\n- Enters 'admin@acme.test' into the email field\n- Enters the admin password (it should come from a stored secret called 'admin_pwd', not be hardcoded)\n- Clicks the Sign In button\n- Verifies the dashboard heading reads 'Customer Portal'\n\nPlease write the test JSON and save it under ./tests/auth/login.json so I can version-control it. After producing the file, also tell me the exact CLI command I'd use to import and run it locally against http://localhost:3000.",
+      "expected_output": "A valid QA Studio test JSON file at ./tests/auth/login.json (relative to the run output dir). Every login-form field must use a secret step: a secret step for the email field (focus pattern, sensible secret_key such as admin_email or admin_username), a secret step for the password field (focus pattern, secret_key admin_pwd as the user requested, NOT 'enter the password into...'), a navigation step for the sign-in click, a validation step for the heading. Both login secrets must be declared in the top-level secrets array. The literal admin@acme.test must NOT appear inside any navigation instruction. Plus correct CLI commands for import and run with --base-url http://localhost:3000.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "eval-02-date-comparison",
+      "prompt": "We have an admin orders page at https://admin.acme.test/orders that lists orders in a table, with the latest order date shown in the top row. The date is rendered in DD/MM/YYYY format (so '02/01/2024' means 2 January 2024 — we're in Europe).\n\nI want a test that:\n\n1. Captures the latest order date from the orders page.\n2. Clicks the 'Create New Order' button, fills the 'Notes' field with whatever, and submits.\n3. Goes back to /orders.\n4. Captures the new latest order date.\n5. Asserts the new date is strictly after the previously captured one.\n\nWrite the test JSON to ./tests/orders/new-order-date-after.json and tell me how to import + run it.",
+      "expected_output": "A valid test JSON that uses retrieve_value with value_type=date and value_format=%d/%m/%Y to canonicalize both dates, then assertion with validation_type=date and validation_operator=after to compare them. Should NOT use transform.parse_date as a separate step (the value_type=date pattern is preferred). Variable references should use {{ name }} consistently.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "eval-03-execute-with-overrides",
+      "prompt": "I have an existing QA Studio test called 'Checkout Flow' that's already imported. I want to:\n\n1. Find its ID (I don't remember it).\n2. Run it against staging at https://staging.acme.test instead of production.\n3. Override two variables: set 'environment' to 'staging' and 'test_user' to 'qa-tester@example.com'.\n4. I also want to run it without posting any execution records to the cloud — just locally.\n5. I want verbose output so I can debug if it fails.\n\nWalk me through the exact CLI commands I'd run.",
+      "expected_output": "A sequence of CLI commands: first 'qa-studio tests list' to find the ID, then 'qa-studio run --usecase-id <id> --base-url https://staging.acme.test --var environment=staging --var test_user=qa-tester@example.com --local-only --verbose'. Should NOT suggest --secrets-file or --headers-file (those don't exist on qa-studio run).",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "eval-04-network-mock",
+      "prompt": "On our app at https://app.acme.test, the user-list page calls GET /api/users to populate a table. I want a test that verifies the page handles a 503 error gracefully:\n\n- The user clicks the Refresh button.\n- We mock the GET /api/users response to return 503 with body {\"error\": \"unavailable\"}.\n- We then verify a banner saying 'Service temporarily unavailable' shows up on the page.\n\nWrite the test JSON to ./tests/error-states/users-503.json.",
+      "expected_output": "A valid test JSON using a network_assertion step (with network_url_pattern, network_method=GET, network_mock_response with status=503 and body) followed by a validation step that checks the banner text. Mock response should be JSON-encoded as a string in the network_mock_response field (string-of-JSON pattern).",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "eval-05-import-non-interactive-dev",
+      "prompt": "I'm working on our local dev environment at http://localhost:3000. There's a login form with email and password fields. Build me a QA Studio test that signs in and verifies the dashboard heading reads 'Dashboard'. Then import it ready-to-run so I can execute it right away — my dev credentials are admin@dev.local / devpass123. Save the file under ./tests/auth/dev-login.json and tell me the import command and the run command.",
+      "expected_output": "Two artifacts. (1) A valid QA Studio test JSON file at ./tests/auth/dev-login.json (relative to the run output dir). The login email and password must BOTH be secret steps (not navigation steps), per the rule that every login-form field is a secret. The literal admin@dev.local must NOT appear inside any navigation or secret instruction — only the secret_key is in the JSON, the value is supplied via the --secret flag at import time. Both secrets must be declared in the top-level secrets array. (2) An import command of the shape `qa-studio tests import ./tests/auth/dev-login.json --non-interactive --secret <email_key>=admin@dev.local --secret <password_key>=devpass123`, where <email_key> and <password_key> match the keys declared in the JSON's secrets array (typical names: admin_email/admin_username and admin_password/admin_pwd). The agent must surface a brief caveat that values typed in chat will appear in the transcript, model context, and shell command line — appropriate for dev/local-only, not production. Must NOT use --skip-secrets here (the user supplied values). Must NOT invent --secrets-file (that flag does not exist on import). Must NOT use plain qa-studio tests import without --non-interactive (the user explicitly asked for ready-to-run). Plus a follow-up qa-studio run --usecase-id <id> command to actually execute the test.",
+      "files": []
+    }
+  ]
+}

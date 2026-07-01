@@ -1,263 +1,163 @@
-# Worker: Nova Act Test Execution Engine
+# Worker: Nova Act Test Execution Container
 
-The worker is a containerized Python application that executes browser-based test cases using [Amazon Nova Act](https://aws.amazon.com/nova/act/). It runs on AWS Fargate as part of the serverless architecture. See the [Architecture](../README.md#architecture) section in the project root README for how it fits into the overall system.
+The worker is a Fargate container that runs test executions. Since the CLI-unified-runner refactor, the container is a thin shell around the `qa-studio` CLI: `entrypoint.sh` translates ECS environment variables into CLI flags and execs `qa-studio run`. The CLI performs all test execution, talks to the public API for state changes, and uploads artifacts via presigned URLs.
 
-It receives execution parameters via environment variables and orchestrates a remote browser session through [Amazon Bedrock AgentCore Browser Tool](https://docs.aws.amazon.com/bedrock/latest/userguide/agentcore-browser.html) to carry out each test step.
+Wizard-mode tasks (interactive step-by-step execution with a persistent browser) still use the legacy `wizard_worker.py` path. That migration is tracked in a separate spec.
 
-## How It Works
+See [`docs/architecture.md`](../../docs/architecture.md) for the full cross-stack picture and execution sequence diagrams.
 
-1. An ECS Fargate task is launched with execution context passed in as environment variables (`USECASE_ID`, `EXECUTION_ID`, etc.)
-2. The worker loads the execution definition, steps, variables, and headers from DynamoDB
-3. A remote browser is created via Bedrock AgentCore (either in PUBLIC or VPC network mode)
-4. Nova Act connects to the browser over CDP (Chrome DevTools Protocol) and navigates to the starting URL
-5. Each step is executed sequentially. The worker stops on the first failure.
-6. Artifacts (video recordings, screenshots, logs) are written to S3 via the Nova Act `S3Writer`
-7. Step results and execution status are persisted back to DynamoDB
-8. An EventBridge event is emitted after execution completes (success or failure) to trigger downstream processes
+## Container Lifecycle
 
-For the full architecture diagram and how the worker integrates with the API layer, SQS queue, and other services, see the [Architecture](../README.md#architecture) section.
+```
+ECS task starts
+      │
+      ▼
+entrypoint.sh reads WORKER_MODE
+      │
+      ├── WORKER_MODE=batch (default)
+      │       resolve API URL + Cognito token endpoint from SSM
+      │       ensure OAUTH_CLIENT_ID/SECRET (from ECS secrets:) present
+      │       exec qa-studio run --browser agentcore \
+      │           --usecase-id $USECASE_ID \
+      │           --execution-id $EXECUTION_ID \
+      │           --region $AWS_REGION
+      │
+      └── WORKER_MODE=wizard
+              exec python wizard_worker.py        (legacy path, unchanged)
+```
+
+## Authentication (Batch Mode)
+
+The CLI authenticates against Cognito using OAuth 2.0 Client Credentials flow. Credentials come from ECS:
+
+- The auth stack provisions a dedicated M2M `UserPoolClient` and stores `{client_id, client_secret}` in Secrets Manager.
+- The worker task definition uses ECS `secrets:` to inject those two values as `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` at container start.
+- The Cognito token endpoint and the API URL are published to SSM parameters; the entrypoint reads both at startup.
+
+The CLI's `TokenResolver` picks up `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` / `OAUTH_TOKEN_ENDPOINT` from env automatically.
+
+## File Layout
+
+```
+worker/
+├── Dockerfile                # Multi-stage: installs qa-studio[runner,agentcore]
+├── entrypoint.sh             # WORKER_MODE branch; env→flag translation
+├── wizard_worker.py          # Wizard mode only (legacy)
+├── recording_controller.py   # Wizard mode only
+├── extension_helper.py       # Wizard mode only
+├── requirements.txt          # Python deps for wizard_worker + CLI runtime
+└── README.md                 # this file
+```
+
+Batch-mode Python (dispatcher, step executors, trajectory manager, browser provisioning) lives in `qa-studio-cli/` and is installed into the container via `pip install -e /build/qa-studio-cli[runner,agentcore]` at image build time. The Docker build context is the **repo root** so the Dockerfile can COPY both `web-app/worker/` and the sibling `qa-studio-cli/` package. A `.dockerignore` at the repo root keeps the build context small.
+
+## Environment Variables
+
+Set by the CDK worker stack task definition:
+
+### Required in batch mode
+
+| Variable | Source | Purpose |
+|---|---|---|
+| `USECASE_ID` | Execute Lambda → ECS RunTask overrides | Identifies which use case to run |
+| `EXECUTION_ID` | Execute Lambda → ECS RunTask overrides | Pre-created execution record the runner attaches to |
+| `QA_STUDIO_API_URL_SSM` | worker-stack | SSM parameter name the entrypoint resolves to the real API URL |
+| `QA_STUDIO_TOKEN_ENDPOINT_SSM` | worker-stack | SSM parameter name for Cognito's `/oauth2/token` |
+| `OAUTH_CLIENT_ID` | ECS `secrets:` → Secrets Manager | M2M client ID |
+| `OAUTH_CLIENT_SECRET` | ECS `secrets:` → Secrets Manager | M2M client secret |
+| `BEDROCK_EXECUTION_ROLE` | worker-stack | IAM role AgentCore browsers assume |
+| `S3_BUCKET` | worker-stack | Artefact bucket the AgentCore browser recording lands in |
+
+### Required in wizard mode
+
+Legacy `wizard_worker.py` still reads `DYNAMO_TABLE`, `S3_BUCKET`, `SESSION_ID`, `WIZARD_QUEUE_URL` etc. as before — unchanged by the refactor.
+
+### Common
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `WORKER_MODE` | `batch` | `batch` (CLI) or `wizard` (legacy) |
+| `AWS_REGION` | task definition | Forwarded to `qa-studio run --region` in batch mode |
+| `ENABLE_TRAJECTORY_REPLAY` | `true` | Set to `false` to skip trajectory replay for navigation steps |
+| `AGENT_CORE_VPC` | `false` | When `true`, AgentCore browsers are VPC-attached |
+| `AC_VPC_ID` / `AC_SUBNET_ID` / `AC_SECURITY_GROUP_ID` | — | Required when `AGENT_CORE_VPC=true` |
+| `USE_NOVA_ACT_GA` | `true` | Selects Nova Act GA Workflow (`true`) vs preview API (`false`) |
+| `NOVA_ACT_API_KEY_NAME` | — | Secrets Manager secret name, required when `USE_NOVA_ACT_GA=false` |
+| `NOVA_ACT_S3_BUCKET` | — | S3 bucket used by Nova Act Workflow storage |
+| `QA_STUDIO_VERBOSE` | `false` | Adds `--verbose` to the CLI invocation for log-level debugging |
+
+## Build and Deploy
+
+The CDK `worker-stack.ts` builds the image using a `DockerImageAsset` with `directory: '..'` (repo root) and `file: 'web-app/worker/Dockerfile'`. Deploy with:
+
+```bash
+cd web-app
+npm run deploy:worker
+```
+
+For a fresh build of everything:
+
+```bash
+npm run deploy
+```
+
+See [`docs/development.md`](../../docs/development.md) for the full list of `npm run deploy:*` targets.
+
+## Running Locally
+
+The unified runner means you can drive an execution from your laptop without the container. See [`docs/development.md` → Running the Unified Runner Locally](../../docs/development.md#running-the-unified-runner-locally) for:
+
+- Running against a deployed stack with `qa-studio run`.
+- Attaching to a pre-created execution with `--execution-id`.
+- Reproducing the worker container locally with `docker run`.
 
 ## Event Emission
 
-After each test execution completes, the worker emits a `usecase.execution.completed` event to EventBridge. This event triggers downstream processes such as cache building for step optimization.
+After the CLI finishes a batch execution, it PATCHes the final execution status through the API. The existing `update_execution_status` Lambda emits the `usecase.execution.completed` EventBridge event (`Source=qa-studio.api`). The container no longer talks to EventBridge directly.
 
-### Event Structure
+Event payload is unchanged:
 
 ```json
 {
-  "Source": "qa-studio.worker",
+  "Source": "qa-studio.api",
   "DetailType": "usecase.execution.completed",
   "Detail": {
     "usecase_id": "uc_abc123",
     "execution_id": "exec_xyz789",
     "execution_status": "success",
-    "timestamp": "2025-01-15T14:32:45.123456Z"
+    "timestamp": "2026-04-30T14:32:45.123456Z"
   }
 }
 ```
 
-### Fire-and-Forget Pattern
+## Trajectory Replay
 
-Event emission follows a fire-and-forget pattern:
-- Failures are logged but do not affect test execution outcomes
-- The worker continues normally even if EventBridge is unavailable
-- No retries are attempted if event emission fails
-- Test execution status is always updated before event emission
+When NovaAct is built with `replayable=True` support, the CLI records a trajectory JSON for each successful navigation step and persists it via the API's trajectory-upload-URL endpoint. On subsequent runs, the runner requests the download URL, replays the trajectory via NovaAct's internal `ProgramRunner`, and skips the LLM call. Typical speedup: 5–10×.
 
-This ensures that adding event emission doesn't introduce new failure modes or impact test reliability.
+Replay failures fall through to a fresh Nova Act call and clear the stale pointer via the `clear_cache_fields` extension on the step-status endpoint.
 
-## Cache Execution
+Controlled by `ENABLE_TRAJECTORY_REPLAY` (default `true`).
 
-The worker supports cached step execution to accelerate test runs by 40-60%. When a test case has caching enabled and navigation steps have cached actions available, the worker executes those actions directly using the Playwright API instead of calling Nova Act. This eliminates LLM inference latency (typically 2-5 seconds per step) while maintaining test reliability through automatic fallback.
+## Troubleshooting
 
-### How Cache Execution Works
+### "QA_STUDIO_API_URL not set and QA_STUDIO_API_URL_SSM not provided"
 
-1. **Cache Eligibility Check**: Before executing a navigation step, the worker checks if:
-   - The test case has `enable_cache=True` in its configuration
-   - The step has `cached_steps` data available (populated by the cache builder after successful executions)
+The entrypoint couldn't resolve the API URL. Check:
+1. The `QA_STUDIO_API_URL_SSM` env var is set by worker-stack.ts and points at a parameter path like `/qa-studio/{baseName}/api-url`.
+2. The api-stack has been deployed (it writes the parameter).
+3. The task role has `ssm:GetParameter` on that parameter ARN.
 
-2. **Cache Hit Path** (Fast):
-   - Parse the cached steps JSON (list of Playwright actions)
-   - Execute each action sequentially using the Playwright API
-   - Complete in 200-500ms (vs 2-5 seconds for Nova Act)
-   - Return a cache result with `metadata.act_id="cached"`
+### "OAUTH_CLIENT_ID must be injected by ECS secrets"
 
-3. **Cache Miss Path** (Normal):
-   - No cached steps available or caching disabled
-   - Execute step using Nova Act as usual
-   - Log the reason for cache miss
+The ECS `secrets:` injection failed to populate the env var. Check:
+1. The `${baseName}-worker-m2m-credentials` secret exists in Secrets Manager.
+2. The secret value is valid JSON with `client_id` and `client_secret` fields.
+3. The ECS execution role has `secretsmanager:GetSecretValue` on the secret ARN.
 
-4. **Cache Failure Path** (Automatic Fallback):
-   - Cache execution fails (e.g., page structure changed)
-   - Worker logs a warning with error details
-   - Automatically falls back to Nova Act execution
-   - Test continues normally without failure
+### CLI authentication errors
 
-### Cache Result Structure
+Look for the token endpoint in the container log output; the entrypoint logs the resolved URL before invoking the CLI. Confirm the Cognito app client is configured with `clientCredentials` flow and has the `api/executions.read` + `api/executions.write` scopes.
 
-When cache execution succeeds, the worker returns a result object compatible with Nova Act results:
+### Wizard mode
 
-```python
-result.metadata.act_id = "cached"  # Identifies result as from cache
-result.logs = ""                    # No Nova Act logs for cached execution
-```
-
-This structure ensures downstream validation logic works correctly regardless of whether cache or Nova Act was used.
-
-### Cache Eligibility Criteria
-
-Cache execution is attempted when **all** of the following conditions are met:
-
-| Condition | Description |
-|-----------|-------------|
-| `enable_cache=True` | Test case has caching enabled in configuration |
-| `cached_steps` exists | Step has cached actions available from previous execution |
-| `cached_steps` non-empty | Cached steps JSON is not null or empty string |
-
-If any condition is not met, the worker skips cache execution and calls Nova Act.
-
-### Fallback Behavior
-
-The worker automatically falls back to Nova Act in these scenarios:
-
-| Scenario | Exception Type | Behavior |
-|----------|---------------|----------|
-| Invalid JSON | `JSONDecodeError` | Log warning, execute with Nova Act |
-| Cache execution failure | `CacheExecutionError` | Log warning, execute with Nova Act |
-| Unexpected error | `Exception` | Log warning, execute with Nova Act |
-
-Fallback execution is identical to normal execution - the same instruction is used (including advanced click types if enabled), and the Nova Act result is returned unchanged. This ensures test reliability is never compromised by cache issues.
-
-### Observability
-
-The worker logs detailed information about cache execution:
-
-| Event | Log Level | Message Format |
-|-------|-----------|----------------|
-| Cache hit | INFO | `Cache hit for step {sort} (executed in {duration_ms}ms)` |
-| Cache miss (disabled) | INFO | `Cache miss for step {sort}: caching disabled` |
-| Cache miss (no data) | INFO | `Cache miss for step {sort}: no cached steps available` |
-| Cache failure | WARNING | `Cache execution failed for step {sort}: {error}, falling back to Nova Act` |
-| JSON parse error | WARNING | `Failed to parse cached_steps for step {sort}: {error}, falling back to Nova Act` |
-
-Use these logs to monitor cache effectiveness and debug issues.
-
-### Cached Action Types
-
-The cache executor supports these Playwright action types:
-
-| Action | Description | Parameters |
-|--------|-------------|------------|
-| `click` | Click at element center | `bbox` (coordinates) |
-| `hover` | Hover at element center | `bbox` (coordinates) |
-| `type` | Click to focus, type text, optionally press Enter | `bbox`, `text`, `press_enter` |
-| `scroll` | Scroll in direction by amount | `direction` (up/down/left/right), `value` (pixels) |
-| `navigate` | Navigate to URL | `url` |
-
-### Configuration
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `CACHE_ACTION_DELAY_MS` | `100` | Delay in milliseconds between cached actions. Increase for slower pages, decrease for faster execution. |
-
-Example: Set `CACHE_ACTION_DELAY_MS=200` for pages that need more time to respond to interactions.
-
-### Performance
-
-Typical cache execution performance:
-
-- **Cache eligibility check**: < 1ms
-- **JSON parsing**: 1-5ms
-- **Cache execution**: 200-400ms (5-10 actions with 100ms delays)
-- **Total cache path**: 200-500ms
-- **Nova Act execution**: 2-5 seconds per step
-- **Speedup**: 5-10x faster with cache
-
-### Integration with Cache Builder
-
-Cache execution integrates with the cache builder system:
-
-1. **First Execution**: Test runs normally using Nova Act, cache builder processes the execution and stores cached steps
-2. **Subsequent Executions**: Worker detects cached steps and executes them directly
-3. **Cache Updates**: Cache builder updates cached steps after each successful execution to adapt to page changes
-
-For more details on the cache builder, see the [Cache Builder Lambda documentation](../lambdas/endpoints/README.md#cache-builder).
-
-## Execution Modes
-
-The `WORKER_MODE` environment variable controls which mode the worker runs in:
-
-### Batch Mode (default)
-
-Runs all steps in a test case sequentially and exits. Used for standard test execution triggered by the API or scheduler.
-
-### Wizard Mode
-
-Maintains a persistent browser session and listens for commands (via DynamoDB polling or SQS). Used by the interactive wizard in the frontend, where users build test cases step-by-step with a live browser preview. Supports `execute_step`, `restart`, and `terminate` commands. Sessions time out after 30 minutes of inactivity.
-
-## Step Types
-
-The worker supports multiple step types, including navigation, validation, secret handling, and more. Each has a dedicated handler module in the project structure below. For the full list and usage guidance, see the [Workflow Steps](../docs/user-guide.md#workflow-steps) section of the User Guide.
-
-## Template Variables
-
-Step instructions support `{{VariableName}}` template syntax. Variables are resolved at runtime from:
-
-- User-defined variables passed with the execution
-- Runtime variables captured by `retrieve_value` steps during execution
-- Built-in variables: `{{UniqueID}}`, `{{Time}}`, `{{ExecutionID}}`, `{{CreatedAt}}`
-
-## Nova Act Backend
-
-The worker supports two Nova Act backends, controlled by the `USE_NOVA_ACT_GA` environment variable:
-
-- **GA Service** (`true`): Uses the Nova Act managed service via `Workflow` and `boto3`. Requires `NOVA_ACT_S3_BUCKET`. No API key needed.
-- **Preview API** (`false`, default): Uses the Nova Act SDK directly with an API key stored in Secrets Manager (`NOVA_ACT_API_KEY_NAME`).
-
-## Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `USECASE_ID` | Yes | Test case identifier |
-| `EXECUTION_ID` | Yes | Execution identifier |
-| `S3_BUCKET` | Yes | S3 bucket for artifacts |
-| `DYNAMO_TABLE` | Yes | DynamoDB table name |
-| `AWS_REGION` | No | AWS region (default: `us-east-1`) |
-| `WORKER_MODE` | No | `batch` (default) or `wizard` |
-| `USE_NOVA_ACT_GA` | No | `true` to use GA service, `false` for Preview API |
-| `NOVA_ACT_API_KEY_NAME` | Conditional | Secrets Manager secret name for the Nova Act API key (required when `USE_NOVA_ACT_GA` is `false`) |
-| `NOVA_ACT_S3_BUCKET` | Conditional | S3 bucket for Nova Act workflow exports (required when `USE_NOVA_ACT_GA` is `true`) |
-| `BEDROCK_EXECUTION_ROLE` | Yes | IAM role ARN for Bedrock AgentCore browser |
-| `AGENT_CORE_VPC` | No | `true` to create browsers in VPC mode |
-| `AC_VPC_ID` | Conditional | VPC ID (required when `AGENT_CORE_VPC` is `true`) |
-| `AC_SUBNET_ID` | Conditional | Subnet ID (required when `AGENT_CORE_VPC` is `true`) |
-| `AC_SECURITY_GROUP_ID` | Conditional | Security group ID (required when `AGENT_CORE_VPC` is `true`) |
-| `LOGS_DIRECTORY` | No | Local log directory (default: `/app/logs`) |
-| `CACHE_ACTION_DELAY_MS` | No | Delay in milliseconds between cached actions (default: `100`) |
-| `SESSION_ID` | Conditional | Session identifier (wizard mode) |
-| `WIZARD_QUEUE_URL` | Conditional | SQS queue URL for wizard commands (wizard mode) |
-
-## Project Structure
-
-```
-worker/
-├── worker.py                # Entry point, routes to batch or wizard mode
-├── wizard_worker.py         # Wizard mode: persistent session with command loop
-├── event_emitter.py         # EventBridge event emission for execution completion
-├── cache_executor.py        # Cache execution: replay cached steps via Playwright API
-├── nova_act_workflow.py     # Nova Act GA workflow definition management
-├── browser.py               # Bedrock AgentCore browser lifecycle (create/start/delete)
-├── navigation_step.py       # Navigation step execution with cache support
-├── validation_step.py       # Validation step execution with type/operator matching
-├── secret_step.py           # Secret step execution with Secrets Manager integration
-├── retrieve_value_step.py   # Value retrieval and runtime variable capture
-├── assertion_step.py        # Runtime variable assertion (no browser interaction)
-├── url_step.py              # URL navigation step
-├── download_step.py         # File download step with S3 upload
-├── dynamodb_client.py       # DynamoDB operations for executions, steps, and status
-├── secrets_client.py        # AWS Secrets Manager client
-├── sqs_client.py            # SQS notification client
-├── template_parser.py       # {{Variable}} template resolution
-├── models.py                # Data models (Execution, ExecutionStep, etc.)
-├── utils.py                 # Helpers (region, time, VPC config validation)
-├── Dockerfile               # Multi-stage build: Python 3.13-slim
-└── requirements.txt         # boto3, nova-act, bedrock_agentcore
-```
-
-## Docker
-
-The worker uses a multi-stage Docker build based on `python:3.13.10-slim`. Playwright browser installation is skipped (`NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true`) since the browser runs remotely via Bedrock AgentCore.
-
-Build the image:
-
-```bash
-docker build -t nova-act-worker ./worker
-```
-
-In production, the image is built and deployed automatically by the CDK stack.
-
-## Dependencies
-
-- `boto3`: AWS SDK
-- `nova-act`: Amazon Nova Act SDK for browser automation
-- `bedrock_agentcore`: Amazon Bedrock AgentCore Browser Tool client
+Wizard mode is unchanged. If wizard-mode tests fail, follow the legacy debugging flow: CloudWatch logs for the ECS task, DynamoDB items under `EXECUTION#{sessionId}`, SQS wizard command queue state.

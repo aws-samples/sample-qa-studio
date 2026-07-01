@@ -232,9 +232,19 @@ def manage_eventbridge_rule(
         if not schedule_expression:
             raise ValueError('schedule_expression is required when schedule_enabled is True')
         
-        # Convert cron expression to EventBridge format
-        # EventBridge uses: cron(minute hour day month day-of-week year)
-        eventbridge_expression = f'cron({schedule_expression} *)'
+        # Convert 5-field unix cron to 6-field EventBridge format.
+        # EventBridge requires exactly one of day-of-month or day-of-week to be '?'.
+        parts = schedule_expression.split()
+        if len(parts) == 5:
+            day_of_month, day_of_week = parts[2], parts[4]
+            if day_of_month == '*' and day_of_week == '*':
+                parts[4] = '?'
+            elif day_of_week == '*':
+                parts[4] = '?'
+            elif day_of_month == '*':
+                parts[2] = '?'
+            parts.append('*')
+        eventbridge_expression = f'cron({" ".join(parts)})'
         
         logger.info(f"Creating/updating EventBridge rule: {rule_name} with expression: {eventbridge_expression}")
         

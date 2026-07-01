@@ -66,7 +66,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'validation_operator',
             'validation_value',
             'assertion_variable',
-            'value_type'
+            'value_type',
+            'network_url_pattern',
+            'network_method',
+            'network_request_body',
+            'network_body_match_type',
+            'network_mock_response',
+            'network_mock_passthrough',
+            'network_timeout',
+            'network_response_body',
+            'network_response_body_match_type',
+            'network_response_status',
         ]
         
         for field in optional_fields:

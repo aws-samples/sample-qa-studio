@@ -60,6 +60,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'assertion_variable': body.get('assertion_variable', ''),
             'value_type': body.get('value_type', '')
         }
+
+        # network_assertion fields are only written when the client sends them,
+        # so existing step types are never silently mutated.
+        for network_field in (
+            'network_url_pattern', 'network_method', 'network_request_body',
+            'network_body_match_type', 'network_mock_response',
+            'network_mock_passthrough', 'network_timeout',
+            'network_response_body', 'network_response_body_match_type',
+            'network_response_status',
+        ):
+            if network_field in body:
+                fields[network_field] = body[network_field]
         
         # Build update expression for all fields
         for field_name, field_value in fields.items():

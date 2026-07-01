@@ -152,6 +152,7 @@ qa-studio run [OPTIONS]
 |--------|------|----------|-------------|---------|
 | `--suite-id` | TEXT | No* | Test suite ID to execute | - |
 | `--usecase-id` | TEXT | No* | Single use case ID to execute | - |
+| `--execution-id` | TEXT | No | Attach to a pre-created execution record (skips creation). Only valid with `--usecase-id` in remote mode. | - |
 | `--local-only` | FLAG | No | Local-only execution (no remote records) | False |
 | `--token-file` | TEXT | No | Path to JSON token file | ~/.qa-studio/tokens.json |
 | `--base-url` | TEXT | No | Override base URL for all use cases | - |
@@ -160,6 +161,9 @@ qa-studio run [OPTIONS]
 | `--model-id` | TEXT | No | Override Nova Act model ID | - |
 | `--device-arn` | TEXT | No | Override Device Farm device ARN for mobile tests | - |
 | `--app-path` | TEXT | No | Path to local .apk/.ipa file for mobile tests | - |
+| `--browser` | CHOICE | No | Browser provisioner: `local`, `agentcore`, `cdp-external`. `agentcore` requires the `[agentcore]` extra. | local |
+| `--cdp-endpoint-url` | TEXT | No | CDP websocket URL. Required when `--browser=cdp-external`. | - |
+| `--cdp-headers-file` | PATH | No | Path to a JSON file with CDP connection headers (used with `--browser=cdp-external`). | - |
 | `--verbose` | FLAG | No | Enable verbose logging | False |
 | `--timeout` | INTEGER | No | Global timeout in seconds | 3600 |
 | `--keep-artifacts` | FLAG | No | Keep local artifact files after upload | False |

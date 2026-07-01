@@ -6,6 +6,7 @@ import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import Link from "@cloudscape-design/components/link";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import { RecordingPlayer } from '../RecordingPlayer';
+import { formatDateTime } from '../../utils/dateFormat';
 
 interface ExecutionInformationProps {
   execution: any;
@@ -19,6 +20,7 @@ function getStatusType(status: string) {
     case 'success': return 'success';
     case 'error': 
     case 'failed': return 'error';
+    case 'running':
     case 'executing': return 'in-progress';
     case 'pending': return 'pending';
     case 'stopped': return 'stopped';
@@ -60,7 +62,7 @@ export default function ExecutionInformation({
           },
           {
             label: "Created",
-            value: new Date(execution.created_at).toLocaleString(),
+            value: formatDateTime(execution.created_at),
           },
           {
             label: "Execution Region",

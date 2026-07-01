@@ -74,13 +74,24 @@ class TestListSuiteUsecases:
     def test_list_usecases_success(self, mock_boto3, mock_event, mock_table, mock_suite, mock_mappings):
         """Test successfully listing use cases in a suite"""
         # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
+        mock_dynamodb = mock_boto3.resource.return_value
+        mock_dynamodb.Table.return_value = mock_table
         
         # Mock suite retrieval
         mock_table.get_item.return_value = {'Item': mock_suite}
         
         # Mock mappings query
         mock_table.query.return_value = {'Items': mock_mappings}
+        
+        # Mock BatchGetItem for canonical records
+        mock_dynamodb.batch_get_item.return_value = {
+            'Responses': {
+                'accept-ai': [
+                    {'pk': 'USECASES', 'sk': 'USECASE#usecase-1', 'id': 'usecase-1', 'name': 'Login Test'},
+                    {'pk': 'USECASES', 'sk': 'USECASE#usecase-2', 'id': 'usecase-2', 'name': 'Checkout Test'},
+                ]
+            }
+        }
         
         # Execute
         response = handler(mock_event, None)
@@ -113,7 +124,8 @@ class TestListSuiteUsecases:
     def test_list_usecases_empty_suite(self, mock_boto3, mock_event, mock_table, mock_suite):
         """Test listing use cases from an empty suite"""
         # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
+        mock_dynamodb = mock_boto3.resource.return_value
+        mock_dynamodb.Table.return_value = mock_table
         
         # Mock suite retrieval
         mock_table.get_item.return_value = {'Item': mock_suite}
@@ -129,12 +141,16 @@ class TestListSuiteUsecases:
         body = json.loads(response['body'])
         assert body['total'] == 0
         assert body['usecases'] == []
+        
+        # BatchGetItem should NOT be called for empty suite
+        mock_dynamodb.batch_get_item.assert_not_called()
     
     @patch('list_suite_usecases.boto3')
     def test_suite_not_found(self, mock_boto3, mock_event, mock_table):
         """Test error when suite doesn't exist"""
         # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
+        mock_dynamodb = mock_boto3.resource.return_value
+        mock_dynamodb.Table.return_value = mock_table
         
         # Mock suite retrieval (not found)
         mock_table.get_item.return_value = {}
@@ -191,13 +207,24 @@ class TestListSuiteUsecases:
     def test_admin_scope_bypasses_validation(self, mock_boto3, mock_event, mock_table, mock_suite, mock_mappings):
         """Test that admin scope bypasses scope validation"""
         # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
+        mock_dynamodb = mock_boto3.resource.return_value
+        mock_dynamodb.Table.return_value = mock_table
         
         # Mock suite retrieval
         mock_table.get_item.return_value = {'Item': mock_suite}
         
         # Mock mappings query
         mock_table.query.return_value = {'Items': mock_mappings}
+        
+        # Mock BatchGetItem for canonical records
+        mock_dynamodb.batch_get_item.return_value = {
+            'Responses': {
+                'accept-ai': [
+                    {'pk': 'USECASES', 'sk': 'USECASE#usecase-1', 'id': 'usecase-1', 'name': 'Login Test'},
+                    {'pk': 'USECASES', 'sk': 'USECASE#usecase-2', 'id': 'usecase-2', 'name': 'Checkout Test'},
+                ]
+            }
+        }
         
         # Execute (event already has api/admin scope)
         response = handler(mock_event, None)
@@ -211,13 +238,24 @@ class TestListSuiteUsecases:
     def test_list_usecases_with_read_scope(self, mock_boto3, mock_table, mock_suite, mock_mappings):
         """Test listing use cases with read scope (no admin)"""
         # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
+        mock_dynamodb = mock_boto3.resource.return_value
+        mock_dynamodb.Table.return_value = mock_table
         
         # Mock suite retrieval
         mock_table.get_item.return_value = {'Item': mock_suite}
         
         # Mock mappings query
         mock_table.query.return_value = {'Items': mock_mappings}
+        
+        # Mock BatchGetItem for canonical records
+        mock_dynamodb.batch_get_item.return_value = {
+            'Responses': {
+                'accept-ai': [
+                    {'pk': 'USECASES', 'sk': 'USECASE#usecase-1', 'id': 'usecase-1', 'name': 'Login Test'},
+                    {'pk': 'USECASES', 'sk': 'USECASE#usecase-2', 'id': 'usecase-2', 'name': 'Checkout Test'},
+                ]
+            }
+        }
         
         # Create event without admin scope
         event = {
@@ -243,7 +281,8 @@ class TestListSuiteUsecases:
     def test_list_usecases_metadata_fields(self, mock_boto3, mock_event, mock_table, mock_suite):
         """Test that all metadata fields are returned correctly"""
         # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
+        mock_dynamodb = mock_boto3.resource.return_value
+        mock_dynamodb.Table.return_value = mock_table
         
         # Mock suite retrieval
         mock_table.get_item.return_value = {'Item': mock_suite}
@@ -260,6 +299,15 @@ class TestListSuiteUsecases:
             'added_at': '2024-01-15T14:30:00Z'
         }
         mock_table.query.return_value = {'Items': [mapping]}
+        
+        # Mock BatchGetItem for canonical record
+        mock_dynamodb.batch_get_item.return_value = {
+            'Responses': {
+                'accept-ai': [
+                    {'pk': 'USECASES', 'sk': 'USECASE#usecase-1', 'id': 'usecase-1', 'name': 'Test Use Case'},
+                ]
+            }
+        }
         
         # Execute
         response = handler(mock_event, None)
@@ -279,13 +327,15 @@ class TestListSuiteUsecases:
     def test_list_usecases_large_result_set(self, mock_boto3, mock_event, mock_table, mock_suite):
         """Test listing a large number of use cases"""
         # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
+        mock_dynamodb = mock_boto3.resource.return_value
+        mock_dynamodb.Table.return_value = mock_table
         
         # Mock suite retrieval
         mock_table.get_item.return_value = {'Item': mock_suite}
         
         # Create 50 mock mappings
         mappings = []
+        canonical_records = []
         for i in range(50):
             mappings.append({
                 'pk': 'SUITE#suite-123',
@@ -297,8 +347,20 @@ class TestListSuiteUsecases:
                 'added_by': 'user@example.com',
                 'added_at': '2024-01-01T10:00:00Z'
             })
+            canonical_records.append({
+                'pk': 'USECASES',
+                'sk': f'USECASE#usecase-{i}',
+                'id': f'usecase-{i}',
+                'name': f'Use Case {i}',
+            })
         
         mock_table.query.return_value = {'Items': mappings}
+        
+        # Mock BatchGetItem — will be called in batches of 25
+        # Return all canonical records for each batch call
+        mock_dynamodb.batch_get_item.return_value = {
+            'Responses': {'accept-ai': canonical_records}
+        }
         
         # Execute
         response = handler(mock_event, None)
@@ -313,7 +375,8 @@ class TestListSuiteUsecases:
     def test_internal_error_handling(self, mock_boto3, mock_event, mock_table):
         """Test error handling for internal errors"""
         # Setup mocks
-        mock_boto3.resource.return_value.Table.return_value = mock_table
+        mock_dynamodb = mock_boto3.resource.return_value
+        mock_dynamodb.Table.return_value = mock_table
         
         # Mock get_item to raise an exception
         mock_table.get_item.side_effect = Exception('Database error')

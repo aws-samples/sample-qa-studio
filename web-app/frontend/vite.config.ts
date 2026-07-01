@@ -47,6 +47,7 @@ export default defineConfig({
       bedrockModelId: config.bedrockModelId,
       apiEndpoint: config.apiEndpoint,
       version: rootPackageJson.version,
+      lambdaConcurrency: config.lambdaConcurrency,
     })
   }
 })

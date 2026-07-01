@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Container,
   Header,
@@ -11,23 +11,39 @@ import {
   Alert,
   BreadcrumbGroup,
   Multiselect,
-  MultiselectProps
+  MultiselectProps,
+  Select,
+  SelectProps
 } from '@cloudscape-design/components';
 import { testSuites, CreateTestSuiteRequest } from '../utils/api';
 import { ErrorState } from '../utils/errorManager';
+import { useApplications } from '../hooks/useApplications';
 
 const CreateTestSuite: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { options: applicationOptions, loading: appsLoading } = useApplications();
   const [suiteData, setSuiteData] = useState<CreateTestSuiteRequest>({
     name: '',
     description: '',
     tags: []
   });
+  const [selectedApplication, setSelectedApplication] = useState<SelectProps.Option | null>(null);
+
+  useEffect(() => {
+    const appId = searchParams.get('applicationId');
+    if (appId && applicationOptions.length > 0 && !selectedApplication) {
+      const match = applicationOptions.find(o => o.value === appId);
+      if (match) setSelectedApplication(match);
+    }
+  }, [applicationOptions, searchParams]);
+
   const [selectedTags, setSelectedTags] = useState<MultiselectProps.Option[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<{
     name?: string;
+    application?: string;
   }>({});
 
   const validateName = (name: string): string | undefined => {
@@ -59,23 +75,26 @@ const CreateTestSuite: React.FC = () => {
 
   const isFormValid = (): boolean => {
     const nameError = validateName(suiteData.name);
-    return !nameError;
+    return !nameError && !!selectedApplication;
   };
 
   const createSuite = async () => {
-    // Final validation
     const nameError = validateName(suiteData.name);
-    
-    if (nameError) {
-      setValidationErrors({ name: nameError });
+    const appError = !selectedApplication ? 'Application is required' : undefined;
+
+    if (nameError || appError) {
+      setValidationErrors({ name: nameError, application: appError });
       return;
     }
 
     setCreating(true);
     setError(null);
-    
+
     try {
-      const response = await testSuites.create(suiteData);
+      const response = await testSuites.create({
+        ...suiteData,
+        application_id: selectedApplication!.value,
+      } as any);
       // Navigate to the newly created suite detail page
       navigate(`/test-suites/${response.id}`);
     } catch (err) {
@@ -124,6 +143,27 @@ const CreateTestSuite: React.FC = () => {
 
       <Container>
         <SpaceBetween direction="vertical" size="l">
+          <FormField
+            label="Application"
+            description="The application this test suite belongs to."
+            constraintText="Required"
+            errorText={validationErrors.application}
+          >
+            <Select
+              selectedOption={selectedApplication}
+              onChange={({ detail }) => {
+                setSelectedApplication(detail.selectedOption);
+                setValidationErrors({ ...validationErrors, application: undefined });
+              }}
+              options={applicationOptions}
+              placeholder="Select an application"
+              loadingText="Loading applications..."
+              statusType={appsLoading ? 'loading' : 'finished'}
+              filteringType="auto"
+              disabled={creating}
+            />
+          </FormField>
+
           <FormField
             label="Name"
             description="A descriptive name for this test suite."

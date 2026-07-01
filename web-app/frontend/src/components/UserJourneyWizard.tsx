@@ -31,7 +31,7 @@ const platformOptions: SelectProps.Options = [
   { label: 'iOS', value: 'IOS' },
 ];
 
-declare const __APP_CONFIG__: { defaultRegion: string; enabledRegions: string[]; apiEndpoint: string; baseName: string; version: string };
+declare const __APP_CONFIG__: { defaultRegion: string; enabledRegions: string[]; apiEndpoint: string; baseName: string; version: string; lambdaConcurrency: number };
 
 interface UserJourneyWizardProps {
   onUsecaseCreated?: (usecaseId: string) => void;

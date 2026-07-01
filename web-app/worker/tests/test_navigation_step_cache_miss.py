@@ -31,6 +31,7 @@ def mock_step():
     step.sort = 1
     step.instruction = "Click login button"
     step.enable_advanced_click_types = False
+    step.trajectory_s3_key = None  # No trajectory — allows Playwright cache path
     return step
 
 

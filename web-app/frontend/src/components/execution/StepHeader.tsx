@@ -28,6 +28,7 @@ export default function StepHeader({
 }: StepHeaderProps) {
   const hasValidation = (stepType === 'validation' || stepType === 'assertion') && validation;
   const hasDownload = stepType === 'download' && validation?.actual_value;
+  const hasNetwork = stepType === 'network_assertion' && validation?.actual_value;
 
   return (
     <SpaceBetween direction="vertical" size="xxs">
@@ -58,6 +59,12 @@ export default function StepHeader({
       {hasDownload && (
         <Box padding={{ left: 'l' }} fontSize="body-s" color="text-body-secondary">
           Downloaded: {validation.actual_value}
+        </Box>
+      )}
+
+      {hasNetwork && (
+        <Box padding={{ left: 'l' }} fontSize="body-s" color="text-body-secondary">
+          Network: {validation.actual_value}
         </Box>
       )}
 

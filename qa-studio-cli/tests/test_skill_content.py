@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
-SKILL_FILE = SKILLS_DIR / "qa-studio" / "SKILL.md"
-REFERENCE_DIR = SKILLS_DIR / "qa-studio" / "reference"
+SKILL_DIR = Path(__file__).resolve().parent.parent.parent / "skill"
+SKILL_FILE = SKILL_DIR / "SKILL.md"
+REFERENCE_DIR = SKILL_DIR / "reference"
 
 
 def _parse_frontmatter(path: Path) -> str:
@@ -37,14 +37,18 @@ def _read_content(path: Path) -> str:
 
 
 class TestFrontmatterKeywords:
-    """Validate that SKILL.md frontmatter description contains required trigger keywords."""
+    """Validate that SKILL.md frontmatter description contains required trigger keywords.
+
+    Keywords are intentionally narrow: the skill covers test authoring and
+    execution only. CI/CD and similar broader topics deliberately do not
+    appear in the description so the skill is not activated for queries it
+    cannot answer.
+    """
 
     REQUIRED_KEYWORDS = [
         "browser-based UI tests",
-        "test web applications",
-        "automated browser tests",
-        "UI tests",
-        "CI/CD",
+        "build a test case",
+        "execute",
         "Nova Act",
     ]
 
@@ -71,23 +75,19 @@ class TestSectionExistence:
     @pytest.mark.parametrize(
         "section",
         [
-            "## Quick Start",
             "## Decision Tree",
             "## Common Workflows",
             "## Examples",
             "## Reference Documentation",
             "## Key Concepts",
-            "## Authentication Models",
             "## Error Handling",
         ],
         ids=[
-            "quick_start",
             "decision_tree",
             "common_workflows",
             "examples",
             "reference_docs",
             "key_concepts",
-            "auth_models",
             "error_handling",
         ],
     )
@@ -127,7 +127,6 @@ class TestErrorHandling:
             "not found",
             "execution",
             "timeout",
-            "configuration",
             "suite",
         ],
         ids=[
@@ -135,7 +134,6 @@ class TestErrorHandling:
             "not_found",
             "execution_failure",
             "timeout",
-            "configuration",
             "suite_errors",
         ],
     )
@@ -190,20 +188,44 @@ class TestReferenceTOC:
         "retrieve_value",
         "assertion",
         "download",
+        "browser",
+        "transform",
+        "network_assertion",
     ]
 
-    def test_step_types_has_all_7_step_types(self):
-        step_types_file = REFERENCE_DIR / "step-types.md"
-        content = step_types_file.read_text()
+    def test_step_types_directory_has_one_file_per_step_type(self):
+        """Each step type has its own dedicated reference file."""
+        step_types_dir = REFERENCE_DIR / "step-types"
+        assert step_types_dir.is_dir(), "step-types/ directory missing"
         for step_type in self.STEP_TYPES:
-            assert step_type in content, (
-                f"step-types.md missing step type '{step_type}'"
+            filepath = step_types_dir / f"{step_type}.md"
+            assert filepath.is_file(), (
+                f"step-types/{step_type}.md missing — every step type "
+                "needs its own reference file"
+            )
+
+    def test_step_types_directory_has_readme_index(self):
+        """A README.md at the directory root provides the decision tree."""
+        readme = REFERENCE_DIR / "step-types" / "README.md"
+        assert readme.is_file(), "step-types/README.md missing"
+
+    @pytest.mark.parametrize("step_type", [
+        "navigation", "browser", "secret", "validation", "retrieve_value",
+        "assertion", "download", "transform", "network_assertion",
+    ])
+    def test_step_type_file_has_required_sections(self, step_type):
+        """Each (non-deprecated) step type file follows the standard template."""
+        filepath = REFERENCE_DIR / "step-types" / f"{step_type}.md"
+        content = filepath.read_text()
+        for section in ["## When to use", "## When NOT to use", "## Inputs", "## Examples", "## Common pitfalls"]:
+            assert section in content, (
+                f"step-types/{step_type}.md missing required section: '{section}'"
             )
 
     def test_validation_operators_grouped_by_category(self):
         val_ops_file = REFERENCE_DIR / "validation-operators.md"
         content = val_ops_file.read_text()
-        for category in ["String", "Number", "Boolean"]:
+        for category in ["String", "Number", "Boolean", "Date"]:
             assert f"## {category}" in content, (
                 f"validation-operators.md missing category group: '{category}'"
             )
@@ -218,16 +240,10 @@ class TestReferenceCompleteness:
     """Validate all expected reference files exist."""
 
     EXPECTED_REFERENCE_FILES = [
-        "step-types.md",
         "validation-operators.md",
-        "creating-tests.md",
-        "local-execution.md",
-        "test-suites.md",
-        "managing-tests.md",
-        "ci-cd-integration.md",
+        "building-tests.md",
+        "executing-tests.md",
         "troubleshooting.md",
-        "best-practices.md",
-        "web-interface.md",
     ]
 
     def test_all_reference_files_exist(self):
@@ -250,20 +266,13 @@ class TestReferenceCompleteness:
 
 
 class TestLineLimit:
-    """Validate all SKILL.md files stay under 500 lines."""
+    """Enforce a tight cap on SKILL.md to keep detail in the reference files."""
 
-    MAX_LINES = 500
+    MAX_LINES = 300
 
-    def _get_all_skill_files(self):
-        """Return all SKILL.md files in the skills directory."""
-        return list(SKILLS_DIR.glob("*/SKILL.md"))
-
-    def test_all_skill_files_under_500_lines(self):
-        skill_files = self._get_all_skill_files()
-        assert skill_files, "No SKILL.md files found"
-        for skill_file in skill_files:
-            line_count = len(skill_file.read_text().splitlines())
-            assert line_count < self.MAX_LINES, (
-                f"{skill_file.parent.name}/SKILL.md has {line_count} lines, "
-                f"expected <{self.MAX_LINES}"
-            )
+    def test_skill_file_under_max_lines(self):
+        line_count = len(SKILL_FILE.read_text().splitlines())
+        assert line_count < self.MAX_LINES, (
+            f"SKILL.md is {line_count} lines (max {self.MAX_LINES}). "
+            "Move detail to reference files."
+        )

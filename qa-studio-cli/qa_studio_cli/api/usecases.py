@@ -11,13 +11,39 @@ class UseCaseAPI:
     def __init__(self, client: ApiClient):
         self.client = client
 
+    def list_usecases(self) -> List[Dict[str, Any]]:
+        """Fetch every use case the caller has read access to.
+
+        Returns the raw list from the API; consumers decide whether to
+        promote entries to a typed model (CLI commands use
+        :class:`UsecaseModel`, TUI uses a UI-shaped dataclass).
+        """
+        response = self.client.get("/usecases")
+        return response.get("usecases", []) or []
+
+    def list_executions(
+        self, usecase_id: str, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Fetch recent executions for a use case, newest first.
+
+        The server sorts by ``created_at`` descending and caps at
+        ``limit`` (default 20). Consumers render the raw dicts;
+        pagination is not supported yet and explicitly out of scope
+        for the TUI POC.
+        """
+        response = self.client.get(
+            f"/usecase/{usecase_id}/executions",
+            params={"limit": limit},
+        )
+        return response.get("executions", []) or []
+
     def get_usecase(self, usecase_id: str) -> Dict[str, Any]:
         """Fetch use case metadata."""
-        return self.client.get(f"/api/usecase/{usecase_id}")
+        return self.client.get(f"/usecase/{usecase_id}")
 
     def get_steps(self, usecase_id: str) -> List[Dict[str, Any]]:
         """Fetch use case steps."""
-        response = self.client.get(f"/api/usecase/{usecase_id}/steps")
+        response = self.client.get(f"/usecase/{usecase_id}/steps")
         return response.get("steps", [])
 
     def get_variables(self, usecase_id: str) -> Dict[str, str]:
@@ -26,7 +52,7 @@ class UseCaseAPI:
         Handles both list format (list of {key, value} dicts) and
         dict format from the API.
         """
-        response = self.client.get(f"/api/usecase/{usecase_id}/variables")
+        response = self.client.get(f"/usecase/{usecase_id}/variables")
         raw_vars = response.get("variables", [])
         if isinstance(raw_vars, dict):
             return raw_vars
@@ -40,7 +66,7 @@ class UseCaseAPI:
 
     def get_secrets(self, usecase_id: str) -> List[Dict[str, Any]]:
         """Fetch use case secrets."""
-        response = self.client.get(f"/api/usecase/{usecase_id}/secrets")
+        response = self.client.get(f"/usecase/{usecase_id}/secrets")
         return response.get("secrets", [])
 
     def create_execution(
@@ -63,7 +89,7 @@ class UseCaseAPI:
         if model_id is not None:
             payload["model_id"] = model_id
         return self.client.post(
-            f"/api/usecase/{usecase_id}/execute",
+            f"/usecase/{usecase_id}/execute",
             json_body=payload if payload else None,
             params={"trigger-type": trigger_type},
         )

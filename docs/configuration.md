@@ -120,3 +120,47 @@ These permissions are automatically configured by the CDK worker stack.
 3. The app binary is uploaded to Device Farm (or reused from a previous upload)
 4. Nova Act controls the device via Appium through the Device Farm endpoint
 5. After execution, the session recording is downloaded asynchronously via an SQS-triggered Lambda
+
+
+## Worker Runtime Environment
+
+Since the CLI-unified-runner refactor, the ECS worker container invokes the `qa-studio` CLI (via `web-app/worker/entrypoint.sh`) instead of a standalone Python script. The container receives its configuration through two channels:
+
+- **ECS `secrets:` injection** — OAuth M2M credentials are pulled from Secrets Manager at task start and exposed as env vars. The secret itself is created by the auth stack.
+- **SSM parameters** — the API URL and Cognito token endpoint are published by the API / auth stacks and read by `entrypoint.sh` at container start. Keeps the image deployment-agnostic.
+
+### Env vars consumed by `entrypoint.sh`
+
+| Variable | Source | Purpose |
+|---|---|---|
+| `WORKER_MODE` | ECS task definition (optional) | `batch` (default) → invokes `qa-studio run`. `wizard` → defers to `wizard_worker.py`. |
+| `USECASE_ID` | ECS task definition | Required in batch mode; passed as `--usecase-id`. |
+| `EXECUTION_ID` | ECS task definition | Required in batch mode; passed as `--execution-id` so the CLI attaches to the pre-created record. |
+| `QA_STUDIO_API_URL_SSM` | CDK worker stack | SSM parameter name the entrypoint reads to discover the API URL. Written as `QA_STUDIO_API_URL` for the CLI. |
+| `QA_STUDIO_TOKEN_ENDPOINT_SSM` | CDK worker stack | SSM parameter name for the Cognito `/oauth2/token` endpoint. Written as `OAUTH_TOKEN_ENDPOINT` for the CLI. |
+| `OAUTH_CLIENT_ID` | ECS `secrets:` → Secrets Manager | M2M client ID (JSON field `client_id` of the `${baseName}-worker-m2m-credentials` secret). |
+| `OAUTH_CLIENT_SECRET` | ECS `secrets:` → Secrets Manager | M2M client secret (JSON field `client_secret`). |
+| `AWS_REGION` | ECS task definition | Forwarded to `qa-studio run --region`. |
+| `ENABLE_TRAJECTORY_REPLAY` | ECS task definition (optional) | `true` (default) or `false`. Read directly by the CLI; no flag. |
+| `QA_STUDIO_VERBOSE` | ECS task definition (optional) | `true` to add `--verbose` to the invocation. |
+| `BEDROCK_EXECUTION_ROLE` | ECS task definition | IAM role assumed by AgentCore browsers. |
+| `AGENT_CORE_VPC` + `AC_VPC_ID` / `AC_SUBNET_ID` / `AC_SECURITY_GROUP_ID` | ECS task definition (when `agentCoreVPC: true` in `configuration.json`) | Put AgentCore browsers in a VPC. |
+| `S3_BUCKET` | ECS task definition | Artefact bucket the AgentCore provisioner writes recordings to. |
+
+### SSM parameters written by the stacks
+
+| Parameter | Written by | Read by |
+|---|---|---|
+| `/qa-studio/{baseName}/api-url` | API stack | Worker entrypoint (batch mode) |
+| `/qa-studio/{baseName}/cognito-token-endpoint` | Auth stack | Worker entrypoint (batch mode) |
+
+Both are `String` parameters (non-sensitive — the URLs themselves grant no access). The worker task role has `ssm:GetParameter` on both exact names.
+
+### Secrets Manager secrets
+
+| Secret name | Contents | Used by |
+|---|---|---|
+| `${baseName}-nova-act-api-key` (existing) | Nova Act API key | Worker (preview API only) |
+| `${baseName}-worker-m2m-credentials` (new) | JSON `{"client_id": "...", "client_secret": "..."}` | ECS task `secrets:` injection |
+
+The M2M credentials secret is populated by a CDK `AwsCustomResource` that calls `cognito-idp:DescribeUserPoolClient` post-deploy to resolve the generated client secret. Rotation is deploy-driven: re-running `npm run deploy` mints fresh credentials through the same custom resource.

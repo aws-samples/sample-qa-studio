@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from qa_studio_cli.api.client import ApiClient
+from qa_studio_cli.api.client import ApiClient, build_api_client
 from qa_studio_cli.api.executions import ExecutionAPI
 from qa_studio_cli.api.test_suites import TestSuiteAPI
 from qa_studio_cli.api.usecases import UseCaseAPI
@@ -18,6 +18,7 @@ from qa_studio_cli.auth.resolver import TokenResolver
 from qa_studio_cli.config.manager import load_config
 from qa_studio_cli.models.errors import ExecutionError
 from qa_studio_cli.runner.artifact_uploader import ArtifactUploader
+from qa_studio_cli.runner.browser import BrowserSelection
 from qa_studio_cli.runner.engine import ExecutionEngine
 from qa_studio_cli.runner.output import SummaryFormatter
 from qa_studio_cli.runner.suite_log_capture import SuiteLogCapture
@@ -31,10 +32,9 @@ logger = logging.getLogger(__name__)
 def _build_api_client(
     token_file: Optional[str] = None,
 ) -> ApiClient:
-    """Build an ApiClient using the TokenResolver chain."""
-    config = load_config()
-    resolver = TokenResolver(token_file=token_file, config=config)
-    return ApiClient(base_url=config.api_url, token_provider=resolver.get_token)
+    """Thin wrapper around the shared builder to preserve the runner's
+    historical function name and keep call sites unchanged."""
+    return build_api_client(token_file=token_file)
 
 
 def _validate_aws_session() -> None:
@@ -80,8 +80,25 @@ def run_usecase(
     output_format: str = "json",
     device_arn: Optional[str] = None,
     app_path: Optional[str] = None,
+    execution_id: Optional[str] = None,
+    browser: str = "local",
+    cdp_endpoint_url: Optional[str] = None,
+    cdp_headers_file: Optional[str] = None,
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
-    """Execute a single use case (local-only or remote mode)."""
+    """Execute a single use case (local-only or remote mode).
+
+    When ``execution_id`` is provided, the remote path attaches to the
+    pre-created execution record instead of creating a new one.  The
+    ``local_only`` path ignores ``execution_id`` — local runs never touch
+    the remote state machine.
+
+    ``browser`` selects the BrowserProvisioner strategy.  ``local`` and
+    ``cdp-external`` are supported on the local-only path; the remote
+    path additionally supports ``agentcore`` which provisions a remote
+    browser via Bedrock AgentCore (requires ``qa-studio[agentcore]``).
+    """
     try:
         logger.info("Loading configuration...")
         _validate_aws_session()
@@ -90,6 +107,10 @@ def run_usecase(
         usecase_api = UseCaseAPI(api_client)
 
         if local_only:
+            if execution_id:
+                logger.warning(
+                    "--execution-id is ignored in --local-only mode",
+                )
             _run_usecase_local(
                 usecase_id=usecase_id,
                 usecase_api=usecase_api,
@@ -100,6 +121,11 @@ def run_usecase(
                 output_format=output_format,
                 device_arn=device_arn,
                 app_path=app_path,
+                browser=browser,
+                cdp_endpoint_url=cdp_endpoint_url,
+                cdp_headers_file=cdp_headers_file,
+                local_browser=local_browser,
+                headful=headful,
             )
         else:
             _run_usecase_remote(
@@ -111,6 +137,12 @@ def run_usecase(
                 region=region,
                 model_id=model_id,
                 output_format=output_format,
+                execution_id=execution_id,
+                browser=browser,
+                cdp_endpoint_url=cdp_endpoint_url,
+                cdp_headers_file=cdp_headers_file,
+                local_browser=local_browser,
+                headful=headful,
             )
     except Exception as e:
         sanitized_error = sanitize_error_message(str(e))
@@ -129,8 +161,20 @@ def _run_usecase_local(
     output_format: str = "json",
     device_arn: Optional[str] = None,
     app_path: Optional[str] = None,
+    browser: str = "local",
+    cdp_endpoint_url: Optional[str] = None,
+    cdp_headers_file: Optional[str] = None,
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
     """Local-only execution path: fetch data, execute locally, print result."""
+    # --browser=agentcore is only valid on the remote path (needs the
+    # live-view endpoint).  Reject it here with a clear error.
+    if browser == "agentcore":
+        raise RuntimeError(
+            "--browser=agentcore is not supported with --local-only; "
+            "use --browser=local (default) or --browser=cdp-external",
+        )
     logger.info("Fetching use case: %s", usecase_id)
     usecase = usecase_api.get_usecase(usecase_id)
     steps = usecase_api.get_steps(usecase_id)
@@ -172,7 +216,15 @@ def _run_usecase_local(
             logger.info("Using CLI app path: %s", app_path)
 
     logger.info("Executing use case locally: %s", usecase_name)
-    engine = ExecutionEngine()
+    engine = ExecutionEngine(
+        browser_selection=BrowserSelection(
+            mode=browser,
+            cdp_endpoint_url=cdp_endpoint_url,
+            cdp_headers_file=cdp_headers_file,
+            local_browser=local_browser,
+            headless=False if headful else None,
+        ),
+    )
     result = engine.execute_usecase_local(
         usecase_id=usecase_id,
         usecase_name=usecase_name,
@@ -205,22 +257,43 @@ def _run_usecase_remote(
     region: Optional[str],
     model_id: Optional[str],
     output_format: str = "json",
+    execution_id: Optional[str] = None,
+    browser: str = "local",
+    cdp_endpoint_url: Optional[str] = None,
+    cdp_headers_file: Optional[str] = None,
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
-    """Remote execution path: create execution record, execute with tracking."""
+    """Remote execution path: create execution record, execute with tracking.
+
+    When ``execution_id`` is supplied, the creation step is skipped and the
+    runner attaches to the supplied pre-created record instead.  This is
+    the path the cloud worker takes: the web API creates the execution
+    record before the ECS task starts, and the task receives the id via
+    env var.
+    """
     from qa_studio_cli.models.execution import RemoteExecutionResult
 
-    logger.info("Creating execution record for use case: %s", usecase_id)
-    execution_response = usecase_api.create_execution(
-        usecase_id=usecase_id,
-        trigger_type="ci_runner",
-        base_url=base_url,
-        variables=variables if variables else None,
-        region=region,
-        model_id=model_id,
-    )
-
-    execution_id = execution_response.get("executionId") or execution_response.get("execution_id")
-    logger.info("Execution created: %s", execution_id)
+    if execution_id:
+        logger.info(
+            "Attaching to pre-created execution: %s (usecase %s)",
+            execution_id, usecase_id,
+        )
+    else:
+        logger.info("Creating execution record for use case: %s", usecase_id)
+        execution_response = usecase_api.create_execution(
+            usecase_id=usecase_id,
+            trigger_type="ci_runner",
+            base_url=base_url,
+            variables=variables if variables else None,
+            region=region,
+            model_id=model_id,
+        )
+        execution_id = (
+            execution_response.get("executionId")
+            or execution_response.get("execution_id")
+        )
+        logger.info("Execution created: %s", execution_id)
 
     execution_api = ExecutionAPI(api_client)
     execution_details = asyncio.run(
@@ -233,7 +306,17 @@ def _run_usecase_remote(
         "usecase_name": execution_details.get("usecase_name", usecase_id),
     }
 
-    engine = ExecutionEngine(execution_api=execution_api, suite_execution_id=None)
+    engine = ExecutionEngine(
+        execution_api=execution_api,
+        suite_execution_id=None,
+        browser_selection=BrowserSelection(
+            mode=browser,
+            cdp_endpoint_url=cdp_endpoint_url,
+            cdp_headers_file=cdp_headers_file,
+            local_browser=local_browser,
+            headless=False if headful else None,
+        ),
+    )
     result = asyncio.run(engine.execute_usecase(execution))
 
     remote_result = RemoteExecutionResult(
@@ -267,6 +350,8 @@ def run_runner(
     keep_artifacts: bool = False,
     token_file: Optional[str] = None,
     output_format: str = "json",
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
     """Main runner execution logic for suite mode."""
     variables = variables or {}
@@ -294,6 +379,8 @@ def run_runner(
                 region=region,
                 model_id=model_id,
                 output_format=output_format,
+                local_browser=local_browser,
+                headful=headful,
             )
         else:
             _run_suite_remote(
@@ -324,6 +411,8 @@ def _run_suite_local(
     region: Optional[str],
     model_id: Optional[str],
     output_format: str = "json",
+    local_browser: str = "chromium",
+    headful: bool = False,
 ) -> None:
     """Local-only suite execution."""
     start_time = datetime.utcnow()
@@ -337,7 +426,12 @@ def _run_suite_local(
         print("Suite has no usecases to execute.")
         sys.exit(0)
 
-    engine = ExecutionEngine()
+    engine = ExecutionEngine(
+        browser_selection=BrowserSelection(
+            local_browser=local_browser,
+            headless=False if headful else None,
+        ),
+    )
     results: List[Dict[str, Any]] = []
 
     for uc in suite_usecases:
