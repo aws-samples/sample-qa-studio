@@ -561,3 +561,43 @@ class TestRetryBehavior:
                 client.get("/test")
             assert exc_info.value.status_code == 500
             assert client._session.request.call_count == 3
+
+
+# ---------------------------------------------------------------------------
+# Worker execution capability header (H-2)
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionTokenHeader:
+    def test_header_sent_when_env_var_set(self, monkeypatch):
+        monkeypatch.setenv("QA_STUDIO_EXECUTION_TOKEN", "uc-1:ex-1:secret-token")
+        client = _make_client()
+        with patch.object(client._session, "request", return_value=_mock_response(200, {})):
+            client.get("/usecase/uc-1")
+            headers = client._session.request.call_args.kwargs["headers"]
+        assert headers["X-QA-Execution-Token"] == "uc-1:ex-1:secret-token"
+        assert headers["Authorization"] == "Bearer tok"
+
+    def test_header_absent_without_env_var(self, monkeypatch):
+        monkeypatch.delenv("QA_STUDIO_EXECUTION_TOKEN", raising=False)
+        client = _make_client()
+        with patch.object(client._session, "request", return_value=_mock_response(200, {})):
+            client.post("/usecase/uc-1/execute")
+            headers = client._session.request.call_args.kwargs["headers"]
+        assert "X-QA-Execution-Token" not in headers
+
+    def test_empty_env_var_not_sent(self, monkeypatch):
+        monkeypatch.setenv("QA_STUDIO_EXECUTION_TOKEN", "")
+        client = _make_client()
+        with patch.object(client._session, "request", return_value=_mock_response(200, {})):
+            client.patch("/x", {})
+            headers = client._session.request.call_args.kwargs["headers"]
+        assert "X-QA-Execution-Token" not in headers
+
+    def test_token_never_logged(self, monkeypatch, caplog):
+        monkeypatch.setenv("QA_STUDIO_EXECUTION_TOKEN", "uc-1:ex-1:very-secret-value")
+        client = _make_client()
+        with caplog.at_level("DEBUG"), \
+                patch.object(client._session, "request", return_value=_mock_response(200, {})):
+            client.get("/usecase/uc-1")
+        assert "very-secret-value" not in caplog.text

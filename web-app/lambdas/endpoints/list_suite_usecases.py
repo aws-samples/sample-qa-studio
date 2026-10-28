@@ -5,8 +5,10 @@ from typing import Any, Dict, List
 from utils import (
     create_response,
     get_table_name,
-    require_scopes,
-    validate_path_id)
+    validate_path_id,
+    extract_user_identity,
+)
+from resource_auth import require_resource_access, suite_from_path, owner_of, can_view_testcase_batch
 from test_suite_schema import (
     get_suite_mapping_pk,
     get_test_suites_pk,
@@ -18,6 +20,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', suite_from_path, scopes=['api/suite.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to list use cases in a test suite.
@@ -38,11 +41,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if error:
             return error
         
-        # Validate scope access (requires api/suite.read or admin)
-        user_identity, error_response = require_scopes(event, ['api/suite.read'])
-        if error_response:
-            return error_response
-        
+        user_identity = extract_user_identity(event)
         user_identity_str = user_identity.get('identity', '')
         
         logger.info(f"Listing use cases for suite {suite_id} for user: {user_identity_str}")
@@ -73,6 +72,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         )
         
         mapping_items = mappings_response.get('Items', [])
+
+        # Per-test-case visibility overrides narrow what the caller sees (BR-3)
+        _, owner_team_id = owner_of(suite)
+        visible = can_view_testcase_batch(
+            user_identity, {item['usecase_id']: owner_team_id for item in mapping_items})
+        mapping_items = [item for item in mapping_items if item['usecase_id'] in visible]
         
         # Resolve current usecase names from canonical records via BatchGetItem
         canonical_lookup: Dict[str, Dict] = {}

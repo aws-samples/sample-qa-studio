@@ -3,13 +3,15 @@ import json
 from typing import Any, Dict, List
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from utils import create_response, get_table_name
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', usecase_from_path, scopes=['api/templates.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to check for template updates for usecase steps.
@@ -22,16 +24,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with update information
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/templates.read'])
-        if error:
-            return error
-        
         # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')

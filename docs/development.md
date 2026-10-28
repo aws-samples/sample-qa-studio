@@ -47,10 +47,16 @@ npm run deploy:frontend-build # Build React app
 - `npm run build:lambdas`: Build all Lambda functions for ARM64
 - `npm run clean:lambdas`: Remove Lambda build artifacts
 - `npm run config:write`: Generate frontend config from CloudFormation outputs
+- `npm run migrate:team-admin`: Migrate legacy `team-{id}-admin` groups to Team Lead (dry run unless `--apply`; runs with `--apply` during `npm run deploy`). See [User Management: Team admin migration](user-management.md#team-admin-migration)
 - `npm run dcv:download`: Download NICE DCV Web Client SDK (runs automatically during deployment)
 - `npm run deploy:frontend-build`: Build React frontend application
 - `npm run build`: Compile TypeScript CDK code
 - `npm run watch`: Watch TypeScript files for changes
+
+### Tests
+
+- `npm test` (or `npx jest`) in `web-app`: CDK and deploy-script tests (`lib/**/*.test.ts`, `scripts/**/*.test.ts`)
+- `npx vitest run` in `web-app/frontend`: frontend tests
 
 ### CDK Commands
 

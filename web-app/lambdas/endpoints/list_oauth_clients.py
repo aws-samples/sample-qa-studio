@@ -3,17 +3,42 @@ import os
 import logging
 from typing import Any, Dict
 import boto3
+from boto3.dynamodb.conditions import Key
 from utils import create_response, get_table_name, require_scopes
+from resource_auth import has_team_role, is_studio_admin
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+def _load_client_records(table) -> Dict[str, dict]:
+    """All OAUTH_CLIENTS records (one partition, paginated query), keyed by client id."""
+    records: Dict[str, dict] = {}
+    query_kwargs: Dict[str, Any] = {'KeyConditionExpression': Key('pk').eq('OAUTH_CLIENTS')}
+    while True:
+        response = table.query(**query_kwargs)
+        for item in response.get('Items', []):
+            records[item['sk']] = item
+        last_key = response.get('LastEvaluatedKey')
+        if not last_key:
+            return records
+        query_kwargs['ExclusiveStartKey'] = last_key
+
+
+def _visible_to(user_identity: dict, record: dict) -> bool:
+    """Admins see every client; others only clients of teams where they are editor+."""
+    if is_studio_admin(user_identity):
+        return True
+    team_id = (record or {}).get('team_id')
+    return bool(team_id) and has_team_role(user_identity, team_id, 'editor')
+
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to list OAuth clients in Amazon Cognito user pool.
-    Requires api/oauth-clients.read or api/admin scope.
+    Requires api/oauth-clients.read or api/admin scope. Non-admins see only
+    clients bound to teams where they are editor or higher.
     
     Args:
         event: API Gateway proxy request event
@@ -40,6 +65,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         table_name = get_table_name()
         table = dynamodb.Table(table_name)
         
+        client_records = _load_client_records(table)
+
         # List all user pool clients
         clients_list = []
         next_token = None
@@ -60,6 +87,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Get detailed information for each client
             for client_summary in response.get('UserPoolClients', []):
                 client_id = client_summary.get('ClientId')
+                record = client_records.get(client_id)
+                if not _visible_to(user_identity, record):
+                    continue
                 
                 try:
                     client_details = cognito_client.describe_user_pool_client(
@@ -73,31 +103,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     created_date = client.get('CreationDate')
                     last_modified_date = client.get('LastModifiedDate')
                     
-                    # Fetch creator information from DynamoDB
-                    created_by = None
-                    try:
-                        logger.info(f"Fetching metadata for client {client_id}")
-                        metadata_response = table.get_item(
-                            Key={
-                                'pk': 'OAUTH_CLIENTS',
-                                'sk': client_id
-                            }
-                        )
-                        logger.info(f"Metadata response: {metadata_response}")
-                        if 'Item' in metadata_response:
-                            created_by = metadata_response['Item'].get('created_by')
-                            logger.info(f"Found created_by: {created_by}")
-                        else:
-                            logger.warning(f"No metadata found for client {client_id}")
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch metadata for client {client_id}: {str(e)}")
+                    record = record or {}
                     
                     clients_list.append({
                         'client_id': client.get('ClientId', ''),
                         'client_name': client.get('ClientName', ''),
                         'created_date': created_date.isoformat() if created_date else None,
                         'last_modified_date': last_modified_date.isoformat() if last_modified_date else None,
-                        'created_by': created_by,
+                        'created_by': record.get('created_by'),
+                        'team_id': record.get('team_id'),
                         'refresh_token_validity': client.get('RefreshTokenValidity'),
                         'access_token_validity': client.get('AccessTokenValidity'),
                         'id_token_validity': client.get('IdTokenValidity'),

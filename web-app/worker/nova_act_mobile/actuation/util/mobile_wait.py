@@ -92,12 +92,14 @@ def wait_for_app_idle(driver: WebDriver) -> None:
                 )
                 return
             _LOGGER.warning(f"Screenshot failed during idle wait: {e}")
-            time.sleep(_POLLING_INTERVAL_S)
+            # Intentional: poll before retrying a failed screenshot (_MAX_TIMEOUT_S).
+            time.sleep(_POLLING_INTERVAL_S)  # nosemgrep
             continue
 
         if previous_screenshot is None:
             previous_screenshot = screenshot
-            time.sleep(_POLLING_INTERVAL_S)
+            # Intentional: poll interval before taking the next screenshot to compare.
+            time.sleep(_POLLING_INTERVAL_S)  # nosemgrep
             continue
 
         try:
@@ -105,7 +107,8 @@ def wait_for_app_idle(driver: WebDriver) -> None:
         except Exception as e:
             _LOGGER.warning(f"Screenshot comparison failed: {e}")
             previous_screenshot = screenshot
-            time.sleep(_POLLING_INTERVAL_S)
+            # Intentional: poll before retrying a failed comparison (_MAX_TIMEOUT_S).
+            time.sleep(_POLLING_INTERVAL_S)  # nosemgrep
             continue
 
         _LOGGER.debug(
@@ -123,4 +126,5 @@ def wait_for_app_idle(driver: WebDriver) -> None:
                 return
 
         previous_screenshot = screenshot
-        time.sleep(_POLLING_INTERVAL_S)
+        # Intentional: poll between screen-stability checks (_MAX_TIMEOUT_S).
+        time.sleep(_POLLING_INTERVAL_S)  # nosemgrep

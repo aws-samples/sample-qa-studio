@@ -4,16 +4,21 @@ from typing import Any, Dict
 from uuid import uuid4
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name, get_current_timestamp, require_scopes, validate_path_id
+from resource_auth import require_resource_access, wizard_session_from_path
+from utils import create_response, get_table_name, get_current_timestamp, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', wizard_session_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to accept a wizard step and make it permanent.
+
+    The decorator checks edit on the path use case and that the session
+    exists under it, so the step can only land in that use case.
     
     Args:
         event: API Gateway proxy request event
@@ -22,11 +27,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway proxy response with acceptance result
     """
-    # Validate scopes - accepting wizard steps modifies usecases
-    user_identity, error = require_scopes(event, ['api/usecases.write'])
-    if error:
-        return error
-    
     try:
         # Get parameters from path
         session_id, error = validate_path_id(event.get('pathParameters', {}).get('sessionId'), 'session ID')

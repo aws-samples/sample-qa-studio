@@ -93,21 +93,21 @@ export default function BrowserSessionPanel({
         setRecordingError(null);
 
         try {
-            await wizardApi.sendRecordingCommand(sessionId, 'recording_start');
+            await wizardApi.sendRecordingCommand(sessionId, usecaseId, 'recording_start');
             setRecordingStatus('recording');
         } catch (err: any) {
             console.error('Failed to start recording:', err);
             setRecordingStatus('error');
             setRecordingError(err.message || 'Failed to start recording. Please try again.');
         }
-    }, [sessionId]);
+    }, [sessionId, usecaseId]);
 
     const handleStopRecording = useCallback(async () => {
         setRecordingStatus('stopping');
         setRecordingError(null);
 
         try {
-            await wizardApi.sendRecordingCommand(sessionId, 'recording_stop');
+            await wizardApi.sendRecordingCommand(sessionId, usecaseId, 'recording_stop');
             // Start polling for recording data
             pollRecordingData();
         } catch (err: any) {
@@ -115,7 +115,7 @@ export default function BrowserSessionPanel({
             setRecordingStatus('error');
             setRecordingError(err.message || 'Failed to stop recording. Please try again.');
         }
-    }, [sessionId, pollRecordingData]);
+    }, [sessionId, usecaseId, pollRecordingData]);
 
     // Show error if live view fails after initial loading
     useEffect(() => {

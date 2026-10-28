@@ -6,7 +6,8 @@ from boto3.dynamodb.conditions import Key
 from utils import (
     create_response,
     get_table_name,
-    require_scopes
+    require_scopes,
+    extract_user_identity
 )
 from test_suite_schema import get_test_suites_pk
 
@@ -47,7 +48,34 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         suites = response.get('Items', [])
         logger.info(f"Retrieved {len(suites)} test suites from DynamoDB")
-        
+
+        # Team-scoping: admins see all; team members see only suites owned by
+        # their team(s) plus those in apps shared with their team(s).
+        identity = extract_user_identity(event)
+        if not identity.get('is_admin', False):
+            team_ids = {tr.get('team_id') for tr in identity.get('team_roles', []) if tr.get('team_id')}
+
+            import permissions_repo
+            shared_app_ids = set()
+            for tid in team_ids:
+                try:
+                    for grant in permissions_repo.list_apps_shared_with_team(tid):
+                        app_id = grant.get('app_id') or grant.get('application_id')
+                        if app_id:
+                            shared_app_ids.add(app_id)
+                except Exception as e:
+                    logger.warning(f"shared-access lookup failed for team {tid}: {e}")
+
+            def visible(s):
+                owner = s.get('owner_team_id')
+                if owner and owner in team_ids:
+                    return True
+                if s.get('application_id') in shared_app_ids:
+                    return True
+                return False
+
+            suites = [s for s in suites if visible(s)]
+
         # Remove pk/sk and unnecessary fields from response objects
         response_suites = []
         for suite in suites:

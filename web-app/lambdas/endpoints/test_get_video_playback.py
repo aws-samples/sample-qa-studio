@@ -273,7 +273,7 @@ class TestGetVideoPlayback(unittest.TestCase):
 
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('Missing required path parameters', body['error'])
+        self.assertIn('usecase ID is required', body['error'])  # resolver validates path ids
 
     @patch('get_video_playback.get_s3_client')
     @patch('get_video_playback.get_dynamodb_client')
@@ -285,7 +285,7 @@ class TestGetVideoPlayback(unittest.TestCase):
 
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('Missing required path parameters', body['error'])
+        self.assertIn('usecase ID is required', body['error'])  # resolver validates path ids
 
     # ------------------------------------------------------------------ #
     # 400: unrecognized trigger_type
@@ -401,3 +401,14 @@ class TestClassifyPlaybackType(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+import pytest as _pytest  # noqa: E402
+from authz_test_support import resource_access_granted as _resource_access_granted  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: ownership is covered by test_execution_routes_access.py."""
+    with _resource_access_granted():
+        yield

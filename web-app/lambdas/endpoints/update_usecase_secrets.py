@@ -3,13 +3,15 @@ import json
 from typing import Any, Dict
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_secret_prefix, require_scopes, validate_path_id
+from utils import create_response, get_secret_prefix, request_log_summary, aws_error_code
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to update a usecase secret value.
@@ -22,18 +24,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with update confirmation
     """
     try:
-        # Validate scopes
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
-        
-        logger.info(f"Received request: {event}")
+        logger.info(f"Received request: {request_log_summary(event)}")
         
         # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by usecase_from_path
         
         # Parse request body
         try:
@@ -59,7 +53,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 SecretString=value
             )
         except ClientError as e:
-            logger.error(f"Error updating secret {secret_name}: {str(e)}")
+            logger.error(f"Error updating usecase secret: {aws_error_code(e)}")
             return create_response(500, {'error': f'Failed to update secret {secret_key}'})
         
         logger.info(f"Successfully updated secret {secret_key} for usecase {usecase_id}")

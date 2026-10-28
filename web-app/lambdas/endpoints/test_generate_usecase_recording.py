@@ -353,3 +353,40 @@ class TestBuildRecordingContentBlocks:
         )
         result = _build_recording_content_blocks(bad_data)
         assert result == []
+
+
+# --- _fetch_and_compress_screenshots tests ---
+
+class TestFetchAndCompressScreenshots:
+    @staticmethod
+    def _s3_with(images):
+        from unittest.mock import MagicMock
+        s3 = MagicMock()
+        s3.get_object.side_effect = lambda Bucket, Key: {'Body': MagicMock(read=lambda: images[Key])}
+        return s3
+
+    @staticmethod
+    def _png(mode, size=(1600, 900)):
+        import io as _io
+        from PIL import Image
+        buf = _io.BytesIO()
+        Image.new(mode, size).save(buf, format='PNG')
+        return buf.getvalue()
+
+    def test_rgba_png_is_converted_and_downscaled_to_jpeg(self):
+        import io as _io
+        from PIL import Image
+        from generate_usecase import _fetch_and_compress_screenshots
+        s3 = self._s3_with({'k1': self._png('RGBA')})
+        result = _fetch_and_compress_screenshots(s3, 'b', {'act-1': 'k1'}, [(0, 'act-1')], target_width=800)
+        assert 'act-1' in result
+        img = Image.open(_io.BytesIO(result['act-1']))
+        assert img.format == 'JPEG'
+        assert img.mode == 'RGB'
+        assert img.width == 800
+
+    def test_palette_png_is_converted_to_jpeg(self):
+        from generate_usecase import _fetch_and_compress_screenshots
+        s3 = self._s3_with({'k1': self._png('P', (100, 100))})
+        result = _fetch_and_compress_screenshots(s3, 'b', {'act-1': 'k1'}, [(0, 'act-1')])
+        assert result['act-1'][:3] == b'\xff\xd8\xff'

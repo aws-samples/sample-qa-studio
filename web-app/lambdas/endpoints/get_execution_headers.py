@@ -21,24 +21,17 @@ from botocore.exceptions import ClientError
 from utils import (
     create_response,
     get_table_name,
-    require_scopes,
     validate_path_id,
 )
+from resource_auth import require_resource_access, execution_from_path
 
 _dynamodb = boto3.client('dynamodb')
 
 
+@require_resource_access('view', execution_from_path, scopes=['api/executions.read'], allow_worker=True)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    # --- Auth --------------------------------------------------------------
-    _user_identity, error_response = require_scopes(event, ['api/executions.read'])
-    if error_response:
-        return error_response
-
     # --- Path params -------------------------------------------------------
     path = event.get('pathParameters') or {}
-    _, error = validate_path_id(path.get('id'), 'usecase ID')
-    if error:
-        return error
     execution_id, error = validate_path_id(path.get('executionId'), 'execution ID')
     if error:
         return error

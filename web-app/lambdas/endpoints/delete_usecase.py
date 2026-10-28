@@ -4,13 +4,15 @@ from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from utils import create_response, no_content_response, get_table_name
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('delete', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to delete a usecase and all related data.
@@ -23,21 +25,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with deletion confirmation
     """
     try:
-        # Validate scope (requires usecases.write or admin)
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
-        
-        # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
-        
+        usecase_id = event['pathParameters']['id']  # validated by usecase_from_path
+
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
-        
+
         # Delete Amazon Nova Act workflow definition if it exists
         delete_workflow_definition(usecase_id)
         
@@ -104,10 +97,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Successfully deleted usecase {usecase_id}")
         
-        return create_response(200, {
-            'status': 'usecase deleted',
-            'usecaseId': usecase_id
-        })
+        return no_content_response()
         
     except Exception as e:
         logger.error(f"Error deleting usecase: {str(e)}", exc_info=True)

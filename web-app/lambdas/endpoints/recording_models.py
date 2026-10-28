@@ -85,7 +85,15 @@ class RecordingData(BaseModel):
 
 # --- API Request/Response Models ---
 
-class RecordingCommandRequest(BaseModel):
+class WizardSessionRequest(BaseModel):
+    """
+    Body fields shared by POST /wizard/{sessionId}/step, /restart and /command:
+    the session's use case (required; the session must exist under it).
+    """
+    usecaseId: str = Field(min_length=1, description="Use case the wizard session belongs to")
+
+
+class RecordingCommandRequest(WizardSessionRequest):
     """Request body for POST /wizard/{sessionId}/command."""
     action: Literal["recording_start", "recording_stop"]
 

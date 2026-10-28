@@ -2,13 +2,15 @@ import logging
 from typing import Any, Dict, List
 from datetime import datetime
 import boto3
-from utils import get_secret_prefix, create_response, require_scopes, validate_path_id
+from utils import get_secret_prefix, create_response, request_log_summary
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', usecase_from_path, scopes=['api/usecases.read'], allow_worker=True)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to get use case secrets from AWS Secrets Manager.
@@ -21,17 +23,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with list of secrets
     """
     try:
-        # Validate scopes
-        user_identity, error_response = require_scopes(event, ['api/usecases.read'])
-        if error_response:
-            return error_response
-        
-        logger.info(f"Received request: {event}")
+        logger.info(f"Received request: {request_log_summary(event)}")
         
         # Get use case ID from path parameters
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by usecase_from_path
         
         # Get secret prefix from environment
         prefix = get_secret_prefix()

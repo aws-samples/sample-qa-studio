@@ -6,11 +6,18 @@ import lambda_init  # noqa: F401 — must be first import to add dependencies/ t
 import json
 import os
 import logging
+import time
 from typing import Any, Dict
 import base64
 import urllib.request
 import urllib.parse
 from urllib.error import URLError
+
+import boto3
+
+from role_scopes import (
+    scopes_for_groups, parse_group, is_admin_group, M2M_TEAM_ROLES, M2M_FORBIDDEN_SCOPES,
+)
 
 # Configure logging
 logger = logging.getLogger()
@@ -19,11 +26,8 @@ logger.setLevel(logging.INFO)
 # Cache for JWKS
 jwks_cache = None
 
-# Group-to-scope mapping for user access tokens.
-# Cognito Lite tier does not include resource server scopes in the access token's
-# scope claim for authorization code flow (user tokens). We resolve scopes from
-# cognito:groups instead, which is present in the access token.
-# This mapping must stay in sync with pre_token_generation.py SCOPE_MAPPINGS.
+# Backward-compatibility alias — existing tests import GROUP_SCOPE_MAPPINGS.
+# This is kept as a read-only constant; the actual resolution uses role_scopes.
 GROUP_SCOPE_MAPPINGS = {
     'users': [
         'api/usecases.read',
@@ -37,6 +41,8 @@ GROUP_SCOPE_MAPPINGS = {
         'api/suite.write',
         'api/oauth-clients.read',
         'api/oauth-clients.write',
+        'api/applications.read',
+        'api/applications.write',
     ],
     'admins': [
         'api/usecases.read',
@@ -50,6 +56,9 @@ GROUP_SCOPE_MAPPINGS = {
         'api/suite.write',
         'api/oauth-clients.read',
         'api/oauth-clients.write',
+        'api/applications.read',
+        'api/applications.write',
+        'api/teams.manage',
         'api/admin',
     ],
 }
@@ -59,18 +68,77 @@ def resolve_scopes_from_groups(groups: list) -> set:
     """
     Resolve OAuth scopes from Cognito group membership.
 
+    Delegates to the shared role_scopes module which is the single source of truth.
+
     Args:
         groups: List of Cognito group names from the cognito:groups claim.
 
     Returns:
         Set of scope strings derived from group membership.
     """
-    scopes = set()
+    return scopes_for_groups(groups)
+
+
+def resolve_team_context(groups: list) -> list:
+    """
+    Extract team membership context from Cognito groups.
+
+    Parses each group name and returns a list of dicts describing the user's
+    team memberships and roles.
+
+    Args:
+        groups: List of Cognito group names from the cognito:groups claim.
+
+    Returns:
+        List of dicts with keys: 'team_id', 'role', 'group_name'.
+        Only includes entries where team_id is not None (team groups).
+    """
+    team_roles = []
     for group in groups:
         group_name = group.strip() if isinstance(group, str) else str(group)
-        if group_name in GROUP_SCOPE_MAPPINGS:
-            scopes.update(GROUP_SCOPE_MAPPINGS[group_name])
-    return scopes
+        parsed = parse_group(group_name)
+        if parsed and parsed['team_id'] is not None:
+            team_roles.append(parsed)
+    return team_roles
+
+# OAuth client -> team binding (OAUTH_CLIENTS/{client_id}.team_id/team_role),
+# cached per warm container. API Gateway also caches the whole policy (5 min).
+CLIENT_BINDING_TTL_SECONDS = 60
+_client_binding_cache: Dict[str, tuple] = {}
+
+
+def _get_clients_table():
+    """DynamoDB table holding the OAUTH_CLIENTS records."""
+    return boto3.resource('dynamodb').Table(os.environ['TABLE_NAME'])
+
+
+def _lookup_client_binding(client_id: str) -> list:
+    """
+    Team binding of an M2M client as authorizer teamRoles.
+
+    Returns:
+        [{'team_id', 'role'}] for a bound client, [] when unbound, when the
+        role isn't an allowed M2M role, or when the lookup fails (fail closed;
+        failures are not cached).
+    """
+    now = time.monotonic()
+    cached = _client_binding_cache.get(client_id)
+    if cached and cached[0] > now:
+        return cached[1]
+    try:
+        item = _get_clients_table().get_item(
+            Key={'pk': 'OAUTH_CLIENTS', 'sk': client_id},
+            ProjectionExpression='team_id, team_role',
+        ).get('Item') or {}
+    except Exception as e:
+        logger.error(f"client_binding_lookup_failed: client_id={client_id} error={type(e).__name__}")
+        return []
+    team_id = item.get('team_id')
+    role = item.get('team_role')
+    binding = [{'team_id': team_id, 'role': role}] if team_id and role in M2M_TEAM_ROLES else []
+    _client_binding_cache[client_id] = (now + CLIENT_BINDING_TTL_SECONDS, binding)
+    return binding
+
 
 # Import JWT libraries — fail closed if not available
 try:
@@ -93,12 +161,12 @@ def get_jwks():
         
         # Validate URL scheme to prevent SSRF via file:// or other schemes
         parsed = urllib.parse.urlparse(jwks_url)
-        if parsed.scheme != 'https' or not parsed.hostname.endswith('.amazonaws.com'):
-            raise ValueError(f"JWKS URL must be an HTTPS amazonaws.com endpoint")
+        if parsed.scheme != 'https' or parsed.hostname != f"cognito-idp.{region}.amazonaws.com":
+            raise ValueError("JWKS URL must be the HTTPS Cognito endpoint for this region")
         
         try:
             req = urllib.request.Request(jwks_url, method='GET')  # nosemgrep: dynamic-urllib-use-detected
-            with urllib.request.urlopen(req) as response:  # nosemgrep: dynamic-urllib-use-detected
+            with urllib.request.urlopen(req, timeout=10) as response:  # nosec B310 nosemgrep: dynamic-urllib-use-detected - scheme/host validated above
                 jwks_cache = json.loads(response.read().decode())
         except URLError as e:
             logger.error(f"Failed to fetch JWKS: {str(e)}")
@@ -221,7 +289,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         IAM policy allowing or denying access
     """
     try:
-        logger.info(f"Authorizer invoked with event: {json.dumps(event)}")
+        # Never log the event: authorizationToken is the caller's bearer token.
+        logger.info(f"Authorizer invoked: type={event.get('type')} methodArn={event.get('methodArn')}")
         
         # Extract token from Authorization header
         token = event.get('authorizationToken', '')
@@ -233,8 +302,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Remove 'Bearer ' prefix if present
         if token.startswith('Bearer '):
             token = token[7:]
-        
-        logger.info(f"Token extracted (first 20 chars): {token[:20]}...")
         
         # Get environment variables
         region = os.environ.get('AWS_REGION', 'us-east-1')
@@ -251,7 +318,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.info("Starting token validation...")
             # Decode and verify token with signature verification
             decoded_token = decode_and_verify_token(token, region, user_pool_id)
-            logger.info(f"Token decoded successfully: {json.dumps(decoded_token, default=str)}")
+            # Claims include email/username (PII); log only opaque identifiers.
+            logger.info(f"Token verified: token_use={decoded_token.get('token_use')} sub={decoded_token.get('sub')}")
             
             # Verify token use
             token_use = decoded_token.get('token_use')
@@ -267,7 +335,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             scope = decoded_token.get('scope', '')
             cognito_groups = decoded_token.get('cognito:groups', [])
             
-            logger.info(f"Token claims - email: {email}, username: {username}, client_id: {client_id}, scope: '{scope}', groups: {cognito_groups}")
+            logger.info(f"Token claims - sub: {sub}, client_id: {client_id}, scope: '{scope}', groups: {cognito_groups}")
             
             # Determine identity type
             if email:
@@ -291,6 +359,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Cognito Lite tier does not put resource server scopes in the
             # access token's scope claim for authorization code flow, so we
             # derive them from group membership instead.
+            team_roles = []
+            is_admin = False
             if identity_type == 'user' and cognito_groups:
                 group_scopes = resolve_scopes_from_groups(cognito_groups)
                 # Merge with any scopes already in the token
@@ -298,9 +368,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 all_scopes = existing_scopes | group_scopes
                 scope = ' '.join(sorted(all_scopes))
                 logger.info(f"Resolved scopes from groups {cognito_groups}: {group_scopes}")
-            
-            logger.info(f"Authorized: {principal_id} (type: {identity_type}, scopes: {scope})")
-            
+
+                # Resolve team context for downstream handlers
+                team_roles = resolve_team_context(cognito_groups)
+                is_admin = any(is_admin_group(g.strip() if isinstance(g, str) else str(g)) for g in cognito_groups)
+                logger.info(f"Team roles: {team_roles}, isAdmin: {is_admin}")
+            elif identity_type == 'client':
+                # M2M clients never hold studio-wide or team-management scopes,
+                # even if the Cognito app client still allows them (legacy).
+                scope = ' '.join(s for s in scope.split() if s not in M2M_FORBIDDEN_SCOPES)
+                worker_client_id = os.environ.get('WORKER_CLIENT_ID')
+                if worker_client_id and client_id == worker_client_id:
+                    # The shared worker acts only through its execution capability.
+                    identity_type = 'worker'
+                else:
+                    team_roles = _lookup_client_binding(client_id)
+                logger.info(f"Client identity: type={identity_type} teamRoles={team_roles}")
+
+            # principal_id is the email for user tokens, so log sub/client_id instead.
+            logger.info(f"Authorized: {sub or client_id} (type: {identity_type}, scopes: {scope})")
+
             # Generate allow policy with context
             # Note: All context values must be strings for API Gateway
             policy = generate_policy(
@@ -314,7 +401,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'clientId': str(client_id or ''),
                     'email': str(email or ''),
                     'username': str(username or ''),
-                    'scope': str(scope)
+                    'scope': str(scope),
+                    'teamRoles': json.dumps(team_roles),
+                    'isAdmin': str(is_admin).lower(),
                 }
             )
             

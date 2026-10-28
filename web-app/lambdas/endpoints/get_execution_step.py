@@ -1,7 +1,8 @@
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, get_table_name, DynamoDBEncoder, require_scopes, validate_path_id
+from utils import create_response, get_table_name, DynamoDBEncoder, validate_path_id
+from resource_auth import require_resource_access, execution_from_path
 import json
 
 # Configure logging
@@ -9,6 +10,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', execution_from_path, scopes=['api/executions.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to get execution step details.
@@ -21,11 +23,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with execution step details
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/executions.read'])
-        if error:
-            return error
-        
         # Get parameters from path
         step_id, error = validate_path_id(event.get('pathParameters', {}).get('stepId'), 'step ID')
         if error:

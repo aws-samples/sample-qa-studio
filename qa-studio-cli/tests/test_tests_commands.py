@@ -30,6 +30,7 @@ def invoke_create(runner, mock_client, extra_args=None):
         "--url", "https://example.com",
         "--journey", "Navigate to login page, enter credentials, click Sign In, verify dashboard",
         "--region", "us-east-1",
+        "--application-id", "app-1",
     ]
     if extra_args:
         args.extend(extra_args)
@@ -128,3 +129,35 @@ class TestTestsCreate:
         assert body["startingUrl"] == "https://example.com"
         assert "Navigate to login page" in body["userJourney"]
         assert body["region"] == "us-east-1"
+
+
+class TestTestsCreateApplicationId:
+    """The generated test is imported into --application-id (required)."""
+
+    def test_application_id_sent_to_import(self, runner, mock_client):
+        mock_client.post.side_effect = [
+            {"success": True, "message": "Generated", "usecaseData": json.dumps({"name": "Test Login", "steps": []})},
+            {"success": True, "message": "Imported", "usecase_id": "test-123"},
+        ]
+        result = invoke_create(runner, mock_client)
+        assert result.exit_code == 0, result.output
+        path, = mock_client.post.call_args_list[1].args
+        assert path == "/import"
+        assert mock_client.post.call_args_list[1].kwargs["json_body"]["application_id"] == "app-1"
+
+    def test_missing_application_id_rejected(self, runner, mock_client):
+        args = [
+            "tests", "create", "--from-journey",
+            "--title", "Test Login",
+            "--url", "https://example.com",
+            "--journey", "Navigate to login page, enter credentials, click Sign In, verify dashboard",
+            "--region", "us-east-1",
+        ]
+        with patch("qa_studio_cli.api.client.config_exists", return_value=True), \
+             patch("qa_studio_cli.api.client.load_config") as mock_config, \
+             patch("qa_studio_cli.api.client.get_valid_token", return_value="fake-token"), \
+             patch("qa_studio_cli.api.client.ApiClient", return_value=mock_client):
+            mock_config.return_value = MagicMock(api_url="https://fake-api.example.com")
+            result = runner.invoke(cli, args)
+        assert result.exit_code == 2
+        mock_client.post.assert_not_called()

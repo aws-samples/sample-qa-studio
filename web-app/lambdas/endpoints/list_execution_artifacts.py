@@ -8,7 +8,8 @@ import json
 import os
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from utils import create_response, get_table_name, validate_path_id, extract_user_identity
+from resource_auth import require_resource_access, execution_from_path
 
 
 def get_dynamodb_client():
@@ -48,6 +49,7 @@ def generate_presigned_download_url(
     )
 
 
+@require_resource_access('view', execution_from_path, scopes=['api/executions.read'])
 def handler(event, context):
     """
     List execution-level artifacts by querying DynamoDB.
@@ -65,12 +67,8 @@ def handler(event, context):
     - 403: Insufficient permissions
     - 500: Internal server error
     """
-    # Validate scopes
-    user_identity, error_response = require_scopes(event, ['api/executions.read'])
-    if error_response:
-        return error_response
-
-    print(f"Execution artifact list requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    user_identity = extract_user_identity(event)
+    print(f"Execution artifact list requested by identity type: {user_identity['identity_type']}")
 
     # Parse path parameters
     execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')

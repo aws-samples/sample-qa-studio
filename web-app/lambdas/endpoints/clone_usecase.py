@@ -5,13 +5,15 @@ from uuid import uuid4
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_secret_prefix, get_current_timestamp, require_scopes, validate_path_id
+from utils import create_response, get_table_name, get_secret_prefix, get_current_timestamp, extract_user_identity
+from resource_auth import require_resource_access, usecase_from_path, authorize_target_app
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to clone a usecase with all its configuration.
@@ -24,15 +26,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with clone result
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/usecases.write'])
-        if error:
-            return error
-        
-        # Get source usecase ID from path
-        source_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        user_identity = extract_user_identity(event)
+        source_id = event['pathParameters']['id']  # validated by usecase_from_path
         
         # Parse request body
         try:
@@ -69,9 +64,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'success': False,
                 'message': 'Source usecase not found'
             })
-        
+
         source_usecase = source_response['Item']
-        
+
+        # The clone lands in body application_id, defaulting to the source's
+        # app; the caller needs edit there (view on the source is checked by
+        # the decorator). An admin cloning an app-less source keeps it app-less.
+        target_app_id = body.get('application_id') or source_usecase.get('application_id', '')
+        target_owner = None
+        if target_app_id:
+            target_owner, auth_err = authorize_target_app(event, target_app_id, 'edit')
+            if auth_err:
+                return auth_err
+
         # Generate new usecase ID
         new_usecase_id = str(uuid4())
         now = get_current_timestamp()
@@ -91,6 +96,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'created_at': now,
             'test_platform': source_usecase.get('test_platform', 'web'),
         }
+        if target_app_id:
+            new_usecase['application_id'] = target_app_id
+        if target_owner:
+            new_usecase['owner_team_id'] = target_owner
 
         # Copy mobile-specific fields if present
         for field in ['platform', 'app_package', 'app_activity', 'bundle_id',

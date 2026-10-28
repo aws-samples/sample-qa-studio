@@ -457,50 +457,50 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     // Secrets Lambdas
     this.createUsecaseSecretsLambda = this.createPythonLambda({
       path: 'create_usecase_secrets',
-      environment: { SECRET_PREFIX: props.baseName }
+      environment: { TABLE_NAME: props.table.tableName, SECRET_PREFIX: props.baseName }
     })
 
     this.getUsecaseSecretsLambda = this.createPythonLambda({
       path: 'get_usecase_secrets',
-      environment: { SECRET_PREFIX: props.baseName }
+      environment: { TABLE_NAME: props.table.tableName, SECRET_PREFIX: props.baseName }
     })
 
     this.getUsecaseSecretValueLambda = this.createPythonLambda({
       path: 'get_usecase_secret_value',
-      environment: { SECRET_PREFIX: props.baseName }
+      environment: { TABLE_NAME: props.table.tableName, SECRET_PREFIX: props.baseName }
     })
 
     this.deleteUsecaseSecretsLambda = this.createPythonLambda({
       path: 'delete_usecase_secrets',
-      environment: { SECRET_PREFIX: props.baseName }
+      environment: { TABLE_NAME: props.table.tableName, SECRET_PREFIX: props.baseName }
     })
 
     this.updateUsecaseSecretsLambda = this.createPythonLambda({
       path: 'update_usecase_secrets',
-      environment: { SECRET_PREFIX: props.baseName }
+      environment: { TABLE_NAME: props.table.tableName, SECRET_PREFIX: props.baseName }
     })
 
     // Recording Lambdas
     this.listRecordingBatchesLambda = this.createPythonLambda({
       path: 'list_recording_batches',
-      environment: { BUCKET_NAME: props.artefactsBucket.bucketName }
+      environment: { TABLE_NAME: props.table.tableName, BUCKET_NAME: props.artefactsBucket.bucketName }
     })
 
     this.getRecordingBatchLambda = this.createPythonLambda({
       path: 'get_recording_batch',
       timeout: cdk.Duration.seconds(30),
       memorySize: 1024,
-      environment: { BUCKET_NAME: props.artefactsBucket.bucketName }
+      environment: { TABLE_NAME: props.table.tableName, BUCKET_NAME: props.artefactsBucket.bucketName }
     })
 
     this.listDownloadsLambda = this.createPythonLambda({
       path: 'list_downloads',
-      environment: { BUCKET_NAME: props.artefactsBucket.bucketName }
+      environment: { TABLE_NAME: props.table.tableName, BUCKET_NAME: props.artefactsBucket.bucketName }
     })
 
     this.downloadFileLambda = this.createPythonLambda({
       path: 'download_file',
-      environment: { BUCKET_NAME: props.artefactsBucket.bucketName }
+      environment: { TABLE_NAME: props.table.tableName, BUCKET_NAME: props.artefactsBucket.bucketName }
     })
 
     this.getVideoPlaybackLambda = this.createPythonLambda({
@@ -600,6 +600,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.requestRecordingDownloadLambda = this.createPythonLambda({
       path: 'request_recording_download',
       environment: {
+        TABLE_NAME: props.table.tableName,
         RECORDING_QUEUE_URL: props.recordingQueueUrl,
       }
     })
@@ -644,6 +645,13 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       }
     });
 
+    // Keep the exports that pre-v1.3 api stacks import. v1.3 routes GET/POST
+    // /users through the user router, so CDK would stop exporting these ARNs;
+    // but this stack deploys before api, and CloudFormation refuses to delete
+    // an export that is still imported. Remove these two lines once every
+    // deployment has run v1.3 (api no longer imports them).
+    this.exportValue(this.listUsersLambda.functionArn);
+    this.exportValue(this.addUserLambda.functionArn);
     this.removeUserLambda = this.createPythonLambda({
       path: 'delete_user',
       environment: {
@@ -672,10 +680,13 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [props.userPool.userPoolArn]
     }));
 
+    // AdminListGroupsForUser + ListUsersInGroup back the last-admin guard
     this.removeUserLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: [
-        'cognito-idp:AdminDeleteUser'
+        'cognito-idp:AdminDeleteUser',
+        'cognito-idp:AdminListGroupsForUser',
+        'cognito-idp:ListUsersInGroup'
       ],
       resources: [props.userPool.userPoolArn]
     }));
@@ -960,6 +971,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.getScheduleLambda = this.createPythonLambda({
       path: 'get_schedule',
       environment: {
+        TABLE_NAME: props.table.tableName,
         SCHEDULER_GROUP_NAME: props.schedulerGroupName
       }
     });
@@ -975,6 +987,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.deleteScheduleLambda = this.createPythonLambda({
       path: 'delete_schedule',
       environment: {
+        TABLE_NAME: props.table.tableName,
         SCHEDULER_GROUP_NAME: props.schedulerGroupName
       }
     });
@@ -993,7 +1006,10 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       path: 'application_router',
       timeout: cdk.Duration.seconds(15),
       memorySize: 256,
-      environment: { TABLE_NAME: props.table.tableName }
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        USER_POOL_ID: props.userPool.userPoolId,
+      }
     })
 
     // Router handles all /applications/* and /dashboard/* routes — parallel requests
@@ -1007,8 +1023,32 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: ['*']
     }))
 
+    // Grant Cognito Admin permissions for team provisioning + user management (permissions feature)
+    this.applicationRouterLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'cognito-idp:AdminAddUserToGroup',
+        'cognito-idp:AdminRemoveUserFromGroup',
+        'cognito-idp:AdminCreateUser',
+        'cognito-idp:AdminDeleteUser',
+        'cognito-idp:AdminGetUser',
+        'cognito-idp:AdminListGroupsForUser',
+        'cognito-idp:CreateGroup',
+        'cognito-idp:DeleteGroup',
+        'cognito-idp:ListUsers',
+        // Last-admin guard counts members of the global 'admins' group
+        'cognito-idp:ListUsersInGroup',
+      ],
+      resources: [props.userPool.userPoolArn]
+    }))
+
     this.applicationRouterLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.applicationRouterLambda.role?.addManagedPolicy(props.tableWritePolicy)
+
+    // No permissions-migration Lambda: v1.3 is backward-compatible by
+    // construction. Existing apps are unowned (admin-only) and legacy non-admin
+    // users have no team, so they see nothing until an admin sets up teams and
+    // assigns applications. Legacy 'admins'-group users retain full access.
 
     // ========== Browser Recording Lambdas ==========
 
@@ -1034,6 +1074,8 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     const readLambdas = [
       this.listUsecasesLambda,
       this.getUsecaseLambda,
+      this.createUsecaseLambda,
+      this.createTestSuiteLambda,
       this.listStepsLambda,
       this.listExecutionsLambda,
       this.getExecutionStepLambda,
@@ -1108,6 +1150,44 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.deleteTestSuiteLambda
     ]
     fullAccessLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableFullAccessPolicy))
+
+    // Need table read for the require_resource_access owner lookup: the
+    // resolvers GetItem the use case / app / execution / override records and
+    // Query shared-access grants before the handler runs. These roles otherwise
+    // have only write (or no) table access. Guarded by
+    // lib/__tests__/ownership-check-iam.test.ts.
+    const ownershipCheckLambdas = [
+      this.updateUsecaseLambda,
+      this.importUsecaseLambda,
+      this.createStepLambda,
+      this.updateStepLambda,
+      this.reorderStepsLambda,
+      this.createLiveViewLambda,
+      this.deleteLiveViewLambda,
+      this.updateMobileMetadataLambda,
+      this.getExecutionHeadersLambda,
+      this.createTrajectoryUploadUrlLambda,
+      this.getTrajectoryDownloadUrlLambda,
+      this.createUsecaseVariablesLambda,
+      this.createUsecaseHooksLambda,
+      this.createUsecaseHeadersLambda,
+      this.createUsecaseSecretsLambda,
+      this.getUsecaseSecretsLambda,
+      this.getUsecaseSecretValueLambda,
+      this.deleteUsecaseSecretsLambda,
+      this.updateUsecaseSecretsLambda,
+      this.listRecordingBatchesLambda,
+      this.getRecordingBatchLambda,
+      this.listDownloadsLambda,
+      this.downloadFileLambda,
+      this.requestRecordingDownloadLambda,
+      this.subscribeUsecaseLambda,
+      this.createOAuthClientLambda,
+      this.getScheduleLambda,
+      this.deleteScheduleLambda,
+      this.sendRecordingCommandLambda
+    ]
+    ownershipCheckLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableReadPolicy))
 
     // Lambdas that need both read and write
     this.importTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
@@ -1188,14 +1268,19 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     }))
 
     // Secrets Manager Permissions
-    // Note: Secrets Manager ARNs have a 6-character random suffix, so we use a wildcard pattern
-    const secretsArnPattern = `arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:${props.baseName}*`;
+    // Use case secrets are always named `${baseName}/usecase/<usecaseId>/<key>`
+    // (see SECRET_PREFIX). Scope every secret action to that path so these
+    // Lambdas cannot touch other secrets such as `${baseName}-worker-m2m-credentials`
+    // or `${baseName}-nova-api-key`. The trailing `*` covers the 6-character
+    // random suffix Secrets Manager appends to ARNs.
+    const secretsArnPattern = `arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:${props.baseName}/usecase/*`;
     
-    // CreateSecret requires * for resource (ARN unknown before creation), scoped to account
+    // CreateSecret and TagResource support resource-level permissions on the
+    // requested secret name, so they are scoped like every other action.
     this.createUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
-      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
+      resources: [secretsArnPattern]
     }))
     
     this.createUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
@@ -1237,11 +1322,17 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: [secretsArnPattern]
     }))
 
-    // ListSecrets and CreateSecret require * for resource, scoped to account
+    // ListSecrets does not support resource-level permissions ("*" required).
     this.cloneUsecaseLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
-      actions: ['secretsmanager:ListSecrets', 'secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
-      resources: [`*`]
+      actions: ['secretsmanager:ListSecrets'],
+      resources: ['*']
+    }))
+
+    this.cloneUsecaseLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
+      resources: [secretsArnPattern]
     }))
 
     // ListSecrets requires * for resource, scoped to account
@@ -1285,11 +1376,10 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: ['*']
     }))
 
-    // CreateSecret requires * for resource, scoped to account
     this.importUsecaseLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
-      resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
+      resources: [secretsArnPattern]
     }))
     
     this.importUsecaseLambda.addToRolePolicy(new PolicyStatement({

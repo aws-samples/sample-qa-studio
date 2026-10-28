@@ -1,5 +1,7 @@
 # Nova Act QA Studio - API Documentation
 
+> This page predates team-bound authorization. For current scopes, team ownership rules, `teamId` on OAuth clients and applications, 204 deletes and the `X-QA-Execution-Token` header, see [api-reference.md](api-reference.md#team-ownership-and-access-control).
+
 ## Overview
 
 Nova Act QA Studio provides a RESTful API for managing test automation workflows. All endpoints require authentication via AWS Cognito and use OAuth 2.0 scopes for authorization.
@@ -414,10 +416,10 @@ response = requests.post(
 
 data = response.json()
 client_id = data['client_id']
-client_secret = data['client_secret']  # Save this - it won't be shown again!
+client_secret = data['client_secret']
 
 print(f"Client ID: {client_id}")
-print(f"Client Secret: {client_secret}")
+# The secret is shown only once. Store it securely (e.g. AWS Secrets Manager); never print or log it.
 ```
 
 **Security Notes**:
@@ -600,10 +602,10 @@ response = requests.post(
 
 data = response.json()
 new_client_id = data['client_id']
-new_client_secret = data['client_secret']  # Save this - it won't be shown again!
+new_client_secret = data['client_secret']
 
 print(f"New Client ID: {new_client_id}")
-print(f"New Client Secret: {new_client_secret}")
+# The secret is shown only once. Store it securely (e.g. AWS Secrets Manager); never print or log it.
 print(f"Rotated at: {data['rotated_at']}")
 ```
 

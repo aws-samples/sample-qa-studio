@@ -98,6 +98,17 @@ export OAUTH_TOKEN_ENDPOINT
 : "${OAUTH_CLIENT_ID:?OAUTH_CLIENT_ID must be injected by ECS secrets (from Secrets Manager)}"
 : "${OAUTH_CLIENT_SECRET:?OAUTH_CLIENT_SECRET must be injected by ECS secrets (from Secrets Manager)}"
 
+# Execution-bound worker capability.  execute_usecase passes EXECUTION_TOKEN
+# (only its hash is stored); the CLI sends QA_STUDIO_EXECUTION_TOKEN as the
+# X-QA-Execution-Token header.  Without it the API denies the worker (403).
+# Never log the value.
+if [ -n "${EXECUTION_TOKEN:-}" ]; then
+  export QA_STUDIO_EXECUTION_TOKEN="${USECASE_ID}:${EXECUTION_ID}:${EXECUTION_TOKEN}"
+  unset EXECUTION_TOKEN
+else
+  log "WARNING: EXECUTION_TOKEN not set; API calls for this execution will be denied"
+fi
+
 # ── Build the qa-studio run command ────────────────────────────────
 cmd=(qa-studio run
   --usecase-id "${USECASE_ID}"
@@ -121,5 +132,5 @@ if [ "${QA_STUDIO_VERBOSE:-false}" = "true" ]; then
 fi
 
 log "Executing: ${cmd[*]}"
-cd /app
+cd "${WORKER_APP_DIR:-/app}"
 exec "${cmd[@]}"

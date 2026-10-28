@@ -1,6 +1,9 @@
 import logging
 import os
+import tempfile
+
 import boto3
+from qa_studio_cli.utils.files import path_in_directory, safe_download_filename
 from nova_act import NovaAct
 from models import ExecutionStep
 
@@ -41,7 +44,7 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
         # Function to download file from intercepted response
         def download_from_stream(interception_id, filename):
             logger.info(f"Downloading file from stream: {filename}")
-            temp_path = f"/tmp/{filename}"
+            temp_path = path_in_directory(tempfile.gettempdir(), filename)
             
             try:
                 # Get response body as stream
@@ -148,6 +151,7 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
                             filename = urllib.parse.unquote(filename)
                 
                 if is_download and filename:
+                    filename = safe_download_filename(filename)
                     logger.info(f"Download detected: {filename}")
                     
                     # Download the file
@@ -192,7 +196,7 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
             
             # Wait a moment to see if CDP also intercepted it
             import time
-            time.sleep(1)
+            time.sleep(1)  # nosemgrep
             
             if download_data['file']:
                 # CDP intercepted it - use that
@@ -203,8 +207,8 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
                 # CDP didn't intercept - fetch via HTTP
                 logger.info("CDP didn't intercept, fetching via HTTP...")
                 download_url = playwright_download.url
-                suggested_filename = playwright_download.suggested_filename
-                temp_path = f"/tmp/{suggested_filename}"
+                suggested_filename = safe_download_filename(playwright_download.suggested_filename)
+                temp_path = path_in_directory(tempfile.gettempdir(), suggested_filename)
                 
                 logger.info(f"Fetching: {download_url}")
                 
@@ -218,11 +222,10 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
                 if parsed.scheme not in ('http', 'https'):
                     raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
                 
+                # Verify TLS certificates (default context)
                 ssl_context = ssl.create_default_context()
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
                 
-                with urllib.request.urlopen(download_url, context=ssl_context) as response:  # nosec B310
+                with urllib.request.urlopen(download_url, context=ssl_context, timeout=60) as response:  # nosec B310 - scheme validated above
                     with open(temp_path, 'wb') as f:
                         bytes_downloaded = 0
                         chunk_size = 8192
@@ -256,7 +259,7 @@ def execute_download_step(nova: NovaAct, step: ExecutionStep, usecase_id: str, e
             # Wait a bit more and check again
             logger.warning("File size is 0, waiting 3 more seconds...")
             import time
-            time.sleep(3)
+            time.sleep(3)  # nosemgrep
             file_size = os.path.getsize(temp_path)
             logger.info(f"File size after wait: {file_size} bytes")
             

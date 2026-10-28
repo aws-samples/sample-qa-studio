@@ -82,6 +82,11 @@ export function applyCdkNagSuppressions(_app: App, stacks: CdkNagStacks): void {
       reason: 'AdvancedSecurityMode is not enabled — this is a non-regulated internal workload. Standard Cognito security features are sufficient.',
     },
     {
+      // cdk-nag >= 2.38 replaced COG3 (AdvancedSecurityMode) with COG8 (Plus feature plan).
+      id: 'AwsSolutions-COG8',
+      reason: 'The user pool is not on the Plus feature plan — this is a non-regulated internal workload. Standard Cognito security features are sufficient; API scopes are resolved from cognito:groups in the Lambda authorizer.',
+    },
+    {
       id: 'AwsSolutions-SMG4',
       reason: 'Worker M2M OAuth credentials secret is populated once from the Cognito-generated client_secret via a deploy-time custom resource. Rotation is driven by re-running `npm run deploy` (which mints a fresh client and rewrites the secret) — not by Secrets Manager automatic rotation.',
     },

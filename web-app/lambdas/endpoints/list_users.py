@@ -74,7 +74,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     )
                     groups = [g['GroupName'] for g in groups_response.get('Groups', [])]
                 except Exception as e:
-                    logger.warning(f"Failed to get groups for user {username}: {str(e)}")
+                    logger.warning(f"Failed to get groups: {str(e)}")
                 
                 # Format created date
                 created_at = ''

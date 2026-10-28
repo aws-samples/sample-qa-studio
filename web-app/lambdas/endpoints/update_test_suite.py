@@ -6,8 +6,9 @@ from utils import (
     create_response,
     get_table_name,
     get_current_timestamp,
-    require_scopes,
+    extract_user_identity,
     validate_path_id)
+from resource_auth import require_resource_access, suite_from_path, authorize_target_app, is_studio_admin
 from test_suite_schema import (
     get_test_suites_pk,
     get_suite_sk,
@@ -19,6 +20,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', suite_from_path, scopes=['api/suite.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to update test suite metadata.
@@ -36,7 +38,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     try:
         # Extract suite_id from path parameters
-        path_params = event.get('pathParameters', {})
         suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')
         if error:
             return error
@@ -47,10 +48,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except json.JSONDecodeError:
             return create_response(400, {'error': 'Invalid JSON in request body'})
         
-        # Validate scope access (requires api/suite.write or admin)
-        user_identity, error_response = require_scopes(event, ['api/suite.write'])
-        if error_response:
-            return error_response
+        user_identity = extract_user_identity(event)
         
         logger.info(f"Updating test suite {suite_id} for user: {user_identity.get('identity')}")
         
@@ -70,9 +68,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if 'Item' not in response:
             logger.warning(f"Test suite {suite_id} not found")
             return create_response(404, {'error': 'Test suite not found'})
-        
+
         suite = response['Item']
-        
+
         # Extract and validate update fields
         name = body.get('name')
         description = body.get('description')
@@ -117,14 +115,41 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             updated_at=now
         )
 
-        # Handle application_id separately (not part of the schema helper)
+        # application_id: moving the suite needs edit on the target app too and
+        # re-stamps owner_team_id; only admins may clear it (an app-less suite
+        # is admin-only).
+        remove_parts = []
         if application_id is not None:
-            if update_expression:
-                update_expression += ', application_id = :application_id'
-            else:
-                update_expression = 'SET application_id = :application_id'
-            expression_values[':application_id'] = application_id
-        
+            current_app_id = suite.get('application_id') or ''
+            set_parts = []
+            if not application_id:
+                if current_app_id and not is_studio_admin(user_identity):
+                    return create_response(403, {
+                        'error': 'Forbidden',
+                        'message': 'Only an admin can remove a test suite from its application',
+                    })
+                set_parts.append('application_id = :application_id')
+                expression_values[':application_id'] = ''
+                remove_parts.append('owner_team_id')
+            elif application_id != current_app_id:
+                target_owner, auth_err = authorize_target_app(event, application_id, 'edit')
+                if auth_err:
+                    return auth_err
+                set_parts.append('application_id = :application_id')
+                expression_values[':application_id'] = application_id
+                if target_owner:
+                    set_parts.append('owner_team_id = :owner_team_id')
+                    expression_values[':owner_team_id'] = target_owner
+                else:
+                    remove_parts.append('owner_team_id')
+            if set_parts:
+                if update_expression:
+                    update_expression += ', ' + ', '.join(set_parts)
+                else:
+                    update_expression = 'SET ' + ', '.join(set_parts)
+        if remove_parts:
+            update_expression += ' REMOVE ' + ', '.join(remove_parts)
+
         # Update the suite in DynamoDB
         update_kwargs = {
             'Key': {

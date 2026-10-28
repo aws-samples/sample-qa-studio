@@ -12,9 +12,12 @@ import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import { CreateApplicationModal } from './dashboard/CreateApplicationModal';
 import { Application } from '../types/application';
 import { api } from '../utils/api';
+import { usePermissions, canCreateApplication } from '../auth';
 
 export default function ApplicationSettings() {
   const navigate = useNavigate();
+  const { isAdmin, teams } = usePermissions();
+  const canCreate = canCreateApplication(isAdmin, teams);
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -50,9 +53,11 @@ export default function ApplicationSettings() {
           <Header
             variant="h1"
             actions={
-              <Button variant="primary" onClick={() => setCreateModalVisible(true)}>
-                Create application
-              </Button>
+              canCreate && (
+                <Button variant="primary" onClick={() => setCreateModalVisible(true)}>
+                  Create application
+                </Button>
+              )
             }
           >
             Applications
@@ -81,7 +86,9 @@ export default function ApplicationSettings() {
           <Box textAlign="center" padding="l">
             <SpaceBetween size="m">
               <Box variant="p">No applications yet</Box>
-              <Button onClick={() => setCreateModalVisible(true)}>Create your first application</Button>
+              {canCreate && (
+                <Button onClick={() => setCreateModalVisible(true)}>Create your first application</Button>
+              )}
             </SpaceBetween>
           </Box>
         }

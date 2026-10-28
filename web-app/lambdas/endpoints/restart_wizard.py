@@ -1,11 +1,17 @@
+import lambda_init  # noqa: F401 — must be first import (adds dependencies/ to sys.path)
+
 import json
 import os
 import boto3
-from utils import create_response, require_scopes, validate_path_id
+from pydantic import ValidationError
+from recording_models import WizardSessionRequest
+from resource_auth import require_resource_access, wizard_session_from_path
+from utils import create_response, validate_path_id
 
 sqs = boto3.client('sqs')
 eventbridge = boto3.client('events')
 
+@require_resource_access('edit', wizard_session_from_path, scopes=['api/usecases.write'])
 def handler(event, context):
     """
     Restart a wizard session by sending a restart command.
@@ -13,25 +19,24 @@ def handler(event, context):
     
     Path Parameters:
     - sessionId: The wizard session ID to restart
+
+    Request Body (WizardSessionRequest):
+    - usecaseId: The use case the session belongs to (required)
     
     Returns:
     - 200: Restart command sent successfully
-    - 400: Missing sessionId
-    - 403: Insufficient scopes
+    - 400: Missing sessionId or usecaseId
+    - 403: Insufficient scopes or no edit access to the use case
+    - 404: Session not found under the use case
     - 500: Error sending command
     """
-    # Validate scopes - restarting wizard modifies usecases
-    user_identity, error = require_scopes(event, ['api/usecases.write'])
-    if error:
-        return error
-    
     session_id, error = validate_path_id(event.get('pathParameters', {}).get('sessionId'), 'session ID')
-
-    
     if error:
-
-    
         return error
+    try:
+        WizardSessionRequest(**json.loads(event.get('body') or '{}'))
+    except (TypeError, ValueError, ValidationError):
+        return create_response(400, {'error': 'usecaseId is required'})
     
     # Prepare restart command
     command = {

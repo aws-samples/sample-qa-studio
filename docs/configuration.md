@@ -89,6 +89,23 @@ To deploy into an existing VPC:
 
 When `vpcId` is set, CDK uses explicit account/region from your AWS environment. The security group must allow outbound HTTPS (443) for AWS API access.
 
+### AgentCore browsers in a VPC (`agentCoreVPC: true`)
+
+When `agentCoreVPC` is enabled, AgentCore browsers are attached to the VPC. AgentCore only supports VPC connectivity in **specific Availability Zones per region**, identified by **AZ ID** (e.g. `use1-az1`), not AZ name (e.g. `us-east-1a`) — and the AZ ID→name mapping differs per AWS account. To prevent browser-creation failures in unsupported zones, the worker stack resolves supported AZs at synth time and:
+
+- **Created VPC** (`vpcId` unset): pins the VPC's subnets to two supported AZs (two NAT Gateways). Because this sets the VPC's Availability Zones, it should be enabled on a **fresh** deployment — turning it on for an already-created VPC forces CloudFormation to re-lay-out (replace) existing subnets, which fails with CIDR conflicts. For an existing VPC, either deploy a fresh stack or use an imported VPC (`vpcId`).
+- **Existing VPC** (`vpcId` set): validates that at least one private subnet is in a supported AZ and fails the deploy with an actionable message otherwise.
+
+Because `agentCoreVPC: true` triggers an `ec2:DescribeAvailabilityZones` call during `cdk synth`, synth then requires AWS credentials for the target account/region (your deploy pipeline already provides these). Non-VPC deploys are unaffected.
+
+> **Maintainer note — keep the supported-AZ table current.** AWS publishes the AgentCore-supported AZ IDs only in documentation (there is no API for the list), so they are hardcoded per region in [`web-app/lib/agentcore-az.ts`](../web-app/lib/agentcore-az.ts) (`AGENTCORE_SUPPORTED_AZ_IDS`). If AWS adds a region or changes the supported zones, update that table from the [AgentCore VPC documentation](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agentcore-vpc.html). Deploying `agentCoreVPC: true` into a region that is missing from the table fails synth with a clear error pointing back to the doc.
+
+To find the AZ ID of a subnet:
+
+```bash
+aws ec2 describe-subnets --subnet-ids subnet-12345678 --query 'Subnets[0].AvailabilityZoneId'
+```
+
 
 ## Mobile Testing (Device Farm)
 
@@ -136,6 +153,7 @@ Since the CLI-unified-runner refactor, the ECS worker container invokes the `qa-
 | `WORKER_MODE` | ECS task definition (optional) | `batch` (default) → invokes `qa-studio run`. `wizard` → defers to `wizard_worker.py`. |
 | `USECASE_ID` | ECS task definition | Required in batch mode; passed as `--usecase-id`. |
 | `EXECUTION_ID` | ECS task definition | Required in batch mode; passed as `--execution-id` so the CLI attaches to the pre-created record. |
+| `EXECUTION_TOKEN` | ECS container override set by `execute_usecase` | Worker execution token (see [below](#worker-execution-token)). Exported as `QA_STUDIO_EXECUTION_TOKEN`, then unset. |
 | `QA_STUDIO_API_URL_SSM` | CDK worker stack | SSM parameter name the entrypoint reads to discover the API URL. Written as `QA_STUDIO_API_URL` for the CLI. |
 | `QA_STUDIO_TOKEN_ENDPOINT_SSM` | CDK worker stack | SSM parameter name for the Cognito `/oauth2/token` endpoint. Written as `OAUTH_TOKEN_ENDPOINT` for the CLI. |
 | `OAUTH_CLIENT_ID` | ECS `secrets:` → Secrets Manager | M2M client ID (JSON field `client_id` of the `${baseName}-worker-m2m-credentials` secret). |
@@ -146,6 +164,27 @@ Since the CLI-unified-runner refactor, the ECS worker container invokes the `qa-
 | `BEDROCK_EXECUTION_ROLE` | ECS task definition | IAM role assumed by AgentCore browsers. |
 | `AGENT_CORE_VPC` + `AC_VPC_ID` / `AC_SUBNET_ID` / `AC_SECURITY_GROUP_ID` | ECS task definition (when `agentCoreVPC: true` in `configuration.json`) | Put AgentCore browsers in a VPC. |
 | `S3_BUCKET` | ECS task definition | Artefact bucket the AgentCore provisioner writes recordings to. |
+
+### Worker execution token
+
+Binds the worker to the one execution it runs. Set automatically; there's nothing to configure. See [architecture](architecture.md#worker-execution-capability).
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `EXECUTION_TOKEN` | string (43-char URL-safe random) | unset | Minted per execution by `execute_usecase` for `Scheduled` and `OnDemandHeadless` runs and passed to the ECS task. Only its SHA-256 is stored (`worker_token_hash`). When unset, the entrypoint logs a warning (without the value) and the run's API calls are denied. |
+| `QA_STUDIO_EXECUTION_TOKEN` | string `{usecase_id}:{execution_id}:{token}` | unset | Read by the `qa-studio` CLI. When set and non-empty, every API request carries it as the `X-QA-Execution-Token` header; it's never logged. Leave it unset for local runs. |
+
+### Lambda authorizer environment
+
+Set by the API stack (`lib/authorizer-client-binding.ts`); no `configuration.json` option.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `TABLE_NAME` | string | storage stack table name | DynamoDB table holding `OAUTH_CLIENTS` records. The authorizer reads the client's `team_id` / `team_role` with `GetItem` (IAM limited to `dynamodb:LeadingKeys = OAUTH_CLIENTS`). |
+| `WORKER_CLIENT_ID` | string | auth stack worker M2M client ID | Tokens from this client get `identityType=worker` and no team roles; they only work with a valid execution token. |
+| — (constant) `CLIENT_BINDING_TTL_SECONDS` | int | `60` | In-memory cache lifetime of a client binding in a warm authorizer container. API Gateway also caches the authorizer result for 5 minutes. |
+
+No new `configuration.json` options were added for team-bound authorization.
 
 ### SSM parameters written by the stacks
 

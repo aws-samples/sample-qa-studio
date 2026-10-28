@@ -6,7 +6,8 @@ from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_secret_prefix, require_scopes, validate_path_id
+from utils import create_response, get_table_name, get_secret_prefix
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
@@ -39,6 +40,7 @@ def convert_dynamodb_types(obj):
         return obj
 
 
+@require_resource_access('view', usecase_from_path, scopes=['api/usecases.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to export a usecase with all its configuration.
@@ -51,16 +53,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with export data
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/usecases.read'])
-        if error:
-            return error
-        
         # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')

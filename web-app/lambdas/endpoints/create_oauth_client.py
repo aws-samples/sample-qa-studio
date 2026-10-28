@@ -3,7 +3,10 @@ import os
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp, require_scopes
+from utils import create_response, get_table_name, get_current_timestamp, require_scopes, validate_path_id
+from resource_auth import require_team_role
+from role_scopes import ROLE_RANK, TEAM_ROLES, M2M_FORBIDDEN_SCOPES
+import permissions_repo
 
 # Configure logging
 logger = logging.getLogger()
@@ -49,12 +52,27 @@ def get_valid_scopes_from_cognito(user_pool_id: str, resource_server_identifier:
         return []
 
 
+def bound_team_role(user_identity: dict, team_id: str) -> str:
+    """
+    Role an OAuth client gets in its team: min(caller's role in the team, 'editor').
+    Admins without a role in the team bind the client as 'editor'.
+    """
+    caller_ranks = [
+        ROLE_RANK[tr['role']] for tr in user_identity.get('team_roles', [])
+        if tr.get('team_id') == team_id and tr.get('role') in TEAM_ROLES
+    ]
+    rank = min(max(caller_ranks, default=ROLE_RANK['editor']), ROLE_RANK['editor'])
+    return next(role for role in TEAM_ROLES if ROLE_RANK[role] == rank)
+
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to create an OAuth client in Amazon Cognito user pool.
     Requires api/oauth-clients.write or api/admin scope.
     
     SECURITY: Users can only grant scopes they already possess to prevent privilege escalation.
+    The client is bound to body.teamId (caller must be admin or editor+ in that
+    team) and may never hold api/admin or api/teams.manage.
     
     Args:
         event: API Gateway proxy request event
@@ -73,8 +91,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         creator_scopes = user_identity.get('scopes', [])
         has_admin = 'api/admin' in creator_scopes
         
-        logger.info(f"Creating OAuth client - user_identity: {user_identity}")
-        logger.info(f"Created by: {created_by}, Creator scopes: {creator_scopes}")
+        logger.info(f"Creating OAuth client (identity_type: {user_identity.get('identity_type')}, creator scope count: {len(creator_scopes)})")
         
         # Parse request body
         body = json.loads(event.get('body', '{}'))
@@ -83,6 +100,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         if not client_name:
             return create_response(400, {'error': 'Client name is required'})
+
+        team_id, error = validate_path_id(body.get('teamId'), 'teamId')
+        if error:
+            return error
+        role_err = require_team_role(user_identity, team_id, 'editor',
+                                     'Editor or higher in the client team required')
+        if role_err:
+            return role_err
+        if not permissions_repo.get_team(team_id):
+            return create_response(404, {'error': 'Team not found'})
+        team_role = bound_team_role(user_identity, team_id)
         
         # Get user pool ID from environment
         user_pool_id = os.environ.get('USER_POOL_ID')
@@ -113,12 +141,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'valid_scopes': valid_scopes
             })
         
+        forbidden_scopes = sorted(set(requested_scopes) & M2M_FORBIDDEN_SCOPES)
+        if forbidden_scopes:
+            return create_response(400, {
+                'error': f'Scopes not allowed for OAuth clients: {", ".join(forbidden_scopes)}'
+            })
+
         # SECURITY CHECK: Prevent privilege escalation
         # Users can only grant scopes they already have (unless they have admin scope)
         if not has_admin:
             unauthorized_scopes = [s for s in requested_scopes if s not in creator_scopes]
             if unauthorized_scopes:
-                logger.warning(f"Privilege escalation attempt by {created_by}: tried to grant {unauthorized_scopes} but only has {creator_scopes}")
+                logger.warning(f"Privilege escalation attempt: tried to grant {len(unauthorized_scopes)} scope(s) the caller does not hold")
                 return create_response(403, {
                     'error': 'Forbidden: Cannot grant scopes you do not possess',
                     'message': f'You cannot grant the following scopes: {", ".join(unauthorized_scopes)}',
@@ -177,7 +211,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'client_name': client_name,
                 'created_by': created_by,
                 'created_at': created_date.isoformat() if created_date else get_current_timestamp(),
-                'entity_type': 'oauth_client'
+                'entity_type': 'oauth_client',
+                'team_id': team_id,
+                'team_role': team_role,
             }
             
             table.put_item(Item=oauth_client_item)
@@ -203,12 +239,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'scopes': requested_scopes,
             'created_date': created_date.isoformat() if created_date else None,
             'created_by': created_by,
+            'team_id': team_id,
+            'team_role': team_role,
             'refresh_token_validity': user_pool_client.get('RefreshTokenValidity'),
             'access_token_validity': user_pool_client.get('AccessTokenValidity'),
             'id_token_validity': user_pool_client.get('IdTokenValidity')
         }
         
-        logger.info(f"Successfully created OAuth client: {client_name} with scopes {requested_scopes} by {created_by}")
+        logger.info(f"Successfully created OAuth client: {client_name} with scopes {requested_scopes}")
         return create_response(201, result)
         
     except cognito_client.exceptions.InvalidParameterException as e:

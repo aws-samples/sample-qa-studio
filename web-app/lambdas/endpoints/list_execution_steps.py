@@ -2,13 +2,15 @@ import logging
 from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import get_table_name, create_response, require_scopes, validate_path_id
+from utils import get_table_name, create_response, validate_path_id
+from resource_auth import require_resource_access, execution_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', execution_from_path, scopes=['api/executions.read'], allow_worker=True)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to list all execution steps for a specific execution from Amazon DynamoDB.
@@ -21,15 +23,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with list of execution steps
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/executions.read'])
-        if error:
-            return error
-        
         # Get use case ID and execution ID from path parameters
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
         if error:
             return error

@@ -14,7 +14,8 @@ from typing import Any, Dict, Tuple
 
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_bucket_name, require_scopes
+from utils import create_response, get_table_name, get_bucket_name
+from resource_auth import require_resource_access, execution_from_path
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -191,6 +192,7 @@ def get_video_playback_data(
     return download_url, content_type, expires_in
 
 
+@require_resource_access('view', execution_from_path, scopes=['api/executions.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Return video playback data for a given execution.
@@ -206,11 +208,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         404: Execution not found or no recording available
         500: Internal server error
     """
-    # Validate scope
-    user_identity, error_response = require_scopes(event, ["api/executions.read"])
-    if error_response:
-        return error_response
-
     # Parse path parameters
     path_params = event.get("pathParameters") or {}
     usecase_id = path_params.get("id")

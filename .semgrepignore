@@ -1,0 +1,25 @@
+# Semgrep replaces its built-in ignore list when this file exists, so the
+# defaults are restated first.
+node_modules/
+build/
+dist/
+vendor/
+.git/
+cdk.out/
+*.min.js
+
+# Test code (fixtures use fake tokens, sleeps and broad excepts on purpose).
+**/tests/
+**/test/
+**/__tests__/
+**/test_*.py
+**/*_test.py
+**/*.test.ts
+**/*.test.tsx
+**/*.test.js
+**/conftest.py
+web-app/lambdas/endpoints/authz_test_support.py
+
+# Application modules whose names match test_*.py: keep scanning them.
+!qa-studio-cli/qa_studio_cli/api/test_suites.py
+!web-app/lambdas/endpoints/test_suite_schema.py

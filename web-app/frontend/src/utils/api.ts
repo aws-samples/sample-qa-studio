@@ -304,13 +304,22 @@ export const wizardApi = {
     }
   },
 
+  // The session routes below need the session's usecaseId in the body: the
+  // API checks edit on that use case and that the session belongs to it.
+  addStep: async (sessionId: string, usecaseId: string, stepData: Record<string, any>) => {
+    return api.post(`wizard/${encodeURIComponent(sessionId)}/step`, { ...stepData, usecaseId });
+  },
+  restart: async (sessionId: string, usecaseId: string) => {
+    return api.post(`wizard/${encodeURIComponent(sessionId)}/restart`, { usecaseId });
+  },
   sendRecordingCommand: async (
     sessionId: string,
+    usecaseId: string,
     action: 'recording_start' | 'recording_stop'
   ): Promise<RecordingCommandResponse> => {
     return apiRequest(`wizard/${encodeURIComponent(sessionId)}/command`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ usecaseId, action }),
     });
   },
 
@@ -440,6 +449,8 @@ export interface OAuthClient {
   created_date: string;
   last_modified_date?: string;
   created_by?: string;
+  /** Team the client is bound to; null for a legacy unbound client (no access). */
+  team_id?: string | null;
   refresh_token_validity?: number;
   access_token_validity?: number;
   id_token_validity?: number;
@@ -457,6 +468,8 @@ export interface OAuthClient {
 export interface CreateOAuthClientRequest {
   name: string;
   scopes?: string[];
+  /** Owning team (required); the client acts with at most editor rights in it. */
+  teamId: string;
 }
 
 export interface CreateOAuthClientResponse {

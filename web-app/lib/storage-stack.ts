@@ -1,6 +1,7 @@
 import { RemovalPolicy, CustomResource, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { Table, AttributeType, ProjectionType, BillingMode } from 'aws-cdk-lib/aws-dynamodb';
+import { Table, AttributeType, BillingMode } from 'aws-cdk-lib/aws-dynamodb';
+import { STORAGE_GSIS_CONTEXT_KEY, selectGsis } from './storage-gsis';
 import { BackupPlan, BackupVault, BackupPlanRule, BackupResource } from 'aws-cdk-lib/aws-backup';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 import { ManagedPolicy, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
@@ -51,20 +52,13 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    // Add GSI for querying use case executions by suite execution ID
-    this.table.addGlobalSecondaryIndex({
-      indexName: 'suite-execution-index',
-      partitionKey: {
-        name: 'suite_execution_id',
-        type: AttributeType.STRING
-      },
-      sortKey: {
-        name: 'sk',
-        type: AttributeType.STRING
-      },
-      projectionType: ProjectionType.ALL,
-    });
-
+    // GSIs are defined in storage-gsis.ts. An optional `storageGsis` context
+    // allowlist lets scripts/deploy-storage.ts add new indexes one per deploy
+    // (DynamoDB allows only one GSI creation per table update).
+    const gsiAllowlist = this.node.tryGetContext(STORAGE_GSIS_CONTEXT_KEY);
+    for (const gsi of selectGsis(gsiAllowlist === undefined ? undefined : String(gsiAllowlist))) {
+      this.table.addGlobalSecondaryIndex(gsi);
+    }
     const backupVault = new BackupVault(this, "dynamodb_backup_vault", {
       backupVaultName: this.cdkName('backup-vault'),
       removalPolicy: RemovalPolicy.DESTROY,
@@ -141,6 +135,7 @@ export class NovaActQAStudioStorageStack extends NovaActQAStudioBaseStack {
           actions: [
             'dynamodb:PutItem',
             'dynamodb:UpdateItem',
+            'dynamodb:DeleteItem',
             'dynamodb:BatchWriteItem'
           ],
           resources: [

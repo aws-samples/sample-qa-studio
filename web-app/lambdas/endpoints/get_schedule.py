@@ -3,13 +3,15 @@ import re
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, require_scopes, validate_path_id
+from utils import create_response
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', usecase_from_path, scopes=['api/usecases.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to get a schedule for a use case from Amazon EventBridge Scheduler.
@@ -22,15 +24,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with schedule information
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/usecases.read'])
-        if error:
-            return error
-        
         # Get use case ID from path parameters
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Get scheduler group name from environment
         scheduler_group_name = os.environ.get('SCHEDULER_GROUP_NAME')

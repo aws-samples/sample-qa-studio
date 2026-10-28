@@ -4,6 +4,7 @@ from typing import Any, Dict
 from urllib.parse import unquote
 import boto3
 from utils import create_response, require_scopes
+import cognito_sync
 
 # Configure logging
 logger = logging.getLogger()
@@ -42,6 +43,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.error("USER_POOL_ID environment variable not set")
             return create_response(500, {'error': 'Internal server error'})
         
+        # Last-admin guard (global 'admins' group). Any error in the check falls
+        # through to the 500 below, so the user is never deleted unchecked.
+        if cognito_sync.is_last_studio_admin(username, user_pool_id):
+            return create_response(409, {'error': 'Cannot delete the last admin'})
+        
         # Initialize Amazon Cognito client
         cognito_client = boto3.client('cognito-idp')
         
@@ -63,5 +69,5 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error(f"Error deleting user with username '{encoded_username}': {str(e)}", exc_info=True)
+        logger.error(f"Error deleting user: {str(e)}", exc_info=True)
         return create_response(500, {'error': 'Failed to delete user'})

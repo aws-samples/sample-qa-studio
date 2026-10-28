@@ -22,8 +22,9 @@ from utils import (
     get_table_name,
     get_current_timestamp,
     generate_uuid7,
-    require_scopes,
+    extract_user_identity,
     validate_path_id)
+from resource_auth import require_resource_access, suite_from_path
 from test_suite_schema import (
     get_test_suites_pk,
     get_suite_sk,
@@ -253,41 +254,6 @@ def get_usecase_definition(usecase_id: str, table_name: str) -> Dict[str, Any]:
         'device_arn': item.get('device_arn', {}).get('S', ''),
         'browser_policy_s3_path': item.get('browser_policy_s3_path', {}).get('S', ''),
     }
-
-
-def get_usecase_secrets(usecase_id: str, table_name: str) -> Dict[str, str]:
-    """
-    Fetch usecase secrets from DynamoDB.
-    
-    Args:
-        usecase_id: Usecase UUID
-        table_name: DynamoDB table name
-    
-    Returns:
-        Dictionary of secret key-value pairs (empty dict if no secrets)
-    """
-    try:
-        response = dynamodb.get_item(
-            TableName=table_name,
-            Key={
-                'pk': {'S': f'USECASE#{usecase_id}'},
-                'sk': {'S': 'SECRETS'}
-            }
-        )
-        
-        if 'Item' not in response:
-            return {}
-        
-        # Secrets are stored as a map
-        secrets_map = response['Item'].get('secrets', {}).get('M', {})
-        secrets = {}
-        for key, value in secrets_map.items():
-            secrets[key] = value.get('S', '')
-        
-        return secrets
-    except Exception as e:
-        print(f'Error fetching secrets for usecase {usecase_id}: {str(e)}')
-        return {}
 
 
 def get_usecase_variables(usecase_id: str, table_name: str) -> Dict[str, str]:
@@ -675,6 +641,24 @@ def create_execution_record_for_usecase(
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
+    Entry point. EventBridge (suite schedules) invokes directly without a
+    requestContext; those calls are authorized by the IAM permission on this
+    Lambda. API calls need api/suite.write + api/executions.write and execute
+    on the suite's application (each use case is re-checked by execute_usecase).
+    """
+    if not event.get('requestContext'):
+        scheduler_identity = {'identity': 'scheduler', 'identity_type': 'scheduler', 'sub': '', 'scopes': []}
+        return _execute_suite(event, scheduler_identity)
+    return _authorized_handler(event, context)
+
+
+@require_resource_access('execute', suite_from_path, scopes=['api/suite.write', 'api/executions.write'])
+def _authorized_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    return _execute_suite(event, extract_user_identity(event))
+
+
+def _execute_suite(event: Dict[str, Any], user_identity: Dict[str, Any]) -> Dict[str, Any]:
+    """
     Execute a test suite by creating suite execution and all usecase execution records.
     
     This endpoint creates execution records with overrides applied,
@@ -697,20 +681,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         404: Test suite not found
         500: Internal server error
     """
-    # Validate authentication and authorization
-    # EventBridge Scheduler invokes directly (no requestContext) — allow these
-    # since they're already authenticated via IAM role permission on this Lambda.
-    if not event.get('requestContext'):
-        user_identity = {'identity': 'scheduler', 'identity_type': 'scheduler', 'sub': '', 'scopes': []}
-    else:
-        user_identity, error_response = require_scopes(
-            event,
-            ['api/suite.write', 'api/executions.write']
-        )
-        if error_response:
-            return error_response
-
-    print(f"Suite execution requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    print(f"Suite execution requested by identity type: {user_identity['identity_type']}")
 
     # Parse path parameters
     suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')
@@ -846,8 +817,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Fetch usecase definition
                 usecase = get_usecase_definition(usecase_id, table_name)
                 
-                # Fetch secrets and variables
-                secrets = get_usecase_secrets(usecase_id, table_name)
+                # Fetch variables. Secret values are never merged into
+                # execution variables (readable by Viewers via
+                # GET .../executions/{id}/variables); the runner reads them
+                # per step from Secrets Manager with execute access (H-1).
                 usecase_vars = get_usecase_variables(usecase_id, table_name)
                 
                 # Apply base URL override
@@ -856,8 +829,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     base_url
                 )
                 
-                # Merge variables with precedence: CLI > usecase > secrets
-                merged_vars = merge_variables(secrets, usecase_vars, cli_variables)
+                # Merge variables with precedence: CLI > usecase
+                merged_vars = merge_variables({}, usecase_vars, cli_variables)
                 
                 # Validate all variables resolved
                 validate_variables_resolved(usecase, merged_vars)

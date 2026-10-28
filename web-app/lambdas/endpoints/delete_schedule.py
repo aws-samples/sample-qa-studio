@@ -2,13 +2,15 @@ import os
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, require_scopes, validate_path_id
+from utils import no_content_response, create_response
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to delete a schedule for a use case from Amazon EventBridge Scheduler.
@@ -21,15 +23,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/usecases.write'])
-        if error:
-            return error
-        
         # Get use case ID from path parameters
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Get scheduler group name from environment
         scheduler_group_name = os.environ.get('SCHEDULER_GROUP_NAME')
@@ -46,7 +41,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             GroupName=scheduler_group_name
         )
         
-        return create_response(200, {'status': 'schedule deleted'})
+        return no_content_response()
         
     except Exception as e:
         logger.error(f"Error deleting schedule: {str(e)}", exc_info=True)

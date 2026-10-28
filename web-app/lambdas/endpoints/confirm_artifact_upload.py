@@ -12,12 +12,14 @@ from utils import (
     create_response,
     get_table_name,
     get_current_timestamp,
-    require_scopes,
-    validate_path_id)
+    validate_path_id,
+)
+from resource_auth import require_resource_access, execution_from_path
 
 dynamodb = boto3.client('dynamodb')
 
 
+@require_resource_access('execute', execution_from_path, scopes=['api/executions.write'], allow_worker=True)
 def handler(event, context):
     """
     Confirm artifact upload completion.
@@ -33,11 +35,6 @@ def handler(event, context):
     - 404: Artifact not found
     - 500: Internal server error
     """
-    # Validate scopes
-    user_identity, error_response = require_scopes(event, ['api/executions.write'])
-    if error_response:
-        return error_response
-
     # Parse path parameters
     execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
     if error:

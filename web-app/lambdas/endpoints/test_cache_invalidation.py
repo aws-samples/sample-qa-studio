@@ -425,3 +425,14 @@ class TestHandleTaskStateChangeInvalidation:
         # Must not raise (EventBridge would retry if we did).
         module.handler(_ecs_event(), None)
         cleanup_spy.assert_called_once()
+
+
+import pytest as _pytest  # noqa: E402
+from authz_test_support import resource_access_granted as _resource_access_granted  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: ownership is covered by test_execution_routes_access.py."""
+    with _resource_access_granted():
+        yield

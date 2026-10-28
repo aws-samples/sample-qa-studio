@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 import boto3
@@ -11,11 +12,50 @@ from utils import (create_response, get_current_timestamp, validate_title,
                    validate_url, validate_user_journey, sanitize_and_fix_json,
                    validate_generated_json, require_scopes)
 from recording_models import RecordingData, CDPRecordingPayload
+from resource_auth import authorize_session
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 bedrock_runtime = boto3.client('bedrock-runtime')
+
+# The wizard worker writes a recording's screenshot manifest to
+# {usecase_id}/{session_id}/screenshot_manifest.json and the screenshots to
+# {usecase_id}/{session_id}/screenshots/ (wizard_worker.upload_recording_screenshots).
+_MANIFEST_KEY_RE = re.compile(r'([^/]+)/([^/]+)/screenshot_manifest\.json')
+
+
+def authorize_manifest_key(event, manifest_key):
+    """
+    A screenshot manifest key is only accepted when it is the manifest of a
+    recording session the caller can edit (the session must exist under the
+    use case named by the key's prefix).
+
+    Returns:
+        (screenshot prefix, None) when allowed, otherwise (None, error
+        response): 400 malformed key, 404 unknown session, 403 no access.
+    """
+    match = _MANIFEST_KEY_RE.fullmatch(manifest_key or '')
+    if not match:
+        return None, create_response(400, {
+            'success': False,
+            'message': 'Request validation failed',
+            'error': 'Invalid screenshot_manifest_key',
+            'code': 'VALIDATION_ERROR',
+        })
+    usecase_id, session_id = match.groups()
+    error = authorize_session(event, usecase_id, session_id, 'edit')
+    if error:
+        return None, error
+    return f'{usecase_id}/{session_id}/screenshots/', None
+
+
+def _manifest_within_prefix(manifest, prefix):
+    """Drop manifest entries pointing outside the session's screenshot prefix."""
+    if not isinstance(manifest, dict):
+        return {}
+    return {action_id: key for action_id, key in manifest.items()
+            if isinstance(key, str) and key.startswith(prefix) and '..' not in key}
 
 
 # --- JSON Schema for structured output ---
@@ -497,6 +537,9 @@ def _fetch_and_compress_screenshots(s3_client, bucket, manifest, selected_ids, t
                 new_height = int(img.height * ratio)
                 img = img.resize((target_width, new_height), Image.LANCZOS)
 
+            # JPEG has no alpha channel; RGBA/P PNG screenshots must be converted first.
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
             buf = io.BytesIO()
             img.save(buf, format='JPEG', quality=70)
             return action_id, buf.getvalue()
@@ -577,6 +620,14 @@ def _build_recording_content_blocks(recording_data, screenshots=None):
 
 
 
+# Prompt guideline lines kept outside the f-string: their example wording
+# ("select ... in the date picker") otherwise trips Bandit B608 (SQL heuristic).
+_PROMPT_WIDGET_PRINCIPLE = '- SEMANTIC OVER MECHANICAL: When a user interacts with a complex UI widget (date picker, dropdown, autocomplete, multi-step selector), generate ONE navigation step that describes the goal (e.g., "select {DOB} in the \'Date of Birth\' date picker") rather than multiple micro-steps for each click within the widget. The executing AI model understands how to operate these widgets — your job is to describe WHAT to achieve, not HOW to click through the widget.'
+_PROMPT_NAVIGATION_STEP_TYPE = '- "navigation": For clicking buttons, filling forms, navigating pages. Each step should describe exactly one user-level interaction. For complex widgets (date pickers, dropdowns, autocomplete fields), write a single goal-oriented step (e.g., "select 03/15/2026 in the \'Date of Birth\' date picker") instead of multiple micro-steps for each click within the widget.'
+_PROMPT_WIDGET_DONT = 'DON\'T: Generate multiple micro-steps for a complex widget (e.g., "click the month dropdown", "select March", "click day 15", "click year field", "type 2026")'
+_PROMPT_WIDGET_DO = 'DO: Generate one goal-oriented step: "select {DOB} in the \'Date of Birth\' date picker" — the executing AI model knows how to operate the widget'
+
+
 def create_prompt(title, starting_url, user_journey, region, recording_data=None):
     """Create the prompt for Amazon Bedrock based on the user journey.
 
@@ -614,7 +665,7 @@ DESIGN PRINCIPLES:
 - SIMPLICITY FIRST: Prefer the fewest steps possible. Each step should do exactly one thing. Shorter test cases are better — do not add steps that are not strictly necessary to cover the user journey.
 - STEP TYPE PRIORITY: Prefer "validation" over "retrieve_value" + "assertion". Only use retrieve_value/assertion when a value must be captured and compared after a state change or reused across multiple later steps.
 - CLEAR TRANSITIONS: Each navigation step must describe exactly one user-level action with an unambiguous target element. Moving between steps should be logical and precise.
-- SEMANTIC OVER MECHANICAL: When a user interacts with a complex UI widget (date picker, dropdown, autocomplete, multi-step selector), generate ONE navigation step that describes the goal (e.g., "select {{DOB}} in the 'Date of Birth' date picker") rather than multiple micro-steps for each click within the widget. The executing AI model understands how to operate these widgets — your job is to describe WHAT to achieve, not HOW to click through the widget.
+{_PROMPT_WIDGET_PRINCIPLE}
 
 User Journey Details:
 - Title: (Wizard) {title}
@@ -659,7 +710,7 @@ CRITICAL REQUIREMENTS:
 21. Every retrieve_value step should be followed by at least one assertion step that references the captured variable. Do not generate a retrieve_value step without a corresponding assertion that uses it. If the value only needs to be checked once and not compared after a state change, use a validation step instead.
 
 Step Type Guidelines:
-- "navigation": For clicking buttons, filling forms, navigating pages. Each step should describe exactly one user-level interaction. For complex widgets (date pickers, dropdowns, autocomplete fields), write a single goal-oriented step (e.g., "select 03/15/2026 in the 'Date of Birth' date picker") instead of multiple micro-steps for each click within the widget.
+{_PROMPT_NAVIGATION_STEP_TYPE}
 - "validation": PREFERRED for any check. For checking page content, verifying elements exist. Reads a value from the live page and compares it. Use this instead of retrieve_value + assertion whenever possible. The instruction MUST ask for the actual content (e.g. "return the value of the heading text"), NEVER ask about visibility or existence (the executing model would return true/false instead of the content).
 - "secret": For using stored credentials (set secret_key field). Secrets are managed by users outside this generation — NEVER populate the top-level "secrets" array. Only reference existing secret keys in step secret_key fields when the journey explicitly mentions credentials.
 - "retrieve_value": ONLY use when the value must be stored for later comparison after a state change or reused in multiple assertion steps. Do NOT use just to read and immediately check a value — use validation instead.
@@ -681,8 +732,8 @@ DO: Write validation instructions that ask for the actual content (e.g. "return 
 DON'T: Split a single check into retrieve_value + assertion when the value is only needed once
 DO: Use validation to check the value directly on the page
 
-DON'T: Generate multiple micro-steps for a complex widget (e.g., "click the month dropdown", "select March", "click day 15", "click year field", "type 2026")
-DO: Generate one goal-oriented step: "select {{DOB}} in the 'Date of Birth' date picker" — the executing AI model knows how to operate the widget
+{_PROMPT_WIDGET_DONT}
+{_PROMPT_WIDGET_DO}
 
 DO: Use retrieve_value + assertion when you need to capture a count before an action, perform the action, then capture and compare the count after
 DO: Use retrieve_value when the same value needs to be referenced in multiple later assertion steps
@@ -925,7 +976,7 @@ def handler(event, context):
     # Extract user info
     user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
     
-    print(f'[INFO] [{request_id}] Processing generate usecase request for user {user_email}')
+    print(f'[INFO] [{request_id}] Processing generate usecase request')
     
     # Parse request body
     try:
@@ -1034,6 +1085,13 @@ def handler(event, context):
             'details': {'validationErrors': validation_errors}
         })
     
+    # The screenshot manifest must belong to a recording session of the caller
+    screenshot_prefix = None
+    if recording_data and recording_data.screenshot_manifest_key:
+        screenshot_prefix, error = authorize_manifest_key(event, recording_data.screenshot_manifest_key)
+        if error:
+            return error
+
     # Get Amazon Bedrock model ID
     model_id = os.environ.get('BEDROCK_MODEL_ID')
     if not model_id:
@@ -1054,7 +1112,8 @@ def handler(event, context):
                 bucket = os.environ.get('BUCKET_NAME')
                 if bucket:
                     manifest_obj = s3.get_object(Bucket=bucket, Key=recording_data.screenshot_manifest_key)
-                    manifest = json.loads(manifest_obj['Body'].read())
+                    manifest = _manifest_within_prefix(json.loads(manifest_obj['Body'].read()),
+                                                       screenshot_prefix)
                     actions = CDPRecordingPayload(**recording_data.data).session.actions
                     selected = _select_key_screenshots(actions, manifest)
                     screenshots = _fetch_and_compress_screenshots(s3, bucket, manifest, selected)

@@ -57,7 +57,7 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
         requireUppercase: true,
         requireDigits: true,
         requireSymbols: true,
-      }
+      },
     });
 
     // Grant Cognito permission to invoke the Lambda BEFORE configuring the trigger
@@ -119,6 +119,18 @@ export class NovaActQAStudioAuthStack extends NovaActQAStudioBaseStack {
       {
         scopeName: 'oauth-clients.write',
         scopeDescription: 'Create, update, delete OAuth clients'
+      },
+      {
+        scopeName: 'applications.read',
+        scopeDescription: 'Read applications'
+      },
+      {
+        scopeName: 'applications.write',
+        scopeDescription: 'Create, update, delete applications'
+      },
+      {
+        scopeName: 'teams.manage',
+        scopeDescription: 'Manage teams and team membership'
       },
       {
         scopeName: 'admin',

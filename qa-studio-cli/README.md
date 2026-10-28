@@ -132,6 +132,8 @@ The `qa-studio tests import` command imports test case JSON files (QA Studio exp
 | `--non-interactive` | flag | `false` | Run without any prompts. Implies `-y`. Exits with code 2 if any secret value is missing — supply via `--secret KEY=VALUE` or use `--skip-secrets` to defer. |
 | `--secret` | `KEY=VALUE` (repeatable) | none | Pre-supply a secret value. Suppresses the interactive prompt for that key. Errors if `KEY` is not declared by any imported test. |
 | `--base-url` | string | `None` | Override `starting_url` for all imports |
+| `--region` | string | `None` | Override `executing_region` for all imports |
+| `--application-id` | string | required unless `--dry-run` | Application the tests are imported into. You need edit access (Editor+ of the owning team, or a `full` share) on it. |
 | `--skip-secrets` | flag | `false` | Skip interactive secret prompts |
 | `--format` | choice | `human` | Output format: `human` or `json` |
 
@@ -139,38 +141,38 @@ The `qa-studio tests import` command imports test case JSON files (QA Studio exp
 
 ```bash
 # Import a single test file
-qa-studio tests import ./login_test.json
+qa-studio tests import ./login_test.json --application-id <app-id>
 
 # Import all tests from a folder (recursive)
-qa-studio tests import ./testcases/
+qa-studio tests import ./testcases/ --application-id <app-id>
 
 # Dry-run: validate files without importing
 qa-studio tests import ./testcases/ --dry-run
 
 # Import with base URL override (e.g. staging)
-qa-studio tests import ./testcases/ --base-url https://staging.example.com --yes
+qa-studio tests import ./testcases/ --application-id <app-id> --base-url https://staging.example.com --yes
 
 # CI pipeline: JSON output, skip secrets, no prompts
-qa-studio tests import ./testcases/ --format json --skip-secrets
+qa-studio tests import ./testcases/ --application-id <app-id> --format json --skip-secrets
 
 # Skip secrets and configure them later in the UI
-qa-studio tests import ./login_test.json --skip-secrets
+qa-studio tests import ./login_test.json --application-id <app-id> --skip-secrets
 
 # Fully non-interactive with values supplied (e.g. agent flow, dev/local credentials)
-qa-studio tests import ./tests/auth/login.json \
+qa-studio tests import ./tests/auth/login.json --application-id <app-id> \
   --non-interactive \
   --secret admin_email=admin@dev.local \
-  --secret admin_password=devpass123
+  --secret admin_password="$DEV_ADMIN_PASSWORD"
 
 # Non-interactive deferring secret config to the UI
-qa-studio tests import ./tests/auth/login.json --non-interactive --skip-secrets
+qa-studio tests import ./tests/auth/login.json --application-id <app-id> --non-interactive --skip-secrets
 ```
 
 #### Exit codes
 
 - `0` — every file imported successfully.
 - `1` — at least one file failed to import (or no valid files found).
-- `2` — input validation failure: malformed `--secret KEY=VALUE`, `--secret` referencing an unknown key, or `--non-interactive` set with required secrets unsupplied. The error message lists the missing/unknown keys and the recovery flag.
+- `2` — input validation failure: missing `--application-id`, malformed `--secret KEY=VALUE`, `--secret` referencing an unknown key, or `--non-interactive` set with required secrets unsupplied. The error message lists the missing/unknown keys and the recovery flag.
 
 ### Two-Phase Flow
 
@@ -182,6 +184,17 @@ In `--format json` mode, all prompts are suppressed and output is a single JSON 
 ## Configuration
 
 Running `qa-studio configure` stores settings in `~/.qa-studio/config.json`.
+
+> **Important — `api_url` must include the `/api` base path.** The value must
+> point at the API, ending in `/api`. Either host works:
+>
+> - API Gateway invoke URL: `https://<api-id>.execute-api.<region>.amazonaws.com/api/`
+> - CloudFront domain: `https://<cloudfront-domain>/api`
+>
+> If you leave off `/api` (for example, using the bare CloudFront URL
+> `https://<cloudfront-domain>`), requests route to the web-app origin instead
+> of the API and fail with a confusing `403` that has no error detail. Verify
+> your setting with `qa-studio status`.
 
 You can override any config value with environment variables:
 
@@ -229,7 +242,7 @@ Or add them to `~/.qa-studio/config.json`:
 
 ```json
 {
-  "api_url": "https://your-api-url",
+  "api_url": "https://your-api-host/api",
   "cognito_domain": "https://your-cognito-domain.auth.region.amazoncognito.com",
   "client_id": "your-public-client-id",
   "oauth_client_id": "your-m2m-client-id",

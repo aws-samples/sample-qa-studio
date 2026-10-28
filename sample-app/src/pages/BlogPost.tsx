@@ -1,6 +1,18 @@
 import { useParams, Link } from 'react-router-dom'
 import { blogPosts } from '../data/blogPosts'
 
+type ContentBlock = { tag: 'h3' | 'p'; text: string }
+
+// Post content is authored as simple <h3>/<p> markup. Render it as React
+// elements (text is escaped) instead of injecting HTML.
+function parseContent(html: string): ContentBlock[] {
+  const blocks: ContentBlock[] = []
+  for (const m of html.matchAll(/<(h3|p)>([\s\S]*?)<\/\1>/g)) {
+    blocks.push({ tag: m[1] as ContentBlock['tag'], text: m[2].trim() })
+  }
+  return blocks
+}
+
 export default function BlogPost() {
   const { id } = useParams<{ id: string }>()
   const post = blogPosts.find(p => p.id === id)
@@ -38,8 +50,11 @@ export default function BlogPost() {
 
         <div
           className="prose max-w-none [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-3 [&_p]:text-gray-600 [&_p]:mb-4 [&_p]:leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: post.content }}
-        />
+        >
+          {parseContent(post.content).map((block, i) =>
+            block.tag === 'h3' ? <h3 key={i}>{block.text}</h3> : <p key={i}>{block.text}</p>
+          )}
+        </div>
 
         {/* Related posts */}
         {related.length > 0 && (

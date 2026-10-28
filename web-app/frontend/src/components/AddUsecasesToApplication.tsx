@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { usePermissions } from '../auth';
 import {
   SpaceBetween,
   Header,
@@ -24,6 +25,7 @@ interface Usecase {
   tags?: string[];
   active: boolean;
   application_id?: string;
+  owner_team_id?: string;
   last_execution_id?: string;
   last_execution_status?: string;
   last_execution_time?: string;
@@ -60,6 +62,7 @@ function getStatusType(status: string) {
 const AddUsecasesToApplication: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { isAdmin, teams } = usePermissions();
 
   const [application, setApplication] = useState<any>(null);
   const [allUsecases, setAllUsecases] = useState<Usecase[]>([]);
@@ -126,8 +129,17 @@ const AddUsecasesToApplication: React.FC = () => {
     return usecase.application_id === id;
   };
 
+  // Filter to use cases owned by the user's team only
+  const teamScopedUsecases = useMemo(() => {
+    if (isAdmin) return allUsecases;
+    const userTeamIds = teams.map(t => t.team_id);
+    return allUsecases.filter(uc =>
+      uc.owner_team_id && userTeamIds.includes(uc.owner_team_id)
+    );
+  }, [allUsecases, isAdmin, teams]);
+
   const getFilteredUsecases = (): Usecase[] => {
-    return allUsecases.filter(usecase => {
+    return teamScopedUsecases.filter(usecase => {
       if (!filteringText) return true;
 
       const searchText = filteringText.toLowerCase();

@@ -8,7 +8,7 @@
 # (follow-up spec).
 
 # ── Build stage ────────────────────────────────────────────────────
-FROM python:3.13.12-slim AS builder
+FROM public.ecr.aws/docker/library/python:3.13.12-slim AS builder
 
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
@@ -42,7 +42,7 @@ RUN python3 -m venv /app/.venv && \
     /app/.venv/bin/pip install --no-cache-dir "/build/qa-studio-cli[runner,agentcore]"
 
 # ── Runtime stage ──────────────────────────────────────────────────
-FROM python:3.13.12-slim
+FROM public.ecr.aws/docker/library/python:3.13.12-slim
 
 ENV PYTHONUNBUFFERED=1
 ENV NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true

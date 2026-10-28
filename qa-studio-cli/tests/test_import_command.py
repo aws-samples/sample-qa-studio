@@ -79,6 +79,9 @@ def _write_test_json(tmp_path: Path, *, with_secrets: bool = True) -> Path:
     return file_path
 
 
+APP_ID = "app-1"
+
+
 def _make_mock_post(usecase_id: str = "uc-fake-id"):
     """Return a side_effect function that routes by URL path.
 
@@ -112,7 +115,7 @@ def _invoke_import(runner, mock_client, args):
          patch("qa_studio_cli.api.client.get_valid_token", return_value="fake-token"), \
          patch("qa_studio_cli.api.client.ApiClient", return_value=mock_client):
         mock_config.return_value = MagicMock(api_url="https://fake-api.example.com")
-        return runner.invoke(cli, ["tests", "import", *args])
+        return runner.invoke(cli, ["tests", "import", *args, "--application-id", APP_ID])
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +186,8 @@ class TestImportConfirmation:
              patch("qa_studio_cli.api.client.get_valid_token", return_value="fake-token"), \
              patch("qa_studio_cli.api.client.ApiClient", return_value=mock_client):
             mock_config.return_value = MagicMock(api_url="https://fake-api.example.com")
-            result = runner.invoke(cli, ["tests", "import", str(json_path)], input="n\n")
+            result = runner.invoke(cli, ["tests", "import", str(json_path), "--application-id", APP_ID],
+                                   input="n\n")
 
         assert result.exit_code == 0, result.output
         assert "Import 1 test(s)?" in result.output
@@ -357,6 +361,7 @@ class TestImportSecrets:
                 cli,
                 [
                     "tests", "import", str(json_path),
+                    "--application-id", APP_ID,
                     "--secret", "admin_email=admin@dev.local",
                 ],
                 input="y\npwd-from-stdin\n",
@@ -377,3 +382,41 @@ class TestImportSecrets:
         assert keys_set == {"admin_email", "admin_password"}
         assert "admin@dev.local" in values_set
         assert "pwd-from-stdin" in values_set
+
+
+# ---------------------------------------------------------------------------
+# --application-id: every imported use case belongs to an application (H-2 N-4)
+# ---------------------------------------------------------------------------
+
+
+def _invoke_raw(runner, mock_client, argv):
+    with patch("qa_studio_cli.api.client.config_exists", return_value=True), \
+         patch("qa_studio_cli.api.client.load_config") as mock_config, \
+         patch("qa_studio_cli.api.client.get_valid_token", return_value="fake-token"), \
+         patch("qa_studio_cli.api.client.ApiClient", return_value=mock_client):
+        mock_config.return_value = MagicMock(api_url="https://fake-api.example.com")
+        return runner.invoke(cli, ["tests", "import", *argv])
+
+
+class TestImportApplicationId:
+    def test_missing_application_id_is_a_usage_error(self, runner, mock_client, tmp_path):
+        json_path = _write_test_json(tmp_path, with_secrets=False)
+        result = _invoke_raw(runner, mock_client, [str(json_path), "-y"])
+        assert result.exit_code == 2
+        assert "--application-id is required" in result.output
+        mock_client.post.assert_not_called()
+
+    def test_dry_run_needs_no_application_id(self, runner, mock_client, tmp_path):
+        json_path = _write_test_json(tmp_path, with_secrets=False)
+        result = _invoke_raw(runner, mock_client, [str(json_path), "--dry-run"])
+        assert result.exit_code == 0, result.output
+        mock_client.post.assert_not_called()
+
+    def test_application_id_sent_in_import_payload(self, runner, mock_client, tmp_path):
+        json_path = _write_test_json(tmp_path, with_secrets=False)
+        mock_client.post.side_effect = _make_mock_post()
+        result = _invoke_raw(runner, mock_client, [str(json_path), "-y", "--application-id", "app-9"])
+        assert result.exit_code == 0, result.output
+        import_calls = [c for c in mock_client.post.call_args_list if c.args[0] == "/import"]
+        assert len(import_calls) == 1
+        assert import_calls[0].kwargs["json_body"]["application_id"] == "app-9"

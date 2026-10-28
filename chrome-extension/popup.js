@@ -83,10 +83,46 @@ const SVG_ICONS = {
   hourglass: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8M4 14h8M5 2v2c0 2 3 3 3 4s-3 2-3 4v2M11 2v2c0 2-3 3-3 4s3 2 3 4v2"/></svg>`,
 };
 
+/**
+ * Builds an SVG element from one of the trusted SVG_ICONS strings without
+ * using innerHTML.
+ * @param {string} svg
+ * @returns {Element}
+ */
+function svgIcon(svg) {
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  return document.importNode(doc.documentElement, true);
+}
+
+/**
+ * Replaces an element's children with an icon.
+ * @param {Element} el
+ * @param {string} svg
+ */
+function setIcon(el, svg) {
+  el.replaceChildren(svgIcon(svg));
+}
+
+/**
+ * Replaces an element's children with `<span class="btn-svg">icon</span>text`.
+ * Text is inserted as a text node, so it is never parsed as HTML.
+ * @param {Element} el
+ * @param {string} svg
+ * @param {string} text
+ * @param {string} [iconStyle] inline CSS for the icon wrapper
+ */
+function setIconWithText(el, svg, text, iconStyle) {
+  const wrapper = document.createElement('span');
+  wrapper.className = 'btn-svg';
+  if (iconStyle) wrapper.style.cssText = iconStyle;
+  wrapper.append(svgIcon(svg));
+  el.replaceChildren(wrapper, document.createTextNode(text));
+}
+
 // Inject toolbar button icons
-document.getElementById('btn-save-icon').innerHTML = SVG_ICONS.save;
-document.getElementById('btn-add-icon').innerHTML = SVG_ICONS.add;
-document.getElementById('btn-clear-icon').innerHTML = SVG_ICONS.remove;
+setIcon(document.getElementById('btn-save-icon'), SVG_ICONS.save);
+setIcon(document.getElementById('btn-add-icon'), SVG_ICONS.add);
+setIcon(document.getElementById('btn-clear-icon'), SVG_ICONS.remove);
 
 /**
  * Returns an inline SVG icon string for the given action.
@@ -171,7 +207,7 @@ function setRecordingState(recording) {
   isRecording = recording;
   if (recording) {
     btnToggle.classList.add('recording');
-    btnToggle.querySelector('.btn-icon').innerHTML = SVG_ICONS.stop;
+    setIcon(btnToggle.querySelector('.btn-icon'), SVG_ICONS.stop);
     btnToggle.querySelector('.btn-label').textContent = 'Stop Recording';
     btnToggle.setAttribute('aria-label', 'Stop Recording');
     recordingStatus.classList.remove('hidden');
@@ -201,7 +237,7 @@ function setRecordingState(recording) {
     }
   } else {
     btnToggle.classList.remove('recording');
-    btnToggle.querySelector('.btn-icon').innerHTML = SVG_ICONS.play;
+    setIcon(btnToggle.querySelector('.btn-icon'), SVG_ICONS.play);
     btnToggle.querySelector('.btn-label').textContent = 'Start Recording';
     btnToggle.setAttribute('aria-label', 'Start Recording');
     recordingStatus.classList.add('hidden');
@@ -223,7 +259,7 @@ function setRecordingState(recording) {
  */
 function renderActionLog(actions) {
   currentActions = actions;
-  actionList.innerHTML = '';
+  actionList.replaceChildren();
 
   if (!actions || actions.length === 0) {
     emptyLogMsg.classList.remove('hidden');
@@ -268,7 +304,7 @@ function createActionEntry(action, index) {
   // Icon
   const icon = document.createElement('span');
   icon.className = 'action-icon';
-  icon.innerHTML = getActionIcon(action);
+  setIcon(icon, getActionIcon(action));
   icon.setAttribute('aria-hidden', 'true');
   li.appendChild(icon);
 
@@ -339,9 +375,9 @@ function createActionEntry(action, index) {
 
       const aIcon = document.createElement('span');
       aIcon.className = 'assertion-icon';
-      aIcon.innerHTML = assertion.result
+      setIcon(aIcon, assertion.result
         ? (assertion.result.passed ? SVG_ICONS.check : SVG_ICONS.fail)
-        : SVG_ICONS.check;
+        : SVG_ICONS.check);
       item.appendChild(aIcon);
 
       const aText = document.createElement('span');
@@ -365,7 +401,7 @@ function createActionEntry(action, index) {
 
       const btnDelAssertion = document.createElement('button');
       btnDelAssertion.className = 'btn-icon-only btn-delete';
-      btnDelAssertion.innerHTML = SVG_ICONS.remove;
+      setIcon(btnDelAssertion, SVG_ICONS.remove);
       btnDelAssertion.title = 'Delete assertion';
       btnDelAssertion.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -406,7 +442,7 @@ function createActionEntry(action, index) {
 
   const btnDelete = document.createElement('button');
   btnDelete.className = 'btn-icon-only btn-delete';
-  btnDelete.innerHTML = SVG_ICONS.remove;
+  setIcon(btnDelete, SVG_ICONS.remove);
   btnDelete.title = 'Delete action';
   btnDelete.setAttribute('aria-label', `Delete action ${index + 1}`);
   btnDelete.addEventListener('click', (e) => {
@@ -537,8 +573,8 @@ btnSaveSession?.addEventListener('click', async () => {
 
   const result = await sendMessage({ kind: 'SAVE_SESSION', sessionName: name });
   if (result && result.success) {
-    btnSaveSession.innerHTML = `<span class="btn-svg">${SVG_ICONS.check}</span>Saved`;
-    setTimeout(() => { btnSaveSession.innerHTML = `<span class="btn-svg">${SVG_ICONS.save}</span>Save`; }, 2000);
+    setIconWithText(btnSaveSession, SVG_ICONS.check, 'Saved');
+    setTimeout(() => { setIconWithText(btnSaveSession, SVG_ICONS.save, 'Save'); }, 2000);
     await loadSessions();
   }
 });
@@ -791,7 +827,7 @@ btnExportZip?.addEventListener('click', async () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    zipStatus.innerHTML = `<span class="btn-svg" style="display:inline-flex;vertical-align:middle;margin-right:4px">${SVG_ICONS.check}</span>${filename} — ${screenshotCount} screenshot${screenshotCount !== 1 ? 's' : ''}`;
+    setIconWithText(zipStatus, SVG_ICONS.check, `${filename} — ${screenshotCount} screenshot${screenshotCount !== 1 ? 's' : ''}`, 'display:inline-flex;vertical-align:middle;margin-right:4px');
     zipStatus.classList.remove('hidden', 'error');
   } catch (e) {
     zipStatus.textContent = `Export failed: ${e.message}`;
@@ -816,7 +852,7 @@ btnRun?.addEventListener('click', async () => {
   const result = await sendMessage({ kind: 'RUN_ON_PLAYGROUND', forceNewTab: forceNew });
 
   if (result && result.success) {
-    replaySummary.innerHTML = `<span class="btn-svg" style="display:inline-flex;vertical-align:middle;margin-right:4px">${SVG_ICONS.check}</span>Playground opened. Script will be injected into the editor.`;
+    setIconWithText(replaySummary, SVG_ICONS.check, 'Playground opened. Script will be injected into the editor.', 'display:inline-flex;vertical-align:middle;margin-right:4px');
   } else {
     replaySummary.textContent = (result && result.error) || 'Failed to open playground';
   }
@@ -868,7 +904,7 @@ async function loadSessions() {
  * @param {SessionSummary[]} sessions
  */
 function renderSessionList(sessions) {
-  sessionList.innerHTML = '';
+  sessionList.replaceChildren();
 
   if (!sessions || sessions.length === 0) {
     emptySessionsMsg.classList.remove('hidden');

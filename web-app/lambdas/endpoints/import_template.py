@@ -4,13 +4,15 @@ from typing import Any, Dict, List
 from uuid import uuid4
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name, get_current_timestamp, require_scopes, validate_path_id
+from utils import create_response, get_table_name, get_current_timestamp
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to import template steps into a usecase.
@@ -23,16 +25,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with import confirmation
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/usecases.write'])
-        if error:
-            return error
-        
         # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Parse request body
         try:

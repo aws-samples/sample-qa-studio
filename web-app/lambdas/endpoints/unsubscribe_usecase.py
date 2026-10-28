@@ -5,13 +5,15 @@ from typing import Any, Dict, List
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from utils import create_response, get_table_name, extract_user_identity
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to unsubscribe a user from usecase notifications.
@@ -24,19 +26,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with subscription status
     """
     try:
-        # Validate scopes (write permission needed to modify subscriptions)
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
-        
+        user_identity = extract_user_identity(event)
         # Get user email from identity (fallback to username if no email)
         user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
         
         # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
@@ -60,10 +55,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             )
             deleted_count += 1
         
-        logger.info(f"Deleted {deleted_count} DynamoDB records for user {user_email}, usecase {usecase_id}")
+        logger.info(f"Deleted {deleted_count} DynamoDB records for usecase {usecase_id}")
         
         # Update SNS filter policy to remove this usecase from the user's subscription
-        logger.info(f"Calling remove_usecase_from_filter_policy for user {user_email}, usecase {usecase_id}")
+        logger.info(f"Calling remove_usecase_from_filter_policy for usecase {usecase_id}")
         remove_usecase_from_filter_policy(sns_client, user_email, usecase_id)
         
         # Return subscription status
@@ -86,7 +81,7 @@ def remove_usecase_from_filter_policy(sns_client, email: str, usecase_id_to_remo
         email: User email address
         usecase_id_to_remove: Usecase ID to remove from filter
     """
-    logger.info(f"=== Starting remove_usecase_from_filter_policy for email: {email}, usecase: {usecase_id_to_remove} ===")
+    logger.info(f"=== Starting remove_usecase_from_filter_policy, usecase: {usecase_id_to_remove} ===")
     
     topic_arn = os.environ.get('SNS_TOPIC_ARN')
     if not topic_arn:
@@ -104,25 +99,24 @@ def remove_usecase_from_filter_policy(sns_client, email: str, usecase_id_to_remo
         logger.info(f"Found {len(subscriptions)} total subscriptions")
         
         subscription_arn = None
-        for i, subscription in enumerate(subscriptions):
+        for subscription in subscriptions:
             endpoint = subscription.get('Endpoint')
             protocol = subscription.get('Protocol')
             arn = subscription.get('SubscriptionArn')
             
-            logger.info(f"Subscription[{i}]: endpoint={endpoint}, protocol={protocol}, arn={arn}")
             
             if endpoint == email and protocol == 'email' and arn != 'PendingConfirmation':
                 subscription_arn = arn
-                logger.info(f"Found matching subscription for {email}: {subscription_arn}")
+                logger.info(f"Found matching subscription: {subscription_arn}")
                 break
         
         if not subscription_arn:
-            logger.info(f"No confirmed SNS subscription found for {email}")
+            logger.info(f"No confirmed SNS subscription found")
             return  # Not an error - user might not have SNS subscription
         
         # Get current filter policy from SNS subscription (ONLY source of truth)
         current_usecases = get_current_filter_policy_usecases(sns_client, subscription_arn)
-        logger.info(f"Current SNS filter policy usecases for {email}: {current_usecases}, removing: {usecase_id_to_remove}")
+        logger.info(f"Current SNS filter policy usecases: {current_usecases}, removing: {usecase_id_to_remove}")
         
         # Check if the usecase is actually in the current filter policy
         usecase_found = False
@@ -145,18 +139,18 @@ def remove_usecase_from_filter_policy(sns_client, email: str, usecase_id_to_remo
         filtered_usecases = [id for id in current_usecases if id != usecase_id_to_remove]
         removed_count = len(current_usecases) - len(filtered_usecases)
         logger.info(f"Removed {removed_count} instances of usecase {usecase_id_to_remove}")
-        logger.info(f"Remaining usecases for {email}: {filtered_usecases}")
+        logger.info(f"Remaining usecases: {filtered_usecases}")
         
         # If no usecases left, unsubscribe completely
         if not filtered_usecases:
-            logger.info(f"User {email} has no remaining usecase subscriptions, unsubscribing from SNS")
+            logger.info(f"User has no remaining usecase subscriptions, unsubscribing from SNS")
             sns_client.unsubscribe(SubscriptionArn=subscription_arn)
-            logger.info(f"Successfully unsubscribed {email} from SNS topic")
+            logger.info(f"Successfully unsubscribed from SNS topic")
             return
         
         # Update filter policy with remaining usecases
         filter_policy = create_filter_policy_json(filtered_usecases)
-        logger.info(f"Updating filter policy for {email} with remaining usecases {filtered_usecases}: {filter_policy}")
+        logger.info(f"Updating filter policy with remaining usecases {filtered_usecases}: {filter_policy}")
         
         logger.info(f"About to call set_subscription_attributes with:")
         logger.info(f"  SubscriptionArn: {subscription_arn}")
@@ -170,7 +164,7 @@ def remove_usecase_from_filter_policy(sns_client, email: str, usecase_id_to_remo
         )
         
         logger.info("SUCCESS: set_subscription_attributes completed successfully")
-        logger.info(f"Successfully updated filter policy for {email}: {filter_policy}")
+        logger.info(f"Successfully updated filter policy: {filter_policy}")
         
         # Verify the update by reading the filter policy again
         logger.info("Verifying filter policy update...")
@@ -178,7 +172,7 @@ def remove_usecase_from_filter_policy(sns_client, email: str, usecase_id_to_remo
         logger.info(f"Verified filter policy after update: {verify_usecases}")
         
     except Exception as e:
-        logger.error(f"Error: Could not update SNS filter policy for {email}: {str(e)}", exc_info=True)
+        logger.error(f"Error: Could not update SNS filter policy: {str(e)}", exc_info=True)
         # Continue anyway - don't fail the unsubscribe operation
 
 

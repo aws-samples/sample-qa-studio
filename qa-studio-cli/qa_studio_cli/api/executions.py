@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from qa_studio_cli.api.client import ApiClient
+from qa_studio_cli.utils.log_filters import register_secret_value
 
 logger = logging.getLogger(__name__)
 
@@ -320,7 +321,11 @@ class ExecutionAPI:
             response = self.client.get(
                 f"/usecase/{usecase_id}/secrets/{secret_key}/value"
             )
-            return response.get("value")
+            value = response.get("value")
+            if value:
+                # Mask this value in every log written from now on
+                register_secret_value(value)
+            return value
         except Exception:
             return None
 

@@ -71,7 +71,7 @@ def _setup_dynamodb_mock(mock_dynamodb, suite_item=None, usecase_items=None, num
     """Configure mock_dynamodb.get_item and .query side effects for the full flow.
 
     Call order per usecase:
-      get_item(suite) -> query(mappings) -> [get_item(usecase_def), get_item(secrets), get_item(variables)] * N
+      get_item(suite) -> query(mappings) -> [get_item(usecase_def), get_item(variables)] * N
       -> get_item(steps query for each execution) ...
     We use side_effect to return the right response for each call.
     """
@@ -80,12 +80,11 @@ def _setup_dynamodb_mock(mock_dynamodb, suite_item=None, usecase_items=None, num
     if usecase_items is None:
         usecase_items = _usecase_mapping_items()[:num_usecases]
 
-    # Build get_item responses: suite, then (usecase_def, secrets, variables) per usecase
+    # Build get_item responses: suite, then (usecase_def, variables) per usecase
     get_item_responses = [{'Item': suite_item}]
     for mapping in usecase_items:
         uid = mapping['usecase_id']['S']
         get_item_responses.append({'Item': _usecase_definition_item(uid)})  # usecase def
-        get_item_responses.append({})  # secrets (empty)
         get_item_responses.append({})  # variables (empty)
 
     mock_dynamodb.get_item.side_effect = get_item_responses
@@ -143,12 +142,10 @@ class TestExecuteTestSuite:
         mock_dynamodb.get_item.side_effect = [
             {'Item': _suite_item()},           # get_test_suite
             {'Item': _usecase_definition_item('usecase-1')},  # get_usecase_definition (uc1)
-            {},                                 # get_usecase_secrets (uc1)
             {},                                 # get_usecase_variables (uc1)
             {},                                 # hooks (uc1)
             {},                                 # headers (uc1)
             {'Item': _usecase_definition_item('usecase-2')},  # get_usecase_definition (uc2)
-            {},                                 # get_usecase_secrets (uc2)
             {},                                 # get_usecase_variables (uc2)
             {},                                 # hooks (uc2)
             {},                                 # headers (uc2)
@@ -168,6 +165,9 @@ class TestExecuteTestSuite:
         body = json.loads(response['body'])
         assert len(body['execution_ids']) == 2
         mock_lambda.invoke.assert_not_called()
+        # H-1: secret values are never read into execution variables
+        read_sks = [c.kwargs['Key']['sk']['S'] for c in mock_dynamodb.get_item.call_args_list]
+        assert 'SECRETS' not in read_sks
 
     @patch('execute_test_suite.dynamodb')
     @patch('execute_test_suite.os.environ.get')
@@ -361,3 +361,14 @@ class TestResolveTriggeredBy:
         }
         result = resolve_triggered_by(identity, 'test-table')
         assert result == 'client-123'
+
+
+import pytest as _pytest  # noqa: E402
+from authz_test_support import resource_access_granted as _resource_access_granted  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: ownership is covered by test_suite_routes_access.py."""
+    with _resource_access_granted():
+        yield

@@ -17,6 +17,7 @@ class TestCreateTestSuite(unittest.TestCase):
         # Mock event
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'Smoke Tests',
                 'description': 'Critical path smoke tests',
                 'scope': 'suite:smoke-tests',
@@ -58,6 +59,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test creating suite with schedule configuration"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'Nightly Tests',
                 'description': 'Tests that run nightly',
                 'scope': 'suite:nightly',
@@ -91,6 +93,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that missing name returns 400"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'description': 'Test description',
                 'scope': 'suite:test'
             }),
@@ -113,6 +116,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that name shorter than 3 characters returns 400"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'AB',
                 'description': 'Test description',
                 'scope': 'suite:test'
@@ -136,6 +140,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that name longer than 100 characters returns 400"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'A' * 101,
                 'description': 'Test description',
                 'scope': 'suite:test'
@@ -159,6 +164,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that missing description returns 400"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'Test Suite',
                 'scope': 'suite:test'
             }),
@@ -181,6 +187,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that description longer than 500 characters returns 400"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'Test Suite',
                 'description': 'A' * 501,
                 'scope': 'suite:test'
@@ -204,6 +211,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that missing scope auto-generates from name"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'Test Suite',
                 'description': 'Test description'
             }),
@@ -230,6 +238,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that scope not starting with 'suite:' returns 400"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'Test Suite',
                 'description': 'Test description',
                 'scope': 'invalid:scope'
@@ -253,6 +262,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that non-array tags returns 400"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'Test Suite',
                 'description': 'Test description',
                 'scope': 'suite:test',
@@ -277,6 +287,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that missing api/suite.write scope returns 403"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'Test Suite',
                 'description': 'Test description',
                 'scope': 'suite:test',
@@ -305,6 +316,7 @@ class TestCreateTestSuite(unittest.TestCase):
         """Test that api/admin scope grants access"""
         event = {
             'body': json.dumps({
+                'application_id': 'app-a',
                 'name': 'Test Suite',
                 'description': 'Test description',
                 'scope': 'suite:test',
@@ -348,8 +360,21 @@ class TestCreateTestSuite(unittest.TestCase):
         
         self.assertEqual(response['statusCode'], 400)
         body = json.loads(response['body'])
-        self.assertIn('Invalid JSON', body['error'])
+
+        # The decorator resolves application_id from the body first
+        self.assertIn('application_id is required', body['error'])
 
 
 if __name__ == '__main__':
     unittest.main()
+
+
+import pytest as _pytest  # noqa: E402
+from authz_test_support import resource_access_granted as _resource_access_granted  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: ownership is covered by test_suite_routes_access.py."""
+    with _resource_access_granted():
+        yield

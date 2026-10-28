@@ -1,3 +1,4 @@
 click>=8.1.7
-requests>=2.31.0
+requests>=2.33.0
 pydantic>=2.5.0
+idna>=3.15

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from qa_studio_cli.utils.log_filters import ThreadLogFilter
+from qa_studio_cli.utils.logger import create_artifact_file_handler
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,7 @@ class ArtifactCapture:
         """Setup log file path and configure logging."""
         self.log_path = self.temp_dir / "logs.txt"
 
-        file_handler = logging.FileHandler(self.log_path)
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        ))
+        file_handler = create_artifact_file_handler(self.log_path)
 
         self._thread_filter = ThreadLogFilter(threading.get_ident())
         file_handler.addFilter(self._thread_filter)

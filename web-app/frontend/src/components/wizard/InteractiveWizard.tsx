@@ -10,7 +10,7 @@ import Spinner from "@cloudscape-design/components/spinner";
 import Box from "@cloudscape-design/components/box";
 import Modal from "@cloudscape-design/components/modal";
 import Breadcrumb from '../common/Breadcrumb';
-import { api } from '../../utils/api';
+import { api, wizardApi } from '../../utils/api';
 import WizardLiveView from './WizardLiveView';
 import WizardStepBuilder from './WizardStepBuilder';
 import WizardStepsList from './WizardStepsList';
@@ -152,7 +152,7 @@ export default function InteractiveWizard() {
 
     try {
       setError(null);
-      const response = await api.post(`wizard/${session.sessionId}/step`, stepData);
+      const response = await wizardApi.addStep(session.sessionId, session.usecaseId, stepData);
       
       console.log('Step added successfully:', response);
       
@@ -212,7 +212,7 @@ export default function InteractiveWizard() {
 
     try {
       setError(null);
-      await api.post(`wizard/${session.sessionId}/restart`, {});
+      await wizardApi.restart(session.sessionId, session.usecaseId);
       
       // Clear current step
       setCurrentStep(null);

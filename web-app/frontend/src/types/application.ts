@@ -4,6 +4,8 @@ export interface Application {
   base_url: string;
   description: string;
   team: string;
+  /** Owning team id; null/absent for an orphaned app (admin-only). */
+  owner_team_id?: string | null;
   environments: string[];
   created_at: string;
   updated_at: string;

@@ -4,8 +4,10 @@ from typing import Any, Dict
 from utils import (
     create_response,
     get_table_name,
-    require_scopes,
-    validate_path_id)
+    validate_path_id,
+    extract_user_identity,
+)
+from resource_auth import require_resource_access, suite_from_path
 from test_suite_schema import get_test_suites_pk, get_suite_sk
 
 # Configure logging
@@ -13,6 +15,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', suite_from_path, scopes=['api/suite.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to get a specific test suite by ID.
@@ -29,16 +32,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     try:
         # Extract suite_id from path parameters
-        path_params = event.get('pathParameters', {})
         suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')
         if error:
             return error
         
-        # Validate scope access (requires api/suite.read or admin)
-        user_identity, error_response = require_scopes(event, ['api/suite.read'])
-        if error_response:
-            return error_response
-        
+        user_identity = extract_user_identity(event)
         logger.info(f"Getting test suite {suite_id} for user: {user_identity.get('identity')}")
         
         # Initialize Amazon DynamoDB client

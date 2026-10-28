@@ -3,6 +3,8 @@
 import logging
 from pathlib import Path
 
+from qa_studio_cli.utils.logger import create_artifact_file_handler
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,11 +25,7 @@ class SuiteLogCapture:
             logger.warning("Cannot create suite log directory: %s", e)
             return None
 
-        handler = logging.FileHandler(self.log_path)
-        handler.setLevel(logging.DEBUG)
-        handler.setFormatter(logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        ))
+        handler = create_artifact_file_handler(self.log_path)
         logging.getLogger().addHandler(handler)
         self._handler = handler
         return self.log_path

@@ -4,13 +4,15 @@ import os
 from typing import Any, Dict
 from uuid import uuid4
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp, require_scopes
+from utils import create_response, get_table_name, get_current_timestamp, extract_user_identity
+from resource_auth import require_resource_access, app_from_body
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', app_from_body('application_id'), scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to create a new usecase.
@@ -29,15 +31,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         except json.JSONDecodeError:
             return create_response(400, {'error': 'Invalid JSON in request body'})
         
-        # Validate scope (requires usecases.write or admin)
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
+        user_identity = extract_user_identity(event)
         
         user_email = user_identity.get('email', '')
         user_sub = user_identity.get('sub', '')
         
-        logger.info(f"Creating usecase for user: {user_email}")
+        logger.info("Creating usecase")
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
@@ -99,11 +98,20 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'test_platform': test_platform,
         }
 
-        # Application association (required)
-        application_id = body.get('application_id', '')
-        if not application_id:
-            return create_response(400, {'error': 'application_id is required'})
+        # Application association (required; edit on it checked by the decorator)
+        application_id = body['application_id']
         usecase['application_id'] = application_id
+
+        # Set owner_team_id from the parent app's team ownership
+        try:
+            app_record = table.get_item(Key={'pk': f'APPLICATION#{application_id}', 'sk': 'METADATA'}).get('Item', {})
+            owner_team_id = app_record.get('owner_team_id', '')
+            if owner_team_id:
+                usecase['owner_team_id'] = owner_team_id
+            else:
+                logger.warning(f"Application {application_id} has no owner_team_id set")
+        except Exception as e:
+            logger.error(f"Failed to read app {application_id} for owner_team_id: {e}")
         
         # Store mobile config fields only when non-empty
         mobile_fields = {

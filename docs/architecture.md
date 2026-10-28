@@ -177,16 +177,17 @@ sequenceDiagram
     User->>WebUI: Trigger test execution
     WebUI->>API: POST /usecase/{id}/execute
     API->>Lambda: Invoke
-    Lambda->>API: Create execution record (via DynamoDB)
+    Lambda->>Lambda: Authorize (api/usecases.execute + execute on owning app)<br/>mint execution token
+    Lambda->>API: Create execution record with worker_token_hash (via DynamoDB)
     Lambda->>SQS: Send execution message
     Lambda->>WebUI: Return execution ID
     
     SQS->>ECS: Trigger worker task
-    ECS->>Entrypoint: Start container (env: USECASE_ID, EXECUTION_ID, …)
-    Entrypoint->>Entrypoint: Read API URL + token endpoint from SSM
+    ECS->>Entrypoint: Start container (env: USECASE_ID, EXECUTION_ID, EXECUTION_TOKEN, …)
+    Entrypoint->>Entrypoint: Read API URL + token endpoint from SSM<br/>export QA_STUDIO_EXECUTION_TOKEN, unset EXECUTION_TOKEN
     Entrypoint->>RunnerCLI: exec qa-studio run --browser agentcore …
     
-    RunnerCLI->>API: Cognito M2M client_credentials grant<br/>GET execution, steps, variables
+    RunnerCLI->>API: Cognito M2M client_credentials grant<br/>GET execution, steps, variables<br/>(every call sends X-QA-Execution-Token)
     RunnerCLI->>AgentCore: Provision browser
     AgentCore->>RunnerCLI: CDP endpoint + live-view URL
     RunnerCLI->>API: POST live-view URL
@@ -200,10 +201,11 @@ sequenceDiagram
         Note over RunnerCLI,API: For retrieve_value / transform:<br/>POST runtime-variable per-capture
     end
     
-    RunnerCLI->>API: PATCH execution status (success/failed)
-    API->>EventBridge: Emit usecase.execution.completed
     RunnerCLI->>API: DELETE live-view
     RunnerCLI->>AgentCore: Delete browser
+    RunnerCLI->>API: Upload execution artifacts / request recording download
+    RunnerCLI->>API: PATCH execution status (success/failed)<br/>(the execution token stops working once the status is terminal)
+    API->>EventBridge: Emit usecase.execution.completed
     ECS->>ECS: Container exits with CLI's exit code
     
     Note over EventBridge: Event triggers downstream<br/>processes (e.g., cache building)
@@ -299,8 +301,8 @@ sequenceDiagram
 **Technology**: Amazon API Gateway (REST API) + AWS Lambda (Python 3.11)
 
 **Authentication**: 
-- Lambda authorizer validates JWT tokens from Cognito
-- Scope-based authorization (e.g., `api/usecase.read`, `api/usecase.write`)
+- Lambda authorizer validates JWT tokens from Cognito and injects the caller identity (user, OAuth client or worker, with team roles)
+- Scope-based authorization (e.g., `api/usecases.read`, `api/usecases.write`) plus team ownership on every resource route through `require_resource_access` (see [Authorization](#authorization))
 
 **Key Endpoints**:
 - `/usecases` - Test management (CRUD)
@@ -324,14 +326,16 @@ sequenceDiagram
   - `wizard` — defers to `wizard_worker.py` until the wizard migration lands.
 
 **Execution Flow (Web, batch mode)**:
-1. Entrypoint resolves `QA_STUDIO_API_URL` (SSM) and `OAUTH_TOKEN_ENDPOINT` (SSM), and exports `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` from the ECS `secrets:` injection.
+1. Entrypoint resolves `QA_STUDIO_API_URL` (SSM) and `OAUTH_TOKEN_ENDPOINT` (SSM), exports `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET` from the ECS `secrets:` injection, and turns `EXECUTION_TOKEN` into `QA_STUDIO_EXECUTION_TOKEN="{usecase_id}:{execution_id}:{token}"` (then unsets `EXECUTION_TOKEN`).
 2. `qa-studio run --browser agentcore --trigger-type worker` starts.
 3. The CLI authenticates via Cognito M2M client-credentials and fetches execution details over the public API.
 4. The AgentCore browser provisioner calls Bedrock to create + start a remote browser, returns CDP endpoint + live-view URL.
 5. The runner publishes the live-view URL via the `live-view` endpoint so the frontend can show it.
 6. For each step, the runner executes via NovaAct, posts step status + uploads artifacts via presigned PUT URLs, and (for `retrieve_value` / `transform` steps) publishes captured runtime variables per-capture.
-7. On success or failure, the runner PATCHes the final execution status — the server-side `update_execution_status` Lambda emits the `usecase.execution.completed` EventBridge event.
-8. The AgentCore browser + live-view record are torn down in the runner's `finally` block.
+7. The AgentCore browser + live-view record are torn down in the runner's `finally` block.
+8. The runner uploads execution artifacts (and, for mobile, requests the recording download), then PATCHes the final execution status — the server-side `update_execution_status` Lambda emits the `usecase.execution.completed` EventBridge event. The order matters: the [worker execution token](#worker-execution-capability) is only valid while the execution is `pending` or `running`.
+
+Every API call in steps 3-8 carries `X-QA-Execution-Token` (from `QA_STUDIO_EXECUTION_TOKEN`, exported by `entrypoint.sh`).
 
 **Execution Flow (Mobile, batch mode)**:
 1. Steps 1-3 as above.
@@ -388,6 +392,18 @@ sequenceDiagram
 - `SUITE#{id}` / `METADATA` - Suite metadata
 - `SUITE#{id}` / `USECASE#{id}` - Suite-usecase mappings
 
+**Authorization attributes** (new attributes on existing records; no new record types or GSIs):
+
+| Record (`pk` / `sk`) | Attribute | Type | Description |
+|---|---|---|---|
+| `OAUTH_CLIENTS` / `{client_id}` | `team_id` | String | Team the client is bound to. Required for new clients; a record without it is an unbound client and gets no team role (fail closed). |
+| `OAUTH_CLIENTS` / `{client_id}` | `team_role` | String (`editor` \| `executor` \| `viewer`) | The client's role in `team_id`: the creator's role capped at `editor`. Any other value is ignored by the authorizer. |
+| `USECASE_EXECUTION#{usecase_id}` / `EXECUTION#{execution_id}` | `worker_token_hash` | String (64-char lowercase hex) | SHA-256 of the worker execution token. Written by `execute_usecase` for `Scheduled` and `OnDemandHeadless` runs only; the token itself is never stored. |
+| `USECASES` / `USECASE#{id}` | `application_id`, `owner_team_id` | String | Owner chain used by the resolvers. Now always stamped when a use case is created (create, import, wizard start, template apply, clone) and re-stamped when it moves to another app. |
+| `USECASE#{id}` / `OVERRIDE` | `allowed_subs`, `allowed_roles` | List of String | Optional per-test-case visibility override (read only; no endpoint writes it yet). |
+
+**Removed record:** `ADMIN_COUNT` / `GLOBAL` (the old team-admin counter). The last-admin guard now counts the `admins` Cognito group, and the team admin migration deletes the record.
+
 **S3 Bucket**:
 - Artifacts organized by execution ID
 - Presigned URLs for secure uploads
@@ -411,21 +427,98 @@ sequenceDiagram
 
 ### Authorization
 
-**Scope-Based Access Control**:
-- `api/usecase.read` - Read tests
-- `api/usecase.write` - Create/update/delete tests
-- `api/suite.read` - Read suites
-- `api/suite.write` - Create/update/delete suites
-- `api/execution.read` - Read execution results
-- `api/execution.write` - Trigger executions
-- `api/oauth.read` - Read OAuth clients
-- `api/oauth.write` - Create/manage OAuth clients
+Authorization has two layers: OAuth scopes (what kind of operation) and team ownership (which resources). The role model and per-role rules are in [User Management](user-management.md); this section covers how they're enforced.
 
-**Lambda Authorizer**:
-- Validates JWT signature
-- Checks token expiration
-- Extracts scopes from token
-- Caches authorization decisions (5 minutes)
+#### User journey
+
+1. An Admin creates a team and adds members with team roles (`team_lead`, `editor`, `executor`, `viewer`). Admin itself is studio-wide and comes only from the `admins` group.
+2. A Team Lead creates an application for their team. Editors create use cases and suites inside it; every new use case is stamped with the app's `application_id` and `owner_team_id`.
+3. An Editor creates an OAuth client for CI and picks the team. The client acts as an Editor (or lower) of that team only.
+4. An Executor (or the CI client) starts a run. `execute_usecase` checks execute on the owning app, creates the execution with a token hash and starts the worker, which may then act on that one execution until it finishes.
+5. A user of another team who opens any of these resources by ID or link gets 403 (404 for an unknown ID, a mismatched use case/execution pair, or a use case hidden by a visibility override).
+
+**Scope-Based Access Control**: scopes follow `api/{resource}.read|write` (plus `api/usecases.execute`, `api/teams.manage`, `api/admin`) and are derived from Cognito groups by `role_scopes.py`. The authoritative list is the API resource server in `web-app/lib/auth-stack.ts`; see the [scope table](api-reference.md#oauth-scopes).
+
+**Lambda Authorizer** (`web-app/lambdas/auth/authorizer.py`):
+- Validates the JWT signature and expiration; caches decisions for 5 minutes (API Gateway authorizer cache)
+- **Users**: scopes and `isAdmin` come from Cognito groups. Only `admins` sets `isAdmin`; a `team-{id}-{role}` group adds a team role only when `role` is one of the four team roles (a legacy `team-{id}-admin` grants nothing)
+- **Worker**: a client token whose `client_id` equals `WORKER_CLIENT_ID` gets `identityType=worker` and no team roles. It can only act through the execution capability below
+- **OAuth clients**: `_lookup_client_binding` does a `GetItem` on `OAUTH_CLIENTS/{client_id}` (projection `team_id`, `team_role`) and emits `teamRoles=[{team_id, role}]`. Results are cached in the warm container for 60 seconds. A missing record, a missing `team_id`, a role outside `editor`/`executor`/`viewer`, or a lookup error emits `[]` (fail closed; errors aren't cached)
+- `api/admin` and `api/teams.manage` are stripped from every client token
+- IAM: `dynamodb:GetItem` on the table, restricted with `dynamodb:LeadingKeys = ["OAUTH_CLIENTS"]` (`lib/authorizer-client-binding.ts`)
+
+#### Central resource check: `require_resource_access`
+
+Every routed handler that touches a team-owned resource is wrapped by one decorator in `lambdas/endpoints/resource_auth.py`:
+
+```python
+@require_resource_access('execute', usecase_from_path,
+                         scopes=['api/usecases.execute'], allow_worker=True)
+def handler(event, context): ...
+```
+
+Order of checks:
+
+1. `require_scopes(event, scopes)`: 403 before anything is read.
+2. The **resolver** loads the owner chain with narrow `GetItem` projections (`permissions_repo`). It returns 400 for an invalid ID and 404 when the resource doesn't exist or doesn't belong to its parent.
+3. **Worker** identity: 403 unless `allow_worker=True`, then the execution capability check.
+4. Everyone else: `authorize_resource(identity, action, owner_team_id, ...)` with the ceiling rule for shared access. A record without `application_id` resolves to no owner, so only admins pass (orphans fail closed).
+5. For `view` on a use case (and its executions), the per-test-case override; a hidden use case returns 404.
+
+| Resolver | Path / body | Owner chain |
+|---|---|---|
+| `usecase_from_path` | `/usecase/{id}` | `USECASES/USECASE#{id}` → `application_id` → app `owner_team_id` |
+| `execution_from_path` | `/usecase/{id}/executions/{executionId}` | `USECASE_EXECUTION#{id}/EXECUTION#{executionId}` must exist, then the use case |
+| `suite_from_path` | `/test-suites/{suite_id}` | `TEST_SUITES/SUITE#{suite_id}` → app |
+| `suite_execution_from_path` | `/test-suites/{suite_id}/executions/{execution_id}` | `SUITE_EXECUTION#{suite_id}/EXECUTION#{execution_id}` must exist, then the suite |
+| `app_from_path` | `/applications/{id}` | `APPLICATION#{id}` `owner_team_id` |
+| `app_from_body(field)` | body `application_id` | target app (create use case/suite, import, wizard start, template apply) |
+| `usecase_from_body(field)` | body `usecaseId` | existing use case (`/generate-s3-url`) |
+| `wizard_session_from_path` | `/wizard/{sessionId}/...` + `usecaseId` (path, query or body) | session execution record under the use case, then the use case |
+
+Related helpers: `require_team_role` (team routes, OAuth client creation), `require_owner_team_lead` (application update/delete; owner team only, never via a share), `require_oauth_client_manager` (client delete/rotate), `authorize_target_app` (moving a use case or suite), `can_view_testcase_batch` (list filtering).
+
+Two tests keep this from regressing: `test_route_coverage.py` parses `api-stack.ts` and the router and fails when a routed handler has neither the decorator nor an allowlist entry with a reason, and `test_cross_team_matrix.py` runs every routed handler against 12 identities (owner roles, other team, shares, admin, bound/unbound client, worker).
+
+#### Worker execution capability
+
+The worker shares one M2M client across all tasks, so its identity alone grants nothing. Each cloud run gets its own capability:
+
+```mermaid
+sequenceDiagram
+    participant Caller as User / CI client
+    participant Exec as execute_usecase
+    participant DDB as DynamoDB
+    participant ECS as ECS task
+    participant API as API (resource_auth)
+
+    Caller->>Exec: POST /usecase/{id}/execute (OnDemandHeadless / Scheduled)
+    Exec->>Exec: token = secrets.token_urlsafe(32)
+    Exec->>DDB: put EXECUTION#{executionId} with worker_token_hash = sha256(token), status pending
+    Exec->>ECS: RunTask with env EXECUTION_TOKEN = token
+    ECS->>ECS: entrypoint.sh exports QA_STUDIO_EXECUTION_TOKEN = usecase_id:execution_id:token
+    ECS->>API: request + X-QA-Execution-Token
+    API->>DDB: GetItem USECASE_EXECUTION#{usecase_id}/EXECUTION#{execution_id}
+    API->>API: compare_digest(sha256(token), hash), status in {pending, running},<br/>path use case / executionId / suite execution match
+    API-->>ECS: 2xx, or 403 "Worker capability required"
+```
+
+- Only routes the runner needs set `allow_worker=True`: reading the use case, steps, variables, secret keys and values, execution, execution steps, variables and headers; execution status, step status, runtime variables, live view (get/create/delete), execution and step artifact URLs, artifact confirmation, mobile metadata, recording download, trajectory upload/download URLs, suite execution status and suite artifact URLs. Wizard routes never allow the worker; `wizard_worker.py` talks to AWS directly.
+- `ci_runner` and `OnDemand` runs get no token. A local `qa-studio run` uses the user's or CI client's own token and team role instead.
+- The token expires with the execution: once the status is terminal, every worker call is denied.
+- EventBridge schedules invoke `execute_usecase` / `execute_test_suite` without a `requestContext`. That path is IAM-only and skips the decorator; `Scheduled` runs still get a token.
+
+#### Audit and access events
+
+Structured JSON lines in the endpoint Lambda logs (CloudWatch Logs Insights):
+
+| Event | Emitted by | Fields |
+|---|---|---|
+| `permission_change` / `app_base_url_change` | `update_application` when `base_url` changes | `actor {sub, client_id}`, `target {app_id, owner_team_id}`, `details {old, new}` |
+| `permission_change` / `revoke_access` (reason `app_deleted`) | `delete_application`, per revoked grant | `actor`, `target {owner_team_id, target_team_id, app_id}`, `details {grant_id, reason}` |
+| `secret_value_access` (plain log line) | `get_usecase_secret_value` | `type`, `sub`, `client_id`, `usecase`, `key` (never the value) |
+
+Every `permission_change` line also carries `event_type`, `timestamp`, `action`.
 
 ### Data Protection
 

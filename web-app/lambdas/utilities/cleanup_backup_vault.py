@@ -163,11 +163,13 @@ def wait_for_deletions(vault_name: str, max_wait_time: int = MAX_WAIT_TIME) -> b
                 return True
             
             logger.info(f"Still waiting for {len(recovery_points)} recovery points to be deleted...")
-            time.sleep(POLL_INTERVAL)
+            # Intentional: poll while waiting for recovery-point deletion (max_wait_time).
+            time.sleep(POLL_INTERVAL)  # nosemgrep
             
         except Exception as e:
             logger.error(f"Error checking recovery point status: {str(e)}")
-            time.sleep(POLL_INTERVAL)
+            # Intentional: back off before re-polling after an error (max_wait_time).
+            time.sleep(POLL_INTERVAL)  # nosemgrep
     
     logger.warning(f"Timeout waiting for recovery points to be deleted after {max_wait_time} seconds")
     return False

@@ -5,13 +5,15 @@ from typing import Any, Dict, List
 from uuid import uuid4
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_current_timestamp, require_scopes, validate_path_id
+from utils import create_response, get_table_name, get_current_timestamp, extract_user_identity
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to subscribe a user to usecase notifications.
@@ -24,19 +26,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with subscription status
     """
     try:
-        # Validate scopes (write permission needed to modify subscriptions)
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
-        
+        user_identity = extract_user_identity(event)
         # Get user email from identity (fallback to username if no email)
         user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
         
         # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
@@ -52,7 +47,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
         
         table.put_item(Item=subscription)
-        logger.info(f"Created subscription record for {user_email} to usecase {usecase_id}")
+        logger.info(f"Created subscription record for usecase {usecase_id}")
         
         # Subscribe user to SNS topic and set/update filter policy
         configure_sns_subscription_with_filter(sns_client, table, user_email, usecase_id)
@@ -94,7 +89,7 @@ def configure_sns_subscription_with_filter(sns_client, table, email: str, usecas
             if subscription.get('Endpoint') == email and subscription.get('Protocol') == 'email':
                 subscription_arn = subscription.get('SubscriptionArn')
                 existing_subscription = True
-                logger.info(f"User {email} already subscribed to SNS topic with ARN: {subscription_arn}")
+                logger.info(f"User already subscribed to SNS topic with ARN: {subscription_arn}")
                 break
         
         # If not subscribed, subscribe with initial filter policy
@@ -111,13 +106,13 @@ def configure_sns_subscription_with_filter(sns_client, table, email: str, usecas
             )
             
             subscription_arn = subscribe_response.get('SubscriptionArn')
-            logger.info(f"Successfully subscribed {email} to SNS topic with filter policy {initial_filter_policy}. Subscription ARN: {subscription_arn}")
+            logger.info(f"Successfully subscribed to SNS topic with filter policy {initial_filter_policy}. Subscription ARN: {subscription_arn}")
         else:
             # For existing subscriptions, update the filter policy to include the new usecase
             if subscription_arn and subscription_arn != 'PendingConfirmation':
                 update_filter_policy_for_user(sns_client, table, email, usecase_id)
             else:
-                logger.info(f"Subscription pending confirmation for {email} - filter policy is updated after confirmation")
+                logger.info(f"Subscription pending confirmation - filter policy is updated after confirmation")
     
     except Exception as e:
         logger.error(f"Error ensuring SNS subscription with filter: {str(e)}", exc_info=True)
@@ -154,7 +149,7 @@ def update_filter_policy_for_user(sns_client, table, email: str, usecase_id: str
     
     # Get current filter policy from SNS subscription (ONLY source of truth)
     current_usecases = get_current_filter_policy_usecases(sns_client, subscription_arn)
-    logger.info(f"Current SNS filter policy usecases for {email}: {current_usecases}")
+    logger.info(f"Current SNS filter policy usecases: {current_usecases}")
     
     # Add the new usecase if not already in the list
     if usecase_id not in current_usecases:
@@ -162,7 +157,7 @@ def update_filter_policy_for_user(sns_client, table, email: str, usecase_id: str
     
     # Create filter policy JSON with updated usecases
     filter_policy = create_filter_policy_json(current_usecases)
-    logger.info(f"Setting filter policy for {email} with usecases {current_usecases}: {filter_policy}")
+    logger.info(f"Setting filter policy with usecases {current_usecases}: {filter_policy}")
     
     # Set the filter policy
     sns_client.set_subscription_attributes(
@@ -171,7 +166,7 @@ def update_filter_policy_for_user(sns_client, table, email: str, usecase_id: str
         AttributeValue=filter_policy
     )
     
-    logger.info(f"Successfully set filter policy for {email}: {filter_policy}")
+    logger.info(f"Successfully set filter policy: {filter_policy}")
 
 
 def get_current_filter_policy_usecases(sns_client, subscription_arn: str) -> List[str]:

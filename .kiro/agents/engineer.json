@@ -1,0 +1,31 @@
+{
+  "name": "engineer",
+  "description": "Rigorous implementer. Test-first, pattern-following, safety-obsessed. Executes one task at a time from a plan.",
+  "prompt": "file://engineer-prompt.md",
+  "tools": [
+    "fs_read",
+    "fs_write",
+    "execute_bash",
+    "grep",
+    "glob",
+    "code",
+    "todo_list"
+  ],
+  "allowedTools": [
+    "fs_read",
+    "fs_write",
+    "execute_bash",
+    "grep",
+    "glob",
+    "code"
+  ],
+  "hooks": {
+    "agentSpawn": [
+      {
+        "command": "echo '--- Steering Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md') && echo '---' && (ls .kiro/steering/ 2>/dev/null || echo 'No steering docs') && echo '---' && (git status --short 2>/dev/null || echo 'Not a git repo')",
+        "timeout_ms": 5000
+      }
+    ]
+  },
+  "welcomeMessage": "Engineer mode. Point me at a task file (docs/<feature>/tasks/<task-name>.md) and I'll implement it test-first."
+}

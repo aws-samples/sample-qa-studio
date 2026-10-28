@@ -210,6 +210,12 @@ def main_batch():
             app_identifier = execution.app_identifier or os.getenv('APP_IDENTIFIER', '')
             starting_page = MobileActuator.app_url(app_identifier)
             logger.info(f"Mobile starting_page: {starting_page}")
+            # Mobile sessions below pass ignore_https_errors=True on purpose:
+            # with a custom actuator there is no browser, and the flag only
+            # skips NovaAct's certificate pre-check of starting_page. That URL
+            # is a synthetic https:// encoding of the app identifier (e.g.
+            # https://com.android.chrome), so the check would always fail.
+            # Same behaviour as qa_studio_cli/runner/engine.py's mobile path.
 
             if use_ga_service:
                 workflow_name = ensure_workflow_definition(usecase_id)
@@ -395,7 +401,6 @@ def main_batch():
                         workflow=workflow,
                         headless=True,
                         logs_directory=execution_logs_dir,
-                        ignore_https_errors=True,
                         chrome_channel="chromium",
                         stop_hooks=[s3_writer],
                     )
@@ -416,7 +421,6 @@ def main_batch():
                     starting_page=execution.starting_url,
                     headless=True,
                     logs_directory=execution_logs_dir,
-                    ignore_https_errors=True,
                     chrome_channel="chromium",
                     stop_hooks=[s3_writer],
                     nova_act_api_key=nova_api_key,
@@ -492,7 +496,8 @@ def _execute_steps(nova, execution, execution_headers, template_parser, usecase_
         for header_name, header_value in execution_headers.headers.items():
             parsed_value = template_parser.parse_instruction(header_value)
             parsed_headers[header_name] = parsed_value
-            logger.info(f"Header: {header_name} = {parsed_value}")
+            # Log the header name only: values often carry tokens or API keys.
+            logger.info(f"Header set: {header_name}")
         
         nova.page.set_extra_http_headers(parsed_headers)
         # Navigate to starting URL to apply headers

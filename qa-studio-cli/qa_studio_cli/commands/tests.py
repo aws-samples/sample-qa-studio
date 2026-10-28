@@ -94,9 +94,11 @@ def get_test(ctx, id):
 @click.option("--url", "starting_url", prompt="Starting URL", help="Starting URL for the test")
 @click.option("--journey", "user_journey", prompt="User journey description", help="Description of the user journey")
 @click.option("--region", prompt=True, help="AWS region for execution (e.g. us-east-1, eu-central-1)")
+@click.option("--application-id", "application_id", required=True,
+              help="Application the test is created in (requires edit access on it)")
 @click.option("--export-to", "export_to", default=None, help="Directory to export generated JSON to")
 @click.pass_context
-def create_test(ctx, from_journey, title, starting_url, user_journey, region, export_to):
+def create_test(ctx, from_journey, title, starting_url, user_journey, region, application_id, export_to):
     """Create a test from a user journey description."""
     client = ctx.obj["client"]
 
@@ -116,7 +118,7 @@ def create_test(ctx, from_journey, title, starting_url, user_journey, region, ex
 
         # Step 2: Import the generated usecase
         usecase_data = json.loads(gen_response.usecase_data)
-        import_data = client.post("/import", json_body=usecase_data)
+        import_data = client.post("/import", json_body={**usecase_data, "application_id": application_id})
         import_response = ImportUsecaseResponse.model_validate(import_data)
 
         if not import_response.success:
@@ -219,6 +221,10 @@ def run_test(ctx, id, trigger_type):
 )
 @click.option("--base-url", default=None, help="Override starting_url for all imports")
 @click.option("--region", default=None, help="Override executing_region for all imports")
+@click.option(
+    "--application-id", "application_id", default=None,
+    help="Application the tests are imported into (required unless --dry-run; needs edit access)",
+)
 @click.option("--skip-secrets", is_flag=True, help="Skip interactive secret prompts")
 @click.option(
     "--format", "output_format",
@@ -228,7 +234,7 @@ def run_test(ctx, id, trigger_type):
 @click.pass_context
 def import_tests(
     ctx, path, dry_run, yes, non_interactive, secret_args, base_url, region,
-    skip_secrets, output_format,
+    application_id, skip_secrets, output_format,
 ):
     """Import test cases from a JSON file or folder."""
     from qa_studio_cli.importers.scanner import scan_all
@@ -239,6 +245,10 @@ def import_tests(
 
     # Parse --secret KEY=VALUE args up front (raises click.BadParameter on malformed)
     cli_secrets = _parse_cli_secrets(secret_args)
+
+    # Every use case belongs to an application; the API rejects imports without one
+    if not dry_run and not application_id:
+        raise click.UsageError("--application-id is required (omit only with --dry-run)")
 
     # Phase 1: Scan & Validate
     results = scan_all(Path(path))
@@ -364,6 +374,7 @@ def import_tests(
     # Phase 2: Import
     import_results = execute_imports(
         client, valid, base_url=base_url, region=region, secret_values=secret_values or None,
+        application_id=application_id,
     )
 
     # Display results

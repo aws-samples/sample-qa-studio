@@ -16,6 +16,7 @@ os.environ['DEFAULT_REGION'] = 'us-east-1'
 from create_usecase import handler as create_handler
 from get_usecase import handler as get_handler
 from update_usecase import handler as update_handler
+from authz_test_support import APP_ID, as_caller, owned_everything
 
 
 @pytest.fixture
@@ -50,17 +51,18 @@ def mock_user_identity():
 
 def test_create_usecase_with_enable_cache_true(dynamodb_table, mock_user_identity):
     """Test creating a usecase with enableCache=True."""
-    with patch('create_usecase.require_scopes', return_value=(mock_user_identity, None)):
+    with owned_everything():
         event = {
             'body': json.dumps({
                 'name': 'Test Usecase',
                 'description': 'Test description',
                 'starting_url': 'https://example.com',
+                'application_id': APP_ID,
                 'enableCache': True
             })
         }
         
-        response = create_handler(event, None)
+        response = create_handler(as_caller(event), None)
         
         assert response['statusCode'] == 201
         body = json.loads(response['body'])
@@ -69,17 +71,18 @@ def test_create_usecase_with_enable_cache_true(dynamodb_table, mock_user_identit
 
 def test_create_usecase_with_enable_cache_false(dynamodb_table, mock_user_identity):
     """Test creating a usecase with enableCache=False."""
-    with patch('create_usecase.require_scopes', return_value=(mock_user_identity, None)):
+    with owned_everything():
         event = {
             'body': json.dumps({
                 'name': 'Test Usecase',
                 'description': 'Test description',
                 'starting_url': 'https://example.com',
+                'application_id': APP_ID,
                 'enableCache': False
             })
         }
         
-        response = create_handler(event, None)
+        response = create_handler(as_caller(event), None)
         
         assert response['statusCode'] == 201
         body = json.loads(response['body'])
@@ -88,16 +91,17 @@ def test_create_usecase_with_enable_cache_false(dynamodb_table, mock_user_identi
 
 def test_create_usecase_default_enable_cache(dynamodb_table, mock_user_identity):
     """Test creating a usecase without enableCache field defaults to False."""
-    with patch('create_usecase.require_scopes', return_value=(mock_user_identity, None)):
+    with owned_everything():
         event = {
             'body': json.dumps({
                 'name': 'Test Usecase',
                 'description': 'Test description',
-                'starting_url': 'https://example.com'
+                'starting_url': 'https://example.com',
+                'application_id': APP_ID,
             })
         }
         
-        response = create_handler(event, None)
+        response = create_handler(as_caller(event), None)
         
         assert response['statusCode'] == 201
         body = json.loads(response['body'])
@@ -115,12 +119,12 @@ def test_get_usecase_returns_enable_cache_as_camelcase(dynamodb_table, mock_user
         'enable_cache': True
     })
     
-    with patch('get_usecase.require_scopes', return_value=(mock_user_identity, None)):
+    with owned_everything():
         event = {
             'pathParameters': {'id': 'test-id'}
         }
         
-        response = get_handler(event, None)
+        response = get_handler(as_caller(event), None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -138,12 +142,12 @@ def test_get_usecase_default_enable_cache_false(dynamodb_table, mock_user_identi
         'name': 'Test Usecase'
     })
     
-    with patch('get_usecase.require_scopes', return_value=(mock_user_identity, None)):
+    with owned_everything():
         event = {
             'pathParameters': {'id': 'test-id'}
         }
         
-        response = get_handler(event, None)
+        response = get_handler(as_caller(event), None)
         
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
@@ -165,19 +169,20 @@ def test_update_usecase_enable_cache_true(dynamodb_table, mock_user_identity):
         'enable_cache': False
     })
     
-    with patch('update_usecase.require_scopes', return_value=(mock_user_identity, None)):
+    with owned_everything():
         event = {
             'pathParameters': {'id': 'test-id'},
             'body': json.dumps({
                 'name': 'Test Usecase',
                 'description': 'Test',
                 'starting_url': 'https://example.com',
+                'application_id': APP_ID,
                 'active': False,
                 'enableCache': True
             })
         }
         
-        response = update_handler(event, None)
+        response = update_handler(as_caller(event), None)
         
         assert response['statusCode'] == 200
         
@@ -201,19 +206,20 @@ def test_update_usecase_enable_cache_false(dynamodb_table, mock_user_identity):
         'enable_cache': True
     })
     
-    with patch('update_usecase.require_scopes', return_value=(mock_user_identity, None)):
+    with owned_everything():
         event = {
             'pathParameters': {'id': 'test-id'},
             'body': json.dumps({
                 'name': 'Test Usecase',
                 'description': 'Test',
                 'starting_url': 'https://example.com',
+                'application_id': APP_ID,
                 'active': False,
                 'enableCache': False
             })
         }
         
-        response = update_handler(event, None)
+        response = update_handler(as_caller(event), None)
         
         assert response['statusCode'] == 200
         
@@ -237,18 +243,19 @@ def test_update_usecase_without_enable_cache_field(dynamodb_table, mock_user_ide
         'enable_cache': True
     })
     
-    with patch('update_usecase.require_scopes', return_value=(mock_user_identity, None)):
+    with owned_everything():
         event = {
             'pathParameters': {'id': 'test-id'},
             'body': json.dumps({
                 'name': 'Updated Name',
                 'description': 'Test',
                 'starting_url': 'https://example.com',
+                'application_id': APP_ID,
                 'active': False
             })
         }
         
-        response = update_handler(event, None)
+        response = update_handler(as_caller(event), None)
         
         assert response['statusCode'] == 200
         

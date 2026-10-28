@@ -2,13 +2,15 @@ import logging
 import json
 from typing import Any, Dict, List
 import boto3
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from utils import create_response, get_table_name, request_log_summary
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to reorder usecase steps.
@@ -21,18 +23,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with reorder confirmation
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/usecases.write'])
-        if error:
-            return error
-        
-        logger.info(f"Received request: {event}")
+        logger.info(f"Received request: {request_log_summary(event)}")
         
         # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Parse request body
         try:

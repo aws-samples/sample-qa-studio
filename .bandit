@@ -1,0 +1,5 @@
+# Test code and build output only. No global skips: real findings stay visible.
+# Endpoint tests use three globs instead of test_*.py so the application module
+# web-app/lambdas/endpoints/test_suite_schema.py is still scanned.
+[bandit]
+exclude = ./qa-studio-cli/tests,./web-app/worker/tests,./web-app/lambdas/endpoints/test_[!s]*.py,./web-app/lambdas/endpoints/test_sh*.py,./web-app/lambdas/endpoints/test_suite_[!s]*.py,./web-app/lambdas/endpoints/conftest.py,./web-app/lambdas/endpoints/authz_test_support.py,./web-app/lambdas/auth/test_*.py,./web-app/lambdas/auth/conftest.py,./web-app/worker/test_*.py,./qa-studio-cli/build,./node_modules

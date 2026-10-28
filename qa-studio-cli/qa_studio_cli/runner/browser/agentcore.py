@@ -296,7 +296,8 @@ def _wait_for_browser_ready(cp_client, browser_id: str, start_time: float) -> No
                 "Error checking AgentCore browser status (attempt %d): %s",
                 attempts, exc,
             )
-            time.sleep(_BROWSER_READY_POLL_INTERVAL_S)
+            # Intentional: poll interval before re-checking browser status after an error.
+            time.sleep(_BROWSER_READY_POLL_INTERVAL_S)  # nosemgrep
             continue
 
         status = response.get("status", "UNKNOWN")
@@ -311,7 +312,8 @@ def _wait_for_browser_ready(cp_client, browser_id: str, start_time: float) -> No
                 f"AgentCore browser {browser_id} ended in terminal status: {status}",
             )
         # CREATING / PENDING / unknown — keep polling
-        time.sleep(_BROWSER_READY_POLL_INTERVAL_S)
+        # Intentional: poll interval while the AgentCore browser becomes READY.
+        time.sleep(_BROWSER_READY_POLL_INTERVAL_S)  # nosemgrep
 
 
 def _safe_teardown(browser_session, cp_client, browser_id: str) -> None:

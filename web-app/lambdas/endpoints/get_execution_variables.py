@@ -1,13 +1,15 @@
 import logging
 from typing import Any, Dict, List
 import boto3
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from utils import create_response, get_table_name, validate_path_id, request_log_summary
+from resource_auth import require_resource_access, execution_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', execution_from_path, scopes=['api/executions.read'], allow_worker=True)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to get execution variables (both defined and runtime).
@@ -20,20 +22,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with variables and runtime_variables
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/executions.read'])
-        if error:
-            return error
-        
-        logger.info(f"Request: {event}")
+        logger.info(f"Received request: {request_log_summary(event)}")
         
         # Get parameters from path
         execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
         if error:
             return error
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')

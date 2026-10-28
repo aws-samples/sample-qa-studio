@@ -16,6 +16,7 @@ Nova Act QA Studio provides a RESTful API for managing test automation workflows
   - [OAuth 2.0 Client Credentials Flow](#oauth-20-client-credentials-flow)
   - [Token Management](#token-management)
   - [OAuth Scopes](#oauth-scopes)
+  - [Team Ownership and Access Control](#team-ownership-and-access-control)
 - [Usecase Management Endpoints](#usecase-management-endpoints)
   - [Create Usecase](#create-usecase)
   - [Get Usecase](#get-usecase)
@@ -65,9 +66,12 @@ curl -X POST 'https://api.example.com/api/oauth-clients' \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "CI/CD Runner - Production",
-    "scopes": ["api/suite.read", "api/suite.write", "api/execution.write"]
+    "teamId": "team-123",
+    "scopes": ["api/suite.read", "api/suite.write", "api/executions.write"]
   }'
 ```
+
+The client is bound to `teamId` and acts with your role in that team, capped at Editor.
 
 **Response**:
 ```json
@@ -91,7 +95,7 @@ curl -X POST \
   -d 'grant_type=client_credentials' \
   -d 'client_id=7abc123def456' \
   -d 'client_secret=secret_xyz789...' \
-  -d 'scope=api/suite.read api/suite.write api/execution.write'
+  -d 'scope=api/suite.read api/suite.write api/executions.write'
 ```
 
 **Response**:
@@ -127,29 +131,87 @@ Scopes follow the pattern `api/{resource}.{permission}`:
 
 | Scope | Description | Access Level |
 |-------|-------------|--------------|
-| `api/admin` | Full access to all resources | Admin |
-| `api/execution.write` | Create and update executions | Write |
-| `api/execution.read` | Read execution data | Read |
-| `api/usecases.write` | Create and update usecases | Write |
-| `api/usecases.read` | Read usecase data | Read |
-| `api/suite.write` | Manage test suites | Write |
-| `api/suite.read` | Read test suite data | Read |
+| `api/admin` | Full access to all resources. Users in the `admins` group only; never granted to OAuth clients | Admin |
+| `api/teams.manage` | Manage teams and membership. Never granted to OAuth clients | Admin |
+| `api/usecases.execute` | Trigger use case executions and read secret values | Execute |
+| `api/executions.write` | Modify execution records (status, steps, artifacts, live view) | Write |
+| `api/executions.read` | Read execution data, recordings, trajectories | Read |
+| `api/usecases.write` | Create, update, delete use cases | Write |
+| `api/usecases.read` | Read use case data | Read |
+| `api/suite.write` | Create, update, delete and execute test suites | Write |
+| `api/suite.read` | Read test suites and suite executions | Read |
+| `api/applications.write` | Create, update, delete applications (Team Lead of the owning team only) | Write |
+| `api/applications.read` | Read applications | Read |
+| `api/templates.write` / `api/templates.read` | Manage / read templates | Write / Read |
 | `api/oauth-clients.write` | Create, delete, and rotate OAuth clients | Write |
 | `api/oauth-clients.read` | List OAuth clients | Read |
 
-**Scope Requirements by Operation**:
+**Scope Requirements by Operation** (each also needs the team role in [Team ownership](#team-ownership-and-access-control)):
 
-| Operation | Required Scopes |
-|-----------|----------------|
-| Execute test suite | `api/suite.write`, `api/execution.write` |
-| Read test suite | `api/suite.read` |
-| Create execution | `api/execution.write` |
-| Update step status | `api/execution.write` |
-| Upload artifacts | `api/execution.write` |
-| Read execution data | `api/execution.read` |
-| Manage OAuth clients | `api/oauth-clients.write`, `api/oauth-clients.read` |
+| Operation | Required Scopes | Team action |
+|-----------|----------------|-------------|
+| Execute use case (`POST /usecase/{id}/execute`) | `api/usecases.execute` | execute |
+| Read a secret value (`GET /usecase/{id}/secrets/{key}/value`) | `api/usecases.execute` (was `api/usecases.read`) | execute |
+| Trajectory download URL (`GET .../trajectory/download-url`) | `api/executions.read` (was `api/executions.write`) | view |
+| Trajectory upload URL | `api/executions.write` | execute |
+| Execute test suite | `api/suite.write`, `api/executions.write` | execute |
+| Read test suite | `api/suite.read` | view |
+| Update execution / step status, upload artifacts | `api/executions.write` | execute |
+| Delete an execution | `api/executions.write` | edit (Editor+) |
+| Read execution data | `api/executions.read` | view |
+| `POST /generate-s3-url` (`app_binary`, `browser_policy`) | `api/usecases.write` | edit |
+| `POST /generate-s3-url` (`html`, `video`) | `api/executions.read` | view |
+| `GET /models` | `api/usecases.read` | – |
+| Manage OAuth clients | `api/oauth-clients.write`, `api/oauth-clients.read` | Editor+ of the client's team |
 
 **Best Practice**: Grant only the minimum scopes required for your use case.
+
+### Team ownership and access control
+
+Scopes alone aren't enough. Every route on a team-owned resource (application, use case, step, variable, hook, header, secret, schedule, execution, execution step, artifact, live view, wizard session, test suite, suite execution) resolves the owning team and checks the caller's role in it. The role rules are in [User Management](user-management.md#how-access-control-works).
+
+- **Users** get their team roles from Cognito groups (`team-{id}-{team_lead|editor|executor|viewer}`). Admins (`admins` group) bypass team checks.
+- **OAuth clients** act with the team role stored on the client (`team_id`, `team_role`, capped at `editor`). Clients without a team get 403 on every team-owned resource.
+- **The cloud worker** must send `X-QA-Execution-Token` (below).
+- **Orphans** (no `application_id`) are Admin-only.
+
+**Status codes added by these checks:**
+
+| Status | When |
+|--------|------|
+| `400` | Invalid path/body ID; missing `teamId` or `application_id`; missing `usecaseId` on wizard step/restart/command; `role: "admin"` on a team member endpoint; forbidden scope on an OAuth client; invalid `secret_key` |
+| `403` | Missing scope; no role (or too low a role) in the owning team; share level too low; orphan resource for a non-admin; unbound OAuth client; worker without a valid execution token; application update/delete by anyone but the owning Team Lead or an Admin |
+| `404` | Unknown resource; execution not under the use case in the path (or suite execution not under the suite); wizard session not under the use case; use case hidden by a visibility override; unknown `teamId` |
+| `409` | Demoting or deleting the last member of the `admins` group |
+
+#### `X-QA-Execution-Token` header
+
+| Header | Format | Sent by | Accepted when |
+|--------|--------|---------|---------------|
+| `X-QA-Execution-Token` | `{usecase_id}:{execution_id}:{token}` | The `qa-studio` CLI when `QA_STUDIO_EXECUTION_TOKEN` is set (the cloud worker) | The caller is the worker client, the route allows the worker, the token's SHA-256 matches `worker_token_hash` on that execution, the execution is `pending` or `running`, and the path's use case / `executionId` / suite execution match it |
+
+Header name matching is case-insensitive. Human and CI callers don't need it; a forged header never replaces the team check for them.
+
+#### Request body changes
+
+| Endpoint | Change |
+|----------|--------|
+| `POST /applications` | `teamId` (string) required. Caller must be Team Lead of that team or Admin. 404 for an unknown team |
+| `PATCH /applications/{id}`, `DELETE /applications/{id}` | Team Lead of the owning team or Admin. `DELETE` returns 204 |
+| `POST /oauth-clients` | `teamId` (string) required; caller must be Editor+ in it. Response adds `team_id`, `team_role` |
+| `POST /usecase` | `application_id` required (edit on that app); 404 for an unknown app |
+| `POST /import`, `POST /wizard/start`, `POST /templates/{id}/apply` | `application_id` (string) required; edit on that app. The new use case gets `application_id` and `owner_team_id` |
+| `POST /usecase/{id}/clone` | Optional `application_id` (defaults to the source's app); edit on that app |
+| `POST /usecase/{id}/steps` | The use case comes from the path; a different body `usecaseId` returns 400 |
+| `PATCH /usecase/{id}`, `PUT /test-suites/{suite_id}` | Changing `application_id` needs edit on the target app; clearing it is Admin-only |
+| `POST /wizard/{sessionId}/step`, `/restart`, `/command` | `usecaseId` (string, required) in the body |
+| `POST /test-suites/{suite_id}/usecases` | Each use case must belong to the suite's owning team (Admins exempt) |
+| `POST /generate-usecase` | `screenshot_manifest_key` must be `{usecase_id}/{session_id}/screenshot_manifest.json` for a session the caller can edit |
+| `POST /teams/{id}/members`, `PATCH /teams/{id}/members/{userId}` | `role` must be `team_lead`, `editor`, `executor` or `viewer`; `admin` returns 400 |
+
+#### Deletes return 204
+
+These now return `204 No Content` with an empty body: `DELETE /applications/{id}`, `DELETE /oauth-clients/{clientId}`, `DELETE /usecase/{id}`, `DELETE /usecase/{id}/steps/{stepId}`, `DELETE /usecase/{id}/schedule`, `DELETE /usecase/{id}/secrets`, `DELETE /usecase/{id}/executions/{executionId}`, `DELETE .../executions/{executionId}/live-view`, `DELETE /applications/{id}/usecases/{usecaseId}`, `DELETE /teams/{id}` (the orphaned-app and unassigned-member counts it used to return are kept in the `team_delete` audit entry).
 
 ---
 
@@ -593,7 +655,9 @@ Create and start a usecase execution.
 - `suite-execution-id` (string, optional) - Suite execution ID if part of a suite
 - `suite-id` (string, optional) - Suite ID if part of a suite
 
-**Required Scopes**: `api/execution.write` or `api/admin`
+**Required Scopes**: `api/usecases.execute` or `api/admin`, plus **execute** on the use case's owning application (Executor+ of the owning team, a team with an Execute/Full share, or an OAuth client bound to such a team). Orphan use cases (no application) are Admin-only. The worker identity can't start executions.
+
+For `Scheduled` and `OnDemandHeadless` runs the execution record gets a `worker_token_hash` and the ECS task gets the matching token (see [`X-QA-Execution-Token`](#x-qa-execution-token-header)). The token is never returned in the response.
 
 **Request Body**: None
 
@@ -630,7 +694,7 @@ Create and start a usecase execution.
 **Error Responses**:
 - `400 Bad Request` - Missing usecase ID or invalid trigger type
 - `401 Unauthorized` - Missing or invalid token
-- `403 Forbidden` - Insufficient scopes
+- `403 Forbidden` - Missing `api/usecases.execute`, no execute access on the owning application, orphan use case, unbound OAuth client, or worker identity
 - `404 Not Found` - Usecase not found
 - `500 Internal Server Error` - Server error
 
@@ -1380,7 +1444,7 @@ Create a suite execution record and execution records for all usecases in a test
 **Request Body Schema**:
 - `trigger_type` (string, required) - Must be "ci_runner"
 - `base_url` (string, optional) - Base URL override for all usecases. Replaces domain/origin while preserving path and query parameters
-- `variables` (object, optional) - Variable overrides (key-value pairs). Precedence: CLI > usecase > secrets
+- `variables` (object, optional) - Variable overrides (key-value pairs). Precedence: CLI > usecase. Secret values are never copied into execution variables; the runner reads them per step.
 - `region` (string, optional) - AWS region override for all executions
 - `model_id` (string, optional) - Bedrock model ID override for all executions
 
@@ -1527,7 +1591,7 @@ console.log(`Created ${data.execution_ids.length} executions`);
 - No ECS tasks are spawned when using `trigger_type=ci_runner`
 - All execution records are created with `status=pending`
 - Base URL override replaces only the scheme and domain, preserving path and query parameters
-- Variable merge precedence: CLI overrides > usecase variables > secrets
+- Variable merge precedence: CLI overrides > usecase variables (secret values are not merged)
 - Maximum recommended suite size: 10 usecases (to avoid API Gateway timeout)
 
 ---
@@ -1542,12 +1606,13 @@ Create a new OAuth client with specified scopes for CI/CD authentication.
 
 **Endpoint**: `POST /api/oauth-clients`
 
-**Required Scopes**: `api/oauth-clients.write` or `api/admin`
+**Required Scopes**: `api/oauth-clients.write` or `api/admin`, and Editor+ in `teamId` (or Admin)
 
 **Request Body**:
 ```json
 {
   "name": "CI/CD Runner - Production",
+  "teamId": "team-123",
   "scopes": [
     "api/suite.read",
     "api/suite.write",
@@ -1558,9 +1623,10 @@ Create a new OAuth client with specified scopes for CI/CD authentication.
 
 **Request Body Fields**:
 - `name` (string, required) - Client name for identification
+- `teamId` (string, required) - Team the client is bound to. The client acts with `team_role` = your role in that team, capped at `editor` (Admins create `editor` clients)
 - `scopes` (array, required) - List of OAuth scopes to grant
   - User can only grant scopes they possess (unless admin)
-  - Valid scopes: `api/suite.read`, `api/suite.write`, `api/execution.read`, `api/execution.write`, `api/oauth-clients.read`, `api/oauth-clients.write`, `api/admin`
+  - `api/admin` and `api/teams.manage` can't be granted to a client, even by an Admin (400)
 
 **Response (201 Created)**:
 ```json
@@ -1575,6 +1641,8 @@ Create a new OAuth client with specified scopes for CI/CD authentication.
   ],
   "created_date": "2026-02-16T12:00:00Z",
   "created_by": "user@example.com",
+  "team_id": "team-123",
+  "team_role": "editor",
   "refresh_token_validity": 30,
   "access_token_validity": 60,
   "id_token_validity": 60
@@ -1588,12 +1656,15 @@ Create a new OAuth client with specified scopes for CI/CD authentication.
 - `scopes` - Granted OAuth scopes
 - `created_date` - ISO8601 timestamp of creation
 - `created_by` - User who created the client
+- `team_id` - Team the client is bound to
+- `team_role` - The client's role in that team (`editor`, `executor` or `viewer`)
 - Token validity fields in minutes/days
 
 **Error Responses**:
-- `400 Bad Request` - Invalid scopes, missing name, or invalid request format
+- `400 Bad Request` - Invalid scopes, `api/admin` / `api/teams.manage` requested, missing name, missing `teamId`, or invalid request format
 - `401 Unauthorized` - Missing or invalid token
-- `403 Forbidden` - Insufficient scopes or privilege escalation attempt
+- `403 Forbidden` - Insufficient scopes, not Editor+ in `teamId`, or privilege escalation attempt
+- `404 Not Found` - `teamId` doesn't exist
 - `429 Too Many Requests` - Too many OAuth clients
 - `500 Internal Server Error` - Server error
 
@@ -1605,10 +1676,11 @@ curl -X POST \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "CI/CD Runner - Production",
+    "teamId": "team-123",
     "scopes": [
       "api/suite.read",
       "api/suite.write",
-      "api/execution.write"
+      "api/executions.write"
     ]
   }'
 ```
@@ -1625,6 +1697,7 @@ response = requests.post(
     },
     json={
         'name': 'CI/CD Runner - Production',
+        'teamId': 'team-123',
         'scopes': [
             'api/suite.read',
             'api/suite.write',
@@ -1635,10 +1708,15 @@ response = requests.post(
 
 data = response.json()
 client_id = data['client_id']
-client_secret = data['client_secret']  # Save this - it won't be shown again!
+client_secret = data['client_secret']
 
 print(f"Client ID: {client_id}")
-print(f"Client Secret: {client_secret}")
+# The secret is shown only once. Store it securely; never print or log it.
+import boto3, json
+boto3.client('secretsmanager').put_secret_value(
+    SecretId='qa-studio/ci-client',  # an existing secret you control
+    SecretString=json.dumps({'client_id': client_id, 'client_secret': client_secret}),
+)
 ```
 
 **Example (JavaScript)**:
@@ -1651,6 +1729,7 @@ const response = await fetch('https://api.example.com/api/oauth-clients', {
   },
   body: JSON.stringify({
     name: 'CI/CD Runner - Production',
+    teamId: 'team-123',
     scopes: [
       'api/suite.read',
       'api/suite.write',
@@ -1661,19 +1740,21 @@ const response = await fetch('https://api.example.com/api/oauth-clients', {
 
 const data = await response.json();
 console.log(`Client ID: ${data.client_id}`);
-console.log(`Client Secret: ${data.client_secret}`); // Save this!
+// data.client_secret is shown only once. Store it in a secrets manager
+// (e.g. AWS Secrets Manager or your CI secret store); never print or log it.
 ```
 
 **Security Notes**:
 - Client secret is ONLY returned at creation - save it securely
 - Users cannot grant scopes they don't possess (prevents privilege escalation)
-- Admin users can grant any scope
+- Admin users can grant any scope except `api/admin` and `api/teams.manage`
+- The authorizer reads the binding on every (uncached) request; clients created before team binding have no `team_id` and get 403 on team-owned resources. Re-create them with a `teamId`
 
 ---
 
 ### List OAuth Clients
 
-List all OAuth clients in the user pool with metadata.
+List OAuth clients with metadata. Admins see every client; other callers see only clients bound to teams where they are Editor or Team Lead.
 
 **Endpoint**: `GET /api/oauth-clients`
 
@@ -1689,6 +1770,7 @@ List all OAuth clients in the user pool with metadata.
       "created_date": "2026-02-16T12:00:00Z",
       "last_modified_date": "2026-02-16T12:00:00Z",
       "created_by": "user@example.com",
+      "team_id": "team-123",
       "allowed_oauth_scopes": [
         "api/suite.read",
         "api/suite.write",
@@ -1749,6 +1831,7 @@ data.clients.forEach(client => {
 **Security Notes**:
 - Client secrets are NEVER returned in list responses
 - Only shows clients created through the application (with metadata)
+- `team_id` is `null` for unbound legacy clients (shown as "Unbound (no access)" in the UI)
 
 ---
 
@@ -1761,20 +1844,14 @@ Delete an OAuth client, immediately revoking its credentials.
 **Path Parameters**:
 - `clientId` (string, required) - OAuth client ID to delete
 
-**Required Scopes**: `api/oauth-clients.write` or `api/admin`
+**Required Scopes**: `api/oauth-clients.write` or `api/admin`, and the caller must be the client's creator, a Team Lead of the client's team, or an Admin
 
-**Response (200 OK)**:
-```json
-{
-  "message": "OAuth client deleted successfully",
-  "client_id": "7abc123def456"
-}
-```
+**Response (204 No Content)**: empty body
 
 **Error Responses**:
 - `400 Bad Request` - Missing client ID
 - `401 Unauthorized` - Missing or invalid token
-- `403 Forbidden` - Client not created through application or insufficient permissions
+- `403 Forbidden` - Client not created through application, or caller isn't the creator, a Team Lead of the client's team, or an Admin
 - `404 Not Found` - Client not found
 - `500 Internal Server Error` - Server error
 
@@ -1794,7 +1871,7 @@ response = requests.delete(
     headers={'Authorization': f'Bearer {jwt_token}'}
 )
 
-if response.status_code == 200:
+if response.status_code == 204:
     print("OAuth client deleted successfully")
 ```
 
@@ -1818,7 +1895,7 @@ if (response.ok) {
 **Security Notes**:
 - Deletion is immediate - client cannot authenticate after deletion
 - Only clients with metadata (created through application) can be deleted
-- Users can only delete clients they created (unless admin)
+- Only the creator, a Team Lead of the client's team, or an Admin can delete a client
 
 ---
 
@@ -1848,9 +1925,9 @@ Generate a new client secret by recreating the OAuth client. Old secret is immed
 - `rotated_at` - ISO8601 timestamp of rotation
 
 **Error Responses**:
-- `400 Bad Request` - Missing client ID
+- `400 Bad Request` - Missing client ID, or the client holds `api/admin` / `api/teams.manage` (re-create it instead)
 - `401 Unauthorized` - Missing or invalid token
-- `403 Forbidden` - User doesn't own client or insufficient permissions
+- `403 Forbidden` - Caller isn't the creator, a Team Lead of the client's team, or an Admin
 - `404 Not Found` - Client not found
 - `500 Internal Server Error` - Server error
 
@@ -1876,10 +1953,15 @@ response = requests.post(
 
 data = response.json()
 new_client_id = data['client_id']
-new_client_secret = data['client_secret']  # Save this - it won't be shown again!
+new_client_secret = data['client_secret']
 
 print(f"New Client ID: {new_client_id}")
-print(f"New Client Secret: {new_client_secret}")
+# The secret is shown only once. Store it securely; never print or log it.
+import boto3, json
+boto3.client('secretsmanager').put_secret_value(
+    SecretId='qa-studio/ci-client',  # an existing secret you control
+    SecretString=json.dumps({'client_id': new_client_id, 'client_secret': new_client_secret}),
+)
 print(f"Rotated at: {data['rotated_at']}")
 ```
 
@@ -1898,7 +1980,8 @@ const response = await fetch(
 
 const data = await response.json();
 console.log(`New Client ID: ${data.client_id}`);
-console.log(`New Client Secret: ${data.client_secret}`); // Save this!
+// data.client_secret is shown only once. Store it in a secrets manager
+// (e.g. AWS Secrets Manager or your CI secret store); never print or log it.
 console.log(`Rotated at: ${data.rotated_at}`);
 ```
 
@@ -1906,12 +1989,12 @@ console.log(`Rotated at: ${data.rotated_at}`);
 - Old secret is immediately invalidated - update all systems using the client
 - Client ID changes during rotation - update configuration accordingly
 - New secret is ONLY shown once - save it securely
-- Users can only rotate secrets for clients they created (unless admin)
+- Only the creator, a Team Lead of the client's team, or an Admin can rotate a client
 
 **Implementation Notes**:
 - Cognito doesn't support in-place secret rotation
 - Rotation deletes and recreates the app client with same settings
-- All configuration (scopes, token validity) is preserved
+- All configuration (scopes, token validity, `team_id`, `team_role`) is preserved
 
 ---
 
@@ -1996,6 +2079,26 @@ All error responses follow this consistent format:
 ```
 
 **Solution**: Only grant scopes that your user account possesses, or contact an administrator.
+
+**Team Access Denied** (scope present, but no role in the owning team or a matching share, which includes unbound OAuth clients):
+```json
+{
+  "error": "Forbidden",
+  "message": "No access to this application"
+}
+```
+
+Other messages: `"Insufficient permissions for this action"` (role or share level too low), `"Application not accessible"` (orphan resource, Admin-only), `"Team lead of the owning team required"` (application update/delete).
+
+**Worker Without a Valid Execution Token**:
+```json
+{
+  "error": "Forbidden",
+  "message": "Worker capability required"
+}
+```
+
+**Solution**: Ask a Team Lead to add you (or bind your OAuth client) to the owning team with the required role. See [Team ownership and access control](#team-ownership-and-access-control).
 
 #### Validation Errors (400)
 
@@ -2586,6 +2689,20 @@ If you discover a security vulnerability, please email security@example.com inst
 ---
 
 ## Changelog
+
+### Team-bound authorization (security fixes C-1, H-1, H-2, H-3)
+**Breaking**:
+- Every team-owned resource route checks the caller's role in the owning team; orphan resources are Admin-only
+- `POST /oauth-clients` and `POST /applications` require `teamId`; `POST /import`, `POST /wizard/start` and `POST /templates/{id}/apply` require `application_id`; wizard `step` / `restart` / `command` require `usecaseId` in the body
+- OAuth clients without a team get 403 on team-owned resources; `api/admin` and `api/teams.manage` are never granted to or honored for clients
+- `POST /usecase/{id}/execute` and `GET /usecase/{id}/secrets/{key}/value` require `api/usecases.execute`; trajectory download URLs require `api/executions.read`
+- Application create/update/delete: Team Lead of the owning team or Admin
+- Team member endpoints reject `role: "admin"` (400); the last `admins` member can't be demoted or deleted (409)
+- More deletes return 204 (see [Deletes return 204](#deletes-return-204))
+
+**Added**:
+- `X-QA-Execution-Token` header for the cloud worker
+- `team_id` / `team_role` on OAuth client responses
 
 ### 2024-02-16 - Version 1.2.0
 **Added**:

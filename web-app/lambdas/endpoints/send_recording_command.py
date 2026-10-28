@@ -9,7 +9,8 @@ import boto3
 from pydantic import ValidationError
 
 from recording_models import RecordingCommandRequest
-from utils import create_response, require_scopes, validate_path_id
+from resource_auth import require_resource_access, wizard_session_from_path
+from utils import create_response, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
@@ -18,6 +19,7 @@ logger.setLevel(logging.INFO)
 eventbridge = boto3.client('events')
 
 
+@require_resource_access('edit', wizard_session_from_path, scopes=['api/usecases.write'])
 def handler(event, context):
     """
     Send a recording command (start/stop) to the wizard worker via EventBridge.
@@ -28,20 +30,16 @@ def handler(event, context):
     Path Parameters:
         sessionId: The wizard session ID
 
-    Request Body:
-        { "action": "recording_start" | "recording_stop" }
+    Request Body (RecordingCommandRequest):
+        { "usecaseId": "<id>", "action": "recording_start" | "recording_stop" }
 
     Returns:
         200: { "status": "command_sent", "commandId": "<uuid>" }
-        400: Invalid request body or missing sessionId
-        403: Insufficient scopes
+        400: Invalid request body or missing sessionId / usecaseId
+        403: Insufficient scopes or no edit access to the use case
+        404: Session not found under the use case
         500: Failed to emit EventBridge event
     """
-    # Validate scopes — recording commands are part of the usecase write workflow
-    user_identity, error = require_scopes(event, ['api/usecases.write'])
-    if error:
-        return error
-
     # Parse and validate sessionId from path parameters
     session_id, error = validate_path_id(
         event.get('pathParameters', {}).get('sessionId'), 'session ID'
@@ -51,7 +49,7 @@ def handler(event, context):
 
     # Parse request body
     try:
-        body = json.loads(event.get('body', '{}'))
+        body = json.loads(event.get('body') or '{}')
     except json.JSONDecodeError:
         return create_response(400, {'error': 'Invalid JSON in request body'})
 

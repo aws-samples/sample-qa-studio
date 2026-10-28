@@ -2,28 +2,40 @@ import json
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, get_table_name, require_scopes, validate_path_id, get_current_timestamp
+from utils import create_response, get_table_name, extract_user_identity, get_current_timestamp
+from resource_auth import require_resource_access, app_from_path, require_owner_team_lead
+from perm_audit import log_permission_change
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', app_from_path, scopes=['api/applications.write'])
 def handle(event: Dict[str, Any]) -> Dict[str, Any]:
-    user_identity, error_response = require_scopes(event, ['api/applications.write'])
-    if error_response:
-        return error_response
+    """
+    Update an application's metadata.
 
-    app_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'application ID')
-    if error:
-        return error
-
-    try:
-        body = json.loads(event.get('body', '{}'))
-    except json.JSONDecodeError:
-        return create_response(400, {'error': 'Invalid JSON in request body'})
+    Only a Team Lead of the owning team (or a studio admin) may update it;
+    shared access never allows it. A base_url change is audit-logged.
+    """
+    user_identity = extract_user_identity(event)
+    app_id = event['pathParameters']['id']  # validated by app_from_path
 
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(get_table_name())
+
+    current = table.get_item(Key={'pk': f'APPLICATION#{app_id}', 'sk': 'METADATA'}).get('Item')
+    if not current:
+        return create_response(404, {'error': 'Application not found'})
+    owner_team_id = current.get('owner_team_id') or None
+    role_err = require_owner_team_lead(user_identity, owner_team_id)
+    if role_err:
+        return role_err
+
+    try:
+        body = json.loads(event.get('body') or '{}')
+    except json.JSONDecodeError:
+        return create_response(400, {'error': 'Invalid JSON in request body'})
 
     update_parts = ['updated_at = :updated_at']
     expr_values: Dict[str, Any] = {':updated_at': get_current_timestamp()}
@@ -60,6 +72,13 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     except table.meta.client.exceptions.ConditionalCheckFailedException:
         return create_response(404, {'error': 'Application not found'})
 
+    if 'base_url' in body and body['base_url'] != current.get('base_url'):
+        log_permission_change(
+            actor={'sub': user_identity.get('sub', ''), 'client_id': user_identity.get('client_id', '')},
+            action='app_base_url_change',
+            target={'app_id': app_id, 'owner_team_id': owner_team_id or ''},
+            details={'old': current.get('base_url', ''), 'new': body['base_url']},
+        )
     # Update name in index record if changed
     if 'name' in body:
         table.update_item(

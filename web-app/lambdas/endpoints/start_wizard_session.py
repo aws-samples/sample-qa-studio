@@ -2,16 +2,20 @@ import json
 import os
 import uuid
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7, require_scopes
+from resource_auth import require_resource_access, app_from_body, new_usecase_owner_fields
+from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7
 
 dynamodb = boto3.client('dynamodb')
 ecs = boto3.client('ecs')
 
+@require_resource_access('edit', app_from_body('application_id'), scopes=['api/usecases.write'])
 def handler(event, context):
     """
     Start a wizard session by creating a usecase, execution, and ECS task.
     
     Request Body:
+    - application_id: Application the new use case belongs to (required;
+      edit on it is checked by the decorator)
     - name: Name of the wizard session (required)
     - starting_url: Starting URL for the wizard (required)
     - description: Optional description
@@ -22,14 +26,10 @@ def handler(event, context):
     Returns:
     - 201: Wizard session created successfully
     - 400: Missing required fields
-    - 403: Insufficient scopes
+    - 403: Insufficient scopes or no edit access to the application
+    - 404: Application not found
     - 500: Error creating session
     """
-    # Validate scopes - wizard creates usecases
-    user_identity, error = require_scopes(event, ['api/usecases.write'])
-    if error:
-        return error
-    
     try:
         body = json.loads(event.get('body', '{}'))
     except json.JSONDecodeError:
@@ -59,10 +59,14 @@ def handler(event, context):
     created_at = get_current_timestamp()
     
     try:
+        owner_fields = {key: {'S': value}
+                        for key, value in new_usecase_owner_fields(body['application_id']).items()}
+
         # Create usecase record
         dynamodb.put_item(
             TableName=table_name,
             Item={
+                **owner_fields,
                 'pk': {'S': 'USECASES'},
                 'sk': {'S': f'USECASE#{usecase_id}'},
                 'id': {'S': usecase_id},

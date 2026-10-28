@@ -391,7 +391,8 @@ class MobileActuator(BrowserActuatorBase, AppiumDriverManagerBase):
         if seconds == 0:
             self.wait_for_page_to_settle()
         else:
-            time.sleep(seconds)
+            # Intentional: explicit wait action; the caller requested this duration.
+            time.sleep(seconds)  # nosemgrep
         return None
 
     def wait_for_page_to_settle(self) -> JSONType:
@@ -483,7 +484,8 @@ class MobileActuator(BrowserActuatorBase, AppiumDriverManagerBase):
                         f"{attempt + 1}/{_MAX_OBSERVATION_RETRIES}), "
                         f"waiting {_SESSION_RECOVERY_BACKOFF_S}s for recovery..."
                     )
-                    time.sleep(_SESSION_RECOVERY_BACKOFF_S)
+                    # Intentional: back off so the device session can recover (bounded retries).
+                    time.sleep(_SESSION_RECOVERY_BACKOFF_S)  # nosemgrep
                 else:
                     _LOGGER.warning(
                         f"Observation attempt {attempt + 1}/{_MAX_OBSERVATION_RETRIES} "
@@ -491,7 +493,8 @@ class MobileActuator(BrowserActuatorBase, AppiumDriverManagerBase):
                     )
                     # Wait briefly and retry
                     wait_for_app_idle(self.driver)
-                    time.sleep(0.5)
+                    # Intentional: short back-off before the next observation retry.
+                    time.sleep(0.5)  # nosemgrep
 
         # Should not reach here, but make type checker happy
         raise RuntimeError("Failed to take observation after all retries")

@@ -2,13 +2,15 @@ import logging
 from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from utils import create_response, get_table_name, extract_user_identity
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', usecase_from_path, scopes=['api/usecases.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to check if user is subscribed to usecase notifications.
@@ -21,19 +23,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with subscription status
     """
     try:
-        # Validate scopes (read permission to check subscription status)
-        user_identity, error_response = require_scopes(event, ['api/usecases.read'])
-        if error_response:
-            return error_response
-        
+        user_identity = extract_user_identity(event)
         # Get user email from identity (fallback to username if no email)
         user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
         
         # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Initialize Amazon DynamoDB
         dynamodb = boto3.resource('dynamodb')

@@ -4,13 +4,15 @@ import logging
 from typing import Any, Dict
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, require_scopes, validate_path_id
+from utils import create_response
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to create a schedule for a use case in Amazon EventBridge Scheduler.
@@ -23,15 +25,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/usecases.write'])
-        if error:
-            return error
-        
         # Get use case ID from path parameters
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Parse request body
         body = json.loads(event.get('body', '{}'))

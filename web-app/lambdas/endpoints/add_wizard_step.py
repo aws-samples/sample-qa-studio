@@ -1,19 +1,28 @@
+import lambda_init  # noqa: F401 — must be first import (adds dependencies/ to sys.path)
+
 import logging
 import json
 import os
 from typing import Any, Dict
 from uuid import uuid4
 import boto3
-from utils import create_response, get_table_name, get_current_timestamp, require_scopes, validate_path_id
+from pydantic import ValidationError
+from recording_models import WizardSessionRequest
+from resource_auth import require_resource_access, wizard_session_from_path
+from utils import create_response, get_table_name, get_current_timestamp, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', wizard_session_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to add a step to a wizard session.
+
+    The body must carry the session's usecaseId (WizardSessionRequest); the
+    decorator checks edit on that use case and that the session exists under it.
     
     Args:
         event: API Gateway proxy request event
@@ -22,14 +31,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway proxy response with step creation result
     """
-    # Validate scopes - adding wizard steps modifies usecases
-    user_identity, error = require_scopes(event, ['api/usecases.write'])
-    if error:
-        return error
-    
     try:
         # Get session ID from path
-        path_params = event.get('pathParameters', {})
         session_id, error = validate_path_id(event.get('pathParameters', {}).get('sessionId'), 'session ID')
         if error:
             return error
@@ -39,6 +42,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             body = json.loads(event.get('body', '{}'))
         except json.JSONDecodeError:
             return create_response(400, {'error': 'Invalid JSON in request body'})
+        try:
+            WizardSessionRequest(**body)
+        except (TypeError, ValidationError):
+            return create_response(400, {'error': 'usecaseId is required'})
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')

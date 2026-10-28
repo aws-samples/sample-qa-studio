@@ -4,6 +4,20 @@ import os
 from unittest.mock import Mock, patch, MagicMock
 from execute_usecase import handler
 
+# Authorized caller for the behavior tests: executor in the owning team.
+EXECUTOR_TEAM_A = json.dumps([{'team_id': 'team-a', 'role': 'executor'}])
+_OWNED_USECASE = {'application_id': 'app-1', 'owner_team_id': 'team-a', 'created_by': None}
+
+
+def setUpModule():
+    global _owner_patch
+    _owner_patch = patch('resource_auth.get_usecase_owner', return_value=_OWNED_USECASE)
+    _owner_patch.start()
+
+
+def tearDownModule():
+    _owner_patch.stop()
+
 
 class TestExecuteUsecaseCiRunner(unittest.TestCase):
     """Test suite for execute_usecase Lambda with ci_runner trigger type"""
@@ -23,7 +37,8 @@ class TestExecuteUsecaseCiRunner(unittest.TestCase):
             'requestContext': {
                 'authorizer': {
                     'client_id': 'ci-runner-client',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -79,7 +94,8 @@ class TestExecuteUsecaseCiRunner(unittest.TestCase):
             'requestContext': {
                 'authorizer': {
                     'client_id': 'ci-runner-client',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -131,7 +147,8 @@ class TestExecuteUsecaseCiRunner(unittest.TestCase):
             'requestContext': {
                 'authorizer': {
                     'client_id': 'ci-runner-client',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -216,7 +233,8 @@ class TestExecuteUsecaseBackwardCompatibility(unittest.TestCase):
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -254,7 +272,8 @@ class TestExecuteUsecaseBackwardCompatibility(unittest.TestCase):
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -297,7 +316,8 @@ class TestExecuteUsecaseBackwardCompatibility(unittest.TestCase):
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -335,7 +355,8 @@ class TestExecuteUsecaseBackwardCompatibility(unittest.TestCase):
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -379,7 +400,8 @@ class TestExecuteUsecaseValidation(unittest.TestCase):
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -399,7 +421,8 @@ class TestExecuteUsecaseValidation(unittest.TestCase):
                 'authorizer': {
                     'email': 'test@example.com',
                     'sub': 'user-123',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -418,7 +441,8 @@ class TestExecuteUsecaseValidation(unittest.TestCase):
             'requestContext': {
                 'authorizer': {
                     'client_id': 'ci-runner-client',
-                    'scope': 'api/execution.write'
+                    'scope': 'api/usecases.execute',
+                    'teamRoles': EXECUTOR_TEAM_A
                 }
             }
         }
@@ -435,3 +459,119 @@ class TestExecuteUsecaseValidation(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# H-2 / N-1: scope + execute check, worker capability token
+# ---------------------------------------------------------------------------
+
+import hashlib  # noqa: E402
+
+_ECS_ENV = {
+    'TABLE_NAME': 'test-table', 'DEFAULT_REGION': 'us-east-1', 'S3_BUCKET_PREFIX': 'b',
+    'AWS_REGION': 'us-east-1', 'ECS_CLUSTER': 'c', 'ECS_TASK_DEFINITION': 't', 'SUBNET_ID': 's',
+    'SECURITY_GROUP_ID': 'g', 'BEDROCK_EXECUTION_ROLE': 'r', 'NOVA_ACT_API_KEY_NAME': 'k',
+    'SECRETS_PREFIX': 'p', 'QUEUE_URL': 'q',
+}
+
+
+def _exec_event(trigger='OnDemandHeadless', scope='api/usecases.execute', team_roles=EXECUTOR_TEAM_A,
+                identity_type='user'):
+    authorizer = {'sub': 'u', 'email': 'u@example.com', 'identityType': identity_type,
+                  'scope': scope, 'teamRoles': team_roles}
+    if identity_type != 'user':
+        authorizer.update({'email': '', 'clientId': 'client-1'})
+    return {
+        'pathParameters': {'id': 'uc-1'},
+        'queryStringParameters': {'trigger-type': trigger},
+        'requestContext': {'authorizer': authorizer},
+    }
+
+
+def _usecase_item():
+    return {'Item': {'starting_url': {'S': 'https://example.com'}, 'executing_region': {'S': 'us-east-1'},
+                     'model_id': {'S': 'm'}, 'application_id': {'S': 'app-1'}}}
+
+
+@patch.dict(os.environ, _ECS_ENV)
+@patch('execute_usecase.eventbridge')
+@patch('execute_usecase.ecs')
+@patch('execute_usecase.dynamodb')
+class TestExecuteUsecaseAuthz(unittest.TestCase):
+    def _run_ecs(self, mock_dynamodb, mock_ecs, event):
+        mock_dynamodb.get_item.side_effect = lambda **kw: (
+            _usecase_item() if kw['Key']['sk']['S'].startswith('USECASE#') else {})
+        mock_dynamodb.query.return_value = {'Items': []}
+        mock_ecs.run_task.return_value = {'tasks': [{'taskArn': 'arn:aws:ecs:r:a:task/c/task-1'}], 'failures': []}
+        return handler(event, None)
+
+    def test_token_hash_stored_and_token_injected(self, mock_dynamodb, mock_ecs, _):
+        resp = self._run_ecs(mock_dynamodb, mock_ecs, _exec_event())
+        self.assertEqual(resp['statusCode'], 200)
+        item = mock_dynamodb.put_item.call_args_list[0].kwargs['Item']
+        stored_hash = item['worker_token_hash']['S']
+        env = {e['name']: e['value'] for e in
+               mock_ecs.run_task.call_args.kwargs['overrides']['containerOverrides'][0]['environment']}
+        token = env['EXECUTION_TOKEN']
+        self.assertGreaterEqual(len(token), 40)
+        self.assertEqual(hashlib.sha256(token.encode()).hexdigest(), stored_hash)
+        self.assertNotIn(token, json.dumps(item))
+        self.assertNotIn(token, resp['body'])
+
+    def test_each_execution_gets_its_own_token(self, mock_dynamodb, mock_ecs, _):
+        self._run_ecs(mock_dynamodb, mock_ecs, _exec_event())
+        first = mock_dynamodb.put_item.call_args_list[0].kwargs['Item']['worker_token_hash']['S']
+        mock_dynamodb.reset_mock()
+        self._run_ecs(mock_dynamodb, mock_ecs, _exec_event())
+        second = mock_dynamodb.put_item.call_args_list[0].kwargs['Item']['worker_token_hash']['S']
+        self.assertNotEqual(first, second)
+
+    def test_scheduled_trigger_also_gets_token(self, mock_dynamodb, mock_ecs, _):
+        event = _exec_event(trigger='Scheduled')
+        del event['requestContext']  # EventBridge Scheduler invocation
+        resp = self._run_ecs(mock_dynamodb, mock_ecs, event)
+        self.assertEqual(resp['statusCode'], 200)
+        self.assertIn('worker_token_hash', mock_dynamodb.put_item.call_args_list[0].kwargs['Item'])
+
+    def test_ci_runner_has_no_worker_token(self, mock_dynamodb, mock_ecs, _):
+        resp = self._run_ecs(mock_dynamodb, mock_ecs, _exec_event(trigger='ci_runner'))
+        self.assertEqual(resp['statusCode'], 200)
+        self.assertNotIn('worker_token_hash', mock_dynamodb.put_item.call_args_list[0].kwargs['Item'])
+        mock_ecs.run_task.assert_not_called()
+
+    def test_missing_execute_scope_403(self, mock_dynamodb, mock_ecs, _):
+        resp = handler(_exec_event(scope='api/usecases.read api/executions.write'), None)
+        self.assertEqual(resp['statusCode'], 403)
+        mock_dynamodb.put_item.assert_not_called()
+
+    def test_viewer_in_owner_team_403(self, mock_dynamodb, mock_ecs, _):
+        resp = handler(_exec_event(team_roles=json.dumps([{'team_id': 'team-a', 'role': 'viewer'}])), None)
+        self.assertEqual(resp['statusCode'], 403)
+        mock_dynamodb.put_item.assert_not_called()
+
+    @patch('resource_auth.list_shared_access', return_value=[])
+    def test_other_team_403(self, _shares, mock_dynamodb, mock_ecs, _):
+        resp = handler(_exec_event(team_roles=json.dumps([{'team_id': 'team-b', 'role': 'editor'}])), None)
+        self.assertEqual(resp['statusCode'], 403)
+        mock_dynamodb.put_item.assert_not_called()
+
+    def test_orphan_usecase_denied(self, mock_dynamodb, mock_ecs, _):
+        with patch('resource_auth.get_usecase_owner',
+                   return_value={'application_id': None, 'owner_team_id': None, 'created_by': None}):
+            resp = handler(_exec_event(team_roles=json.dumps([{'team_id': 'team-a', 'role': 'team_lead'}])), None)
+        self.assertEqual(resp['statusCode'], 403)
+        mock_dynamodb.put_item.assert_not_called()
+
+    def test_unbound_client_denied_bound_client_allowed(self, mock_dynamodb, mock_ecs, _):
+        with patch('resource_auth.list_shared_access', return_value=[]):
+            resp = handler(_exec_event(trigger='ci_runner', identity_type='client', team_roles='[]'), None)
+        self.assertEqual(resp['statusCode'], 403)
+        resp = self._run_ecs(mock_dynamodb, mock_ecs, _exec_event(
+            trigger='ci_runner', identity_type='client',
+            team_roles=json.dumps([{'team_id': 'team-a', 'role': 'editor'}])))
+        self.assertEqual(resp['statusCode'], 200)
+
+    def test_worker_cannot_start_executions(self, mock_dynamodb, mock_ecs, _):
+        resp = handler(_exec_event(identity_type='worker'), None)
+        self.assertEqual(resp['statusCode'], 403)
+        mock_dynamodb.put_item.assert_not_called()

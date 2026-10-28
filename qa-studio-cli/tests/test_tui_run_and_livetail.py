@@ -43,7 +43,7 @@ def _make_api() -> MagicMock:
 
 
 def _snippet_runner(body: str) -> RunnerProcess:
-    argv = [sys.executable, "-c", body]
+    argv = [sys.executable, "-u", "-c", body]
     return RunnerProcess(argv=argv, override_files=OverrideFiles())
 
 

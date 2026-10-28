@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 import boto3
 import botocore
 from botocore.exceptions import ClientError
-from utils import create_response
+from utils import create_response, require_scopes
 
 # Configure logging
 logger = logging.getLogger()
@@ -25,7 +25,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway proxy response with list of models
     """
-    print(boto3.__version__)
+    _, error_response = require_scopes(event, ['api/usecases.read'])
+    if error_response:
+        return error_response
     try:
         # Create Amazon Nova Act client in us-east-1 (GA region)
         novaact_client = boto3.client('nova-act', region_name=NOVA_ACT_REGION)

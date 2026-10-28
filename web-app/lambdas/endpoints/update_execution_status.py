@@ -15,8 +15,9 @@ from utils import (
     create_response,
     get_table_name,
     get_current_timestamp,
-    require_scopes,
+    extract_user_identity,
     validate_path_id)
+from resource_auth import require_resource_access, execution_from_path
 from test_suite_schema import (
     get_suite_execution_pk,
     get_execution_sk
@@ -27,6 +28,7 @@ dynamodb = boto3.client('dynamodb')
 eventbridge = boto3.client('events')
 
 
+@require_resource_access('execute', execution_from_path, scopes=['api/executions.write'], allow_worker=True)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Update execution status.
@@ -46,15 +48,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         404: Execution not found
         500: Internal server error
     """
-    # Validate authentication and authorization
-    user_identity, error_response = require_scopes(
-        event,
-        ['api/executions.write']
-    )
-    if error_response:
-        return error_response
+    user_identity = extract_user_identity(event)
     
-    print(f"Execution status update requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    print(f"Execution status update requested by identity type: {user_identity['identity_type']}")
     
     # Parse path parameters
     usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')

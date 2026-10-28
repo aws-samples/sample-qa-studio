@@ -28,6 +28,10 @@ class RunResult:
     duration_seconds: float
 
 
+# The only program RunnerProcess may start: this interpreter running the CLI.
+RUNNER_PREFIX = (sys.executable, "-u", "-m", "qa_studio_cli")
+
+
 def build_argv(
     *,
     usecase_id: Optional[str] = None,
@@ -64,7 +68,7 @@ def build_argv(
             "build_argv requires exactly one of usecase_id or suite_id"
         )
 
-    argv = [sys.executable, "-u", "-m", "qa_studio_cli", "run"]
+    argv = [*RUNNER_PREFIX, "run"]
     if usecase_id:
         argv.extend(["--usecase-id", usecase_id])
     else:
@@ -96,6 +100,15 @@ class RunnerProcess:
     """
 
     def __init__(self, argv: List[str], override_files: OverrideFiles):
+        # argv is passed to exec without a shell, so arguments cannot inject
+        # commands. The program is pinned to this Python interpreter running
+        # unbuffered (``sys.executable -u``, as build_argv emits) so the TUI
+        # can never launch an arbitrary binary; start() passes both as
+        # literals and forwards only the remaining arguments.
+        if argv[:2] != [sys.executable, "-u"]:
+            raise ValueError(
+                "RunnerProcess only runs the current Python interpreter with -u"
+            )
         self._argv = argv
         self._override_files = override_files
         self._proc: Optional[asyncio.subprocess.Process] = None
@@ -131,7 +144,9 @@ class RunnerProcess:
         # ``start_new_session`` is a no-op; we document this as a
         # known limitation (POC targets macOS/Linux).
         self._proc = await asyncio.create_subprocess_exec(
-            *self._argv,
+            sys.executable,
+            "-u",
+            *self._argv[2:],
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,

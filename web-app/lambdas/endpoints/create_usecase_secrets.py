@@ -3,13 +3,15 @@ import logging
 from typing import Any, Dict
 import boto3
 from botocore.exceptions import ClientError
-from utils import get_secret_prefix, create_response, require_scopes, validate_path_id
+from utils import get_secret_prefix, create_response, request_log_summary, aws_error_code
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to create or update use case secrets in AWS Secrets Manager.
@@ -22,17 +24,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response
     """
     try:
-        # Validate scopes
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
-        
-        logger.info(f"Received request: {event}")
+        logger.info(f"Received request: {request_log_summary(event)}")
         
         # Get use case ID from path parameters
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by usecase_from_path
         
         # Parse request body
         body = json.loads(event.get('body', '{}'))
@@ -74,10 +69,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             SecretString=secret_value
                         )
                     except Exception as update_err:
-                        logger.error(f"Error updating secret {secret_name}: {str(update_err)}")
+                        logger.error(f"Error updating usecase secret: {aws_error_code(update_err)}")
                         return create_response(500, {'error': f'Failed to update secret {secret_key}'})
                 else:
-                    logger.error(f"Error creating secret {secret_name}: {str(e)}")
+                    logger.error(f"Error creating usecase secret: {aws_error_code(e)}")
                     return create_response(500, {'error': f'Failed to create secret {secret_key}'})
         
         return create_response(200, {

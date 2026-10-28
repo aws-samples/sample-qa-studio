@@ -9,6 +9,7 @@ import Box from "@cloudscape-design/components/box";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import type { StepProps } from '../types';
 import { parseImportFile } from '../validation';
+import ApplicationSelect from '../../common/ApplicationSelect';
 
 export default function UploadFileStep({ state, dispatch, validationErrors }: StepProps) {
   const { importConfig } = state;
@@ -87,6 +88,12 @@ export default function UploadFileStep({ state, dispatch, validationErrors }: St
     <SpaceBetween direction="vertical" size="l">
       <Container>
         <SpaceBetween direction="vertical" size="l">
+          <ApplicationSelect
+            value={state.basicInfo.applicationId}
+            onChange={(applicationId) => dispatch({ type: 'UPDATE_BASIC_INFO', payload: { applicationId } })}
+            errorText={validationErrors.applicationId}
+            description="The imported use case is created in this application"
+          />
           <FormField
             label="Select export file"
             description="Choose a JSON file exported from another use case"

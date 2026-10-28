@@ -4,7 +4,8 @@ Implements the upload-side of R-API-5.  Called by the CLI runner after a
 successful ``nova.act()`` call when trajectory recording is enabled.
 
 Route: ``POST /api/usecase/{id}/steps/{stepId}/trajectory/upload-url``
-Scope: ``api/executions.write``
+Scope: ``api/executions.write`` plus execute on the owning application (the
+worker through its execution capability).
 Body (optional): ``{"content_type": "application/json"}``
 
 DynamoDB step record: ``(pk='USECASE#{usecase}', sk='STEP#{step}')``.
@@ -28,9 +29,9 @@ from utils import (
     create_response,
     get_current_timestamp,
     get_table_name,
-    require_scopes,
     validate_path_id,
 )
+from resource_auth import require_resource_access, usecase_from_path
 
 _s3 = boto3.client('s3')
 _dynamodb = boto3.client('dynamodb')
@@ -40,17 +41,11 @@ _DEFAULT_CONTENT_TYPE = 'application/json'
 _UPLOAD_EXPIRES_IN = 900  # 15 minutes
 
 
+@require_resource_access('execute', usecase_from_path, scopes=['api/executions.write'], allow_worker=True)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    # --- Auth --------------------------------------------------------------
-    _user_identity, error_response = require_scopes(event, ['api/executions.write'])
-    if error_response:
-        return error_response
-
     # --- Path params -------------------------------------------------------
     path = event.get('pathParameters') or {}
-    usecase_id, error = validate_path_id(path.get('id'), 'usecase ID')
-    if error:
-        return error
+    usecase_id = path['id']  # validated by usecase_from_path
     step_id, error = validate_path_id(path.get('stepId'), 'step ID')
     if error:
         return error

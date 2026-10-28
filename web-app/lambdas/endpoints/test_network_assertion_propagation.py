@@ -14,6 +14,8 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from authz_test_support import APP_ID, make_event, owned_everything
+
 os.environ.setdefault("TABLE_NAME", "test-table")
 
 _ENDPOINTS_DIR = Path(__file__).resolve().parent
@@ -74,14 +76,8 @@ class TestCreateStepPropagation:
     def _event(self, body: dict) -> dict:
         return {
             "body": json.dumps(body),
-            "requestContext": {
-                "authorizer": {
-                    "claims": {
-                        "sub": "user-1",
-                        "cognito:groups": '["api/usecases.write"]',
-                    }
-                }
-            },
+            "pathParameters": {"id": body.get("usecaseId", "uc-1")},
+            "requestContext": make_event("editor_a", scopes="api/usecases.write")["requestContext"],
         }
 
     def test_network_fields_persisted(self):
@@ -112,7 +108,7 @@ class TestCreateStepPropagation:
         }
 
         with patch("create_step.boto3") as boto_mock, \
-             patch("create_step.require_scopes", return_value=({"sub": "u1"}, None)):
+             owned_everything():
             boto_mock.resource.return_value = _FakeDynamo()
             response = create_step.handler(self._event(body), None)
 
@@ -150,7 +146,7 @@ class TestCreateStepPropagation:
         }
 
         with patch("create_step.boto3") as boto_mock, \
-             patch("create_step.require_scopes", return_value=({"sub": "u1"}, None)):
+             owned_everything():
             boto_mock.resource.return_value = _FakeDynamo()
             response = create_step.handler(self._event(body), None)
 
@@ -198,12 +194,7 @@ class TestImportUsecasePropagation:
             "steps": imported_steps,
         }
 
-        event = {
-            "body": json.dumps(usecase_body),
-            "requestContext": {
-                "authorizer": {"claims": {"cognito:groups": '["api/usecases.write"]'}}
-            },
-        }
+        event = make_event("editor_a", body={**usecase_body, "application_id": APP_ID})
 
         def _fake_resource(_service):
             m = MagicMock()
@@ -211,7 +202,7 @@ class TestImportUsecasePropagation:
             return m
 
         with patch("import_usecase.boto3") as boto_mock, \
-             patch("import_usecase.require_scopes", return_value=({"sub": "u1"}, None)):
+             owned_everything():
             boto_mock.resource.side_effect = _fake_resource
             response = import_usecase.handler(event, None)
 
@@ -305,15 +296,11 @@ class TestExportImportRoundTrip:
 
         event = {
             "pathParameters": {"id": "uc-1"},
-            "requestContext": {
-                "authorizer": {
-                    "claims": {"cognito:groups": '["api/usecases.read"]', "sub": "u1"}
-                }
-            },
+            "requestContext": make_event("viewer_a", scopes="api/usecases.read")["requestContext"],
         }
 
         with patch("export_usecase.boto3") as boto_mock, \
-             patch("export_usecase.require_scopes", return_value=({"sub": "u1"}, None)):
+             owned_everything():
             boto_mock.resource.return_value = dynamodb_mock
             boto_mock.client.side_effect = _client
             response = export_usecase.handler(event, None)
@@ -337,17 +324,10 @@ class TestExportImportRoundTrip:
             m.Table.return_value = _FakeTable()
             return m
 
-        event = {
-            "body": json.dumps(export_body),
-            "requestContext": {
-                "authorizer": {
-                    "claims": {"cognito:groups": '["api/usecases.write"]'}
-                }
-            },
-        }
+        event = make_event("editor_a", body={**export_body, "application_id": APP_ID})
 
         with patch("import_usecase.boto3") as boto_mock, \
-             patch("import_usecase.require_scopes", return_value=({"sub": "u1"}, None)):
+             owned_everything():
             boto_mock.resource.side_effect = _fake_resource
             response = import_usecase.handler(event, None)
 

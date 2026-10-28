@@ -42,7 +42,7 @@ def mobile_type(
 
     # Small delay to allow keyboard to appear
 
-    time.sleep(0.3)
+    time.sleep(0.3)  # nosemgrep
 
     # Get the currently active element (should be the focused input)
     try:

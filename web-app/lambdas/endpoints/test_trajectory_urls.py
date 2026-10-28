@@ -6,22 +6,27 @@ from unittest.mock import MagicMock
 import pytest
 from botocore.exceptions import ClientError
 
+from authz_test_support import (
+    UC_ID, make_event, owned_everything, owned_resources, share, worker_header,
+)
+
 
 def _event(
     body=None,
     usecase_id='uc-1',
     step_id='step-1',
-    scope='api/executions.write',
+    scope='api/executions.write api/executions.read',
+    caller='executor_a',
+    **kwargs,
 ):
-    event = {
-        'pathParameters': {'id': usecase_id, 'stepId': step_id},
-        'requestContext': {
-            'authorizer': {'client_id': 'test-client', 'scope': scope},
-        },
-    }
-    if body is not None:
-        event['body'] = json.dumps(body)
-    return event
+    return make_event(caller, path={'id': usecase_id, 'stepId': step_id}, body=body,
+                      scopes=scope, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _owned():
+    with owned_everything():
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -203,7 +208,7 @@ class TestDownloadUrl:
     def test_missing_scope_rejected(self, patched_download):
         from get_trajectory_download_url import handler
 
-        response = handler(_event(scope='api/executions.read'), None)
+        response = handler(_event(scope='api/executions.write'), None)
         assert response['statusCode'] == 403
 
     def test_bad_step_id_rejected(self, patched_download):
@@ -222,3 +227,47 @@ class TestDownloadUrl:
 
         response = handler(_event(), None)
         assert response['statusCode'] == 500
+
+
+class TestTrajectoryAccess:
+    """Upload needs execute, download needs view on the owning app; worker via capability (H-2)."""
+
+    def _call(self, module, caller, **owned):
+        import importlib
+        handler = importlib.import_module(module).handler
+        extra = {'worker_header': worker_header()} if caller == 'worker' else {}
+        with owned_resources(**owned):
+            return handler(_event(usecase_id=UC_ID, caller=caller, **extra), None)
+
+    @pytest.mark.parametrize('caller,expected', [
+        ('executor_a', 200), ('admin', 200), ('client_a', 200), ('worker', 200),
+        ('viewer_a', 403), ('executor_b', 403), ('client_unbound', 403),
+    ])
+    def test_upload(self, patched_upload, caller, expected):
+        patched_upload[1].update_item.return_value = {}
+        assert self._call('create_trajectory_upload_url', caller)['statusCode'] == expected
+
+    def test_upload_shared_execute(self, patched_upload):
+        patched_upload[1].update_item.return_value = {}
+        response = self._call('create_trajectory_upload_url', 'executor_b', shares=share('execute'))
+        assert response['statusCode'] == 200
+
+    @pytest.mark.parametrize('caller,expected', [
+        ('viewer_a', 404), ('admin', 404), ('worker', 404),  # authorized; no trajectory recorded
+        ('viewer_b', 403), ('editor_b', 403), ('client_unbound', 403),
+    ])
+    def test_download(self, patched_download, caller, expected):
+        patched_download[1].get_item.return_value = {}
+        assert self._call('get_trajectory_download_url', caller)['statusCode'] == expected
+
+    def test_download_needs_executions_read_not_write(self, patched_download):
+        from get_trajectory_download_url import handler
+        patched_download[1].get_item.return_value = {}
+        response = handler(_event(scope='api/executions.read', caller='viewer_a'), None)
+        assert response['statusCode'] == 404
+
+    def test_worker_token_for_other_usecase_denied(self, patched_upload):
+        from create_trajectory_upload_url import handler
+        event = _event(usecase_id=UC_ID, caller='worker', worker_header=worker_header(usecase_id='uc-other'))
+        with owned_resources():
+            assert handler(event, None)['statusCode'] == 403

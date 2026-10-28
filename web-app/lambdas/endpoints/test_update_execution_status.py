@@ -623,3 +623,14 @@ class TestSuiteCounterUpdates(unittest.TestCase):
                     mock_ddb.update_item.call_count, 2,
                     f"status={status}: expected 2 update_item calls, got {mock_ddb.update_item.call_count}"
                 )
+
+
+import pytest as _pytest  # noqa: E402
+from authz_test_support import resource_access_granted as _resource_access_granted  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: ownership is covered by test_execution_routes_access.py."""
+    with _resource_access_granted():
+        yield

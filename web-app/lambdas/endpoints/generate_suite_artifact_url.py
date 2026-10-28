@@ -9,9 +9,10 @@ from botocore.exceptions import ClientError
 from utils import (
     create_response,
     get_table_name,
-    require_scopes,
-    validate_path_id
+    validate_path_id,
+    extract_user_identity,
 )
+from resource_auth import require_resource_access, suite_execution_from_path
 
 
 def get_dynamodb_client():
@@ -120,6 +121,7 @@ def generate_presigned_upload_url(
         raise
 
 
+@require_resource_access('execute', suite_execution_from_path, scopes=['api/suite.write'], allow_worker=True)
 def handler(event, context):
     """
     Generate presigned S3 URL for suite-level artifacts.
@@ -143,12 +145,8 @@ def handler(event, context):
     - 404: Suite execution not found
     - 500: Internal server error
     """
-    # Validate scopes
-    user_identity, error_response = require_scopes(event, ['api/suite.write'])
-    if error_response:
-        return error_response
-
-    print(f"Suite artifact URL requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    user_identity = extract_user_identity(event)
+    print(f"Suite artifact URL requested by identity type: {user_identity['identity_type']}")
 
     # Parse path parameters
     suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')

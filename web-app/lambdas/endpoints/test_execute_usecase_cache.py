@@ -4,6 +4,15 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock, call
 from execute_usecase import handler
 
+EXECUTOR_TEAM_A = json.dumps([{'team_id': 'team-a', 'role': 'executor'}])
+
+
+@pytest.fixture(autouse=True)
+def _owned_usecase():
+    with patch('resource_auth.get_usecase_owner',
+               return_value={'application_id': 'app-1', 'owner_team_id': 'team-a', 'created_by': None}):
+        yield
+
 
 class TestExecuteUsecaseCacheFields:
     """Test suite for cache field copying in execute_usecase"""
@@ -56,7 +65,7 @@ class TestExecuteUsecaseCacheFields:
         event = {
             'pathParameters': {'id': 'usecase123'},
             'queryStringParameters': None,
-            'requestContext': {'authorizer': {'claims': {}}}
+            'requestContext': {'authorizer': {'claims': {'email': 'test@example.com', 'scope': 'api/usecases.execute', 'teamRoles': EXECUTOR_TEAM_A}}}
         }
         
         with patch('execute_usecase.get_table_name', return_value='test-table'):
@@ -130,7 +139,7 @@ class TestExecuteUsecaseCacheFields:
         event = {
             'pathParameters': {'id': 'usecase123'},
             'queryStringParameters': None,
-            'requestContext': {'authorizer': {'claims': {}}}
+            'requestContext': {'authorizer': {'claims': {'email': 'test@example.com', 'scope': 'api/usecases.execute', 'teamRoles': EXECUTOR_TEAM_A}}}
         }
         
         with patch('execute_usecase.get_table_name', return_value='test-table'):

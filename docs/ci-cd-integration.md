@@ -60,14 +60,17 @@ The recommended approach for CI/CD pipelines. No browser login required.
 
 First, create an OAuth client in the QA Studio web UI:
 
-1. Navigate to OAuth Clients (admin only)
+1. Navigate to OAuth Clients (Editors, Team Leads and Admins)
 2. Click "Create OAuth Client"
 3. Name it (e.g., "CI/CD Pipeline")
-4. Grant required scopes:
+4. Pick the **Team** that owns the suites the pipeline runs (required). The client acts as a member of that team with your role, capped at Editor, and can't reach other teams' resources.
+5. Grant required scopes:
    - `api/suite.read`, `api/suite.write`
    - `api/usecases.read`, `api/usecases.execute`
    - `api/executions.read`, `api/executions.write`
-5. Save the client ID and secret (secret is only shown once)
+6. Save the client ID and secret (secret is only shown once)
+
+Clients created before team binding show as "Unbound (no access)" and get 403 on every team-owned resource. Re-create them with a team. See [User Management](user-management.md#oauth-clients-m2m).
 
 Then set these environment variables in your pipeline:
 

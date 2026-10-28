@@ -3,6 +3,7 @@ import json
 from typing import Any, Dict
 import boto3
 from botocore.exceptions import ClientError
+from resource_auth import require_resource_access, usecase_from_body
 from utils import create_response, get_table_name, get_bucket_name
 
 # Configure logging
@@ -14,6 +15,39 @@ PLATFORM_EXTENSIONS = {
     'ANDROID': '.apk',
     'IOS': '.ipa',
 }
+
+
+def _store_usecase_s3_path(usecase_id: str, attribute: str, s3_key: str):
+    """
+    SET `attribute` = s3_key on an existing use case record. The condition
+    keeps the update from creating a record for an unknown id (no upsert).
+
+    Returns:
+        None on success, otherwise a 404 / 500 response.
+    """
+    try:
+        dynamodb = boto3.resource('dynamodb')
+        table = dynamodb.Table(get_table_name())
+        table.update_item(
+            Key={
+                'pk': 'USECASES',
+                'sk': f'USECASE#{usecase_id}',
+            },
+            UpdateExpression='SET #attr = :s3path',
+            ConditionExpression='attribute_exists(pk)',
+            ExpressionAttributeNames={
+                '#attr': attribute,
+            },
+            ExpressionAttributeValues={
+                ':s3path': s3_key,
+            },
+        )
+    except ClientError as e:
+        if e.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+            return create_response(404, {'error': 'Use case not found'})
+        logger.error(f"Error updating Usecase with {attribute}: {e.response.get('Error', {}).get('Code')}")
+        return create_response(500, {'error': f'Failed to store {attribute.replace("_s3_path", "").replace("_", " ")} path'})
+    return None
 
 
 def _handle_app_binary(body: dict) -> Dict[str, Any]:
@@ -65,25 +99,9 @@ def _handle_app_binary(body: dict) -> Dict[str, Any]:
         return create_response(500, {'error': 'Failed to generate upload URL'})
 
     # Store app_binary_s3_path on the Usecase DynamoDB record
-    try:
-        dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table(get_table_name())
-        table.update_item(
-            Key={
-                'pk': 'USECASES',
-                'sk': f'USECASE#{usecase_id}',
-            },
-            UpdateExpression='SET #abs = :s3path',
-            ExpressionAttributeNames={
-                '#abs': 'app_binary_s3_path',
-            },
-            ExpressionAttributeValues={
-                ':s3path': s3_key,
-            },
-        )
-    except ClientError as e:
-        logger.error(f"Error updating Usecase with app_binary_s3_path: {str(e)}")
-        return create_response(500, {'error': 'Failed to store app binary path'})
+    error = _store_usecase_s3_path(usecase_id, 'app_binary_s3_path', s3_key)
+    if error:
+        return error
 
     logger.info(f"Generated app_binary upload URL for usecase {usecase_id}, key={s3_key}")
 
@@ -127,22 +145,9 @@ def _handle_browser_policy(body: dict) -> Dict[str, Any]:
         logger.error(f"Error generating pre-signed PUT URL for browser policy: {str(e)}")
         return create_response(500, {'error': 'Failed to generate upload URL'})
 
-    try:
-        dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table(get_table_name())
-        table.update_item(
-            Key={
-                'pk': 'USECASES',
-                'sk': f'USECASE#{usecase_id}',
-            },
-            UpdateExpression='SET browser_policy_s3_path = :s3path',
-            ExpressionAttributeValues={
-                ':s3path': s3_key,
-            },
-        )
-    except ClientError as e:
-        logger.error(f"Error updating Usecase with browser_policy_s3_path: {str(e)}")
-        return create_response(500, {'error': 'Failed to store browser policy path'})
+    error = _store_usecase_s3_path(usecase_id, 'browser_policy_s3_path', s3_key)
+    if error:
+        return error
 
     logger.info(f"Generated browser_policy upload URL for usecase {usecase_id}, key={s3_key}")
 
@@ -153,10 +158,33 @@ def _handle_browser_policy(body: dict) -> Dict[str, Any]:
     })
 
 
+def _parse_body(event: Dict[str, Any]) -> dict:
+    body = json.loads(event.get('body') or '{}')
+    return body if isinstance(body, dict) else {}
+
+
+@require_resource_access('edit', usecase_from_body('usecaseId'), scopes=['api/usecases.write'])
+def _upload_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """app_binary / browser_policy: upload URL + S3 path stored on the use case (edit)."""
+    body = _parse_body(event)
+    if body.get('fileType') == 'app_binary':
+        return _handle_app_binary(body)
+    return _handle_browser_policy(body)
+
+
+@require_resource_access('view', usecase_from_body('usecaseId'), scopes=['api/executions.read'])
+def _download_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """html / video: download URL for an execution artifact of the use case (view)."""
+    return _handle_execution_artifact(_parse_body(event))
+
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to generate pre-signed Amazon S3 URLs for execution artifacts
     and app binary uploads.
+
+    Access (N-2): app_binary / browser_policy need api/usecases.write and edit
+    on the body's usecaseId; html / video need api/executions.read and view.
     
     Args:
         event: API Gateway proxy request event
@@ -166,28 +194,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with signed URL
     """
     try:
-        # Parse request body
-        try:
-            body = json.loads(event.get('body', '{}'))
-        except json.JSONDecodeError:
-            return create_response(400, {'error': 'Invalid JSON in request body'})
-        
-        file_type = body.get('fileType', 'html')
+        body = _parse_body(event)
+    except (TypeError, ValueError):
+        return create_response(400, {'error': 'Invalid JSON in request body'})
 
-        # Validate fileType
-        if file_type not in ['html', 'video', 'app_binary', 'browser_policy']:
-            logger.error(f"Invalid fileType: {file_type}. Must be 'html', 'video', 'app_binary', or 'browser_policy'")
-            return create_response(400, {'error': "fileType must be 'html', 'video', 'app_binary', or 'browser_policy'"})
+    file_type = body.get('fileType', 'html')
 
-        # Handle app_binary uploads (separate flow — no execution needed)
-        if file_type == 'app_binary':
-            return _handle_app_binary(body)
+    # Validate fileType
+    if file_type not in ['html', 'video', 'app_binary', 'browser_policy']:
+        logger.error("Invalid fileType. Must be 'html', 'video', 'app_binary', or 'browser_policy'")
+        return create_response(400, {'error': "fileType must be 'html', 'video', 'app_binary', or 'browser_policy'"})
 
-        # Handle browser_policy uploads
-        if file_type == 'browser_policy':
-            return _handle_browser_policy(body)
+    if file_type in ('app_binary', 'browser_policy'):
+        return _upload_handler(event, context)
+    return _download_handler(event, context)
 
-        # --- Existing artifact download flow (html / video) ---
+
+def _handle_execution_artifact(body: dict) -> Dict[str, Any]:
+    """Find an execution's html / video artifact and return a pre-signed GET URL."""
+    file_type = body.get('fileType', 'html')
+    try:
         usecase_id = body.get('usecaseId', '')
         execution_id = body.get('executionId', '')
         act_id = body.get('actId', '')

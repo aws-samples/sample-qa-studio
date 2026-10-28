@@ -10,7 +10,8 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from pydantic import BaseModel
 
-from utils import create_response, get_bucket_name, get_table_name, require_scopes
+from utils import create_response, get_bucket_name, get_table_name
+from resource_auth import require_resource_access, execution_from_path
 
 # Configure logging
 logger = logging.getLogger()
@@ -155,6 +156,7 @@ def find_trace_s3_key(
 # Lambda handler
 # ---------------------------------------------------------------------------
 
+@require_resource_access('view', execution_from_path, scopes=['api/executions.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Fetch and return parsed JSON trace data for a single execution step.
@@ -163,11 +165,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Scope: api/executions.read
     """
     try:
-        # --- Scope validation ---
-        user_identity, error = require_scopes(event, ["api/executions.read"])
-        if error:
-            return error
-
         # --- Path parameters ---
         params = event.get("pathParameters") or {}
         usecase_id = params.get("id")

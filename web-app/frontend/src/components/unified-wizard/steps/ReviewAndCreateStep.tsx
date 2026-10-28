@@ -126,6 +126,7 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
     if (creationMethod === 'template') {
       // POST /templates/:id/apply
       const result = await api.post(`templates/${templateConfig.selectedTemplateId}/apply`, {
+        application_id: basicInfo.applicationId,
         name: basicInfo.name,
         description: basicInfo.description || templateConfig.description,
         tags: basicInfo.tags.split(',').map((t) => t.trim()).filter(Boolean),
@@ -145,7 +146,10 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
     if (creationMethod === 'user-journey') {
       // Import the generated usecase data
       if (userJourneyConfig.generatedUsecase) {
-        const result = await exportImportApi.importUsecase(userJourneyConfig.generatedUsecase);
+        const result = await exportImportApi.importUsecase({
+          ...userJourneyConfig.generatedUsecase,
+          application_id: basicInfo.applicationId,
+        });
         dispatch({ type: 'SUBMIT_SUCCESS' });
         if (result?.usecaseId || result?.id) {
           navigate(`/usecase/${result.usecaseId || result.id}`);
@@ -223,7 +227,7 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
 
     const fileContent = await importConfig.file.text();
     const importData = JSON.parse(fileContent);
-    const result = await exportImportApi.importUsecase(importData);
+    const result = await exportImportApi.importUsecase({ ...importData, application_id: basicInfo.applicationId });
 
     if (result.success) {
       // Check for missing secrets

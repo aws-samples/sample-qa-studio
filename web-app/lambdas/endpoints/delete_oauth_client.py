@@ -3,7 +3,8 @@ import os
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, get_table_name, require_scopes
+from utils import create_response, get_table_name, require_scopes, no_content_response
+from resource_auth import require_oauth_client_manager
 
 # Configure logging
 logger = logging.getLogger()
@@ -13,7 +14,8 @@ logger.setLevel(logging.INFO)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to delete an OAuth client from Amazon Cognito user pool.
-    Requires api/oauth-clients.write or api/admin scope.
+    Requires api/oauth-clients.write or api/admin scope, and the caller must be
+    the creator, a team lead of the client's team, or an admin.
     
     Args:
         event: API Gateway proxy request event
@@ -62,6 +64,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'error': 'Cannot delete this OAuth client',
                     'message': 'Only OAuth clients created through the application can be deleted'
                 })
+            client_record = metadata_response['Item']
         except Exception as e:
             logger.error(f"Error checking client metadata: {str(e)}")
             return create_response(403, {
@@ -69,6 +72,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'message': 'Only OAuth clients created through the application can be deleted'
             })
         
+        manager_err = require_oauth_client_manager(user_identity, client_record)
+        if manager_err:
+            logger.warning(f"Denied OAuth client delete: {client_id}")
+            return manager_err
+
         # Delete OAuth client from Amazon Cognito
         try:
             cognito_client.delete_user_pool_client(
@@ -97,10 +105,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'message': 'The client was deleted from Amazon Cognito but metadata cleanup failed. Please contact support.'
             })
         
-        return create_response(200, {
-            'message': 'OAuth client deleted successfully',
-            'client_id': client_id
-        })
+        return no_content_response()
         
     except Exception as e:
         logger.error(f"Error deleting OAuth client: {str(e)}", exc_info=True)

@@ -4,13 +4,15 @@ import gzip
 from typing import Any, Dict, List
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_bucket_name, require_scopes, validate_path_id
+from utils import create_response, get_bucket_name, validate_path_id
+from resource_auth import require_resource_access, execution_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', execution_from_path, scopes=['api/executions.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to get recording batch events with pagination.
@@ -23,15 +25,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with paginated events
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/executions.read'])
-        if error:
-            return error
-        
         # Get parameters from path
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
         if error:
             return error

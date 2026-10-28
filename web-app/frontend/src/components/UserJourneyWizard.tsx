@@ -18,6 +18,7 @@ import Input from "@cloudscape-design/components/input";
 import Textarea from "@cloudscape-design/components/textarea";
 import UsecasePreview from './UserJourneyWizard/UsecasePreview';
 import BrowserSessionPanel from './UserJourneyWizard/BrowserSessionPanel';
+import ApplicationSelect from './common/ApplicationSelect';
 import RecordingSummary from './UserJourneyWizard/RecordingSummary';
 import Popover from "@cloudscape-design/components/popover";
 import LoadingBar from "@cloudscape-design/chat-components/loading-bar";
@@ -99,6 +100,19 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
     },
   });
 
+  // Application the generated use case (and the recording session) belongs to
+  const [applicationId, setApplicationId] = useState('');
+  const requireApplication = (): boolean => {
+    if (applicationId) {
+      return true;
+    }
+    setState(prev => ({
+      ...prev,
+      validationErrors: { ...prev.validationErrors, applicationId: 'Application is required' },
+    }));
+    return false;
+  };
+
   // Mobile platform state (from current branch)
   const [testPlatform, setTestPlatform] = useState<string>('web');
   const [mobilePlatform, setMobilePlatform] = useState<SelectProps.Option | null>(null);
@@ -140,9 +154,9 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
   }, []);
 
   // Stop recording before terminating session, if recording is active
-  const stopRecordingBeforeTerminate = useCallback(async (sessionId: string) => {
+  const stopRecordingBeforeTerminate = useCallback(async (sessionId: string, usecaseId: string) => {
     try {
-      await wizardApi.sendRecordingCommand(sessionId, 'recording_stop');
+      await wizardApi.sendRecordingCommand(sessionId, usecaseId, 'recording_stop');
     } catch (err) {
       console.error('Failed to stop recording before session end:', err);
     }
@@ -154,7 +168,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
       if (sessionRef.current) {
         const { sessionId, usecaseId } = sessionRef.current;
         if (recordingStatusRef.current === 'recording' || recordingStatusRef.current === 'starting') {
-          stopRecordingBeforeTerminate(sessionId);
+          stopRecordingBeforeTerminate(sessionId, usecaseId);
         }
         terminateBrowserSession(sessionId, usecaseId);
       }
@@ -168,7 +182,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
       if (sessionRef.current) {
         const { sessionId, usecaseId } = sessionRef.current;
         if (recordingStatusRef.current === 'recording' || recordingStatusRef.current === 'starting') {
-          stopRecordingBeforeTerminate(sessionId);
+          stopRecordingBeforeTerminate(sessionId, usecaseId);
         }
         terminateBrowserSession(sessionId, usecaseId);
       }
@@ -185,6 +199,9 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
   };
 
   const handleStartBrowserSession = async () => {
+    if (!requireApplication()) {
+      return;
+    }
     if (!isValidHttpUrl(state.formData.startingUrl)) {
       setState(prev => ({
         ...prev,
@@ -203,6 +220,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
 
     try {
       const response = await api.post('wizard/start', {
+        application_id: applicationId,
         name: state.formData.title.trim() || 'User Journey Recording',
         description: 'Browser recording session for user journey',
         starting_url: state.formData.startingUrl.trim(),
@@ -240,7 +258,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
     const { sessionId, usecaseId } = state.browserSession;
     if (sessionId && usecaseId) {
       if (state.recording.status === 'recording' || state.recording.status === 'starting') {
-        await stopRecordingBeforeTerminate(sessionId);
+        await stopRecordingBeforeTerminate(sessionId, usecaseId);
       }
       await terminateBrowserSession(sessionId, usecaseId);
     }
@@ -278,6 +296,10 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
       validation.errors.userJourney = 'User journey description must be at least 50 characters if provided';
       validation.isValid = false;
     }
+    if (!applicationId) {
+      validation.errors.applicationId = 'Application is required';
+      validation.isValid = false;
+    }
 
     setState(prev => ({
       ...prev,
@@ -307,7 +329,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
     // Terminate browser session first if active
     if (state.browserSession.sessionId && state.browserSession.usecaseId) {
       if (state.recording.status === 'recording' || state.recording.status === 'starting') {
-        await stopRecordingBeforeTerminate(state.browserSession.sessionId);
+        await stopRecordingBeforeTerminate(state.browserSession.sessionId, state.browserSession.usecaseId);
       }
       await terminateBrowserSession(state.browserSession.sessionId, state.browserSession.usecaseId);
       setState(prev => ({
@@ -370,7 +392,7 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
     setState(prev => ({ ...prev, isImporting: true, error: null }));
 
     // Merge mobile platform fields into the generated usecase
-    const usecaseToImport = { ...state.generatedUsecase };
+    const usecaseToImport = { ...state.generatedUsecase, application_id: applicationId };
     if (isMobile) {
       usecaseToImport.usecase = {
         ...usecaseToImport.usecase,
@@ -575,6 +597,15 @@ export default function UserJourneyWizard({ onUsecaseCreated }: UserJourneyWizar
 
   const renderFormFields = () => (
     <>
+      <ApplicationSelect
+        value={applicationId}
+        onChange={(value) => {
+          setApplicationId(value);
+          setState(prev => ({ ...prev, validationErrors: { ...prev.validationErrors, applicationId: '' } }));
+        }}
+        errorText={state.validationErrors.applicationId}
+        disabled={state.isGenerating || isBrowserSessionActive}
+      />
       <FormField
         label={
           <SpaceBetween direction="horizontal" size="xs" alignItems="center">

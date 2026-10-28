@@ -12,11 +12,13 @@ import Alert from '@cloudscape-design/components/alert';
 import Tabs from '@cloudscape-design/components/tabs';
 import { ApplicationMetricsCard } from './ApplicationMetricsCard';
 import { MetricsTab } from './MetricsTab';
+import { ReassignTeamModal } from './ReassignTeamModal';
 import { UsecasesTable, UsecaseItem } from '../common/UsecasesTable';
 import { TestSuitesTable } from '../common/TestSuitesTable';
 import { DashboardOverviewItem } from '../../types/application';
 import { api, TestSuite } from '../../utils/api';
 import { useBatchExecute } from '../../hooks/useBatchExecute';
+import { usePermissions, canManageApplication } from '../../auth';
 
 
 export default function ApplicationDetailView() {
@@ -45,6 +47,8 @@ export default function ApplicationDetailView() {
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState('');
   const { executeBatch, executing } = useBatchExecute();
+  const { isAdmin, teams } = usePermissions();
+  const [reassignVisible, setReassignVisible] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -137,13 +141,27 @@ export default function ApplicationDetailView() {
         variant="h1"
         actions={
           <SpaceBetween direction="horizontal" size="m">
-            <Button onClick={() => navigate(`/applications/${id}/edit`)}>Edit</Button>
+            {isAdmin && <Button onClick={() => setReassignVisible(true)}>Assign to team</Button>}
+            {canManageApplication(isAdmin, teams, app.owner_team_id) && (
+              <Button onClick={() => navigate(`/applications/${id}/edit`)}>Edit</Button>
+            )}
             <Button variant="primary" onClick={() => navigate(`/create/new?applicationId=${id}`)}>Create usecase</Button>
           </SpaceBetween>
         }
       >
         {app.name}
       </Header>
+
+      {isAdmin && (
+        <ReassignTeamModal
+          visible={reassignVisible}
+          onDismiss={() => setReassignVisible(false)}
+          onSuccess={loadData}
+          applicationId={id!}
+          applicationName={app.name}
+          currentTeamId={(app as any).owner_team_id}
+        />
+      )}
 
       <ApplicationMetricsCard app={app} hideHeader />
 

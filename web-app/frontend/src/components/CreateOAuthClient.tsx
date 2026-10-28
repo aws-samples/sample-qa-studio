@@ -13,17 +13,24 @@ import {
   Box,
   CopyToClipboard,
   Multiselect,
-  MultiselectProps
+  MultiselectProps,
+  Select,
+  SelectProps
 } from '@cloudscape-design/components';
 import { oauthClientApi, scopesApi, CreateOAuthClientRequest } from '../utils/api';
 import { ErrorState } from '../utils/errorManager';
+import { useTeamOptions } from '../hooks/useTeamOptions';
+import { M2M_FORBIDDEN_SCOPES, OAUTH_CLIENT_CREATOR_ROLES } from '../types/permissions';
 
 const CreateOAuthClient: React.FC = () => {
   const navigate = useNavigate();
   const [clientData, setClientData] = useState<CreateOAuthClientRequest>({
     name: '',
-    scopes: [] // No default scopes
+    scopes: [], // No default scopes
+    teamId: ''
   });
+  const teamOptions = useTeamOptions(true, OAUTH_CLIENT_CREATOR_ROLES);
+  const [selectedTeam, setSelectedTeam] = useState<SelectProps.Option | null>(null);
   const [selectedScopes, setSelectedScopes] = useState<MultiselectProps.Option[]>([]);
   const [availableScopes, setAvailableScopes] = useState<MultiselectProps.Option[]>([]);
   const [loadingScopes, setLoadingScopes] = useState(true);
@@ -44,7 +51,8 @@ const CreateOAuthClient: React.FC = () => {
       try {
         setLoadingScopes(true);
         const response = await scopesApi.list();
-        setAvailableScopes(response.scopes);
+        // M2M clients may never hold admin / team-management scopes
+        setAvailableScopes(response.scopes.filter((s) => !M2M_FORBIDDEN_SCOPES.includes(s.value)));
         setScopesError(null);
       } catch (err) {
         console.error('Failed to fetch scopes:', err);
@@ -87,7 +95,7 @@ const CreateOAuthClient: React.FC = () => {
   };
 
   const isFormValid = () => {
-    return clientData.name.trim().length > 0 && (clientData.scopes?.length || 0) > 0;
+    return clientData.name.trim().length > 0 && (clientData.scopes?.length || 0) > 0 && !!clientData.teamId;
   };
 
   const handleCloseSuccessModal = () => {
@@ -144,6 +152,23 @@ const CreateOAuthClient: React.FC = () => {
             />
           </FormField>
 
+          <FormField
+            label="Team"
+            description="The team this client acts for. It gets at most editor access to that team's applications."
+            constraintText="Required"
+          >
+            <Select
+              selectedOption={selectedTeam}
+              onChange={({ detail }) => {
+                setSelectedTeam(detail.selectedOption);
+                setClientData({ ...clientData, teamId: detail.selectedOption.value || '' });
+              }}
+              options={teamOptions}
+              placeholder="Select a team"
+              empty="No teams where you are an editor or team lead"
+              disabled={creating}
+            />
+          </FormField>
           <FormField
             label="Scopes"
             description="Select the permissions this OAuth client will have."

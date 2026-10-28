@@ -792,3 +792,14 @@ class TestClearCacheFields(unittest.TestCase):
 
         # Primary operation (status update) must still be reported as 200.
         self.assertEqual(response['statusCode'], 200)
+
+
+import pytest as _pytest  # noqa: E402
+from authz_test_support import resource_access_granted as _resource_access_granted  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: ownership is covered by test_execution_routes_access.py."""
+    with _resource_access_granted():
+        yield

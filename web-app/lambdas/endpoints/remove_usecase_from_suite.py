@@ -5,9 +5,10 @@ from utils import (
     create_response,
     get_table_name,
     get_current_timestamp,
-    require_scopes,
-    validate_path_id
+    validate_path_id,
+    extract_user_identity,
 )
+from resource_auth import require_resource_access, suite_from_path
 from test_suite_schema import (
     get_suite_mapping_pk,
     get_usecase_mapping_sk,
@@ -20,6 +21,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', suite_from_path, scopes=['api/suite.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to remove a use case from a test suite.
@@ -44,11 +46,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if error:
             return error
         
-        # Validate scope access (requires api/suite.write or admin)
-        user_identity, error_response = require_scopes(event, ['api/suite.write'])
-        if error_response:
-            return error_response
-        
+        user_identity = extract_user_identity(event)
         user_identity_str = user_identity.get('identity', '')
         
         logger.info(f"Removing use case {usecase_id} from suite {suite_id} for user: {user_identity_str}")

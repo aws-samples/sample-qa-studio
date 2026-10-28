@@ -107,7 +107,8 @@ class AppiumInstanceManager:
                             f"Appium session creation failed (attempt {attempt}/{max_retries}): {e}. "
                             f"Retrying in {retry_delay}s..."
                         )
-                        time.sleep(retry_delay)
+                        # Intentional: retry delay between Appium session attempts (max_retries).
+                        time.sleep(retry_delay)  # nosemgrep
                     else:
                         _LOGGER.error(f"Appium session creation failed after {max_retries} attempts")
 

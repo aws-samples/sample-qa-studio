@@ -35,8 +35,8 @@ Out of scope here: CI/CD pipeline setup, cloud deployment, the web interface, sc
 
 - **Hand-author the JSON** *(preferred when an agent is helping)* — write the JSON to a file under `./tests/`, then push to the cloud via Importing tests. The agent IS the AI; calling Nova Act through the CLI to generate steps adds an unnecessary layer.
 - **Generate from a user-journey description** *(fallback)* — `qa-studio tests create --from-journey ... --export-to ./tests/`. Use when the user explicitly wants the CLI's draft, or when the agent's context isn't enough to author the test directly.
-- **Import an existing JSON or push edits to the cloud** — `qa-studio tests import <path>`. Validates and uploads. Same command for both authoring paths above. See [Importing tests](./reference/building-tests.md#importing-tests) for flags (`--dry-run`, `--base-url`, `--skip-secrets`, `--format json`) and the secret-prompt behavior.
-- **Import end-to-end through chat (ready-to-run)** — `qa-studio tests import <path> --non-interactive --secret KEY=VALUE [--secret KEY=VALUE]...`. Use only for non-prod / dev / dummy credentials. **Mandatory caveat:** whenever you import with values inline (whether the user volunteers them or you ask), you MUST warn the user that credentials will appear in the **chat transcript**, the **model context**, and the **shell command line** — all three keywords are required. Use this template: "Heads up: anything you paste in this chat lands in the **chat transcript**, the **model context**, and the **shell command line** I'll execute. That's fine for dev or local accounts, but don't paste production credentials — for those, I'll use `--skip-secrets` and you can set them in the QA Studio UI." See [Agent flow: ready-to-run import](./reference/building-tests.md#agent-flow-ready-to-run-import) for the full decision logic.
+- **Import an existing JSON or push edits to the cloud** — `qa-studio tests import <path> --application-id <app-id>`. Validates and uploads. Same command for both authoring paths above. See [Importing tests](./reference/building-tests.md#importing-tests) for flags (`--application-id` (required unless `--dry-run`), `--dry-run`, `--base-url`, `--skip-secrets`, `--format json`) and the secret-prompt behavior.
+- **Import end-to-end through chat (ready-to-run)** — `qa-studio tests import <path> --application-id <app-id> --non-interactive --secret KEY=VALUE [--secret KEY=VALUE]...`. Use only for non-prod / dev / dummy credentials. **Mandatory caveat:** whenever you import with values inline (whether the user volunteers them or you ask), you MUST warn the user that credentials will appear in the **chat transcript**, the **model context**, and the **shell command line** — all three keywords are required. Use this template: "Heads up: anything you paste in this chat lands in the **chat transcript**, the **model context**, and the **shell command line** I'll execute. That's fine for dev or local accounts, but don't paste production credentials — for those, I'll use `--skip-secrets` and you can set them in the QA Studio UI." See [Agent flow: ready-to-run import](./reference/building-tests.md#agent-flow-ready-to-run-import) for the full decision logic.
 - **Pick the right step type for a goal** — see [🎯 Step Types](./reference/step-types/) (one file per type).
 - **Choose a validation operator** — see [✅ Validation Operators](./reference/validation-operators.md).
 
@@ -80,7 +80,7 @@ The default agent flow. The agent reads the user's description, drafts the JSON 
 qa-studio tests import ./tests/checkout-flow.json --dry-run
 
 # Import for real.
-qa-studio tests import ./tests/checkout-flow.json
+qa-studio tests import ./tests/checkout-flow.json --application-id <app-id>
 
 # Run it against a local dev server.
 qa-studio run --usecase-id <id> --base-url http://localhost:3000
@@ -111,7 +111,7 @@ qa-studio run --usecase-id <id> \
 qa-studio tests import ./tests/login.json --dry-run
 
 # Import for real.
-qa-studio tests import ./tests/login.json
+qa-studio tests import ./tests/login.json --application-id <app-id>
 
 # Find the suite and run it.
 qa-studio suites list
@@ -159,7 +159,7 @@ The agent's preferred path. The agent writes the JSON file based on the user's d
 
 ```bash
 # After writing ./tests/user-registration.json:
-qa-studio tests import ./tests/user-registration.json
+qa-studio tests import ./tests/user-registration.json --application-id <app-id>
 ```
 
 If the agent's context isn't enough to author the test directly, fall back to `qa-studio tests create --from-journey ... --export-to ./tests/` which delegates the drafting to Nova Act and writes the result to disk.

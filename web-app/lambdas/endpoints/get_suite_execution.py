@@ -15,9 +15,10 @@ from boto3.dynamodb.conditions import Key
 from utils import (
     create_response,
     get_table_name,
-    require_scopes,
-    validate_path_id
+    validate_path_id,
+    extract_user_identity,
 )
+from resource_auth import require_resource_access, suite_execution_from_path
 from test_suite_schema import (
     get_suite_execution_pk,
     get_execution_sk,
@@ -29,6 +30,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('view', suite_execution_from_path, scopes=['api/suite.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to get a specific suite execution with all results.
@@ -53,11 +55,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if error:
             return error
         
-        # Validate scope access (requires api/suite.read or admin)
-        user_identity, error_response = require_scopes(event, ['api/suite.read'])
-        if error_response:
-            return error_response
-        
+        user_identity = extract_user_identity(event)
         user_identity_str = user_identity.get('identity', '')
         
         logger.info(f"Getting suite execution {execution_id} for suite {suite_id} for user: {user_identity_str}")

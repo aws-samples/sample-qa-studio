@@ -279,30 +279,30 @@ class TestFindTraceS3Key:
 # ---------------------------------------------------------------------------
 
 class TestHandler:
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_scope_validation_failure(self, mock_scopes, valid_event):
         error_resp = {"statusCode": 403, "body": "Forbidden"}
         mock_scopes.return_value = ({}, error_resp)
         result = handler(valid_event, None)
         assert result == error_resp
 
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_missing_path_params(self, mock_scopes):
         mock_scopes.return_value = ({"identity": "user"}, None)
         event = {"pathParameters": {}}
         result = handler(event, None)
         body = json.loads(result["body"])
         assert result["statusCode"] == 400
-        assert "Missing required parameters" in body["error"]
+        assert "usecase ID is required" in body["error"]  # resolver validates path ids
 
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_null_path_params(self, mock_scopes):
         mock_scopes.return_value = ({"identity": "user"}, None)
         event = {"pathParameters": None}
         result = handler(event, None)
         assert result["statusCode"] == 400
 
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_missing_path_params_key(self, mock_scopes):
         mock_scopes.return_value = ({"identity": "user"}, None)
         event = {}
@@ -310,7 +310,7 @@ class TestHandler:
         assert result["statusCode"] == 400
 
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_step_not_found(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -324,7 +324,7 @@ class TestHandler:
         assert "Execution step not found" in body["error"]
 
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_step_not_found_wrong_sort(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         """Query returns steps but none match the requested sort value."""
         mock_scopes.return_value = ({"identity": "user"}, None)
@@ -341,7 +341,7 @@ class TestHandler:
         assert "Execution step not found" in body["error"]
 
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_no_act_id(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -355,7 +355,7 @@ class TestHandler:
         assert "No trace available" in body["error"]
 
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_cached_act_id(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -368,7 +368,7 @@ class TestHandler:
         assert "cached step" in body["error"]
 
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_error_act_id(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -381,7 +381,7 @@ class TestHandler:
         assert "errored step" in body["error"]
 
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_execution_not_found(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -396,7 +396,7 @@ class TestHandler:
         assert "Execution not found" in body["error"]
 
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_no_session_id(self, mock_scopes, mock_boto3, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -411,7 +411,7 @@ class TestHandler:
 
     @patch("get_step_trace.find_trace_s3_key", return_value=None)
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_trace_file_not_found(self, mock_scopes, mock_boto3, mock_find, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -427,7 +427,7 @@ class TestHandler:
     @patch("get_step_trace.parse_trace_json")
     @patch("get_step_trace.find_trace_s3_key", return_value="uc/ex/sess/act_001_nav_calls.json")
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_successful_trace_retrieval(self, mock_scopes, mock_boto3, mock_find, mock_parse, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -456,7 +456,7 @@ class TestHandler:
 
     @patch("get_step_trace.find_trace_s3_key", return_value="uc/ex/sess/act_001_nav_calls.json")
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_s3_get_object_no_such_key(self, mock_scopes, mock_boto3, mock_find, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -478,7 +478,7 @@ class TestHandler:
 
     @patch("get_step_trace.find_trace_s3_key", return_value="uc/ex/sess/act_001_nav_calls.json")
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_s3_get_object_other_error(self, mock_scopes, mock_boto3, mock_find, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -499,7 +499,7 @@ class TestHandler:
     @patch("get_step_trace.parse_trace_json", side_effect=ValueError("bad"))
     @patch("get_step_trace.find_trace_s3_key", return_value="uc/ex/sess/act_001_nav_calls.json")
     @patch("get_step_trace.boto3")
-    @patch("get_step_trace.require_scopes")
+    @patch("resource_auth.require_scopes")
     def test_parse_failure(self, mock_scopes, mock_boto3, mock_find, mock_parse, mock_env_vars, valid_event):
         mock_scopes.return_value = ({"identity": "user"}, None)
         table = MagicMock()
@@ -518,7 +518,19 @@ class TestHandler:
         assert result["statusCode"] == 404
         assert "Failed to parse trace data" in body["error"]
 
-    @patch("get_step_trace.require_scopes", side_effect=RuntimeError("boom"))
-    def test_unexpected_exception(self, mock_scopes, valid_event):
+    @patch("get_step_trace.get_table_name", side_effect=RuntimeError("boom"))
+    @patch("resource_auth.require_scopes", return_value=({"identity": "user"}, None))
+    def test_unexpected_exception(self, mock_scopes, mock_table_name, valid_event):
         result = handler(valid_event, None)
         assert result["statusCode"] == 500
+
+
+import pytest as _pytest  # noqa: E402
+from authz_test_support import resource_access_granted as _resource_access_granted  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: ownership is covered by test_execution_routes_access.py."""
+    with _resource_access_granted():
+        yield

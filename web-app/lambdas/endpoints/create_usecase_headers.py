@@ -2,13 +2,15 @@ import json
 import logging
 from typing import Any, Dict
 import boto3
-from utils import get_table_name, create_response, get_current_timestamp, require_scopes, validate_path_id
+from utils import get_table_name, create_response, get_current_timestamp
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to create or update use case headers in Amazon DynamoDB.
@@ -21,15 +23,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response
     """
     try:
-        # Validate scopes
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
-        
         # Get use case ID from path parameters
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Parse request body
         body = json.loads(event.get('body', '{}'))

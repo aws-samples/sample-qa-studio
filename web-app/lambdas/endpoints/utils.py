@@ -102,8 +102,9 @@ def get_bucket_name() -> str:
     """Get Amazon S3 bucket name from environment variable."""
     bucket_name = os.environ.get('BUCKET_NAME')
     if not bucket_name:
-        logging.warning("environment variable 'BUCKET_NAME' missing")
-        return 'accept-ai-artefacts'
+        # Fail closed: never fall back to a guessable bucket name that someone
+        # else could own (bucket squatting). CDK always sets BUCKET_NAME.
+        raise RuntimeError("environment variable 'BUCKET_NAME' is not set")
     return bucket_name
 
 
@@ -130,17 +131,20 @@ def extract_user_identity(event: dict) -> dict:
     Returns:
         Dictionary with:
         - identity: Email for user tokens, client_id for M2M tokens
-        - identity_type: 'user' or 'client'
+        - identity_type: 'user', 'client' (M2M) or 'worker' (the shared worker client)
         - sub: Amazon Cognito sub claim
         - client_id: Client ID for M2M tokens (optional)
         - email: Email for user tokens (optional)
         - scopes: List of OAuth scopes for M2M tokens (optional)
+        - team_roles: Team memberships; for a client, its team binding from
+          the authorizer ([] when unbound, which fails closed)
+        - is_admin: Always False for client and worker identities
     """
     request_context = event.get('requestContext', {})
     authorizer = request_context.get('authorizer', {})
     
     logging.info(f"=== EXTRACTING USER IDENTITY ===")
-    logging.info(f"Full authorizer object: {json.dumps(authorizer, default=str)}")
+    # Never log the authorizer context or claims: they carry email/username.
     
     # Check if using Lambda authorizer (context is directly in authorizer)
     # or Cognito authorizer (context is in claims)
@@ -153,7 +157,6 @@ def extract_user_identity(event: dict) -> dict:
         claims = authorizer
         logging.info("Using Lambda authorizer format (direct context)")
     
-    logging.info(f"Claims extracted: {json.dumps(claims, default=str)}")
     
     email = claims.get('email')
     username = claims.get('username')
@@ -162,21 +165,34 @@ def extract_user_identity(event: dict) -> dict:
     identity_type = claims.get('identityType') or claims.get('identity_type')
     scope = claims.get('scope', '')
     
-    logging.info(f"Parsed values - email: {email}, username: {username}, sub: {sub}, client_id: {client_id}, identity_type: {identity_type}, scope: {scope}")
+    logging.info(f"Parsed values - client_id: {client_id}, identity_type: {identity_type}, scope: {scope}")
     
     # Parse scopes (space-separated string)
     scopes = scope.split() if scope else []
     
+    # Parse team context from authorizer (added by permissions feature)
+    team_roles_raw = claims.get('teamRoles', '[]')
+    try:
+        team_roles = json.loads(team_roles_raw) if isinstance(team_roles_raw, str) else []
+    except (json.JSONDecodeError, TypeError):
+        team_roles = []
+
+    is_admin_raw = claims.get('isAdmin', 'false')
+    is_admin = is_admin_raw == 'true' if isinstance(is_admin_raw, str) else False
+
     # Use identity_type from authorizer if available
-    if identity_type == 'client':
+    if identity_type in ('client', 'worker'):
         result = {
             'identity': client_id or sub,
-            'identity_type': 'client',
+            'identity_type': identity_type,
             'sub': sub,
             'client_id': client_id,
-            'scopes': scopes
+            'scopes': scopes,
+            # Workers never act through team roles (execution capability only).
+            'team_roles': team_roles if identity_type == 'client' else [],
+            'is_admin': False,
         }
-        logging.info(f"Identified as CLIENT: {result}")
+        logging.info(f"Identified as {identity_type.upper()}")
         return result
     elif identity_type == 'user':
         result = {
@@ -184,9 +200,11 @@ def extract_user_identity(event: dict) -> dict:
             'identity_type': 'user',
             'sub': sub,
             'email': email,
-            'scopes': scopes  # Include scopes for user tokens too
+            'scopes': scopes,  # Include scopes for user tokens too
+            'team_roles': team_roles,
+            'is_admin': is_admin,
         }
-        logging.info(f"Identified as USER: {result}")
+        logging.info("Identified as USER")
         return result
     
     # Fallback: determine from claims
@@ -197,9 +215,11 @@ def extract_user_identity(event: dict) -> dict:
             'identity_type': 'client',
             'sub': sub,
             'client_id': client_id,
-            'scopes': scopes
+            'scopes': scopes,
+            'team_roles': team_roles,
+            'is_admin': False,
         }
-        logging.info(f"Fallback identified as CLIENT: {result}")
+        logging.info("Fallback identified as CLIENT")
         return result
     
     # User token
@@ -209,9 +229,11 @@ def extract_user_identity(event: dict) -> dict:
             'identity_type': 'user',
             'sub': sub,
             'email': email,
-            'scopes': scopes  # Include scopes for user tokens too
+            'scopes': scopes,  # Include scopes for user tokens too
+            'team_roles': team_roles,
+            'is_admin': is_admin,
         }
-        logging.info(f"Fallback identified as USER: {result}")
+        logging.info("Fallback identified as USER")
         return result
     
     # Unknown token type
@@ -221,7 +243,7 @@ def extract_user_identity(event: dict) -> dict:
         'sub': sub,
         'scopes': []
     }
-    logging.warning(f"Could not identify token type - returning UNKNOWN: {result}")
+    logging.warning("Could not identify token type - returning UNKNOWN")
     return result
 
 
@@ -242,8 +264,8 @@ def allow_m2m_token(event: dict) -> tuple[dict, dict | None]:
     if user_identity['identity_type'] == 'unknown':
         return user_identity, create_response(401, {'error': 'Unauthorized'})
     
-    # Allow both 'user' and 'client' identity types
-    logging.info(f"Request authorized: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    # Allow 'user', 'client' and 'worker' identity types
+    logging.info(f"Request authorized (type: {user_identity['identity_type']})")
     return user_identity, None
 
 
@@ -264,7 +286,7 @@ def require_user_token(event: dict) -> tuple[dict, dict | None]:
     """
     user_identity = extract_user_identity(event)
     
-    if user_identity['identity_type'] == 'client':
+    if user_identity['identity_type'] in ('client', 'worker'):
         logging.warning(f"M2M token attempted to access user-only endpoint: {user_identity['client_id']}")
         return user_identity, create_response(403, {
             'error': 'Forbidden',
@@ -274,7 +296,7 @@ def require_user_token(event: dict) -> tuple[dict, dict | None]:
     if user_identity['identity_type'] == 'unknown':
         return user_identity, create_response(401, {'error': 'Unauthorized'})
     
-    logging.info(f"User authenticated: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    logging.info(f"User authenticated (type: {user_identity['identity_type']})")
     return user_identity, None
 
 
@@ -304,7 +326,7 @@ def require_scopes(event: dict, required_scopes: list[str]) -> tuple[dict, dict 
     token_scopes = user_identity.get('scopes', [])
     
     # Log scope validation attempt
-    logging.info(f"Scope validation - Identity: {user_identity['identity']}, "
+    logging.info(f"Scope validation - "
                 f"Type: {user_identity['identity_type']}, "
                 f"Token scopes: {token_scopes}, "
                 f"Required: {required_scopes}")
@@ -407,6 +429,53 @@ def create_response(status_code: int, body: Any, cors: bool = True) -> dict:
         'headers': headers,
         'body': json.dumps(body, cls=DynamoDBEncoder)
     }
+
+
+def no_content_response(cors: bool = True) -> dict:
+    """204 No Content with the standard headers and an empty body."""
+    response = create_response(204, None, cors)
+    response['body'] = ''
+    return response
+
+
+def request_log_summary(event: dict) -> str:
+    """
+    Build a log-safe one-line summary of an API Gateway proxy event.
+
+    Never log the raw event: it carries the caller's bearer token in
+    ``headers.Authorization`` and request bodies that can contain secret
+    values (e.g. POST /usecase/{id}/secrets). Only routing metadata and
+    the caller's opaque identifiers are included here.
+    """
+    event = event or {}
+    ctx = event.get('requestContext') or {}
+    authorizer = ctx.get('authorizer') or {}
+    body = event.get('body')
+    return (
+        f"method={event.get('httpMethod')} "
+        f"resource={event.get('resource')} "
+        f"path_params={sorted((event.get('pathParameters') or {}).keys())} "
+        f"query_params={sorted((event.get('queryStringParameters') or {}).keys())} "
+        f"request_id={ctx.get('requestId')} "
+        # sub / clientId are opaque IDs; principalId and email are not logged
+        # because principalId is the user's email for user tokens.
+        f"caller={authorizer.get('sub') or authorizer.get('clientId') or None} "
+        f"body_bytes={len(body) if isinstance(body, str) else 0}"
+    )
+
+
+def aws_error_code(err: Exception) -> str:
+    """
+    Return a log-safe identifier for an AWS SDK error.
+
+    ``str(ClientError)`` embeds resource identifiers (e.g. the secret ARN),
+    so log this instead: the botocore error code for a ``ClientError``,
+    otherwise the exception class name.
+    """
+    response = getattr(err, 'response', None)
+    if isinstance(response, dict):
+        return response.get('Error', {}).get('Code') or 'Unknown'
+    return type(err).__name__
 
 
 # User journey validation utilities

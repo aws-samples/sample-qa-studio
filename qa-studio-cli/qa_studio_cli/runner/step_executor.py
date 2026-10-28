@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 from nova_act import NovaAct, BOOL_SCHEMA
 
 from qa_studio_cli.models.execution import StepResult
+from qa_studio_cli.utils.files import path_in_directory, safe_download_filename
 from qa_studio_cli.runner.transform.date_compare import evaluate_date_assertion
 from qa_studio_cli.runner.transform.date_parser import DateParseError, parse_to_utc
 
@@ -421,23 +422,23 @@ class StepExecutor:
             act_id = self._extract_act_id(result)
             playwright_download = download_info.value
 
-            time.sleep(1)
+            # Intentional: give the CDP interception handler a moment to capture the download.
+            time.sleep(1)  # nosemgrep
 
             if download_data["file"]:
                 temp_path = download_data["file"]
                 filename = download_data["filename"]
             else:
-                filename = playwright_download.suggested_filename
+                filename = safe_download_filename(playwright_download.suggested_filename)
                 self.downloads_dir.mkdir(parents=True, exist_ok=True)
-                temp_path = str(self.downloads_dir / filename)
+                temp_path = path_in_directory(self.downloads_dir, filename)
                 # Validate URL scheme to prevent SSRF
                 parsed_url = urlparse(playwright_download.url)
                 if parsed_url.scheme not in ('http', 'https'):
                     raise ValueError(f"Unsupported URL scheme: {parsed_url.scheme}")
+                # Verify TLS: the browser already validated this site's certificate.
                 ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-                with urllib.request.urlopen(playwright_download.url, context=ctx) as resp:  # nosec B310
+                with urllib.request.urlopen(playwright_download.url, context=ctx, timeout=60) as resp:  # nosec B310 - scheme validated above
                     with open(temp_path, "wb") as f:
                         while chunk := resp.read(8192):
                             f.write(chunk)
@@ -577,6 +578,7 @@ class StepExecutor:
             if not filename:
                 url = event.get("request", {}).get("url", "")
                 filename = urllib.parse.unquote(url.split("/")[-1].split("?")[0]) if url else "download"
+            filename = safe_download_filename(filename)
             file_path = self._download_from_stream(cdp_session, interception_id, filename)
             if file_path:
                 download_data["file"] = file_path
@@ -590,7 +592,7 @@ class StepExecutor:
     def _download_from_stream(self, cdp_session, interception_id: str, filename: str) -> Optional[str]:
         """Download file content from a CDP interception stream."""
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
-        temp_path = str(self.downloads_dir / filename)
+        temp_path = path_in_directory(self.downloads_dir, filename)
         try:
             resp = cdp_session.send(
                 "Network.takeResponseBodyForInterceptionAsStream",

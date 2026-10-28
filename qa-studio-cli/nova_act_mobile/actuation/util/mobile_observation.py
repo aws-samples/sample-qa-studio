@@ -1,7 +1,10 @@
 """Mobile observation utilities for screenshots and UI hierarchy extraction."""
 
 import math
-import xml.etree.ElementTree as ET
+# Parse with defusedxml: the UI hierarchy comes from the device under test,
+# so block entity expansion / external entities (XXE).
+
+from defusedxml import ElementTree as SafeET
 
 from appium.webdriver.webdriver import WebDriver
 from nova_act.types.api.step import BboxTLWH
@@ -105,14 +108,14 @@ def parse_ui_hierarchy(
     platform = get_platform(driver)
 
     try:
-        root = ET.fromstring(xml_source)
+        root = SafeET.fromstring(xml_source)
 
         id_to_bbox_map: dict[int, BboxTLWH] = {}
         simplified_dom_lines: list[str] = []
         element_id = 0
 
-        def parse_element(elem: ET.Element, depth: int = 0) -> None:
-            """Recursively parse UI elements."""
+        def parse_element(elem, depth: int = 0) -> None:
+            """Recursively parse UI elements (``elem`` is an ElementTree element)."""
             nonlocal element_id
 
             # Extract element information based on platform
@@ -213,7 +216,7 @@ def parse_ui_hierarchy(
         simplified_dom = "\n".join(simplified_dom_lines)
         return id_to_bbox_map, simplified_dom
 
-    except ET.ParseError as e:
+    except SafeET.ParseError as e:
         _LOGGER.error(f"Failed to parse UI hierarchy XML: {e}")
         raise ValueError(f"Invalid UI hierarchy XML: {e}") from e
     except Exception as e:

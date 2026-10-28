@@ -21,6 +21,7 @@ import { Topic } from 'aws-cdk-lib/aws-sns';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 import { loadConfig } from './config';
+import { resolveAgentCoreAzNames } from './agentcore-az';
 
 const config = loadConfig();
 const { defaultRegion, enabledRegions, vpcId, workerSecurityGroupId, createVpcEndpoints, agentCoreVPC } = config;
@@ -353,6 +354,16 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // VPC Configuration: Use existing VPC or create new one
     let shouldCreateVpcEndpoints: boolean;
 
+    // When AgentCore browsers are attached to a VPC, they can only run in
+    // specific Availability Zones (see agentcore-az.ts). Resolve the set of
+    // supported AZ *names* for this account/region up front so we can (a) pin
+    // a created VPC's subnets to supported zones, and (b) validate that an
+    // imported VPC actually has a subnet in a supported zone. Only resolved on
+    // the VPC path so non-VPC deploys stay env-agnostic (no synth-time AWS call).
+    const agentCoreAzNames = agentCoreVPC
+      ? resolveAgentCoreAzNames(process.env.CDK_DEFAULT_REGION || defaultRegion)
+      : undefined;
+
     if (vpcId) {
       // Use existing VPC - automatically discovers subnets
       this.vpc = Vpc.fromLookup(this, 'existing-vpc', {
@@ -364,19 +375,54 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         throw new Error(`Existing VPC ${vpcId} must have at least one private subnet with NAT Gateway for ECS tasks and AgentCore browsers`);
       }
 
+      // When VPC-attaching AgentCore browsers, the imported VPC must have at
+      // least one private subnet in an AgentCore-supported AZ — otherwise
+      // browser creation fails at runtime and can't be fixed without changing
+      // the VPC's subnets. Fail fast at synth with an actionable message.
+      if (agentCoreAzNames) {
+        const supportedSubnets = this.vpc.privateSubnets.filter((s) =>
+          agentCoreAzNames.includes(s.availabilityZone),
+        );
+        if (supportedSubnets.length === 0) {
+          const vpcAzs = this.vpc.privateSubnets.map((s) => s.availabilityZone);
+          throw new Error(
+            `agentCoreVPC is enabled but imported VPC ${vpcId} has no private ` +
+              `subnet in an AgentCore-supported Availability Zone. ` +
+              `VPC private-subnet AZs: ${vpcAzs.join(', ') || '(none)'}. ` +
+              `AgentCore-supported AZs in this region: ${agentCoreAzNames.join(', ')}. ` +
+              `Add a private subnet (with NAT Gateway internet access) in one of ` +
+              `the supported AZs.`,
+          );
+        }
+      }
+
       // Only create VPC endpoints if explicitly requested for existing VPC
       shouldCreateVpcEndpoints = createVpcEndpoints ?? false;
     } else {
-      // Create new VPC with default configuration
+      // Create new VPC. When AgentCore VPC mode is on, pin the VPC's subnets to
+      // AgentCore-supported AZs (one NAT Gateway per AZ for internet access);
+      // otherwise fall back to the default two-AZ layout.
       this.vpc = new Vpc(this, 'vpc', {
         vpcName: this.cdkName('vpc'),
-        maxAzs: 2,
-        natGateways: 2,
+        // Pin to the first two supported AZs (AgentCore recommends >= 2). Two
+        // AZs matches the previous default footprint and the NAT cap, keeping
+        // the created VPC small and avoiding a third-AZ expansion.
+        ...(agentCoreAzNames
+          ? { availabilityZones: agentCoreAzNames.slice(0, 2), natGateways: 2 }
+          : { maxAzs: 2, natGateways: 2 }),
       });
 
       // Always create VPC endpoints for new VPC
       shouldCreateVpcEndpoints = true;
     }
+
+    // Choose a private subnet in an AgentCore-supported AZ to hand to the
+    // browser. For a created VPC every private subnet already qualifies (we
+    // pinned the AZs above); for an imported VPC we pick the first supported
+    // one (validated to exist above).
+    const agentCoreSubnet = agentCoreAzNames
+      ? this.vpc.privateSubnets.find((s) => agentCoreAzNames.includes(s.availabilityZone))!
+      : this.vpc.privateSubnets[0];
 
     // Create VPC endpoints if needed
     if (shouldCreateVpcEndpoints) {
@@ -483,7 +529,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       // VPC configuration for AgentCore browsers
       AGENT_CORE_VPC: 'true',
       AC_VPC_ID: this.vpc.vpcId,
-      AC_SUBNET_ID: this.vpc.privateSubnets[0].subnetId,
+      AC_SUBNET_ID: agentCoreSubnet.subnetId,
       AC_SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
     } : baseEnvironment;
 
@@ -698,47 +744,25 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }));
     }
 
-    // Add Secrets Manager permissions to execution role
-    this.taskDefinition.executionRole!.attachInlinePolicy(new Policy(this, 'ecr_access_policy', {
-      statements: [
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: [
-            'secretsmanager:GetSecretValue',
-          ],
-          resources: [
-            `arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`,
-          ]
-        }),
-      ]
-    }));
-
-    this.taskDefinition.executionRole!.attachInlinePolicy(new Policy(this, 'secrets_manager_policy', {
-      statements: [
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: [
-            'secretsmanager:GetSecretValue',
-            'secretsmanager:ListSecrets',
-          ],
-          resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
-        })
-      ]
-    }));
-
+    // Secrets Manager access.
+    // - Execution role: only needs the worker M2M credentials secret, which
+    //   ECS injects as OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET. CDK grants that
+    //   automatically via EcsSecret.fromSecretsManager, so no extra policy.
+    // - Task role: the Nova Act API key (used when USE_NOVA_ACT_GA=false) and
+    //   this deployment's use case secrets (`${baseName}/usecase/...`). The
+    //   trailing `*` covers the 6-character random ARN suffix.
     this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_secrets_manager_policy', {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
-          actions: [
-            'secretsmanager:GetSecretValue',
-            'secretsmanager:ListSecrets',
-          ],
-          resources: [`arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:*`]
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [
+            props.novaActApiKeySecret.secretArn,
+            `arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:${this.baseName}/usecase/*`,
+          ]
         })
       ]
     }));
-
     this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_bedrock_agentscore', {
       statements: [
         new PolicyStatement({
@@ -761,13 +785,59 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser-custom/*`,
             `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser-session/*`
           ]
+        }),
+        // Allow creation of the AgentCore network service-linked role. This is
+        // required the first time an AgentCore browser is attached to a VPC —
+        // AgentCore uses this SLR to manage the ENIs it places in your subnets.
+        // Without it, CreateBrowser fails with:
+        //   "Failed creating service linked role. Please verify that the calling
+        //    role has sufficient permissions to create a service linked role."
+        // Scoped to the AgentCore network service via the iam:AWSServiceName
+        // condition, matching the nova-act SLR statement above.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['iam:CreateServiceLinkedRole'],
+          resources: [
+            'arn:aws:iam::*:role/aws-service-role/network.bedrock-agentcore.amazonaws.com/*'
+          ],
+          conditions: {
+            StringLike: {
+              'iam:AWSServiceName': 'network.bedrock-agentcore.amazonaws.com'
+            }
+          }
         })
       ]
     }));
 
-    // Device Farm permissions for mobile testing (Device Farm is only available in us-west-2)
+    // Device Farm permissions for mobile testing (Device Farm is only available in us-west-2).
+    // The project is either supplied per use case / DEVICE_FARM_PROJECT_ARN or
+    // auto-discovered (first project in the account, created if none exists),
+    // so sessions, uploads and projects are scoped to this account's
+    // us-west-2 resources rather than a single project ARN.
+    const deviceFarmArn = (type: string, account: string = this.account) =>
+      `arn:aws:devicefarm:us-west-2:${account}:${type}:*`;
     this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_device_farm', {
       statements: [
+        // No resource-level permissions for these actions ("*" required).
+        // ListArtifacts is called with a session ARN, which is not one of its
+        // supported resource types (job/run/suite/test).
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            'devicefarm:ListProjects',
+            'devicefarm:CreateProject',
+            'devicefarm:ListDevices',
+            'devicefarm:ListArtifacts',
+          ],
+          resources: ['*'],
+        }),
+        // Public device catalog (devices have no account in their ARN).
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['devicefarm:GetDevice', 'devicefarm:CreateRemoteAccessSession'],
+          resources: [deviceFarmArn('device', ''), deviceFarmArn('deviceinstance', '')],
+        }),
+        // Account-owned projects, uploads and sessions.
         new PolicyStatement({
           effect: Effect.ALLOW,
           actions: [
@@ -775,20 +845,14 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             'devicefarm:GetRemoteAccessSession',
             'devicefarm:StopRemoteAccessSession',
             'devicefarm:DeleteRemoteAccessSession',
-            'devicefarm:ListProjects',
-            'devicefarm:CreateProject',
-            'devicefarm:ListDevices',
-            'devicefarm:GetDevice',
             'devicefarm:CreateUpload',
             'devicefarm:GetUpload',
             'devicefarm:ListUploads',
-            'devicefarm:ListArtifacts',
           ],
-          resources: ['*'],
+          resources: [deviceFarmArn('project'), deviceFarmArn('upload'), deviceFarmArn('session')],
         }),
       ],
     }));
-
     this.schedulerGroup = new CfnScheduleGroup(this, 'schedule_group', {
       name: this.cdkName('schedules')
     });
@@ -917,6 +981,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     this.createScheduleLambda = this.createPythonLambda({
       path: 'create_schedule',
       environment: {
+        TABLE_NAME: props.table.tableName,
         SCHEDULER_GROUP_NAME: this.schedulerGroup.name!,
         EXECUTE_USECASE_LAMBDA_ARN: this.executeUsecaseLambda.functionArn,
         SCHEDULER_TARGET_ROLE_ARN: this.schedulerRole.roleArn
@@ -951,6 +1016,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     this.restartWizardLambda = this.createPythonLambda({
       path: 'restart_wizard',
       environment: {
+        TABLE_NAME: props.table.tableName,
         WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
         WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
       }
@@ -988,6 +1054,12 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     props.table.grantReadWriteData(this.addWizardStepLambda);
     props.table.grantReadWriteData(this.terminateWizardLambda);
     props.table.grantReadWriteData(processWizardCommandLambda);
+
+    // Need table read for the require_resource_access owner lookup (these
+    // routes have no other table access). Guarded by
+    // lib/__tests__/ownership-check-iam.test.ts.
+    [this.createScheduleLambda, this.restartWizardLambda]
+      .forEach(lambda => lambda.role?.addManagedPolicy(props.tableReadPolicy));
 
     this.wizardQueue.grantSendMessages(this.startWizardLambda);
     this.wizardQueue.grantSendMessages(this.addWizardStepLambda);

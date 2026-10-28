@@ -125,6 +125,7 @@ qa-studio tests create --from-journey \
   --url "https://shop.example.com" \
   --journey "Add a product to cart, proceed to checkout, fill the shipping form, verify the order confirmation page" \
   --region us-east-1 \
+  --application-id <app-id> \
   --export-to ./tests/
 ```
 
@@ -149,33 +150,33 @@ After editing, push the updated test to the cloud via [Importing tests](#importi
 
 ```bash
 # Single file
-qa-studio tests import ./tests/login.json
+qa-studio tests import ./tests/login.json --application-id <app-id>
 
 # Whole directory (imports every *.json in it)
-qa-studio tests import ./tests/
+qa-studio tests import ./tests/ --application-id <app-id>
 
 # Validate without uploading (useful in CI or pre-commit checks)
 qa-studio tests import ./tests/login.json --dry-run
 
 # Override starting_url across all imports (e.g., point at staging)
-qa-studio tests import ./tests/ --base-url https://staging.example.com
+qa-studio tests import ./tests/ --application-id <app-id> --base-url https://staging.example.com
 
 # Skip the interactive secret prompt (configure values later in the UI)
-qa-studio tests import ./tests/ --skip-secrets
+qa-studio tests import ./tests/ --application-id <app-id> --skip-secrets
 
 # Machine-readable output (JSON), for piping into another tool
-qa-studio tests import ./tests/ --format json
+qa-studio tests import ./tests/ --application-id <app-id> --format json
 
 # Fully non-interactive (implies -y). Required secret values must be supplied
 # inline via --secret KEY=VALUE, otherwise the command fails with exit 2 and
 # lists the missing keys.
-qa-studio tests import ./tests/auth/login.json \
+qa-studio tests import ./tests/auth/login.json --application-id <app-id> \
   --non-interactive \
   --secret admin_email=admin@dev.local \
   --secret admin_password=devpass123
 
 # Non-interactive deferring secret config to the UI
-qa-studio tests import ./tests/auth/login.json --non-interactive --skip-secrets
+qa-studio tests import ./tests/auth/login.json --application-id <app-id> --non-interactive --skip-secrets
 ```
 
 Exit codes: `0` on success, `1` if any file failed to import, `2` for input-validation errors (malformed `--secret`, unknown secret key, or `--non-interactive` set with required secrets unsupplied).

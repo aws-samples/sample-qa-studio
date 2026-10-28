@@ -11,11 +11,13 @@ import Textarea from "@cloudscape-design/components/textarea";
 import Select from "@cloudscape-design/components/select";
 import Alert from "@cloudscape-design/components/alert";
 import Breadcrumb from '../common/Breadcrumb';
+import ApplicationSelect from '../common/ApplicationSelect';
 import { api } from '../../utils/api';
 import { regionOptions } from '../../utils/browser_regions';
 
 export default function WizardSetup() {
   const navigate = useNavigate();
+  const [applicationId, setApplicationId] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [starting_url, setStartingUrl] = useState('');
@@ -24,8 +26,8 @@ export default function WizardSetup() {
   const [error, setError] = useState<string | null>(null);
 
   const handleStart = async () => {
-    if (!name.trim() || !starting_url.trim()) {
-      setError('Name and Starting URL are required');
+    if (!applicationId || !name.trim() || !starting_url.trim()) {
+      setError('Application, Name and Starting URL are required');
       return;
     }
 
@@ -34,6 +36,7 @@ export default function WizardSetup() {
 
     try {
       const response = await api.post('wizard/start', {
+        application_id: applicationId,
         name: name.trim(),
         description: description.trim(),
         starting_url: starting_url.trim(),
@@ -105,6 +108,8 @@ export default function WizardSetup() {
                 The Interactive Wizard uses a live browser session and is only available for web tests. For mobile tests, use "Create Blank" or "Create from User Journey".
               </Alert>
 
+              <ApplicationSelect value={applicationId} onChange={setApplicationId} />
+
               <FormField
                 label="Use Case Name"
                 description="A descriptive name for your use case"
@@ -163,7 +168,7 @@ export default function WizardSetup() {
                   variant="primary"
                   onClick={handleStart}
                   loading={creating}
-                  disabled={!name.trim() || !starting_url.trim()}
+                  disabled={!applicationId || !name.trim() || !starting_url.trim()}
                 >
                   Start Wizard
                 </Button>

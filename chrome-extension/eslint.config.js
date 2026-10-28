@@ -37,6 +37,7 @@ export default [
         KeyboardEvent: 'readonly',
         JSZip: 'readonly',
         URL: 'readonly',
+        DOMParser: 'readonly',
         self: 'readonly',
       },
     },

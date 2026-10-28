@@ -123,7 +123,8 @@ class DynamoDBClient:
                     steps.append(step)
                 except Exception as e:
                     logger.error(f"Error parsing step {item.get('sk', 'unknown')}: {e}")
-                    logger.error(f"Step data: {item}")
+                    # Field names only: values may include secret key names or instructions.
+                    logger.error(f"Step fields: {sorted(item.keys())}")
                     continue
             
             # Sort by sort field to ensure proper order

@@ -4,9 +4,8 @@ Pre-Token Generation Lambda Trigger
 This Lambda function is triggered by Cognito during token generation to inject
 scopes into JWT tokens based on user group membership.
 
-Group-to-Scope Mapping:
-- users: usecases.read, usecases.write, executions.read, executions.write, usecases.execute
-- admins: all user scopes + oauth-clients.manage + admin
+Scope resolution is delegated to the shared role_scopes module (single source
+of truth for role-to-scope mappings).
 """
 
 import json
@@ -15,7 +14,10 @@ import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Define scope mappings for each group
+from role_scopes import scopes_for_groups
+
+# Backward-compatibility alias — existing tests import SCOPE_MAPPINGS.
+# This constant is kept for test assertions; actual resolution uses role_scopes.
 SCOPE_MAPPINGS = {
     'users': [
         'api/usecases.read',
@@ -29,6 +31,8 @@ SCOPE_MAPPINGS = {
         'api/suite.write',
         'api/oauth-clients.read',
         'api/oauth-clients.write',
+        'api/applications.read',
+        'api/applications.write',
     ],
     'admins': [
         'api/usecases.read',
@@ -42,6 +46,9 @@ SCOPE_MAPPINGS = {
         'api/suite.write',
         'api/oauth-clients.read',
         'api/oauth-clients.write',
+        'api/applications.read',
+        'api/applications.write',
+        'api/teams.manage',
         'api/admin'
     ]
 }
@@ -60,8 +67,10 @@ def handler(event, context):
     """
     try:
         logger.info(f"=== PRE-TOKEN GENERATION V2 TRIGGERED ===")
-        logger.info(f"Full event: {json.dumps(event, default=str)}")
-        logger.info(f"User: {event.get('userName')}")
+        # The event carries user attributes (email, name, phone): log only
+        # the opaque sub and the trigger source.
+        user_sub = (event.get('request', {}).get('userAttributes') or {}).get('sub')
+        logger.info(f"User sub: {user_sub}")
         logger.info(f"Trigger source: {event.get('triggerSource')}")
         
         # Extract user groups from the event
@@ -76,7 +85,6 @@ def handler(event, context):
         # Fallback: check userAttributes for cognito:groups
         if not groups:
             user_attributes = request.get('userAttributes', {})
-            logger.info(f"User attributes: {json.dumps(user_attributes, default=str)}")
             
             # cognito:groups might be a list or comma-separated string
             cognito_groups = user_attributes.get('cognito:groups', [])
@@ -91,15 +99,9 @@ def handler(event, context):
         if not groups:
             logger.warning("No groups found for user - token has no custom scopes")
         
-        # Collect scopes from all groups (union of scopes)
-        scopes = set()
-        for group in groups:
-            group_name = group.strip() if isinstance(group, str) else str(group)
-            if group_name in SCOPE_MAPPINGS:
-                scopes.update(SCOPE_MAPPINGS[group_name])
-                logger.info(f"Added scopes from group '{group_name}': {SCOPE_MAPPINGS[group_name]}")
-            else:
-                logger.warning(f"Unknown group: {group_name}")
+        # Collect scopes from all groups via the shared role_scopes module
+        scopes = scopes_for_groups(groups)
+        logger.info(f"Resolved scopes from groups {groups}: {scopes}")
         
         # Convert to space-separated string (OAuth 2.0 scope format)
         scope_string = ' '.join(sorted(scopes))

@@ -4,13 +4,15 @@ from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_bucket_name, require_scopes, validate_path_id
+from utils import create_response, no_content_response, get_table_name, get_bucket_name, validate_path_id
+from resource_auth import require_resource_access, execution_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', execution_from_path, scopes=['api/executions.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to delete an execution and its associated data.
@@ -22,19 +24,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway proxy response with deletion result
     """
-    # Validate scopes - deleting executions requires write permission
-    user_identity, error = require_scopes(event, ['api/executions.write'])
-    if error:
-        return error
-    
     try:
         # Get execution and usecase IDs from path
         execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
         if error:
             return error
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by the resolver
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
@@ -82,10 +77,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Successfully deleted execution {execution_id}")
         
-        return create_response(200, {
-            'status': 'execution deleted',
-            'executionId': execution_id
-        })
+        return no_content_response()
         
     except Exception as e:
         logger.error(f"Error deleting execution: {str(e)}", exc_info=True)

@@ -157,7 +157,7 @@ def setup_extension(nova):
     logger.info("Setting up NovaActRecorder extension...")
 
     # Wait briefly for extension to initialize after page load
-    time.sleep(2)
+    time.sleep(2)  # nosemgrep
 
     # Verify extension is installed
     status = verify_extension_loaded(nova)

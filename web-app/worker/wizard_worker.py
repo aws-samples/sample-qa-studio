@@ -278,7 +278,6 @@ def main():
                     workflow=workflow,
                     headless=True,
                     logs_directory=execution_logs_dir,
-                    ignore_https_errors=True,
                     chrome_channel="chromium",
                     stop_hooks=[s3_writer],
                     user_agent=os.getenv('USER_AGENT', 'Mozilla/5.0')
@@ -341,7 +340,7 @@ def main():
 
                                 if not commands:
                                     # No commands, sleep briefly and continue
-                                    time.sleep(0.5)
+                                    time.sleep(0.5)  # nosemgrep
                                     continue
 
                                 command_record = commands[0]
@@ -447,7 +446,6 @@ def main():
                                     starting_page=execution.starting_url,
                                     headless=True,
                                     logs_directory=execution_logs_dir,
-                                    ignore_https_errors=True,
                                     chrome_channel="chromium",
                                     stop_hooks=[s3_writer],
                                     nova_act_api_key=nova_api_key,
@@ -581,7 +579,6 @@ def main():
                 starting_page=execution.starting_url,
                 headless=True,
                 logs_directory=execution_logs_dir,
-                ignore_https_errors=True,
                 chrome_channel="chromium",
                 stop_hooks=[s3_writer],
                 nova_act_api_key=nova_api_key,
@@ -645,7 +642,7 @@ def main():
                                 
                                 if not commands:
                                     # No commands, sleep briefly and continue
-                                    time.sleep(0.5)
+                                    time.sleep(0.5)  # nosemgrep
                                     continue
                                 
                                 command_record = commands[0]
@@ -751,7 +748,6 @@ def main():
                                     starting_page=execution.starting_url,
                                     headless=True,
                                     logs_directory=execution_logs_dir,
-                                    ignore_https_errors=True,
                                     chrome_channel="chromium",
                                     stop_hooks=[s3_writer],
                                     nova_act_api_key=nova_api_key,

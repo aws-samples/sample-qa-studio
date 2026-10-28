@@ -3,13 +3,15 @@ import json
 from typing import Any, Dict
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_secret_prefix, require_scopes, validate_path_id
+from utils import create_response, no_content_response, get_secret_prefix, aws_error_code
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to delete a usecase secret.
@@ -22,16 +24,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with deletion result
     """
     try:
-        # Validate scopes
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
-        
         # Get usecase ID from path
-        path_params = event.get('pathParameters', {})
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
+        usecase_id = event['pathParameters']['id']  # validated by usecase_from_path
         
         # Parse request body
         try:
@@ -56,15 +50,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 ForceDeleteWithoutRecovery=True
             )
         except ClientError as e:
-            logger.error(f"Error deleting secret {secret_name}: {str(e)}")
+            logger.error(f"Error deleting usecase secret: {aws_error_code(e)}")
             return create_response(500, {'error': f'Failed to delete secret {secret_key}'})
         
-        logger.info(f"Successfully deleted secret {secret_name}")
+        logger.info(f"Successfully deleted secret {secret_key} for usecase {usecase_id}")
         
-        return create_response(200, {
-            'message': 'Secret deleted successfully',
-            'secret_key': secret_key
-        })
+        return no_content_response()
         
     except Exception as e:
         logger.error(f"Error deleting secret: {str(e)}", exc_info=True)

@@ -187,6 +187,12 @@ const OAuthClients: React.FC = () => {
               sortingField: 'created_date'
             },
             {
+              id: 'team_id',
+              header: 'Team',
+              cell: (client: OAuthClient) => client.team_id || 'Unbound (no access)',
+              sortingField: 'team_id'
+            },
+            {
               id: 'created_by',
               header: 'Created By',
               cell: (client: OAuthClient) => client.created_by || 'System',

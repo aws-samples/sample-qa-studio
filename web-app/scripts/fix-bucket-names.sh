@@ -2,12 +2,15 @@
 
 # Fix cross-region S3 bucket names to include account ID prefix
 # Old format: nova-act-qa-studio-modular-artefacts-{region}
-# New format: 672106413069-nova-act-qa-studio-modular-artefacts-{region}
+# New format: {account-id}-{base-name}-artefacts-{region}
+#
+# Usage: BASE_NAME=<baseName> ./fix-bucket-names.sh
+#        (account ID is read from the current AWS credentials)
 
 set -e
 
-ACCOUNT_ID="672106413069"
-BASE_NAME="nova-act-qa-studio-modular"
+: "${BASE_NAME:?Set BASE_NAME to the deployment baseName}"
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 REGIONS=("us-east-1" "us-west-2" "ap-southeast-2")
 
 echo "Fixing cross-region bucket names..."

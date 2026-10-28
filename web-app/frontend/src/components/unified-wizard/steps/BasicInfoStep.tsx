@@ -8,12 +8,11 @@ import Select, { SelectProps } from "@cloudscape-design/components/select";
 import Toggle from "@cloudscape-design/components/toggle";
 import type { StepProps } from '../types';
 import { useModels } from '../../../hooks/useModels';
-import { useApplications } from '../../../hooks/useApplications';
+import ApplicationSelect from '../../common/ApplicationSelect';
 import { regionOptions, findRegionOptions } from '../../../utils/browser_regions';
 
 export default function BasicInfoStep({ state, dispatch, validationErrors }: StepProps) {
   const { modelOptions, findModelOption, loading: modelsLoading } = useModels();
-  const { options: applicationOptions, loading: appsLoading } = useApplications();
 
   // Pre-populate region and model defaults on mount
   useEffect(() => {
@@ -42,30 +41,15 @@ export default function BasicInfoStep({ state, dispatch, validationErrors }: Ste
     (opt) => opt.value === state.basicInfo.modelId
   ) || (state.basicInfo.modelId ? { label: state.basicInfo.modelId, value: state.basicInfo.modelId } : null);
 
-  const selectedApplication = applicationOptions.find(
-    (opt) => opt.value === state.basicInfo.applicationId
-  ) || null;
 
   return (
     <Container>
       <SpaceBetween direction="vertical" size="l">
-        <FormField
-          label="Application"
-          constraintText="Required"
+        <ApplicationSelect
+          value={state.basicInfo.applicationId}
+          onChange={(applicationId) => dispatch({ type: 'UPDATE_BASIC_INFO', payload: { applicationId } })}
           errorText={validationErrors.applicationId}
-        >
-          <Select
-            selectedOption={selectedApplication}
-            onChange={({ detail }) =>
-              dispatch({ type: 'UPDATE_BASIC_INFO', payload: { applicationId: detail.selectedOption?.value || '' } })
-            }
-            options={applicationOptions}
-            placeholder="Select an application"
-            loadingText="Loading applications..."
-            statusType={appsLoading ? 'loading' : 'finished'}
-            filteringType="auto"
-          />
-        </FormField>
+        />
 
         <FormField
           label="Name"

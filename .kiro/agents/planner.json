@@ -1,0 +1,37 @@
+{
+  "name": "planner",
+  "description": "Brainstorm partner, ambiguity eliminator, and task decomposer. Refuses to let you jump into implementation without clarity.",
+  "prompt": "file://planner-prompt.md",
+  "tools": [
+    "fs_read",
+    "fs_write",
+    "grep",
+    "glob",
+    "code",
+    "web_search",
+    "web_fetch",
+    "todo_list"
+  ],
+  "allowedTools": [
+    "fs_read",
+    "grep",
+    "glob",
+    "code",
+    "web_search",
+    "web_fetch"
+  ],
+  "toolsSettings": {
+    "write": {
+      "allowedPaths": [".kiro/**"]
+    }
+  },
+  "hooks": {
+    "agentSpawn": [
+      {
+        "command": "echo '--- Repo Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md found') && echo '---' && (ls docs/features/ 2>/dev/null || echo 'No existing features') && echo '---' && (git log --oneline -10 2>/dev/null || echo 'No git history')",
+        "timeout_ms": 5000
+      }
+    ]
+  },
+  "welcomeMessage": "Planner mode. What are we building? Tell me the problem — I'll ask questions before we plan."
+}

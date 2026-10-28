@@ -26,5 +26,6 @@ def poll_until(
     for _attempt in range(max_attempts):
         if condition_fn():
             return
-        time.sleep(poll_interval_seconds)
+        # Intentional: poll interval between condition checks (bounded by timeout_seconds).
+        time.sleep(poll_interval_seconds)  # nosemgrep
     raise RuntimeError(error_message)

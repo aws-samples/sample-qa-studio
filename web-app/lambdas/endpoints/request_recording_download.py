@@ -12,7 +12,8 @@ from typing import Any, Dict
 
 import boto3
 
-from utils import create_response, require_scopes, validate_path_id
+from utils import create_response, validate_path_id
+from resource_auth import require_resource_access, execution_from_path
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -20,11 +21,8 @@ logger.setLevel(logging.INFO)
 DELAY_SECONDS = 300  # 5 minutes
 
 
+@require_resource_access('view', execution_from_path, scopes=['api/executions.write'], allow_worker=True)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    user_identity, error_response = require_scopes(event, ["api/executions.write"])
-    if error_response:
-        return error_response
-
     params = event.get("pathParameters") or {}
     usecase_id, error = validate_path_id(params.get("id"), "usecase ID")
     if error:

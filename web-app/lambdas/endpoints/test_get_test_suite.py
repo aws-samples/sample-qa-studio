@@ -246,3 +246,14 @@ class TestGetTestSuite(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+import pytest as _pytest  # noqa: E402
+from authz_test_support import resource_access_granted as _resource_access_granted  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: ownership is covered by test_suite_routes_access.py."""
+    with _resource_access_granted():
+        yield

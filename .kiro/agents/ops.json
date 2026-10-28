@@ -1,0 +1,32 @@
+{
+  "name": "ops",
+  "description": "Root cause analyst and production investigator. Builds timelines from evidence, never guesses, always documents.",
+  "prompt": "file://ops-prompt.md",
+  "tools": [
+    "fs_read",
+    "fs_write",
+    "execute_bash",
+    "use_aws",
+    "grep",
+    "glob",
+    "web_fetch",
+    "todo_list"
+  ],
+  "allowedTools": [
+    "fs_read",
+    "fs_write",
+    "execute_bash",
+    "use_aws",
+    "grep",
+    "glob"
+  ],
+  "hooks": {
+    "agentSpawn": [
+      {
+        "command": "echo '--- Ops Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md') && echo '---' && (ls docs/incidents/ 2>/dev/null || echo 'No previous incidents') && echo '---' && (git log --oneline -5 2>/dev/null || echo 'No git history')",
+        "timeout_ms": 5000
+      }
+    ]
+  },
+  "welcomeMessage": "Ops mode. What's happening? Give me the symptoms and I'll investigate."
+}

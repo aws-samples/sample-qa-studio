@@ -3,7 +3,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name, require_scopes
+from utils import create_response, get_table_name, require_scopes, extract_user_identity
+from resource_auth import filter_visible_apps
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -39,6 +40,10 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
         RequestItems={get_table_name(): {'Keys': keys}}
     )
     apps = batch_response.get('Responses', {}).get(get_table_name(), [])
+
+    # Filter apps by team ownership
+    identity = extract_user_identity(event)
+    apps = filter_visible_apps(identity, apps)
 
     # Fetch CloudWatch metrics for all apps
     now = datetime.now(timezone.utc)

@@ -7,13 +7,15 @@ import os
 import boto3
 
 from recording_models import RecordingDataResponse, RecordingData
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from resource_auth import require_resource_access, wizard_session_from_path
+from utils import create_response, get_table_name, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', wizard_session_from_path, scopes=['api/usecases.write'])
 def handler(event, context):
     """
     Return recording data for a wizard session.
@@ -33,14 +35,10 @@ def handler(event, context):
         200: { "status": "available", "recording_data": <RecordingData> }
              or { "status": "not_available", "recording_data": null }
         400: Missing or invalid sessionId / usecaseId
-        403: Insufficient scopes
-        404: Execution record not found
+        403: Insufficient scopes or no edit access to the use case
+        404: Session / execution record not found
         500: Internal error
     """
-    # Validate scopes — recording is part of the usecase write workflow
-    user_identity, error = require_scopes(event, ['api/usecases.write'])
-    if error:
-        return error
 
     # Parse and validate sessionId from path parameters
     session_id, error = validate_path_id(

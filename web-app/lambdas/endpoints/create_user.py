@@ -109,14 +109,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         group_errors = []
         for group in groups:
             try:
-                logger.info(f"Attempting to add user {username} to group {group}")
+                logger.info(f"Attempting to add user to group {group}")
                 cognito_client.admin_add_user_to_group(
                     UserPoolId=user_pool_id,
                     Username=username,
                     GroupName=group
                 )
                 added_groups.append(group)
-                logger.info(f"✅ Successfully added user {username} to group {group}")
+                logger.info(f"✅ Successfully added user to group {group}")
             except cognito_client.exceptions.ResourceNotFoundException as e:
                 error_msg = f"Group '{group}' does not exist in user pool"
                 logger.error(f"❌ {error_msg}: {str(e)}")
@@ -145,7 +145,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if group_errors:
             result['warnings'] = group_errors
         
-        logger.info(f"✅ User creation complete: {username}, groups: {added_groups}")
+        logger.info(f"✅ User creation complete, groups: {added_groups}")
         return create_response(201, result)
         
     except json.JSONDecodeError as e:

@@ -15,6 +15,7 @@ import os
 import uuid
 import time as _time
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 from urllib.request import urlopen
 
 import boto3
@@ -24,6 +25,14 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 DEVICE_FARM_REGION = "us-west-2"
+
+
+def _require_https(url: str) -> str:
+    """Only fetch artifact URLs over HTTPS (blocks file:// and other schemes)."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise ValueError("Device Farm artifact URL must be an HTTPS URL")
+    return url
 
 
 class SessionNotReady(Exception):
@@ -49,7 +58,7 @@ def find_video_artifact(df_client, session_arn: str) -> Optional[tuple]:
                 )
                 if is_video and url:
                     logger.info("Found video: name=%s, type=%s, ext=%s", name, a_type, ext)
-                    with urlopen(url, timeout=60) as resp:
+                    with urlopen(_require_https(url), timeout=60) as resp:  # nosec B310 - scheme validated
                         return (resp.read(), ext or "mp4")
         except ClientError as e:
             code = e.response.get("Error", {}).get("Code", "")

@@ -1,11 +1,14 @@
+import hashlib
 import json
 import os
+import secrets
 import time
 import uuid
 import boto3
 from botocore.exceptions import ClientError
 from urllib.parse import quote
 from utils import create_response, get_table_name, get_current_timestamp, generate_uuid7, allow_m2m_token, validate_path_id
+from resource_auth import require_resource_access, usecase_from_path
 
 dynamodb = boto3.client('dynamodb')
 sqs = boto3.client('sqs')
@@ -88,7 +91,40 @@ def update_execution_status_with_error(usecase_id, execution_id, status, error_m
         print(f'Error updating execution status: {str(e)}')
 
 
+def new_worker_token() -> tuple:
+    """
+    Execution-bound worker capability.
+
+    Returns:
+        (token, sha256 hex digest). Only the hash is stored on the execution
+        record; the token goes to the ECS task as EXECUTION_TOKEN.
+    """
+    token = secrets.token_urlsafe(32)
+    return token, hashlib.sha256(token.encode()).hexdigest()
+
+
 def handler(event, context):
+    """
+    Entry point. EventBridge Scheduler invokes directly (no requestContext);
+    those calls are already authorized by the IAM permission on this Lambda.
+    Every API call needs api/usecases.execute and execute on the use case's
+    application (orphaned use cases are admin-only).
+    """
+    if not event.get('requestContext'):
+        scheduler_identity = {'identity': 'scheduler', 'identity_type': 'scheduler', 'sub': '', 'scopes': []}
+        return _execute(event, scheduler_identity)
+    return _authorized_handler(event, context)
+
+
+@require_resource_access('execute', usecase_from_path, scopes=['api/usecases.execute'])
+def _authorized_handler(event, context):
+    user_identity, error_response = allow_m2m_token(event)
+    if error_response:
+        return error_response
+    return _execute(event, user_identity)
+
+
+def _execute(event, user_identity):
     """
     Execute a usecase by creating an execution record and starting an ECS task.
     Supports OnDemand (queue), Scheduled, OnDemandHeadless (direct ECS), and ci_runner trigger types.
@@ -112,17 +148,7 @@ def handler(event, context):
     - 401: Unauthorized
     - 500: Error starting execution
     """
-    # Validate authentication (allow both user and M2M tokens)
-    # EventBridge Scheduler invokes directly (no requestContext) — allow these
-    # since they're already authenticated via IAM role permission on this Lambda.
-    if not event.get('requestContext'):
-        user_identity = {'identity': 'scheduler', 'identity_type': 'scheduler', 'sub': '', 'scopes': []}
-    else:
-        user_identity, error_response = allow_m2m_token(event)
-        if error_response:
-            return error_response
-
-    print(f"Execution requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    print(f"Execution requested by identity type: {user_identity['identity_type']}")
     
     usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
 
@@ -164,6 +190,7 @@ def handler(event, context):
         
         usecase = usecase_result['Item']
         print(usecase)
+
         starting_url = usecase.get('starting_url', {}).get('S', '')
         # Get executing_region from usecase, use default if empty or missing
         region = usecase.get('executing_region', {}).get('S', '').strip()
@@ -185,6 +212,13 @@ def handler(event, context):
             'executing_region': {'S': region},
             'model_id': {'S': model_id}
         }
+
+        # Cloud runs get an execution-bound worker capability; only its hash
+        # is stored (the worker presents the token via X-QA-Execution-Token).
+        worker_token = None
+        if trigger_type in ('Scheduled', 'OnDemandHeadless'):
+            worker_token, worker_token_hash = new_worker_token()
+            execution_item['worker_token_hash'] = {'S': worker_token_hash}
         
         # Copy mobile config fields from usecase to execution record
         test_platform = usecase.get('test_platform', {}).get('S', 'web')
@@ -420,6 +454,7 @@ def handler(event, context):
                     {'name': 'AWS_REGION', 'value': os.environ['AWS_REGION']},
                     {'name': 'CACHE_ACTION_DELAY_MS', 'value': '1000'},
                     {'name': 'EXECUTION_ID', 'value': execution_id},
+                    {'name': 'EXECUTION_TOKEN', 'value': worker_token},
                     {'name': 'USECASE_ID', 'value': usecase_id},
                     {'name': 'DYNAMODB_TABLE_NAME', 'value': table_name},
                     {'name': 'S3_BUCKET', 'value': s3_bucket},

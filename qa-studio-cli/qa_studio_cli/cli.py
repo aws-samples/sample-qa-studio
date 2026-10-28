@@ -16,6 +16,11 @@ from qa_studio_cli.commands.tests import tests
 from qa_studio_cli.commands.suites import suites
 from qa_studio_cli.commands.run import run
 from qa_studio_cli.commands.tui import tui
+from qa_studio_cli.commands.teams import teams
+from qa_studio_cli.commands.members import members
+from qa_studio_cli.commands.users import users
+from qa_studio_cli.commands.apps import apps
+from qa_studio_cli.utils.logger import add_safety_filters
 
 
 def require_config(fn):
@@ -39,6 +44,8 @@ def cli(ctx, debug: bool) -> None:
     if debug:
         logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s: %(message)s")
         logging.getLogger("qa_studio_cli").setLevel(logging.DEBUG)
+        for handler in logging.getLogger().handlers:
+            add_safety_filters(handler)
 
 
 @cli.command()
@@ -145,6 +152,10 @@ cli.add_command(tests)
 cli.add_command(suites)
 cli.add_command(run)
 cli.add_command(tui)
+cli.add_command(teams)
+cli.add_command(members)
+cli.add_command(users)
+cli.add_command(apps)
 
 
 @cli.command()

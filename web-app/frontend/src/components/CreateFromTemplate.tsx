@@ -14,6 +14,7 @@ import Badge from "@cloudscape-design/components/badge";
 import Spinner from "@cloudscape-design/components/spinner";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
 import { api } from '../utils/api';
+import ApplicationSelect from './common/ApplicationSelect';
 
 interface Template {
   id: string;
@@ -38,6 +39,7 @@ export default function CreateFromTemplate() {
   const [templateDetail, setTemplateDetail] = useState<TemplateDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   
+  const [applicationId, setApplicationId] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [starting_url, setStartingUrl] = useState('');
@@ -88,11 +90,12 @@ export default function CreateFromTemplate() {
   }, [selectedTemplate]);
 
   const handleCreate = async () => {
-    if (!selectedTemplate || !name.trim()) return;
+    if (!selectedTemplate || !applicationId || !name.trim()) return;
 
     setCreating(true);
     try {
       const response = await api.post(`templates/${selectedTemplate.value}/apply`, {
+        application_id: applicationId,
         name,
         description,
         starting_url
@@ -211,6 +214,8 @@ export default function CreateFromTemplate() {
       {selectedTemplate && (
         <Container>
           <SpaceBetween direction="vertical" size="l">
+            <ApplicationSelect value={applicationId} onChange={setApplicationId} disabled={!selectedTemplate || creating} />
+
             <FormField label="Use Case Name" description="Name for your new use case">
               <Input
                 value={name}
@@ -244,7 +249,7 @@ export default function CreateFromTemplate() {
                 variant="primary"
                 onClick={handleCreate}
                 loading={creating}
-                disabled={!selectedTemplate || !name.trim() || !starting_url.trim() || creating}
+                disabled={!selectedTemplate || !applicationId || !name.trim() || !starting_url.trim() || creating}
               >
                 Create
               </Button>

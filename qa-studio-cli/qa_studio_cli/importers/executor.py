@@ -30,9 +30,16 @@ def import_single(
     scan_result: ScanResult,
     base_url: Optional[str] = None,
     region: Optional[str] = None,
+    application_id: Optional[str] = None,
 ) -> ImportResult:
-    """Send a single validated payload to POST /api/import."""
+    """Send a single validated payload to POST /api/import.
+
+    The API creates the use case in `application_id` (required by the API;
+    the caller needs edit access on that application).
+    """
     payload_dict = scan_result.payload.model_dump(by_alias=False)
+    if application_id:
+        payload_dict["application_id"] = application_id
 
     if base_url:
         original_url = payload_dict["usecase"].get("starting_url", "")
@@ -100,6 +107,7 @@ def execute_imports(
     base_url: Optional[str] = None,
     region: Optional[str] = None,
     secret_values: Optional[dict[str, dict[str, str]]] = None,
+    application_id: Optional[str] = None,
 ) -> list[ImportResult]:
     """Import all valid files sequentially, set secrets if provided.
 
@@ -109,11 +117,13 @@ def execute_imports(
         base_url: Optional base URL override for all imports.
         region: Optional executing region override for all imports.
         secret_values: Optional dict mapping file_name -> {secret_key: value}.
+        application_id: Application the imported use cases are created in.
     """
     results: list[ImportResult] = []
 
     for scan_result in valid_results:
-        result = import_single(client, scan_result, base_url=base_url, region=region)
+        result = import_single(client, scan_result, base_url=base_url, region=region,
+                               application_id=application_id)
         results.append(result)
 
         # Set secret values if import succeeded and values provided

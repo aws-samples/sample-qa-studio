@@ -88,7 +88,6 @@ export class LiveViewer {
       }
       console.log('[Viewer] DCV SDK loaded, version:', dcv.version || 'Unknown');
       console.log('[Viewer] Available DCV methods:', Object.keys(dcv));
-      console.log('[Viewer] Presigned URL:', this.presignedUrl);
       // Set debug logging
       if (dcv.setLogLevel) {
         dcv.setLogLevel(dcv.LogLevel.SILENT);
@@ -113,10 +112,10 @@ export class LiveViewer {
           reject(error);
         },
         success: (_auth: any, result:any) => {
-          console.log('[Viewer] DCV auth success:', result);
+          console.log('[Viewer] DCV auth success');
           if (result && result[0]) {
             const { sessionId, authToken } = result[0];
-            console.log('[Viewer] Session ID:', sessionId);
+            console.log('[Viewer] Session ID received:', sessionId ? 'Yes' : 'No');
             console.log('[Viewer] Auth token received:', authToken ? 'Yes' : 'No');
             this.connectToSession(sessionId, authToken, resolve, reject);
           } else {
@@ -130,7 +129,7 @@ export class LiveViewer {
   }
 
   connectToSession(sessionId: string, authToken: string, resolve: Function, reject: Function) {
-    console.log('[Viewer] Connecting to session:', sessionId);
+    console.log('[Viewer] Connecting to session');
     const connectOptions = {
       url: this.presignedUrl,
       sessionId: sessionId,
@@ -153,11 +152,11 @@ export class LiveViewer {
       },
     };
 
-    console.log('[Viewer] Connect options:', connectOptions);
+    console.log('[Viewer] Connecting with base URL:', connectOptions.baseUrl);
     dcv
       .connect(connectOptions)
       .then((connection: connection) => {
-        console.log('[Viewer] Connection established:', connection);
+        console.log('[Viewer] Connection established');
         this.connection = connection;
         // Enable clipboard event capture so copy/paste keyboard shortcuts
         // are intercepted by the SDK and clipboard data is synced between

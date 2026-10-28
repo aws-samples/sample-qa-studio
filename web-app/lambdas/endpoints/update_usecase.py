@@ -3,7 +3,9 @@ import logging
 import os
 from typing import Any, Dict
 import boto3
-from utils import get_table_name, create_response, require_scopes, validate_path_id
+from utils import get_table_name, create_response, extract_user_identity
+from permissions_repo import get_usecase_owner
+from resource_auth import require_resource_access, usecase_from_path, authorize_target_app, is_studio_admin
 from cache_invalidation import cleanup_cache_artifacts
 
 # Configure logging
@@ -13,6 +15,7 @@ logger.setLevel(logging.INFO)
 
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to update a use case in Amazon DynamoDB.
@@ -25,16 +28,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response
     """
     try:
-        # Validate scope (requires usecases.write or admin)
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
-        
-        # Get use case ID from path parameters
-        usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-        if error:
-            return error
-        
+        usecase_id = event['pathParameters']['id']  # validated by usecase_from_path
+
         # Parse request body
         body = json.loads(event.get('body', '{}'))
         
@@ -116,16 +111,33 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 update_expression_parts.append(f'{field_name} = :{field_name}')
                 expression_attribute_values[f':{field_name}'] = field_value
         
-        # Application association
+        # Application association (N-5): moving a use case needs edit on the
+        # target app too, and re-stamps owner_team_id from it. Only admins may
+        # clear it (an app-less use case is admin-only).
         application_id = body.get('application_id')
+        remove_parts = []
         if application_id is not None:
-            if application_id:
-                update_expression_parts.append('application_id = :application_id')
-                expression_attribute_values[':application_id'] = application_id
-            else:
-                # Clear application_id when explicitly set to empty string
+            current_app_id = (get_usecase_owner(usecase_id) or {}).get('application_id') or ''
+            if not application_id:
+                if current_app_id and not is_studio_admin(extract_user_identity(event)):
+                    return create_response(403, {
+                        'error': 'Forbidden',
+                        'message': 'Only an admin can remove a use case from its application',
+                    })
                 update_expression_parts.append('application_id = :application_id')
                 expression_attribute_values[':application_id'] = ''
+                remove_parts.append('owner_team_id')
+            elif application_id != current_app_id:
+                target_owner, auth_err = authorize_target_app(event, application_id, 'edit')
+                if auth_err:
+                    return auth_err
+                update_expression_parts.append('application_id = :application_id')
+                expression_attribute_values[':application_id'] = application_id
+                if target_owner:
+                    update_expression_parts.append('owner_team_id = :owner_team_id')
+                    expression_attribute_values[':owner_team_id'] = target_owner
+                else:
+                    remove_parts.append('owner_team_id')
 
         # Only update tags if provided and not empty (DynamoDB String Sets cannot be empty)
         if tags:
@@ -133,6 +145,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             expression_attribute_values[':tags'] = set(tags)  # Convert to set for DynamoDB
         
         update_expression = 'SET ' + ', '.join(update_expression_parts)
+        if remove_parts:
+            update_expression += ' REMOVE ' + ', '.join(remove_parts)
         
         # Detect enable_cache true → false transition and trigger cleanup
         if enable_cache is not None:

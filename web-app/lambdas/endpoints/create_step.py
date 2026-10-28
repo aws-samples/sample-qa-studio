@@ -3,13 +3,15 @@ import logging
 from typing import Any, Dict
 from uuid import uuid4
 import boto3
-from utils import get_table_name, create_response, get_current_timestamp, require_scopes
+from utils import get_table_name, create_response, get_current_timestamp
+from resource_auth import require_resource_access, usecase_from_path
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to create a step for a use case in Amazon DynamoDB.
@@ -22,15 +24,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with created step
     """
     try:
-        # Validate scopes
-        user_identity, error_response = require_scopes(event, ['api/usecases.write'])
-        if error_response:
-            return error_response
-        
         # Parse request body
         body = json.loads(event.get('body', '{}'))
         
-        usecase_id = body.get('usecaseId')
+        # The step belongs to the use case in the path (authorized by the
+        # resolver); a different body usecaseId would write to another use case.
+        usecase_id = event['pathParameters']['id']
+        if body.get('usecaseId') not in (None, usecase_id):
+            return create_response(400, {'error': 'usecaseId does not match the path'})
         sort = body.get('sort')
         instruction = body.get('instruction')
         step_type = body.get('step_type', 'navigation')  # Default to navigation

@@ -99,6 +99,8 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   lambdaConcurrency,
   networkAssertionBodyMaxBytes,
   userPool: authStack.userPool,
+  table: storageStack.table,
+  workerClientId: authStack.workerM2MClient.userPoolClientId,
   apiDeploymentStage,
   lambdaStack: lambdaStack,
   addUserLambda: lambdaStack.addUserLambda,

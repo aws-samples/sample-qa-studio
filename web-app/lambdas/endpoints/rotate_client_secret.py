@@ -5,6 +5,8 @@ from typing import Any, Dict
 from datetime import datetime
 import boto3
 from utils import create_response, get_table_name, require_scopes
+from resource_auth import require_oauth_client_manager
+from role_scopes import M2M_FORBIDDEN_SCOPES
 
 # Configure logging
 logger = logging.getLogger()
@@ -16,7 +18,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Lambda handler to rotate an OAuth client secret by recreating the Amazon Cognito app client.
     Requires api/oauth-clients.write or api/admin scope.
     
-    SECURITY: Only the user who created the client can rotate its secret.
+    SECURITY: Only the creator, a team lead of the client's team, or an admin
+    can rotate its secret. The team binding is carried over to the new client.
     
     Args:
         event: API Gateway proxy request event
@@ -76,14 +79,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'message': 'Only OAuth clients created through the application can be rotated'
                 })
             
-            # Check ownership (unless user has admin scope)
-            has_admin = 'api/admin' in user_identity.get('scopes', [])
-            if not has_admin and created_by != requesting_user:
-                logger.warning(f"User {requesting_user} attempted to rotate client owned by {created_by}")
-                return create_response(403, {
-                    'error': 'Forbidden: Cannot rotate secret for OAuth client you do not own',
-                    'message': f'This client was created by {created_by}'
-                })
+            manager_err = require_oauth_client_manager(user_identity, metadata)
+            if manager_err:
+                logger.warning(f"Denied OAuth client rotation: {old_client_id}")
+                return manager_err
                 
         except Exception as e:
             logger.error(f"Error checking client metadata: {str(e)}")
@@ -114,6 +113,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             ])
             
             logger.info(f"Fetched configuration for client: {client_name}")
+
+            # Never recreate a client with scopes M2M clients may not hold.
+            forbidden_scopes = sorted(set(allowed_oauth_scopes) & M2M_FORBIDDEN_SCOPES)
+            if forbidden_scopes:
+                return create_response(400, {
+                    'error': f'Cannot rotate a client holding {", ".join(forbidden_scopes)}; create a new client instead'
+                })
             
         except cognito_client.exceptions.ResourceNotFoundException:
             logger.error(f"OAuth client not found in Amazon Cognito: {old_client_id}")
@@ -188,6 +194,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'rotated_at': rotated_at,
                 'entity_type': 'oauth_client'
             }
+            for binding_field in ('team_id', 'team_role'):
+                if metadata.get(binding_field):
+                    oauth_client_item[binding_field] = metadata[binding_field]
             
             table.put_item(Item=oauth_client_item)
             logger.info(f"Updated OAuth client metadata in DynamoDB: {new_client_id}")

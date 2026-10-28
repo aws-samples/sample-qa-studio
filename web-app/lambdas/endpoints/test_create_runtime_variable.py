@@ -220,3 +220,14 @@ class TestDynamoDBError:
         assert patched_dynamodb.update_item.call_count == 2
         retry_kwargs = patched_dynamodb.update_item.call_args_list[1].kwargs
         assert 'if_not_exists' in retry_kwargs['UpdateExpression']
+
+
+import pytest as _pytest  # noqa: E402
+from authz_test_support import resource_access_granted as _resource_access_granted  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: ownership is covered by test_execution_routes_access.py."""
+    with _resource_access_granted():
+        yield

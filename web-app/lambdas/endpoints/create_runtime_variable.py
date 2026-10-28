@@ -26,9 +26,9 @@ from botocore.exceptions import ClientError
 from utils import (
     create_response,
     get_table_name,
-    require_scopes,
     validate_path_id,
 )
+from resource_auth import require_resource_access, execution_from_path
 
 # Module-level client; tests monkeypatch this attribute to inject mocks.
 _dynamodb = boto3.client('dynamodb')
@@ -37,17 +37,10 @@ _MAX_KEY_LENGTH = 128
 _MAX_VALUE_LENGTH = 4096
 
 
+@require_resource_access('execute', execution_from_path, scopes=['api/executions.write'], allow_worker=True)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    # --- Auth --------------------------------------------------------------
-    _user_identity, error_response = require_scopes(event, ['api/executions.write'])
-    if error_response:
-        return error_response
-
     # --- Path params -------------------------------------------------------
     path = event.get('pathParameters') or {}
-    _, error = validate_path_id(path.get('id'), 'usecase ID')
-    if error:
-        return error
     execution_id, error = validate_path_id(path.get('executionId'), 'execution ID')
     if error:
         return error

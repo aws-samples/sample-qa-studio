@@ -1,4 +1,6 @@
 nova-act~=3.3
+# Transitive floor (via nova-act): Pillow 12.x security advisories
+pillow>=13.0.0
 boto3>=1.34.0
 tenacity>=8.2.0
 playwright

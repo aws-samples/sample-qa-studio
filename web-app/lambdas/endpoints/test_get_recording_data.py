@@ -8,7 +8,15 @@ from io import BytesIO
 os.environ.setdefault('TABLE_NAME', 'test-table')
 os.environ.setdefault('BUCKET_NAME', 'test-bucket')
 
+from authz_test_support import resource_access_granted
 from get_recording_data import handler
+
+
+@pytest.fixture(autouse=True)
+def _access_granted():
+    """Handler-logic tests: owners resolve and access is granted (rules: test_wizard_routes_access)."""
+    with resource_access_granted():
+        yield
 
 
 def _make_event(session_id='sess-123', usecase_id='uc-456'):
@@ -47,7 +55,7 @@ class TestGetRecordingData:
     """Tests for the get_recording_data handler."""
 
     @patch('get_recording_data.boto3')
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_returns_available_when_completed(self, mock_scopes, mock_boto3):
         """Completed recording with valid S3 data returns status=available."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)
@@ -82,7 +90,7 @@ class TestGetRecordingData:
         )
 
     @patch('get_recording_data.boto3')
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_returns_not_available_when_recording(self, mock_scopes, mock_boto3):
         """In-progress recording returns status=not_available."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)
@@ -102,7 +110,7 @@ class TestGetRecordingData:
         assert body['recording_data'] is None
 
     @patch('get_recording_data.boto3')
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_returns_error_when_worker_error(self, mock_scopes, mock_boto3):
         """Worker error status is surfaced as status=error with message."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)
@@ -124,7 +132,7 @@ class TestGetRecordingData:
         assert body['recording_data'] is None
 
     @patch('get_recording_data.boto3')
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_returns_error_with_default_message(self, mock_scopes, mock_boto3):
         """Worker error without recording_error field uses default message."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)
@@ -144,7 +152,7 @@ class TestGetRecordingData:
         assert 'failed' in body['error'].lower()
 
     @patch('get_recording_data.boto3')
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_returns_404_when_execution_not_found(self, mock_scopes, mock_boto3):
         """Missing execution record returns 404."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)
@@ -157,7 +165,7 @@ class TestGetRecordingData:
         assert response['statusCode'] == 404
 
     @patch('get_recording_data.boto3')
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_returns_not_available_when_no_recording_status(self, mock_scopes, mock_boto3):
         """Execution record without recording_status returns not_available."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)
@@ -173,7 +181,7 @@ class TestGetRecordingData:
         body = json.loads(response['body'])
         assert body['status'] == 'not_available'
 
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_missing_usecase_id_returns_400(self, mock_scopes):
         """Missing usecaseId query parameter returns 400."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)
@@ -184,7 +192,7 @@ class TestGetRecordingData:
         response = handler(event, None)
         assert response['statusCode'] == 400
 
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_insufficient_scope_returns_403(self, mock_scopes):
         """Insufficient scopes returns 403."""
         mock_scopes.return_value = (None, {
@@ -196,7 +204,7 @@ class TestGetRecordingData:
         assert response['statusCode'] == 403
 
     @patch('get_recording_data.boto3')
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_s3_fetch_failure_returns_not_available(self, mock_scopes, mock_boto3):
         """S3 get_object failure returns not_available gracefully."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)
@@ -224,7 +232,7 @@ class TestGetRecordingData:
         assert body['recording_data'] is None
 
     @patch('get_recording_data.boto3')
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_malformed_s3_data_returns_not_available(self, mock_scopes, mock_boto3):
         """Completed recording with unparseable JSON in S3 returns not_available."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)
@@ -253,7 +261,7 @@ class TestGetRecordingData:
         assert body['status'] == 'not_available'
 
     @patch('get_recording_data.boto3')
-    @patch('get_recording_data.require_scopes')
+    @patch('resource_auth.require_scopes')
     def test_completed_without_s3_key_returns_not_available(self, mock_scopes, mock_boto3):
         """Completed status but missing recording_s3_key returns not_available."""
         mock_scopes.return_value = ({'identity': 'user@example.com'}, None)

@@ -2,6 +2,7 @@
 
 import functools
 import logging
+import os
 from typing import Callable, Optional
 
 import click
@@ -16,6 +17,12 @@ from qa_studio_cli.models.config import CLIConfig
 logger = logging.getLogger(__name__)
 
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+# Execution-bound worker capability ('{usecase_id}:{execution_id}:{token}'),
+# exported by the worker entrypoint for cloud runs. Sent as a header, never logged.
+# Both constants are NAMES (env var / HTTP header), not secret values.
+EXECUTION_TOKEN_ENV = "QA_STUDIO_EXECUTION_TOKEN"  # nosec B105  # nosemgrep
+EXECUTION_TOKEN_HEADER = "X-QA-Execution-Token"  # nosec B105  # nosemgrep
 
 
 class _RetryableError(Exception):
@@ -117,6 +124,9 @@ class ApiClient:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
+        execution_token = os.environ.get(EXECUTION_TOKEN_ENV)
+        if execution_token:
+            headers[EXECUTION_TOKEN_HEADER] = execution_token
         logger.info("→ %s %s", method, url)
         try:
             response = self._session.request(method, url, headers=headers, **kwargs)
@@ -124,7 +134,9 @@ class ApiClient:
             logger.warning("Transient error, will retry: %s", e)
             raise _RetryableError(ApiError(0, f"Connection error: {e}"))
 
-        logger.debug("← %s %s", response.status_code, response.text[:500])
+        # Never log response bodies: endpoints such as
+        # /usecase/{id}/secrets/{key}/value return decrypted secrets.
+        logger.debug("← %s (%d bytes)", response.status_code, len(response.content or b""))
 
         if not response.ok:
             if response.status_code in RETRYABLE_STATUS_CODES:
@@ -156,7 +168,8 @@ class ApiClient:
             msg = "Insufficient permissions."
             if detail:
                 msg += f" {detail}"
-            logger.debug("403 response body: %s", body)
+            # Log only the error code; never response bodies (see _request_with_retry).
+            logger.debug("403 response, code=%s", error_code)
             raise ApiError(403, msg, error_code=error_code, response_data=body)
         if status == 404:
             raise ApiError(404, "Resource not found.", response_data=body)

@@ -14,9 +14,11 @@ import Input from "@cloudscape-design/components/input";
 import Select, { SelectProps } from "@cloudscape-design/components/select";
 import { exportImportApi, api } from '../utils/api';
 import { regionOptions, findRegionOptions } from '../utils/browser_regions';
+import ApplicationSelect from './common/ApplicationSelect';
 
 export default function ImportUsecase() {
   const navigate = useNavigate();
+  const [applicationId, setApplicationId] = useState('');
   const [file, setFile] = useState<File[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
@@ -60,7 +62,7 @@ export default function ImportUsecase() {
   }, [file]);
 
   const handleImport = async () => {
-    if (!file[0]) return;
+    if (!file[0] || !applicationId) return;
 
     setImporting(true);
     setError('');
@@ -73,6 +75,7 @@ export default function ImportUsecase() {
       if (selectedRegion?.value) {
         importData.regionOverride = selectedRegion.value;
       }
+      importData.application_id = applicationId;
 
       const result = await exportImportApi.importUsecase(importData);
       setImportResult(result);
@@ -163,6 +166,8 @@ export default function ImportUsecase() {
 
       <Container>
         <SpaceBetween direction="vertical" size="l">
+          <ApplicationSelect value={applicationId} onChange={setApplicationId} disabled={importing || importResult?.success} />
+
           <FormField
             label="Select export file"
             description="Choose a JSON file exported from another usecase"
@@ -298,7 +303,7 @@ export default function ImportUsecase() {
                 variant="primary" 
                 onClick={handleImport}
                 loading={importing}
-                disabled={!file[0] || importing || importResult?.success}
+                disabled={!file[0] || !applicationId || importing || importResult?.success}
               >
                 {importing ? 'Importing...' : 'Import Use Case'}
               </Button>

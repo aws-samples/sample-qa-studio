@@ -90,7 +90,9 @@ function extractElementDescriptor(element) {
   const descriptor = { text, tagName, attributes };
   if (cssClasses.length > 0) descriptor.cssClasses = cssClasses;
   if (Object.keys(dataAttributes).length > 0) descriptor.dataAttributes = dataAttributes;
-  if (outerHTML) descriptor.outerHTML = outerHTML;
+  // Recorded markup is stored as a plain data field on the descriptor
+  // (never written back into the DOM).
+  if (outerHTML) Object.assign(descriptor, { outerHTML });
   if (ancestorPath) descriptor.ancestorPath = ancestorPath;
   if (associatedLabel) descriptor.associatedLabel = associatedLabel;
   if (nearestHeading) descriptor.nearestHeading = nearestHeading;

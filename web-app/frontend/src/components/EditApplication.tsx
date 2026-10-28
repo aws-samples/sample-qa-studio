@@ -14,10 +14,13 @@ import Spinner from '@cloudscape-design/components/spinner';
 import BreadcrumbGroup from '@cloudscape-design/components/breadcrumb-group';
 import { api } from '../utils/api';
 import { Application } from '../types/application';
+import { usePermissions, canManageApplication } from '../auth';
 
 export default function EditApplication() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { isAdmin, teams } = usePermissions();
+  const [ownerTeamId, setOwnerTeamId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -42,6 +45,7 @@ export default function EditApplication() {
       setBaseUrl(app.base_url);
       setDescription(app.description || '');
       setTeam(app.team || '');
+      setOwnerTeamId(app.owner_team_id || null);
       setEnvironments(app.environments || []);
     } catch (e: any) {
       setError(e.message || 'Failed to load application');
@@ -91,6 +95,8 @@ export default function EditApplication() {
     return <Box textAlign="center" padding="xxl"><Spinner size="large" /></Box>;
   }
 
+  const canManage = canManageApplication(isAdmin, teams, ownerTeamId);
+
   return (
     <SpaceBetween size="l">
       <BreadcrumbGroup
@@ -107,7 +113,7 @@ export default function EditApplication() {
         actions={
           <SpaceBetween direction="horizontal" size="xs">
             <Button onClick={() => navigate(`/applications/${id}`)}>Cancel</Button>
-            <Button variant="primary" loading={saving} onClick={handleSave}>Save</Button>
+            {canManage && <Button variant="primary" loading={saving} onClick={handleSave}>Save</Button>}
           </SpaceBetween>
         }
       >
@@ -115,6 +121,11 @@ export default function EditApplication() {
       </Header>
 
       {error && <Alert type="error" dismissible onDismiss={() => setError('')}>{error}</Alert>}
+      {!canManage && (
+        <Alert type="info">
+          Only a team lead of the owning team or an admin can edit or delete this application.
+        </Alert>
+      )}
 
       <Container>
         <SpaceBetween size="l">
@@ -155,11 +166,13 @@ export default function EditApplication() {
         </SpaceBetween>
       </Container>
 
-      <Container header={<Header variant="h2">Danger Zone</Header>}>
-        <Button variant="link" loading={deleting} onClick={handleDelete}>
-          Delete this application
-        </Button>
-      </Container>
+      {canManage && (
+        <Container header={<Header variant="h2">Danger Zone</Header>}>
+          <Button variant="link" loading={deleting} onClick={handleDelete}>
+            Delete this application
+          </Button>
+        </Container>
+      )}
     </SpaceBetween>
   );
 }

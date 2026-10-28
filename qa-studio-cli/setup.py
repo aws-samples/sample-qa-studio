@@ -13,12 +13,15 @@ setup(
     extras_require={
         "runner": [
             "nova-act~=3.3",
+            # Transitive floor (via nova-act): Pillow 12.x security advisories
+            "pillow>=13.0.0",
             "boto3>=1.34.0",
             "tenacity>=8.2.0",
             "playwright",
             "Appium-Python-Client>=4.0.0",
+            "defusedxml>=0.7.1",
             "mypy-boto3-devicefarm",
-            "requests>=2.32.0",
+            "requests>=2.33.0",
             "jsonschema>=4.18.0",
         ],
         # Opt-in extra for --browser=agentcore.  The bedrock_agentcore
@@ -26,7 +29,7 @@ setup(
         # out of the base [runner] surface.  Implies [runner] because the
         # AgentCore path only makes sense when NovaAct is installed.
         "agentcore": [
-            "bedrock_agentcore>=1.4.0",
+            "bedrock_agentcore>=1.18.1",
         ],
         # Opt-in extra for the interactive terminal UI (``qa-studio tui``).
         # Textual is pre-1.0 and ships breaking minor-version bumps, so

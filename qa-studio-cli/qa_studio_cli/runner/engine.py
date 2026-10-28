@@ -32,6 +32,8 @@ from qa_studio_cli.runner.step_executor import StepExecutor
 from qa_studio_cli.runner.template_parser import TemplateParser
 from qa_studio_cli.runner.workflow_manager import WorkflowManager, NOVA_ACT_REGION
 from qa_studio_cli.utils.errors import sanitize_error_message
+from qa_studio_cli.utils.log_filters import register_secret_value
+from qa_studio_cli.utils.logger import create_artifact_file_handler
 from qa_studio_cli.validation import validate_step
 
 logger = logging.getLogger(__name__)
@@ -117,11 +119,7 @@ class ExecutionEngine:
         os.makedirs(logs_dir, exist_ok=True)
 
         log_path = artifacts_dir / "logs.txt"
-        file_handler = logging.FileHandler(log_path)
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        ))
+        file_handler = create_artifact_file_handler(log_path)
         logging.getLogger().addHandler(file_handler)
 
         step_results: List[StepResultDetail] = []
@@ -189,7 +187,10 @@ class ExecutionEngine:
 
                     def _local_secret_resolver(uc_id: str, secret_key: str):
                         secret = secrets_dict.get(secret_key)
-                        return secret.get("value") if secret else None
+                        value = secret.get("value") if secret else None
+                        if value:
+                            register_secret_value(value)
+                        return value
 
                     executor = StepExecutor(nova, secrets_resolver=_local_secret_resolver)
                     runtime_variables: Dict[str, str] = {}
@@ -459,17 +460,13 @@ class ExecutionEngine:
             duration = (datetime.utcnow() - start_time).total_seconds()
             final_status = "success" if result["success"] else "failed"
 
-            await self.execution_api.update_status(
-                usecase_id=usecase_id, execution_id=execution_id,
-                status=final_status, error_message=result.get("error"),
-            )
+            # Upload artifacts and request the recording BEFORE the final
+            # status: a cloud worker's execution capability is only valid
+            # while the execution is pending/running.
             execution_artifacts = artifact_capture.get_execution_artifacts()
             await artifact_uploader.upload_execution_artifacts(
                 usecase_id=usecase_id, execution_id=execution_id, artifacts=execution_artifacts,
             )
-
-            status_label = "PASSED" if result["success"] else "FAILED"
-            logger.info("[%s] Completed: %s (%.1fs)", usecase_name, status_label, duration)
 
             # Request async recording download for mobile executions
             if execution_details.get("test_platform") == "mobile":
@@ -489,6 +486,14 @@ class ExecutionEngine:
                         logger.warning("[%s] No Device Farm session ARN — cannot request recording", usecase_name)
                 except Exception as rec_err:
                     logger.warning("[%s] Failed to request recording download: %s", usecase_name, rec_err)
+
+            await self.execution_api.update_status(
+                usecase_id=usecase_id, execution_id=execution_id,
+                status=final_status, error_message=result.get("error"),
+            )
+
+            status_label = "PASSED" if result["success"] else "FAILED"
+            logger.info("[%s] Completed: %s (%.1fs)", usecase_name, status_label, duration)
 
             return {
                 "execution_id": execution_id,

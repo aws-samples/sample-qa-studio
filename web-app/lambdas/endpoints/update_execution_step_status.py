@@ -1,6 +1,7 @@
 import json
 import boto3
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from utils import create_response, get_table_name, validate_path_id, extract_user_identity
+from resource_auth import require_resource_access, execution_from_path
 
 dynamodb = boto3.client('dynamodb')
 
@@ -16,6 +17,7 @@ _ALLOWED_CLEAR_FIELDS = {
 }
 
 
+@require_resource_access('execute', execution_from_path, scopes=['api/executions.write'], allow_worker=True)
 def handler(event, context):
     """
     Update the status of an individual execution step.
@@ -43,17 +45,11 @@ def handler(event, context):
     - 404: Execution or step not found
     - 500: Internal server error
     """
-    # Validate scope authorization (requires api/executions.write or admin)
-    user_identity, error_response = require_scopes(event, ['api/executions.write'])
-    if error_response:
-        return error_response
-    
-    print(f"Step status update requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    user_identity = extract_user_identity(event)
+    print(f"Step status update requested by identity type: {user_identity['identity_type']}")
     
     # Parse path parameters
-    usecase_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'usecase ID')
-    if error:
-        return error
+    usecase_id = event['pathParameters']['id']  # validated by the resolver
     execution_id, error = validate_path_id(event.get('pathParameters', {}).get('executionId'), 'execution ID')
     if error:
         return error

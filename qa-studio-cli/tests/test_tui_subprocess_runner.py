@@ -94,7 +94,7 @@ def _asyncio_run(coro):
 
 
 def _snippet_argv(body: str) -> list[str]:
-    return [sys.executable, "-c", body]
+    return [sys.executable, "-u", "-c", body]
 
 
 class TestRunnerProcessLifecycle:

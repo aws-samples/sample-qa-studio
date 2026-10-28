@@ -1,7 +1,8 @@
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, get_table_name, require_scopes, validate_path_id
+from utils import create_response, get_table_name, validate_path_id
+from resource_auth import require_resource_access, execution_from_path
 
 # Configure logging
 logger = logging.getLogger()
@@ -9,6 +10,16 @@ logger.setLevel(logging.INFO)
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """CORS preflight and method guard ahead of authorization."""
+    if event.get('httpMethod') == 'OPTIONS':
+        return create_response(200, {})
+    if event.get('httpMethod') != 'GET':
+        return create_response(405, {'error': 'method not allowed'})
+    return _get_live_view(event, context)
+
+
+@require_resource_access('view', execution_from_path, scopes=['api/executions.read'], allow_worker=True)
+def _get_live_view(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to get live view URL for an execution.
     
@@ -20,17 +31,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with live view data
     """
     try:
-        # Handle CORS preflight
-        if event.get('httpMethod') == 'OPTIONS':
-            return create_response(200, {})
-        
-        if event.get('httpMethod') != 'GET':
-            return create_response(405, {'error': 'method not allowed'})
-        
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/executions.read'])
-        if error:
-            return error
         
         # Get execution ID from path
         path_params = event.get('pathParameters', {})

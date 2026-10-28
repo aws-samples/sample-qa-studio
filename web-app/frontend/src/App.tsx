@@ -12,6 +12,8 @@ import TopNavigation from "@cloudscape-design/components/top-navigation";
 import Spinner from "@cloudscape-design/components/spinner";
 import Box from "@cloudscape-design/components/box";
 import ErrorBoundary from './components/ErrorBoundary';
+import { PermissionsProvider, usePermissions } from './auth';
+import { api } from './utils/api';
 
 // Configuration loaded from lib/config.ts at build time via Vite
 
@@ -50,72 +52,68 @@ const AddUsecasesToApplication = React.lazy(() => import('./components/AddUsecas
 const AddTestSuitesToApplication = React.lazy(() => import('./components/AddTestSuitesToApplication'));
 const EditApplication = React.lazy(() => import('./components/EditApplication'));
 
+// Admin/Permissions pages
+const TeamsListPage = React.lazy(() => import('./components/admin/TeamsListPage'));
+const TeamDetailPage = React.lazy(() => import('./components/admin/TeamDetailPage'));
+const UsersListPage = React.lazy(() => import('./components/admin/UsersListPage'));
+const MyTeamPage = React.lazy(() => import('./components/admin/MyTeamPage'));
+const UnassignedLanding = React.lazy(() => import('./components/admin/UnassignedLanding'));
+
 Amplify.configure(amplifyconfig);
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeHref, setActiveHref] = useState(location.pathname);
-  const [userScopes, setUserScopes] = useState<string[]>([]);
+  const { hasScope, isAdmin, isTeamLead, teams } = usePermissions();
+  const [myTeamName, setMyTeamName] = useState('');
 
-  // Extract scopes from user token
   useEffect(() => {
-    const extractScopes = async () => {
-      try {
-        const { fetchAuthSession } = await import('aws-amplify/auth');
-        const session = await fetchAuthSession();
-        
-        if (session.tokens?.idToken) {
-          const idTokenString = session.tokens.idToken.toString();
-          const payload = JSON.parse(atob(idTokenString.split('.')[1]));
-          const scope = payload.scope || '';
-          const scopes = scope.split(' ').filter((s: string) => s.length > 0);
-          setUserScopes(scopes);
-        }
-      } catch (error) {
-        console.error('Failed to extract scopes:', error);
-        setUserScopes([]);
-      }
-    };
-    
-    extractScopes();
-  }, []);
+    if (isTeamLead && !isAdmin && teams.length > 0) {
+      api.get(`teams/${encodeURIComponent(teams[0].team_id)}`)
+        .then((data: any) => setMyTeamName(data.name || ''))
+        .catch(() => {});
+    }
+  }, [isTeamLead, isAdmin, teams]);
 
-  // Check if user has required scope (with admin inheritance)
-  const hasScope = (requiredScope: string): boolean => {
-    return userScopes.includes('api/admin') || userScopes.includes(requiredScope);
-  };
-
-  // Build navigation items based on user scopes
+  // Build navigation items based on user permissions
   const navigationItems = React.useMemo(() => {
     const items: any[] = [
       { type: "link", text: "Dashboard", href: "/" },
       { type: "link", text: "Applications", href: "/applications" },
-      { type: "link", text: "Use cases", href: "/usecases" },
-      { type: "link", text: "Test Suites", href: "/test-suites" },
+      ...(isAdmin ? [
+        { type: "link", text: "Use cases", href: "/usecases" },
+        { type: "link", text: "Test Suites", href: "/test-suites" },
+      ] : []),
       { type: "link", text: "Templates", href: "/templates" },
     ];
 
-    // Add admin section if user has admin or oauth-clients scopes
-    const hasAdminAccess = hasScope('api/admin');
-    const hasOAuthAccess = hasScope('api/oauth-clients.read') || hasScope('api/oauth-clients.write');
-
-    if (hasAdminAccess || hasOAuthAccess) {
+    // Team section — visible to team leads (non-admin) for "My Team"
+    if (isTeamLead && !isAdmin) {
       items.push({ type: "divider" });
+      items.push({ type: "link", text: myTeamName ? `My Team: ${myTeamName}` : "My Team", href: "/my-team" });
+    }
 
-      if (hasAdminAccess) {
-        items.push({ type: "link", text: "Users", href: "/users" });
-      }
+    // Admin section — visible to admins
+    if (isAdmin) {
+      items.push({ type: "divider" });
+      items.push({ type: "link", text: "Teams", href: "/admin/teams" });
+      items.push({ type: "link", text: "Users", href: "/admin/users" });
+    }
 
-      if (hasOAuthAccess || hasAdminAccess) {
-        items.push({ type: "link", text: "OAuth Clients", href: "/oauth-clients" });
+    // OAuth section — visible to admins and users with OAuth client access
+    const hasOAuthAccess = hasScope('api/oauth-clients.read') || hasScope('api/oauth-clients.write');
+    if (hasOAuthAccess || isAdmin) {
+      if (!isAdmin) {
+        items.push({ type: "divider" });
       }
+      items.push({ type: "link", text: "OAuth Clients", href: "/oauth-clients" });
     }
 
     items.push({ type: "divider" });
     items.push({ type: "link", text: "About", href: "/about" });
 
     return items;
-  }, [userScopes]);
+  }, [hasScope, isAdmin, isTeamLead, myTeamName]);
 
   // Preload components when the app becomes idle
   React.useEffect(() => {
@@ -186,16 +184,20 @@ function AppContent() {
   return (
     <AppLayout
       navigation={
-        <SideNavigation
-          activeHref={activeHref}
-          items={navigationItems}
-          onFollow={(event) => {
-            if (!event.detail.external) {
-              event.preventDefault();
-              navigate(event.detail.href);
-            }
-          }}
-        />
+        <div data-testid="nav-sidebar">
+          {(isTeamLead || isAdmin) && <span data-testid="nav-team-section" aria-hidden="true" />}
+          {isAdmin && <span data-testid="nav-admin-section" aria-hidden="true" />}
+          <SideNavigation
+            activeHref={activeHref}
+            items={navigationItems}
+            onFollow={(event) => {
+              if (!event.detail.external) {
+                event.preventDefault();
+                navigate(event.detail.href);
+              }
+            }}
+          />
+        </div>
       }
       toolsHide
       content={
@@ -232,6 +234,11 @@ function AppContent() {
             <Route path="/templates" element={<TemplateLibrary />} />
             <Route path="/templates/:id" element={<TemplateDetail />} />
             <Route path="/template-usecase" element={<TemplateUsecase />} />
+            <Route path="/admin/teams" element={<TeamsListPage />} />
+            <Route path="/admin/teams/:id" element={<TeamDetailPage />} />
+            <Route path="/admin/users" element={<UsersListPage />} />
+            <Route path="/my-team" element={<MyTeamPage />} />
+            <Route path="/unassigned" element={<UnassignedLanding />} />
             <Route path="/users" element={<Users />} />
             <Route path="/users/create" element={<CreateUser />} />
             <Route path="/oauth-clients" element={<OAuthClients />} />
@@ -262,20 +269,22 @@ function App() {
     <Authenticator>
       {({ signOut, user }) => (
         <Router>
-          <TopNavigation
-            identity={{
-              href: "/",
-              title: "QA Studio",
-            }}
-            utilities={[
-              {
-                type: "button",
-                text: "Sign out",
-                onClick: signOut
-              }
-            ]}
-          />
-          <AppContent />
+          <PermissionsProvider>
+            <TopNavigation
+              identity={{
+                href: "/",
+                title: "QA Studio",
+              }}
+              utilities={[
+                {
+                  type: "button",
+                  text: "Sign out",
+                  onClick: signOut
+                }
+              ]}
+            />
+            <AppContent />
+          </PermissionsProvider>
         </Router>
       )}
     </Authenticator>

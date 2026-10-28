@@ -6,8 +6,10 @@ from utils import (
     create_response,
     get_table_name,
     get_current_timestamp,
-    require_scopes,
-    validate_path_id)
+    validate_path_id,
+    extract_user_identity,
+)
+from resource_auth import require_resource_access, suite_from_path, owner_of, authorize_record, is_studio_admin
 from test_suite_schema import (
     create_suite_usecase_mapping_item,
     get_suite_mapping_pk,
@@ -21,6 +23,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', suite_from_path, scopes=['api/suite.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to add use cases to a test suite.
@@ -57,11 +60,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if error:
             return error
         
-        # Validate scope access (requires api/suite.write or admin)
-        user_identity, error_response = require_scopes(event, ['api/suite.write'])
-        if error_response:
-            return error_response
-        
+        user_identity = extract_user_identity(event)
         user_identity_str = user_identity.get('identity', '')
         
         logger.info(f"Adding {len(usecase_ids)} use cases to suite {suite_id} for user: {user_identity_str}")
@@ -81,6 +80,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         suite = suite_response.get('Item')
         if not suite:
             return create_response(404, {'error': 'Test suite not found'})
+        _, suite_owner = owner_of(suite)
         
         # Query existing mappings to check for duplicates
         existing_mappings_response = table.query(
@@ -119,6 +119,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 logger.warning(f"Use case {usecase_id} not found, skipping")
                 continue
             
+            # The caller must see the use case, and it must belong to the
+            # suite's team: a suite run executes its use cases.
+            auth_err = authorize_record(event, usecase, 'view')
+            if auth_err:
+                return auth_err
+            if owner_of(usecase)[1] != suite_owner and not is_studio_admin(user_identity):
+                return create_response(403, {
+                    'error': 'Forbidden',
+                    'message': f'Use case {usecase_id} belongs to another team',
+                })
             usecase_name = usecase.get('name', '')
             usecase_scope = usecase.get('scope', 'usecase:default')
             

@@ -6,10 +6,15 @@ import Button from '@cloudscape-design/components/button';
 import FormField from '@cloudscape-design/components/form-field';
 import Input from '@cloudscape-design/components/input';
 import Textarea from '@cloudscape-design/components/textarea';
+import Select, { SelectProps } from '@cloudscape-design/components/select';
 import TokenGroup from '@cloudscape-design/components/token-group';
 import Alert from '@cloudscape-design/components/alert';
 import { Application } from '../../types/application';
 import { api } from '../../utils/api';
+import { usePermissions } from '../../auth';
+import { useTeamOptions } from '../../hooks/useTeamOptions';
+
+const APP_CREATOR_ROLES = ['team_lead'] as const;
 
 interface CreateApplicationModalProps {
   visible: boolean;
@@ -19,27 +24,38 @@ interface CreateApplicationModalProps {
 }
 
 export function CreateApplicationModal({ visible, onDismiss, onSuccess, editApplication }: CreateApplicationModalProps) {
+  const { isAdmin } = usePermissions();
   const [name, setName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [description, setDescription] = useState('');
-  const [team, setTeam] = useState('');
+  const [selectedTeam, setSelectedTeam] = useState<SelectProps.Option | null>(null);
+  // Non-admins: only teams they lead (a Team Lead creates apps for their team)
+  const teamOptions = useTeamOptions(visible, APP_CREATOR_ROLES);
   const [environments, setEnvironments] = useState<string[]>([]);
   const [envInput, setEnvInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!isAdmin && teamOptions.length === 1 && !editApplication) {
+      setSelectedTeam(teamOptions[0]);
+    }
+  }, [teamOptions, isAdmin, editApplication]);
+
+  useEffect(() => {
     if (editApplication) {
       setName(editApplication.name);
       setBaseUrl(editApplication.base_url);
       setDescription(editApplication.description);
-      setTeam(editApplication.team);
+      const ownerTeamId = (editApplication as any).owner_team_id || '';
+      const teamName = (editApplication as any).team || '';
+      setSelectedTeam(ownerTeamId ? { label: teamName || ownerTeamId, value: ownerTeamId } : null);
       setEnvironments(editApplication.environments || []);
     } else {
       setName('');
       setBaseUrl('');
       setDescription('');
-      setTeam('');
+      setSelectedTeam(null);
       setEnvironments([]);
     }
     setError('');
@@ -54,12 +70,16 @@ export function CreateApplicationModal({ visible, onDismiss, onSuccess, editAppl
       setError('Base URL is required');
       return;
     }
+    if (!editApplication && !selectedTeam?.value) {
+      setError('Team is required');
+      return;
+    }
 
     setSaving(true);
     setError('');
 
     try {
-      const payload = { name, base_url: baseUrl, description, team, environments };
+      const payload = { name, base_url: baseUrl, description, team: selectedTeam?.label || '', teamId: selectedTeam?.value || '', environments };
 
       if (editApplication) {
         await api.patch(`applications/${editApplication.id}`, payload);
@@ -115,8 +135,14 @@ export function CreateApplicationModal({ visible, onDismiss, onSuccess, editAppl
           <Textarea value={description} onChange={({ detail }) => setDescription(detail.value)} placeholder="Optional description" />
         </FormField>
 
-        <FormField label="Team">
-          <Input value={team} onChange={({ detail }) => setTeam(detail.value)} placeholder="Team name" />
+        <FormField label="Team" description="The team that owns this application" constraintText={editApplication ? undefined : 'Required'}>
+          <Select
+            selectedOption={selectedTeam}
+            onChange={({ detail }) => setSelectedTeam(detail.selectedOption)}
+            options={teamOptions}
+            placeholder="Select a team"
+            empty="No teams available"
+          />
         </FormField>
 
         <FormField label="Environments">

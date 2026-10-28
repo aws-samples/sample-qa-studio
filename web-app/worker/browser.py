@@ -187,7 +187,7 @@ def _wait_for_browser_ready(cp_client, browser_id: str, creation_start_time: flo
                 logger.warning(f"⚠️ Unknown browser status: {status}")
             
             # Wait before next check
-            time.sleep(check_interval)
+            time.sleep(check_interval)  # nosemgrep
             
         except Exception as e:
             if "does not exist" in str(e).lower():
@@ -195,7 +195,8 @@ def _wait_for_browser_ready(cp_client, browser_id: str, creation_start_time: flo
                 raise Exception(f"Browser {browser_id} not found during status check")
             else:
                 logger.warning(f"Error checking browser status: {e}")
-                time.sleep(check_interval)
+                # Intentional: poll before re-checking after an error (max_wait_time).
+                time.sleep(check_interval)  # nosemgrep
     
     # Timeout reached
     total_wait_time = time.time() - creation_start_time

@@ -4,16 +4,21 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, get_table_name, get_secret_prefix, get_current_timestamp, require_scopes
+from resource_auth import require_resource_access, app_from_body, new_usecase_owner_fields
+from utils import create_response, get_table_name, get_secret_prefix, get_current_timestamp, extract_user_identity
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', app_from_body('application_id'), scopes=['api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to import a usecase from export data.
+
+    The body's top-level application_id (required) names the target app;
+    the decorator checks edit on it.
     
     Args:
         event: API Gateway proxy request event
@@ -23,10 +28,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         API Gateway proxy response with import result
     """
     try:
-        # Validate scope authorization
-        user_identity, error = require_scopes(event, ['api/usecases.write'])
-        if error:
-            return error
+        user_identity = extract_user_identity(event)
         
         # Extract user info for created_by tracking
         user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
@@ -81,6 +83,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'tags': usecase_tags,
             'created_at': now,
             'test_platform': usecase_data.get('test_platform', 'web'),
+            **new_usecase_owner_fields(body['application_id']),
         }
 
         # Add mobile-specific fields if present
@@ -163,7 +166,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         missing_secrets = []
         for secret in secrets_data:
             secret_key = secret.get('key', '')
-            secret_name = f"{get_secret_prefix()}/{new_usecase_id}/{secret_key}"
+            # Same path and tag as create_usecase_secrets so the secret can be
+            # listed, resolved at runtime, and matches the IAM scope.
+            secret_name = f"{get_secret_prefix()}/usecase/{new_usecase_id}/{secret_key}"
             
             # Save secret info to DynamoDB
             secret_item = {
@@ -185,7 +190,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 secrets_client.create_secret(
                     Name=secret_name,
                     Description=f"Imported secret: {secret.get('description', '')}",
-                    SecretString=''  # Empty value - needs to be configured
+                    SecretString='',  # Empty value - needs to be configured
+                    Tags=[
+                        {'Key': 'usecase_id', 'Value': new_usecase_id},
+                        {'Key': 'managed_by', 'Value': get_secret_prefix()},
+                    ],
                 )
             except Exception as e:
                 logger.error(f"Error creating secret in AWS: {str(e)}")

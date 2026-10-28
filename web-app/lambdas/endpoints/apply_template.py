@@ -4,16 +4,22 @@ from typing import Any, Dict
 from uuid import uuid4
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name, get_current_timestamp, require_scopes, validate_path_id
+from resource_auth import require_resource_access, app_from_body, new_usecase_owner_fields
+from utils import create_response, get_table_name, get_current_timestamp, extract_user_identity, validate_path_id
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+@require_resource_access('edit', app_from_body('application_id'),
+                         scopes=['api/templates.read', 'api/usecases.write'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to create a new usecase from a template.
+
+    Templates are studio-global; the new use case lands in the body's
+    application_id (required), on which the decorator checks edit.
     
     Args:
         event: API Gateway proxy request event
@@ -22,11 +28,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Returns:
         API Gateway proxy response with created usecase
     """
-    # Validate scopes - requires both template read and usecase write
-    user_identity, error = require_scopes(event, ['api/templates.read', 'api/usecases.write'])
-    if error:
-        return error
-    
+    user_identity = extract_user_identity(event)
+
     try:
         # Get template ID from path
         template_id, error = validate_path_id(event.get('pathParameters', {}).get('id'), 'template ID')
@@ -86,7 +89,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'active': True,
             'region': 'eu-central-1',
             'tags': [],
-            'created_at': now
+            'created_at': now,
+            **new_usecase_owner_fields(body['application_id']),
         }
         
         # Save new usecase

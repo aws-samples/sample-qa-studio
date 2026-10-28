@@ -137,6 +137,24 @@ class TestGroupFallback:
         scopes_to_add = result["response"]["claimsAndScopeOverrideDetails"]["accessTokenGeneration"]["scopesToAdd"]
         assert scopes_to_add == []
 
+    def test_team_admin_group_gets_no_admin_scope(self):
+        """team-x-admin is not a team role (C-1): it must not yield api/admin."""
+        event = make_event(groups=["team-x-admin"])
+        result = handler(event, None)
+
+        details = result["response"]["claimsAndScopeOverrideDetails"]
+        assert "api/admin" not in details["accessTokenGeneration"]["scopesToAdd"]
+        assert "api/admin" not in details["idTokenGeneration"]["claimsToAddOrOverride"].get("scope", "")
+        assert details["accessTokenGeneration"]["scopesToAdd"] == []
+
+    def test_team_lead_with_team_admin_group_gets_no_admin_scope(self):
+        event = make_event(groups=["team-x-team_lead", "team-x-admin"])
+        result = handler(event, None)
+
+        scopes_to_add = result["response"]["claimsAndScopeOverrideDetails"]["accessTokenGeneration"]["scopesToAdd"]
+        assert "api/admin" not in scopes_to_add
+        assert "api/teams.manage" in scopes_to_add
+
 
 class TestMultipleGroups:
     """Verify scope union when user belongs to multiple groups."""

@@ -1,8 +1,10 @@
+import json
 import logging
 from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
-from utils import create_response, get_table_name, require_scopes
+from utils import create_response, get_table_name, require_scopes, extract_user_identity
+from resource_auth import filter_visible_apps
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -36,5 +38,9 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     for app in applications:
         app.pop('pk', None)
         app.pop('sk', None)
+
+    # Use full resource_auth filter with shared-app annotation (BL-5)
+    identity = extract_user_identity(event)
+    applications = filter_visible_apps(identity, applications)
 
     return create_response(200, applications)

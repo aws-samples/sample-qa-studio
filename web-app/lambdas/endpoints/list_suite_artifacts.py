@@ -6,7 +6,8 @@ import json
 import os
 import boto3
 from botocore.exceptions import ClientError
-from utils import create_response, require_scopes, validate_path_id
+from utils import create_response, validate_path_id, extract_user_identity
+from resource_auth import require_resource_access, suite_execution_from_path
 
 
 # Filename extension → (type, content_type) mapping
@@ -65,6 +66,7 @@ def generate_presigned_download_url(
     )
 
 
+@require_resource_access('view', suite_execution_from_path, scopes=['api/suite.read'])
 def handler(event, context):
     """
     List suite-level artifacts by querying S3 with ListObjectsV2.
@@ -78,12 +80,8 @@ def handler(event, context):
     - 403: Insufficient permissions
     - 500: Internal server error
     """
-    # Validate scopes
-    user_identity, error_response = require_scopes(event, ['api/suite.read'])
-    if error_response:
-        return error_response
-
-    print(f"Suite artifact list requested by: {user_identity['identity']} (type: {user_identity['identity_type']})")
+    user_identity = extract_user_identity(event)
+    print(f"Suite artifact list requested by identity type: {user_identity['identity_type']}")
 
     # Parse path parameters
     suite_id, error = validate_path_id(event.get('pathParameters', {}).get('suite_id'), 'suite ID')

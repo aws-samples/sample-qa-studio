@@ -30,6 +30,9 @@ export function validateHowToStart(state: WizardState): Record<string, string> {
 
 export function validateBasicInfo(state: WizardState): Record<string, string> {
   const errors: Record<string, string> = {};
+  if (!state.basicInfo.applicationId) {
+    errors.applicationId = 'Application is required';
+  }
   if (!state.basicInfo.name.trim()) {
     errors.name = 'Name is required';
   }
@@ -101,6 +104,9 @@ export function validateSelectSource(state: WizardState): Record<string, string>
 
 export function validateUploadFile(state: WizardState): Record<string, string> {
   const errors: Record<string, string> = {};
+  if (!state.basicInfo.applicationId) {
+    errors.applicationId = 'Application is required';
+  }
 
   if (!state.importConfig.file) {
     errors.file = 'Please upload a JSON file';

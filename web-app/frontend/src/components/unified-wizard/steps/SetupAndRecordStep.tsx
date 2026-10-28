@@ -9,7 +9,7 @@ import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Grid from "@cloudscape-design/components/grid";
 import type { StepProps } from '../types';
-import { api } from '../../../utils/api';
+import { api, wizardApi } from '../../../utils/api';
 import { regionOptions, findRegionOptions } from '../../../utils/browser_regions';
 import WizardLiveView from '../../wizard/WizardLiveView';
 import WizardStepBuilder from '../../wizard/WizardStepBuilder';
@@ -109,6 +109,7 @@ export default function SetupAndRecordStep({ state, dispatch, validationErrors }
 
     try {
       const response = await api.post('wizard/start', {
+        application_id: state.basicInfo.applicationId,
         name: state.basicInfo.name.trim() || 'Interactive Wizard Session',
         description: state.basicInfo.description.trim(),
         starting_url: state.basicInfo.startingUrl.trim(),
@@ -143,10 +144,10 @@ export default function SetupAndRecordStep({ state, dispatch, validationErrors }
   };
 
   const handleAddStep = async (stepData: any) => {
-    if (!interactiveConfig.sessionId) return;
+    if (!interactiveConfig.sessionId || !interactiveConfig.usecaseId) return;
 
     try {
-      await api.post(`wizard/${interactiveConfig.sessionId}/step`, stepData);
+      await wizardApi.addStep(interactiveConfig.sessionId, interactiveConfig.usecaseId, stepData);
 
       // Immediate poll for updated steps
       if (interactiveConfig.usecaseId) {
