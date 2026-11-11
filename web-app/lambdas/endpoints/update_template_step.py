@@ -3,6 +3,9 @@ import logging
 from typing import Any, Dict
 import boto3
 from utils import get_table_name, create_response, require_scopes, validate_path_id
+from repeat_validation import template_step_error
+from step_copy import COPYABLE_STEP_FIELDS
+from template_store import bump_template_version
 
 # Configure logging
 logger = logging.getLogger()
@@ -37,6 +40,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Parse request body
         body = json.loads(event.get('body', '{}'))
+
+        repeat_error = template_step_error(body)
+        if repeat_error:
+            return create_response(400, {'error': repeat_error})
         
         # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
@@ -47,31 +54,24 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         expression_attribute_values = {}
         expression_attribute_names = {}
         
-        # Map of field names to their values
+        # Map of field names to their values.  The legacy fields are always
+        # written (default '') — the step form sends the full set.
+        legacy_fields = (
+            'secret_key', 'capture_variable', 'validation_type', 'validation_operator',
+            'validation_value', 'assertion_variable', 'value_type',
+        )
         fields = {
             'sort': body.get('sort'),
             'instruction': body.get('instruction'),
             'step_type': body.get('step_type'),
-            'secret_key': body.get('secret_key', ''),
-            'capture_variable': body.get('capture_variable', ''),
-            'validation_type': body.get('validation_type', ''),
-            'validation_operator': body.get('validation_operator', ''),
-            'validation_value': body.get('validation_value', ''),
-            'assertion_variable': body.get('assertion_variable', ''),
-            'value_type': body.get('value_type', '')
+            **{field: body.get(field, '') for field in legacy_fields},
         }
 
-        # network_assertion fields are only written when the client sends them,
-        # so existing step types are never silently mutated.
-        for network_field in (
-            'network_url_pattern', 'network_method', 'network_request_body',
-            'network_body_match_type', 'network_mock_response',
-            'network_mock_passthrough', 'network_timeout',
-            'network_response_body', 'network_response_body_match_type',
-            'network_response_status',
-        ):
-            if network_field in body:
-                fields[network_field] = body[network_field]
+        # Every other authored field is only written when the client sends
+        # it, so existing step types are never silently mutated.
+        for field in COPYABLE_STEP_FIELDS:
+            if field not in legacy_fields and field in body:
+                fields[field] = body[field]
         
         # Build update expression for all fields
         for field_name, field_value in fields.items():
@@ -98,6 +98,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         )
         
         updated_item = response.get('Attributes', {})
+        bump_template_version(table, template_id)
         
         return create_response(200, {
             'message': 'Step updated successfully',

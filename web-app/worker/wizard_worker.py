@@ -12,7 +12,7 @@ import json
 import time
 from nova_act import NovaAct, Workflow
 from nova_act.util.s3_writer import S3Writer
-from utils import get_region, get_time
+from utils import get_region, get_time, install_sigterm_exit
 from browser import start_browser, create_browser, delete_browser
 
 from dynamodb_client import DynamoDBClient
@@ -108,7 +108,7 @@ def execute_single_step(nova, step, template_parser, usecase_id, execution_id, s
             case 'download':
                 result, success, logs, actual_value = execute_download_step(nova, parsed_step, usecase_id, execution_id, s3_bucket_name)
             case _:
-                result, success, logs = execute_navigation_step(nova, parsed_step, False)
+                result, success, logs = execute_navigation_step(nova, parsed_step)
 
         # Extract act_id from result
         if result and hasattr(result, 'metadata') and hasattr(result.metadata, 'act_id'):
@@ -157,7 +157,13 @@ def execute_single_step(nova, step, template_parser, usecase_id, execution_id, s
 
 def main():
     """Main wizard worker function"""
-    
+    # SIGTERM (MicroVM ``/terminate`` hook, supervisor watchdog)
+    # must run the ``finally`` cleanup below: SystemExit is a BaseException, so
+    # neither the command loop's nor the outer ``except Exception`` catches it
+    # and no ``failed`` is written — the record is already ``success``
+    # (terminate_wizard_session writes it before TerminateMicrovm) or ``timeout``.
+    install_sigterm_exit(logger)
+
     session_id = os.getenv('SESSION_ID')
     usecase_id = os.getenv('USECASE_ID')
     wizard_queue_url = os.getenv('WIZARD_QUEUE_URL')
@@ -878,7 +884,9 @@ def main():
         return False
     
     finally:
-        # Final cleanup (in case terminate wasn't called or there was an error)
+        # Final cleanup (in case terminate wasn't called or there was an error).
+        # Also the SIGTERM path: SystemExit skips both ``except Exception``
+        # blocks above and lands here, so the browser never leaks.
         logger.info("Running final cleanup...")
         try:
             if 'nova' in locals():

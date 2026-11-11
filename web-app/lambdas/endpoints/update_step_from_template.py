@@ -3,13 +3,15 @@ from typing import Any, Dict
 import boto3
 from utils import create_response, get_table_name, validate_path_id
 from resource_auth import require_resource_access, usecase_from_path
+from step_copy import copy_step_fields
+from template_store import get_template_metadata
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write'])
+@require_resource_access('edit', usecase_from_path, scopes=['api/usecases.write', 'api/templates.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to update a step from its template.
@@ -32,7 +34,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
-        
+
         # 1. Get the current step
         step_response = table.get_item(
             Key={
@@ -53,17 +55,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         template_step_id = current_step.get('template_step_id')
         
         # 2. Get the template metadata
-        template_response = table.get_item(
-            Key={
-                'pk': 'TEMPLATES',
-                'sk': f'TEMPLATE#{template_id}'
-            }
-        )
-        
-        if 'Item' not in template_response:
+        template = get_template_metadata(table, template_id)
+        if template is None:
             return create_response(404, {'error': 'Template not found'})
-        
-        template = template_response['Item']
         
         # 3. Get the template step
         template_step_response = table.get_item(
@@ -85,46 +79,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'id': current_step['id'],
             'sort': current_step['sort'],
             'created_at': current_step['created_at'],
-            # Update from template
-            'instruction': template_step.get('instruction', ''),
-            'step_type': template_step.get('step_type', ''),
             # Update template reference
             'template_id': template_id,
             'template_step_id': template_step_id,
-            'template_version': template.get('version', 1)
+            'template_version': template.get('version', 1),
+            # Update from template (instruction, step_type and every authored field)
+            **copy_step_fields(template_step),
         }
-        
-        # Add optional fields from template if present
-        if template_step.get('secret_key'):
-            updated_step['secret_key'] = template_step['secret_key']
-        if template_step.get('capture_variable'):
-            updated_step['capture_variable'] = template_step['capture_variable']
-        if template_step.get('validation_type'):
-            updated_step['validation_type'] = template_step['validation_type']
-        if template_step.get('validation_operator'):
-            updated_step['validation_operator'] = template_step['validation_operator']
-        if template_step.get('validation_value'):
-            updated_step['validation_value'] = template_step['validation_value']
-        if template_step.get('assertion_variable'):
-            updated_step['assertion_variable'] = template_step['assertion_variable']
-        if template_step.get('value_type'):
-            updated_step['value_type'] = template_step['value_type']
-
-        for network_field in (
-            'network_url_pattern', 'network_method', 'network_request_body',
-            'network_body_match_type', 'network_mock_response',
-            'network_mock_passthrough', 'network_timeout',
-            'network_response_body', 'network_response_body_match_type',
-            'network_response_status',
-        ):
-            if network_field in template_step:
-                updated_step[network_field] = template_step[network_field]
-        
-        # Add browser/transform fields from template if present
-        for field in ['browser_action', 'browser_args', 'transform_operation', 'transform_args',
-                      'enable_advanced_click_types', 'value_source']:
-            if template_step.get(field):
-                updated_step[field] = template_step[field]
         
         # Save updated step
         table.put_item(Item=updated_step)

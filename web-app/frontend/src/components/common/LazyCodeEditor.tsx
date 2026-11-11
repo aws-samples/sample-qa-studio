@@ -42,9 +42,3 @@ export default function LazyCodeEditor(props: LazyCodeEditorProps) {
   );
 }
 
-// Preload function for the code editor
-export function preloadCodeEditor() {
-  return import('ace-builds').then(() => 
-    import('@cloudscape-design/components/code-editor')
-  );
-}

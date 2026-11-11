@@ -12,7 +12,7 @@ import type {
 
 // --- Default Config Objects (exported for resets and testing) ---
 
-export const defaultBasicInfo: BasicInfo = {
+const defaultBasicInfo: BasicInfo = {
   name: '',
   description: '',
   tags: '',
@@ -23,7 +23,7 @@ export const defaultBasicInfo: BasicInfo = {
   applicationId: '',
 };
 
-export const defaultBlankConfig: BlankConfig = {
+const defaultBlankConfig: BlankConfig = {
   startingUrl: '',
   active: true,
   enableCache: false,
@@ -35,7 +35,7 @@ export const defaultBlankConfig: BlankConfig = {
   appBinaryFile: null,
 };
 
-export const defaultInteractiveConfig: InteractiveConfig = {
+const defaultInteractiveConfig: InteractiveConfig = {
   startingUrl: '',
   browserRegion: '',
   sessionId: null,
@@ -46,14 +46,14 @@ export const defaultInteractiveConfig: InteractiveConfig = {
   isNavHidden: false,
 };
 
-export const defaultTemplateConfig: TemplateConfig = {
+const defaultTemplateConfig: TemplateConfig = {
   selectedTemplateId: null,
   templateDetail: null,
   startingUrl: '',
   description: '',
 };
 
-export const defaultUserJourneyConfig: UserJourneyConfig = {
+const defaultUserJourneyConfig: UserJourneyConfig = {
   startingUrl: '',
   userJourneyText: '',
   executionRegion: '',
@@ -63,15 +63,16 @@ export const defaultUserJourneyConfig: UserJourneyConfig = {
   appPackage: '',
   appActivity: '',
   bundleId: '',
+  recordingData: null,
 };
 
-export const defaultCloneConfig: CloneConfig = {
+const defaultCloneConfig: CloneConfig = {
   selectedUsecaseId: null,
   usecaseDetail: null,
   newName: '',
 };
 
-export const defaultImportConfig: ImportConfig = {
+const defaultImportConfig: ImportConfig = {
   file: null,
   parsedData: null,
   parseError: null,
@@ -148,9 +149,11 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
         return state;
       }
 
+      // Interactive wizard and templates need a cloud browser: web only.
+      const resetMethod = state.creationMethod !== null && WEB_ONLY_METHODS.has(state.creationMethod);
+
       if (action.payload === 'mobile') {
         // Switching to mobile: clear web-specific fields, reset method if web-only
-        const resetMethod = state.creationMethod !== null && WEB_ONLY_METHODS.has(state.creationMethod);
         return {
           ...state,
           testPlatform: 'mobile',
@@ -163,7 +166,29 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
         };
       }
 
-      // Switching to web: clear mobile-specific fields
+      if (action.payload === 'electron') {
+        // Switching to electron: no URL, no browser policy, no device/app
+        // binary. bundleId is shared with iOS but starts blank for a new
+        // platform so an iOS value is never mis-attributed to the desktop app.
+        return {
+          ...state,
+          testPlatform: 'electron',
+          creationMethod: resetMethod ? null : state.creationMethod,
+          mobilePlatform: null,
+          blankConfig: {
+            ...state.blankConfig,
+            startingUrl: '',
+            browserPolicyFile: null,
+            appPackage: '',
+            appActivity: '',
+            bundleId: '',
+            deviceArn: null,
+            appBinaryFile: null,
+          },
+        };
+      }
+
+      // Switching to web: clear mobile/electron-specific fields
       return {
         ...state,
         testPlatform: 'web',

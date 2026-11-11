@@ -2,9 +2,9 @@ import json
 import logging
 from typing import Any, Dict
 import boto3
-from botocore.exceptions import ClientError
 from utils import get_secret_prefix, create_response, request_log_summary, aws_error_code
 from resource_auth import require_resource_access, usecase_from_path
+from secret_names import usecase_secret_name, upsert_secret
 
 # Configure logging
 logger = logging.getLogger()
@@ -47,33 +47,20 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if not secret_key or not secret_value:
                 continue
             
-            secret_name = f"{prefix}/usecase/{usecase_id}/{secret_key}"
-            
             try:
-                # Try to create the secret first
-                secrets_client.create_secret(
-                    Name=secret_name,
-                    SecretString=secret_value,
-                    Description=f"Secret for usecase {usecase_id}",
-                    Tags=[
+                upsert_secret(
+                    secrets_client,
+                    usecase_secret_name(prefix, usecase_id, secret_key),
+                    secret_value,
+                    f"Secret for usecase {usecase_id}",
+                    [
                         {'Key': 'usecase_id', 'Value': usecase_id},
                         {'Key': 'managed_by', 'Value': prefix}
-                    ]
+                    ],
                 )
-            except ClientError as e:
-                # If secret already exists, update it
-                if e.response['Error']['Code'] == 'ResourceExistsException':
-                    try:
-                        secrets_client.update_secret(
-                            SecretId=secret_name,
-                            SecretString=secret_value
-                        )
-                    except Exception as update_err:
-                        logger.error(f"Error updating usecase secret: {aws_error_code(update_err)}")
-                        return create_response(500, {'error': f'Failed to update secret {secret_key}'})
-                else:
-                    logger.error(f"Error creating usecase secret: {aws_error_code(e)}")
-                    return create_response(500, {'error': f'Failed to create secret {secret_key}'})
+            except Exception as e:
+                logger.error(f"Error creating/updating usecase secret: {aws_error_code(e)}")
+                return create_response(500, {'error': f'Failed to create or update secret {secret_key}'})
         
         return create_response(200, {
             'message': 'Secrets created/updated successfully',

@@ -43,7 +43,7 @@ interface ConsolidatedReport {
 function runSynth(): void {
   console.log('🔍 Running cdk synth to trigger cdk-nag checks...\n');
   try {
-    execSync('npx cdk synth --quiet 2>&1', {
+    execSync('./node_modules/.bin/cdk synth --quiet 2>&1', {
       cwd: join(__dirname, '..'),
       encoding: 'utf-8',
       stdio: 'inherit',

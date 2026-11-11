@@ -1,8 +1,8 @@
 import re
 import logging
 from models import ExecutionStep
-from transform.date_compare import evaluate_date_assertion
-from transform.date_parser import DateParseError
+from qa_studio_cli.runner.transform.date_compare import evaluate_date_assertion
+from qa_studio_cli.runner.transform.date_parser import DateParseError
 
 logger = logging.getLogger(__name__)
 

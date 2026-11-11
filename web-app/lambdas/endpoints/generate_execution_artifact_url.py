@@ -15,6 +15,14 @@ from utils import (
     extract_user_identity,
 )
 from resource_auth import require_resource_access, execution_from_path
+from artifact_upload import (
+    UPLOAD_URL_EXPIRES_IN,
+    create_artifact_record,
+    generate_presigned_upload_url,
+    sanitize_filename,
+    sanitize_path,
+    validate_content_type as _validate_allowed,
+)
 
 def get_dynamodb_client():
     """Get DynamoDB client (lazy initialization for testing)"""
@@ -26,60 +34,19 @@ def get_s3_client():
     return boto3.client('s3')
 
 
-def sanitize_filename(filename: str) -> str:
-    """
-    Sanitize filename to prevent security issues.
-    
-    - Remove path separators (/, \\)
-    - Remove null bytes
-    - Limit length to 255 characters
-    - Preserve file extension
-    """
-    # Remove path separators and null bytes
-    sanitized = filename.replace('/', '_').replace('\\', '_').replace('\0', '')
-    
-    # Limit length
-    if len(sanitized) > 255:
-        name, ext = os.path.splitext(sanitized)
-        sanitized = name[:255-len(ext)] + ext
-    
-    return sanitized
-
-
-def sanitize_path(path: str) -> str:
-    """
-    Sanitize a relative file path while preserving directory structure.
-    
-    - Remove null bytes
-    - Remove backslashes (normalize to forward slashes)
-    - Prevent path traversal (remove .. components)
-    - Remove leading slashes
-    - Sanitize each path component individually
-    """
-    # Remove null bytes and normalize separators
-    sanitized = path.replace('\0', '').replace('\\', '/')
-    
-    # Remove leading slashes
-    sanitized = sanitized.lstrip('/')
-    
-    # Split into components and filter out traversal attempts
-    components = sanitized.split('/')
-    safe_components = [c for c in components if c and c != '..']
-    
-    return '/'.join(safe_components)
+ALLOWED_CONTENT_TYPES = {
+    'recording': ['video/webm', 'video/mp4'],
+    'logs': ['text/plain'],
+    'trace': ['text/html', 'application/json'],
+}
 
 
 def validate_content_type(artifact_type: str, content_type: str) -> None:
     """Validate content type is allowed for artifact type."""
-    ALLOWED_CONTENT_TYPES = {
-        'recording': ['video/webm', 'video/mp4'],
-        'logs': ['text/plain'],
-        'trace': ['text/html', 'application/json']
-    }
-    
-    allowed = ALLOWED_CONTENT_TYPES.get(artifact_type, [])
-    if content_type not in allowed:
-        raise ValueError(f'Content type {content_type} not allowed for {artifact_type}')
+    _validate_allowed(
+        content_type, ALLOWED_CONTENT_TYPES.get(artifact_type, []),
+        f'Content type {content_type} not allowed for {artifact_type}',
+    )
 
 
 def validate_execution_exists(usecase_id: str, execution_id: str) -> dict:
@@ -134,89 +101,6 @@ def generate_s3_key_for_execution_artifact(
         return f'{usecase_id}/{execution_id}/{sanitized_path}'
     sanitized_filename = sanitize_filename(filename)
     return f'{usecase_id}/{execution_id}/{sanitized_filename}'
-
-
-def create_artifact_record(
-    artifact_id: str,
-    execution_id: str,
-    artifact_type: str,
-    filename: str,
-    content_type: str,
-    s3_bucket: str,
-    s3_key: str,
-    created_at: str,
-    step_id: str = None
-) -> None:
-    """
-    Create artifact metadata record in DynamoDB.
-    
-    Put: pk='EXECUTION#{execution_id}', sk='ARTIFACT#{artifact_id}'
-    """
-    dynamodb = get_dynamodb_client()
-    table_name = get_table_name()
-    
-    item = {
-        'pk': {'S': f'EXECUTION#{execution_id}'},
-        'sk': {'S': f'ARTIFACT#{artifact_id}'},
-        'artifact_id': {'S': artifact_id},
-        'execution_id': {'S': execution_id},
-        'type': {'S': artifact_type},
-        'filename': {'S': filename},
-        'content_type': {'S': content_type},
-        's3_bucket': {'S': s3_bucket},
-        's3_key': {'S': s3_key},
-        'upload_status': {'S': 'pending'},
-        'created_at': {'S': created_at}
-    }
-    
-    # Add step_id for step-level artifacts
-    if step_id:
-        item['step_id'] = {'S': step_id}
-    
-    try:
-        dynamodb.put_item(
-            TableName=table_name,
-            Item=item
-        )
-        print(f'Created artifact record: {artifact_id}')
-    except ClientError as e:
-        print(f'DynamoDB error creating artifact record: {str(e)}')
-        raise
-
-
-def generate_presigned_upload_url(
-    s3_bucket: str,
-    s3_key: str,
-    content_type: str,
-    expires_in: int = 3600
-) -> str:
-    """
-    Generate presigned URL for Amazon S3 PutObject operation.
-    
-    Args:
-        s3_bucket: Amazon S3 bucket name
-        s3_key: Amazon S3 object key
-        content_type: MIME type (enforced in presigned URL)
-        expires_in: Expiration time in seconds (default 1 hour)
-    
-    Returns:
-        Presigned URL string
-    """
-    s3_client = get_s3_client()
-    try:
-        presigned_url = s3_client.generate_presigned_url(
-            'put_object',
-            Params={
-                'Bucket': s3_bucket,
-                'Key': s3_key,
-                'ContentType': content_type
-            },
-            ExpiresIn=expires_in
-        )
-        return presigned_url
-    except ClientError as e:
-        print(f'S3 error generating presigned URL: {str(e)}')
-        raise
 
 
 @require_resource_access('execute', execution_from_path, scopes=['api/executions.write'], allow_worker=True)
@@ -322,6 +206,7 @@ def handler(event, context):
     created_at = get_current_timestamp()
     try:
         create_artifact_record(
+            get_dynamodb_client(), get_table_name(),
             artifact_id=artifact_id,
             execution_id=execution_id,
             artifact_type=artifact_type,
@@ -341,10 +226,11 @@ def handler(event, context):
     # Generate presigned URL
     try:
         presigned_url = generate_presigned_upload_url(
+            get_s3_client(),
             s3_bucket=s3_bucket,
             s3_key=s3_key,
             content_type=content_type,
-            expires_in=3600  # 1 hour
+            expires_in=UPLOAD_URL_EXPIRES_IN,
         )
     except Exception as e:
         print(f'Error generating presigned URL: {str(e)}')
@@ -368,6 +254,6 @@ def handler(event, context):
     return create_response(200, {
         'artifact_id': artifact_id,
         'upload_url': presigned_url,
-        'expires_in': 3600,
+        'expires_in': UPLOAD_URL_EXPIRES_IN,
         's3_key': s3_key
     })

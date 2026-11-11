@@ -3,8 +3,10 @@
 import click
 
 from qa_studio_cli.api.client import require_auth
-from qa_studio_cli.models.errors import ApiError
+from qa_studio_cli.commands._admin_output import Column, confirmed, echo_table, exit_on_api_error, list_items
 from qa_studio_cli.models.permissions import Member
+
+ROLE_CHOICE = click.Choice(["Admin", "Editor", "Viewer"], case_sensitive=True)
 
 
 @click.group()
@@ -17,25 +19,15 @@ def members():
 @require_auth
 @click.option("--team", "team_id", required=True, help="Team ID")
 @click.option("--email", required=True, help="User email to add")
-@click.option(
-    "--role",
-    type=click.Choice(["Admin", "Editor", "Viewer"], case_sensitive=True),
-    required=True,
-    help="Role to assign",
-)
+@click.option("--role", type=ROLE_CHOICE, required=True, help="Role to assign")
 @click.pass_context
 def add_member(ctx, team_id, email, role):
     """Add a member to a team."""
     client = ctx.obj["client"]
-    body = {"email": email, "role": role}
-
-    try:
-        data = client.post(f"/teams/{team_id}/members", json_body=body)
+    with exit_on_api_error():
+        data = client.post(f"/teams/{team_id}/members", json_body={"email": email, "role": role})
         member = Member.model_validate(data)
         click.echo(f"✓ Added {member.email} to team as {member.role}.")
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
 
 
 @members.command("remove")
@@ -47,43 +39,26 @@ def add_member(ctx, team_id, email, role):
 def remove_member(ctx, team_id, user_id, yes):
     """Remove a member from a team."""
     client = ctx.obj["client"]
-
-    if not yes:
-        if not click.confirm(f"Remove user {user_id} from team {team_id}?"):
-            click.echo("Aborted.")
-            return
-
-    try:
+    if not confirmed(f"Remove user {user_id} from team {team_id}?", yes):
+        return
+    with exit_on_api_error():
         client.delete(f"/teams/{team_id}/members/{user_id}")
         click.echo(f"✓ User {user_id} removed from team {team_id}.")
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
 
 
 @members.command("set-role")
 @require_auth
 @click.option("--team", "team_id", required=True, help="Team ID")
 @click.option("--user", "user_id", required=True, help="User ID")
-@click.option(
-    "--role",
-    type=click.Choice(["Admin", "Editor", "Viewer"], case_sensitive=True),
-    required=True,
-    help="New role to assign",
-)
+@click.option("--role", type=ROLE_CHOICE, required=True, help="New role to assign")
 @click.pass_context
 def set_role(ctx, team_id, user_id, role):
     """Update a member's role within a team."""
     client = ctx.obj["client"]
-    body = {"role": role}
-
-    try:
-        data = client.patch(f"/teams/{team_id}/members/{user_id}", json_body=body)
+    with exit_on_api_error():
+        data = client.patch(f"/teams/{team_id}/members/{user_id}", json_body={"role": role})
         member = Member.model_validate(data)
         click.echo(f"✓ Updated {member.email} to {member.role} in team {team_id}.")
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
 
 
 @members.command("list")
@@ -93,28 +68,14 @@ def set_role(ctx, team_id, user_id, role):
 def list_members(ctx, team_id):
     """List all members of a team."""
     client = ctx.obj["client"]
-
-    try:
+    with exit_on_api_error():
         data = client.get(f"/teams/{team_id}/members")
-        items = data.get("members", data) if isinstance(data, dict) else data
-        members_list = [Member.model_validate(item) for item in items]
-
+        members_list = [Member.model_validate(item) for item in list_items(data, "members")]
         if not members_list:
             click.echo("No members found.")
             return
-
-        # Header
-        email_w = max(len(m.email) for m in members_list)
-        uid_w = max(len(m.user_id) for m in members_list)
-        email_w = max(email_w, 5)
-        uid_w = max(uid_w, 7)
-
-        header = f"{'User ID':<{uid_w}}  {'Email':<{email_w}}  {'Role':<7}"
-        click.echo(header)
-        click.echo("─" * len(header))
-
-        for m in members_list:
-            click.echo(f"{m.user_id:<{uid_w}}  {m.email:<{email_w}}  {m.role:<7}")
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
+        echo_table(members_list, [
+            Column("User ID", lambda m: m.user_id),
+            Column("Email", lambda m: m.email),
+            Column("Role", lambda m: m.role, width=7),
+        ])

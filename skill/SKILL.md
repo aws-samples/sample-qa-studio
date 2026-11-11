@@ -4,8 +4,9 @@ description: >
   Create, edit, and execute browser-based UI tests using QA Studio and Amazon Nova Act.
   Use when the developer wants to build a test case (in JSON or via the CLI), modify
   an existing test, or run an existing test case locally. Covers test authoring,
-  editing, importing test cases, finding existing tests and suites, and running them
-  with variable / header / secret overrides. Also trigger when the user asks about
+  editing, importing test cases, reusing templates (shared login / setup steps),
+  finding existing tests and suites, and running them with variable / header / secret
+  overrides. Also trigger when the user asks about
   browser regression testing, UI test coverage, verifying user flows after a code change,
   or anything that sounds like "make sure this page still works" or "write me a
   regression test for this flow." NOT for unit tests, API tests, or CI/CD pipeline
@@ -33,10 +34,13 @@ Out of scope here: CI/CD pipeline setup, cloud deployment, the web interface, sc
 
 → See [📝 Building Tests](./reference/building-tests.md) for the full guide. Quick paths:
 
-- **Hand-author the JSON** *(preferred when an agent is helping)* — write the JSON to a file under `./tests/`, then push to the cloud via Importing tests. The agent IS the AI; calling Nova Act through the CLI to generate steps adds an unnecessary layer.
+- **Hand-author the JSON** *(preferred when an agent is helping)* — write the JSON to a file under `./tests/`, then push to the cloud via Importing tests. The agent IS the AI; calling Nova Act through the CLI to generate steps adds an unnecessary layer. **One action or one check per step** — never bundle several verifications into one instruction (see [One action or one check per step](./reference/building-tests.md#one-action-or-one-check-per-step)).
 - **Generate from a user-journey description** *(fallback)* — `qa-studio tests create --from-journey ... --export-to ./tests/`. Use when the user explicitly wants the CLI's draft, or when the agent's context isn't enough to author the test directly.
 - **Import an existing JSON or push edits to the cloud** — `qa-studio tests import <path> --application-id <app-id>`. Validates and uploads. Same command for both authoring paths above. See [Importing tests](./reference/building-tests.md#importing-tests) for flags (`--application-id` (required unless `--dry-run`), `--dry-run`, `--base-url`, `--skip-secrets`, `--format json`) and the secret-prompt behavior.
 - **Import end-to-end through chat (ready-to-run)** — `qa-studio tests import <path> --application-id <app-id> --non-interactive --secret KEY=VALUE [--secret KEY=VALUE]...`. Use only for non-prod / dev / dummy credentials. **Mandatory caveat:** whenever you import with values inline (whether the user volunteers them or you ask), you MUST warn the user that credentials will appear in the **chat transcript**, the **model context**, and the **shell command line** — all three keywords are required. Use this template: "Heads up: anything you paste in this chat lands in the **chat transcript**, the **model context**, and the **shell command line** I'll execute. That's fine for dev or local accounts, but don't paste production credentials — for those, I'll use `--skip-secrets` and you can set them in the QA Studio UI." See [Agent flow: ready-to-run import](./reference/building-tests.md#agent-flow-ready-to-run-import) for the full decision logic.
+- **Reuse steps across tests (templates)** — *before* hand-authoring login / setup steps, run `qa-studio templates list`. Reuse by putting `{ "sort": N, "step_type": "template", "template_id": "<uuid>" }` in the test's `steps` (expanded by the cloud at import; template secrets are prompted with the file's own). Create a template with `qa-studio templates create <file>` when the same sequence appears in ≥ 2 tests. Add one to a test that already lives in the cloud with `qa-studio tests insert-template <usecase-id> --template-id <uuid> [--position N]`. See [🧩 Templates](./reference/templates.md).
+- **Change an existing template** — `qa-studio templates export <id> --output <file>` → edit the file (keep the step `id`s) → `qa-studio templates update <id> <file> --dry-run` → `qa-studio templates update <id> <file>`. **Never recreate a template to change it**: `templates create` makes a new UUID and every placeholder / inserted reference to the old one breaks. Delete a throwaway template with `qa-studio templates delete <id> [--yes]` (tests that used it keep their steps; only the template link is removed). See [Change a template](./reference/templates.md#change-a-template-export--edit--update).
+- **Same rows for several tests of one application (customers, products, accounts)** — reference an application dataset from the `repeat` step (`"dataset_id": "<id>"` instead of `repeat_columns` / `repeat_rows`; `qa-studio apps datasets list|create <app-id>`), so editing the rows once changes every test. Shared values and credentials go on the application too (`qa-studio apps variables set`, `qa-studio apps secrets set`) and are inherited by its tests. See [Rows shared by several tests](./reference/building-tests.md#rows-shared-by-several-tests--an-application-dataset-dataset_id) and [repeat](./reference/step-types/repeat.md).
 - **Pick the right step type for a goal** — see [🎯 Step Types](./reference/step-types/) (one file per type).
 - **Choose a validation operator** — see [✅ Validation Operators](./reference/validation-operators.md).
 
@@ -45,10 +49,11 @@ Out of scope here: CI/CD pipeline setup, cloud deployment, the web interface, sc
 → See [▶️ Executing Tests](./reference/executing-tests.md) for the full guide. Quick paths:
 
 - **Find an existing test or suite** — `qa-studio tests list` / `qa-studio suites list` / `qa-studio tests get <id>`
-- **Run a single test locally** — `qa-studio run --usecase-id <id>`
+- **Run one or more tests locally** — `qa-studio run --usecase-id <id>` or `qa-studio run --usecase-id "<id> <id> <id>"` (quoted, whitespace-separated; sequential with one summary at the end; `--fail-fast` stops at the first failure). See [Running several tests at once](./reference/executing-tests.md#running-several-tests-at-once).
 - **Run a suite locally** — `qa-studio run --suite-id <id>`
-- **Override variables and base URL at runtime** — `--var KEY=VALUE` (repeatable), `--base-url <url>`. Per-run secret/header/cookie overrides are NOT supported on `qa-studio run` today; secrets are configured per-use-case at import time. See [▶️ Executing Tests](./reference/executing-tests.md#runtime-overrides) for the full surface.
+- **Override variables, base URL and repeat datasets at runtime** — `--var KEY=VALUE` (repeatable), `--base-url <url>`, `--dataset-file [LABEL=]file.csv` (feeds a `repeat` step from CSV). Per-run secret/header/cookie overrides are NOT supported on `qa-studio run` today; secrets are configured per-use-case at import time. See [▶️ Executing Tests](./reference/executing-tests.md#runtime-overrides) for the full surface.
 - **Choose the browser provisioner** — `--browser local|agentcore|cdp-external`
+- **Run an Electron desktop test** — `qa-studio run --usecase-id <id> --app-path <App.app>`; the runner launches the app itself. See [Electron execution](./reference/executing-tests.md#electron-execution).
 
 ### The user wants to edit an existing test
 
@@ -56,8 +61,8 @@ When the UI changed, a step is broken, or the user wants to add/remove steps fro
 
 1. **Get the test JSON locally.** If the file is already on disk under `./tests/`, edit it there. If not, use `qa-studio tests get <id>` to inspect the current steps, then recreate the JSON on disk (there is no `qa-studio tests export` command yet — the local file is the source of truth).
 2. **Edit the steps.** Apply the fix — update instructions, change step types, add/remove steps, renumber `sort` values. Use the [🎯 Step Types](./reference/step-types/) reference for per-step guidance.
-3. **Re-import.** `qa-studio tests import <path>` pushes the updated version to the cloud, overwriting the previous version for that use case name.
-4. **Re-run.** `qa-studio run --usecase-id <id>` to verify the fix.
+3. **Re-import.** `qa-studio tests import <path>` pushes the updated version to the cloud as a **new use case** (a new ID; the old one is not overwritten or deleted). Delete the superseded test with `qa-studio tests delete <old-id>` once the new one passes, and point suites at the new ID. To add shared steps to the existing cloud test instead, use `qa-studio tests insert-template <id> --template-id <uuid>`.
+4. **Re-run.** `qa-studio run --usecase-id <id>` to verify the fix. If the change touches several tests (a shared variable, a renamed page element), re-run all of them in one call: `qa-studio run --usecase-id "<id> <id>" --format human`.
 
 Common edit scenarios: tightening a vague step instruction, replacing a hardcoded value with a variable, converting a `navigation` step to a `secret` step for a credential field, updating a `validation_value` after a UI text change.
 
@@ -104,7 +109,25 @@ qa-studio run --usecase-id <id> \
   --var feature_flag=on
 ```
 
-### Workflow 3: Import a test from JSON, then run a suite
+### Workflow 3: Reuse a login template in a new test
+
+```bash
+# Is there a login template already?
+qa-studio templates list
+qa-studio templates get <template-id>      # steps + "Required secrets: shop_username, shop_password"
+
+# (Agent writes ./tests/checkout.json with
+#  { "sort": 1, "step_type": "template", "template_id": "<template-id>" } as the first step.)
+
+qa-studio tests import ./tests/checkout.json --dry-run   # checks the template exists, lists required secrets
+qa-studio tests import ./tests/checkout.json             # prompts for shop_username / shop_password
+qa-studio run --usecase-id <id>
+
+# No fitting template? Write ./templates/login-shop.json (see Templates reference) and
+qa-studio templates create ./templates/login-shop.json   # → ID to reference
+```
+
+### Workflow 4: Import a test from JSON, then run a suite
 
 ```bash
 # Validate the JSON shape without importing.
@@ -125,8 +148,9 @@ qa-studio run --suite-id <suite-id> --base-url http://localhost:3000
 Load these as needed for detailed guidance:
 
 - [📝 Building Tests](./reference/building-tests.md) — test case JSON shape, step decision tree, variable wiring, import flow, worked examples
-- [▶️ Executing Tests](./reference/executing-tests.md) — finding tests/suites, running locally, runtime overrides, browser provisioner, mobile execution, output reading
+- [▶️ Executing Tests](./reference/executing-tests.md) — finding tests/suites, running locally, runtime overrides, application-level variables/secrets/datasets (`qa-studio apps …`), browser provisioner, mobile execution, output reading
 - [🎯 Step Types](./reference/step-types/) — one file per step type with when-to-use, when-not-to-use, inputs, examples, pitfalls
+- [🧩 Templates](./reference/templates.md) — reuse step sequences: list/inspect, placeholder step, template file format, export → edit → update an existing template, delete (linked tests keep their steps), insert into an existing test, UUID-per-environment caveat
 - [✅ Validation Operators](./reference/validation-operators.md) — string, number, boolean, date operators
 - [🔧 Troubleshooting](./reference/troubleshooting.md) — build- and execute-time failures
 
@@ -138,13 +162,18 @@ Load these as needed for detailed guidance:
 A test defines a starting URL, an ordered list of steps, optional variables, and optional secrets. Stored as JSON; the same shape is what the import command consumes and what the CLI writes when generating a test.
 
 ### Step
-The atomic unit of a test. Each step has a `step_type` plus type-specific fields. The 9 active step types are: `navigation`, `browser`, `secret`, `validation`, `retrieve_value`, `assertion`, `download`, `transform`, `network_assertion`. (`url` is deprecated — use `browser` with `browser_action: navigate`.)
+The atomic unit of a test. Each step has a `step_type` plus type-specific fields. The 10 active step types are: `navigation`, `browser`, `secret`, `validation`, `retrieve_value`, `assertion`, `download`, `transform`, `network_assertion`, `repeat` (a data-driven loop whose nested `steps` run once per dataset row). (`url` is deprecated — use `browser` with `browser_action: navigate`.)
+
+**One step does exactly one thing: one UI action, or one check of one value.** An instruction like "Verify the panel shows a 'Name' field, a 'Description' field and 'Save' and 'Cancel' buttons" is four checks and must become four `validation` steps. Lists, "and", colons followed by enumerations, or several verbs in an instruction are the signal to split. See [One action or one check per step](./reference/building-tests.md#one-action-or-one-check-per-step).
 
 ### Variable
 A named value that flows between steps. Variables come from three sources: the test's `variables` array (defined at authoring time), `retrieve_value` and `transform` step outputs (`capture_variable`), and runtime overrides (`--var KEY=VALUE`). Reference them in any string field with `{{ variable_name }}`.
 
 ### Secret
 A named credential resolved at execution time. Authored steps reference secrets by `secret_key`; the actual values come from the configured secret resolver (typically AWS Secrets Manager) or are entered at import time via the interactive secret prompt. **Every field on a login or authentication form is a secret — usernames, emails, passwords, MFA codes, OTP codes, security-question answers — not just the password.** There is no per-run `--secrets-file` override on `qa-studio run`; if a secret value needs to change, re-import the test or update via the web UI.
+
+### Template
+A named, reusable step sequence (plus variables) such as "Login – Shop", identified by a UUID that is specific to one QA Studio environment. A test references it with a placeholder step `{ "sort", "step_type": "template", "template_id" }`; `tests import` checks the template exists and the cloud expands it into linked steps (so template edits later surface as "update available"). Templates cannot nest, cannot contain `repeat` steps, and declare no secrets — their `secret` steps' `secret_key`s are prompted at import. Manage with `qa-studio templates list|get|create|export|update|delete` and `qa-studio tests insert-template`; change an existing template with `export` → edit → `update` (never recreate it — the UUID would change).
 
 ### Test Suite
 A collection of tests that execute together. Use suites when several tests share the same starting URL, variables, or run cadence. Authored separately; the skill covers running suites but not authoring them (suite *authoring* is out of scope).

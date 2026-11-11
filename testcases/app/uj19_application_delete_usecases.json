@@ -1,0 +1,378 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-10-30T12:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-19 Application Delete Use Cases",
+    "description": "Create a blank use case in the application, open the application, verify 'Delete selected (0)' is disabled, select the use case, cancel the delete dialog and see the use case kept, then delete it with 'permanently delete' and verify it is gone from the application and the Use Cases page",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "application",
+      "usecase",
+      "delete"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "navigation",
+      "instruction": "Click the 'Use cases' menu item in the left navigation"
+    },
+    {
+      "sort": 5,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Use case' button"
+    },
+    {
+      "sort": 6,
+      "step_type": "navigation",
+      "instruction": "Select the 'Create New' option"
+    },
+    {
+      "sort": 7,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 8,
+      "step_type": "navigation",
+      "instruction": "Select the 'Web' platform option"
+    },
+    {
+      "sort": 9,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 10,
+      "step_type": "navigation",
+      "instruction": "Type '{{usecase_name}}' in the Name field"
+    },
+    {
+      "sort": 11,
+      "step_type": "navigation",
+      "instruction": "Type 'https://example.com' in the Starting URL field"
+    },
+    {
+      "sort": 12,
+      "step_type": "navigation",
+      "instruction": "Select 'eu-central-1' in the Execution Region dropdown"
+    },
+    {
+      "sort": 13,
+      "step_type": "navigation",
+      "instruction": "Select 'nova-act-v1.0' in the Model dropdown"
+    },
+    {
+      "sort": 14,
+      "step_type": "navigation",
+      "instruction": "Select 'QA Studio' in the Application dropdown"
+    },
+    {
+      "sort": 15,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 16,
+      "step_type": "navigation",
+      "instruction": "Select the 'Create Blank' option"
+    },
+    {
+      "sort": 17,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 18,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 19,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button"
+    },
+    {
+      "sort": 20,
+      "step_type": "validation",
+      "instruction": "Is the use case '{{usecase_name}}' detail page shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 21,
+      "step_type": "navigation",
+      "instruction": "Click the 'Applications' menu item in the left navigation"
+    },
+    {
+      "sort": 22,
+      "step_type": "navigation",
+      "instruction": "Open the application 'QA Studio' (click its card if several applications are listed)"
+    },
+    {
+      "sort": 23,
+      "step_type": "validation",
+      "instruction": "Is the application 'QA Studio' detail page shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 24,
+      "step_type": "validation",
+      "instruction": "Is the 'Usecases' tab selected?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 25,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] AppDelete {{UniqueID}}' in the 'Search use cases by name, description, tags, or status' field of the Usecases table"
+    },
+    {
+      "sort": 26,
+      "step_type": "validation",
+      "instruction": "Is use case '{{usecase_name}}' listed in the Usecases table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 27,
+      "step_type": "validation",
+      "instruction": "Is the 'Execute selected (0)' button shown above the Usecases table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 28,
+      "step_type": "navigation",
+      "instruction": "Click the dropdown arrow next to the 'Execute selected (0)' button"
+    },
+    {
+      "sort": 29,
+      "step_type": "validation",
+      "instruction": "Is the item 'Delete selected (0)' listed in the open dropdown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 30,
+      "step_type": "validation",
+      "instruction": "Is the item 'Delete selected (0)' in the open dropdown greyed out (disabled)?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 31,
+      "step_type": "navigation",
+      "instruction": "Click the item 'Delete selected (0)' in the open dropdown"
+    },
+    {
+      "sort": 32,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Delete Use Cases' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 33,
+      "step_type": "navigation",
+      "instruction": "Press the Escape key to close the dropdown"
+    },
+    {
+      "sort": 34,
+      "step_type": "navigation",
+      "instruction": "Click the checkbox in front of use case '{{usecase_name}}' in the Usecases table"
+    },
+    {
+      "sort": 35,
+      "step_type": "validation",
+      "instruction": "Is the 'Execute selected (1)' button shown above the Usecases table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 36,
+      "step_type": "navigation",
+      "instruction": "Click the dropdown arrow next to the 'Execute selected (1)' button"
+    },
+    {
+      "sort": 37,
+      "step_type": "validation",
+      "instruction": "Is the item 'Delete selected (1)' listed in the open dropdown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 38,
+      "step_type": "navigation",
+      "instruction": "Select 'Delete selected (1)' from the dropdown"
+    },
+    {
+      "sort": 39,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Delete Use Cases' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 40,
+      "step_type": "validation",
+      "instruction": "Does the dialog say 'You are about to permanently delete 1 use case.'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 41,
+      "step_type": "navigation",
+      "instruction": "Click the 'Cancel' button in the dialog"
+    },
+    {
+      "sort": 42,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Delete Use Cases' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 43,
+      "step_type": "validation",
+      "instruction": "Is use case '{{usecase_name}}' listed in the Usecases table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 44,
+      "step_type": "validation",
+      "instruction": "Is the checkbox in front of use case '{{usecase_name}}' checked?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 45,
+      "step_type": "navigation",
+      "instruction": "Click the dropdown arrow next to the 'Execute selected (1)' button"
+    },
+    {
+      "sort": 46,
+      "step_type": "navigation",
+      "instruction": "Select 'Delete selected (1)' from the dropdown"
+    },
+    {
+      "sort": 47,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Delete Use Cases' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 48,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the dialog"
+    },
+    {
+      "sort": 49,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Delete Use Cases' still shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 50,
+      "step_type": "navigation",
+      "instruction": "Type 'permanently delete' in the confirmation field of the dialog"
+    },
+    {
+      "sort": 51,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the dialog"
+    },
+    {
+      "sort": 52,
+      "step_type": "validation",
+      "instruction": "Is the green message 'Successfully deleted 1 use case(s)' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 53,
+      "step_type": "validation",
+      "instruction": "Is use case '{{usecase_name}}' listed in the Usecases table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 54,
+      "step_type": "navigation",
+      "instruction": "Click the 'Use cases' menu item in the left navigation"
+    },
+    {
+      "sort": 55,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] AppDelete {{UniqueID}}' in the search bar"
+    },
+    {
+      "sort": 56,
+      "step_type": "validation",
+      "instruction": "Is use case '{{usecase_name}}' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    }
+  ],
+  "variables": [
+    {
+      "Key": "usecase_name",
+      "Value": "[QA Test] AppDelete {{UniqueID}}"
+    }
+  ],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Username for login"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Password for login"
+    }
+  ]
+}

@@ -92,6 +92,8 @@ Date check with a captured baseline:
 
 ## Common pitfalls
 
+- **Checking more than one thing in a step.** `"Verify the panel titled 'New Blueprint' is shown with 'Name' and 'Description' fields and 'Save' and 'Cancel' buttons"` is five checks. Write five `validation` steps — one for the title, one per field, one per button. A compound bool validation is answered `true` when most of the list is present and gives no clue which item failed. See [One action or one check per step](../building-tests.md#one-action-or-one-check-per-step).
+- **Bool when a value is available.** `"Is the heading 'Dashboard'?"` → `true/false` hides the actual heading. Prefer `"Get the heading text"` with `validation_type: "string"`, `exact`, `"Dashboard"` — a failure then records what the page really showed. Use `bool` only for genuine presence checks ("Is there a 'Save' button?").
 - **Vague extraction instructions.** "Verify the page is correct" — the AI doesn't know what to look at. Describe the specific element ("the H1 heading", "the price next to 'Total'").
 - **Type mismatch.** Setting `validation_type: "number"` when the page renders `"$99.99"` won't extract `99.99` — the AI's number schema rejects strings with currency symbols. Use `string` + `contains`, or use [`retrieve_value`](./retrieve_value.md) (string) + [`transform`](./transform.md) (`to_number`) + [`assertion`](./assertion.md).
 - **Date validation without an explicit format.** If the page renders `01/02/2024` (ambiguous), validation will fail with a clear error. Either ensure the page is rendering in ISO 8601, or capture via `retrieve_value` with `value_type: date` and `value_format`, then assert.

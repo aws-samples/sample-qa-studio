@@ -97,6 +97,21 @@ class TestRouteDispatching(unittest.TestCase):
         mock_get_handler.assert_called_once_with("handlers.delete_application")
 
     @patch("application_router._get_handler")
+    def test_delete_user_routes_to_permissions_aware_handler(self, mock_get_handler):
+        """API Gateway's resource is /users/{username}; the router matches the
+        concrete path and injects userId for handlers.delete_user."""
+        mock_fn = MagicMock(return_value={"statusCode": 204, "body": ""})
+        mock_get_handler.return_value = mock_fn
+
+        event = _build_event("DELETE", "/users/{username}", path_params={"username": "sub-123"})
+        event["path"] = "/users/sub-123"
+        response = handler(event, None)
+
+        mock_get_handler.assert_called_once_with("handlers.delete_user")
+        self.assertEqual(event["pathParameters"]["userId"], "sub-123")
+        self.assertEqual(response["statusCode"], 204)
+
+    @patch("application_router._get_handler")
     def test_post_usecases_association_routes_correctly(self, mock_get_handler):
         mock_fn = MagicMock(return_value={"statusCode": 200, "body": "{}"})
         mock_get_handler.return_value = mock_fn
@@ -145,6 +160,61 @@ class TestRouteDispatching(unittest.TestCase):
         response = handler(event, None)
 
         mock_get_handler.assert_called_once_with("handlers.get_dashboard_overview")
+
+
+class TestApplicationConfigRouteDispatching(unittest.TestCase):
+    """Application-level variables, secrets and datasets ride the router (no new API resources)."""
+
+    CASES = [
+        ("GET", "/applications/{id}/variables", {"id": "app-001"}, "handlers.get_application_variables"),
+        ("POST", "/applications/{id}/variables", {"id": "app-001"}, "handlers.put_application_variables"),
+        ("GET", "/applications/{id}/secrets", {"id": "app-001"}, "handlers.get_application_secrets"),
+        ("POST", "/applications/{id}/secrets", {"id": "app-001"}, "handlers.put_application_secrets"),
+        ("DELETE", "/applications/{id}/secrets", {"id": "app-001"}, "handlers.delete_application_secrets"),
+        ("GET", "/applications/{id}/datasets", {"id": "app-001"}, "handlers.list_application_datasets"),
+        ("POST", "/applications/{id}/datasets", {"id": "app-001"}, "handlers.create_application_dataset"),
+        ("GET", "/applications/{id}/datasets/{datasetId}", {"id": "app-001", "datasetId": "ds-1"},
+         "handlers.get_application_dataset"),
+        ("PUT", "/applications/{id}/datasets/{datasetId}", {"id": "app-001", "datasetId": "ds-1"},
+         "handlers.update_application_dataset"),
+        ("DELETE", "/applications/{id}/datasets/{datasetId}", {"id": "app-001", "datasetId": "ds-1"},
+         "handlers.delete_application_dataset"),
+    ]
+
+    def setUp(self):
+        _handler_cache.clear()
+
+    def test_each_config_route_dispatches_to_its_handler(self):
+        for method, resource, path_params, module_path in self.CASES:
+            with self.subTest(method=method, resource=resource):
+                with patch("application_router._get_handler") as mock_get_handler:
+                    mock_fn = MagicMock(return_value={"statusCode": 200, "body": "{}"})
+                    mock_get_handler.return_value = mock_fn
+
+                    event = _build_event(method, resource, path_params=path_params)
+                    response = handler(event, None)
+
+                    mock_get_handler.assert_called_once_with(module_path)
+                    mock_fn.assert_called_once_with(event)
+                    self.assertEqual(response["statusCode"], 200)
+
+    def test_dataset_route_extracts_path_params_from_proxy_path(self):
+        """Under `/applications/{proxy+}` the resource is the proxy template; params come from the path."""
+        with patch("application_router._get_handler") as mock_get_handler:
+            mock_fn = MagicMock(return_value={"statusCode": 200, "body": "{}"})
+            mock_get_handler.return_value = mock_fn
+
+            event = _build_event("PUT", "/applications/{proxy+}", path_params={"proxy": "app-001/datasets/ds-1"})
+            event["path"] = "/applications/app-001/datasets/ds-1"
+            handler(event, None)
+
+            mock_get_handler.assert_called_once_with("handlers.update_application_dataset")
+            self.assertEqual(event["pathParameters"]["id"], "app-001")
+            self.assertEqual(event["pathParameters"]["datasetId"], "ds-1")
+
+    def test_config_routes_are_in_route_map(self):
+        for method, resource, _params, module_path in self.CASES:
+            self.assertEqual(ROUTE_MAP.get((method, resource)), module_path, f"Missing route: {method} {resource}")
 
 
 class TestUnknownRoutes(unittest.TestCase):

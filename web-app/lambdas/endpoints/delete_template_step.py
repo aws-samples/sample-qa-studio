@@ -2,6 +2,7 @@ import logging
 from typing import Any, Dict
 import boto3
 from utils import get_table_name, create_response, require_scopes, validate_path_id
+from template_store import bump_template_version
 
 # Configure logging
 logger = logging.getLogger()
@@ -45,6 +46,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'sk': f'STEP#{step_id}'
             }
         )
+        bump_template_version(table, template_id)
         
         return create_response(200, {'message': 'Step deleted successfully'})
         

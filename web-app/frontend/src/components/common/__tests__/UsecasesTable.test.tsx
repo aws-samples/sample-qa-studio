@@ -41,10 +41,17 @@ describe('UsecasesTable', () => {
     expect(screen.getByText('failed')).toBeInTheDocument();
   });
 
+  it('renders an Electron badge for desktop usecases', () => {
+    render(<UsecasesTable items={[createItem({ id: 'uc-3', name: 'Harness smoke', test_platform: 'electron' })]} />);
+    expect(screen.getByText('Electron')).toBeInTheDocument();
+    expect(screen.queryByText('Web')).not.toBeInTheDocument();
+  });
+
   it('filters items by search text', async () => {
     const items = [
       createItem({ id: 'uc-1', name: 'Login Test' }),
-      createItem({ id: 'uc-2', name: 'Checkout Flow' }),
+      // The default description mentions "login"; give the non-match its own.
+      createItem({ id: 'uc-2', name: 'Checkout Flow', description: 'Pays for the cart' }),
     ];
 
     render(<UsecasesTable items={items} showFilter={true} />);
@@ -75,7 +82,8 @@ describe('UsecasesTable', () => {
     const onSelectionChange = vi.fn();
     const items = [
       createItem({ id: 'uc-1', name: 'Login Test' }),
-      createItem({ id: 'uc-2', name: 'Checkout Flow' }),
+      // The default description mentions "login"; give the non-match its own.
+      createItem({ id: 'uc-2', name: 'Checkout Flow', description: 'Pays for the cart' }),
     ];
 
     render(

@@ -1,8 +1,7 @@
 """Date transform operations.
 
-Mirror of ``web-app/worker/transform/date_ops.py``. The two
-implementations MUST stay in lockstep — see
-``tests/test_date_parser_consistency.py`` for the cross-package check.
+The wizard worker (``web-app/worker``) imports this module directly; there is
+no second copy to keep in lockstep.
 
 Five operations layered on top of :mod:`qa_studio_cli.runner.transform.date_parser`:
 

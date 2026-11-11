@@ -16,20 +16,43 @@ function buildRestEndpoint(path: string): string {
   return `${endpoint}${path}`
 }
 
+/** Execution record as returned by `GET usecase/{id}/executions` (DynamoDB item, snake_case). */
 export interface ExecutionModel {
   pk: string;
   sk: string;
   status: string;
-  starting_url: string;
-  createdAt: string;
-  completedAt: string;
-  executingAt: string;
-  triggerType: string;
-  novaActSessionId: string;
+  starting_url?: string;
+  created_at: string;
+  executing_at?: string;
+  completed_at?: string;
+  trigger_type?: string;
   cloudwatch_logs_url?: string;
 }
 
-export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
+/** One `{key, value}` row of `GET usecase/{id}/executions/{executionId}/variables`. */
+interface ExecutionVariable {
+  key: string;
+  value: string;
+}
+
+/** Response of `GET usecase/{id}/executions/{executionId}/variables` (snake_case). */
+export interface ExecutionVariablesResponse {
+  /** The use case's current `USECASE_VARIABLES` (kept for compatibility, not the run's values). */
+  variables: ExecutionVariable[];
+  /** Captured during the run, final value per key. */
+  runtime_variables: ExecutionVariable[];
+  /** Snapshot of the merged variables the run started with; `{}` when none were recorded. */
+  execution_variables: Record<string, string>;
+}
+
+const EXECUTION_SK_PREFIX = 'EXECUTION#';
+
+/** The bare execution id of an execution record (`sk` is `EXECUTION#{id}`). */
+export function executionIdOf(item: Pick<ExecutionModel, 'sk'>): string {
+  return item.sk.startsWith(EXECUTION_SK_PREFIX) ? item.sk.slice(EXECUTION_SK_PREFIX.length) : item.sk;
+}
+
+const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   try {
     const session = await fetchAuthSession();
     
@@ -70,6 +93,11 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
       if (errorData.code) {
         error.code = errorData.code;
       }
+
+      // Keep the raw status and parsed body reachable for callers that act on
+      // structured error answers (e.g. `409 {usecases}` on dataset delete).
+      (error as ApiHttpError).status = response.status;
+      (error as ApiHttpError).body = errorData;
 
       throw error;
     }
@@ -128,13 +156,13 @@ export const hooksApi = {
 };
 
 // Recording data interfaces (matching stripped NovaActRecorder extension output)
-export interface Assertion {
+interface Assertion {
   id: string;
   text: string;
   captureScreenshot: boolean;
 }
 
-export interface ActionEntry {
+interface ActionEntry {
   id: string;
   type: 'click' | 'dblclick' | 'contextmenu' | 'type' | 'paste' | 'change' | 'pointer' | 'scroll' | 'navigation' | 'tab_switch' | 'intent' | 'extract_variable';
   prompt: string;
@@ -147,7 +175,7 @@ export interface ActionEntry {
   sourceVariableName?: string;
 }
 
-export interface RecordingSession {
+interface RecordingSession {
   id: string;
   startedAt: number;
   stoppedAt?: number;
@@ -170,19 +198,19 @@ export interface RecordingData {
   screenshot_s3_prefix?: string;
 }
 
-export interface RecordingCommandResponse {
+interface RecordingCommandResponse {
   status: 'command_sent';
   commandId: string;
 }
 
-export interface RecordingDataResponse {
+interface RecordingDataResponse {
   status: 'available' | 'not_available' | 'error';
   recording_data: RecordingData | null;
   error?: string | null;
 }
 
 // User Journey Wizard API interfaces
-export interface GenerateUsecaseRequest {
+interface GenerateUsecaseRequest {
   title: string;
   starting_url: string;
   userJourney: string;
@@ -190,7 +218,7 @@ export interface GenerateUsecaseRequest {
   recording_data?: RecordingData;
 }
 
-export interface GenerateUsecaseResponse {
+interface GenerateUsecaseResponse {
   success: boolean;
   usecaseData: string; // JSON string compatible with import_usecase
   message: string;
@@ -203,25 +231,6 @@ export interface ApiError {
   retryable: boolean;
   details?: string;
 }
-
-// Enhanced API request with retry logic using RetryManager
-export const apiRequestWithRetry = async (
-  endpoint: string,
-  options: RequestInit = {},
-  maxRetries: number = 3
-): Promise<any> => {
-  const operation = () => apiRequest(endpoint, options);
-
-  // Use RetryManager for consistent retry behavior
-  const { RetryManager } = await import('./retryManager');
-  const result = await RetryManager.executeWithRetry(operation, { maxRetries });
-
-  if (result.success) {
-    return result.data;
-  } else {
-    throw result.error;
-  }
-};
 
 export const wizardApi = {
   generateUsecase: async (request: GenerateUsecaseRequest): Promise<GenerateUsecaseResponse> => {
@@ -309,9 +318,6 @@ export const wizardApi = {
   addStep: async (sessionId: string, usecaseId: string, stepData: Record<string, any>) => {
     return api.post(`wizard/${encodeURIComponent(sessionId)}/step`, { ...stepData, usecaseId });
   },
-  restart: async (sessionId: string, usecaseId: string) => {
-    return api.post(`wizard/${encodeURIComponent(sessionId)}/restart`, { usecaseId });
-  },
   sendRecordingCommand: async (
     sessionId: string,
     usecaseId: string,
@@ -380,7 +386,7 @@ export interface ModelResponse {
   description?: string;
 }
 
-export interface ListModelsResponse {
+interface ListModelsResponse {
   models: ModelResponse[];
   defaultModel: string;
 }
@@ -392,7 +398,7 @@ export const modelsApi = {
 }
 
 // Device Farm Devices API
-export interface DeviceFarmDevice {
+interface DeviceFarmDevice {
   arn: string;
   name: string;
   platform: string;
@@ -402,7 +408,7 @@ export interface DeviceFarmDevice {
   modelId: string;
 }
 
-export interface ListDevicesResponse {
+interface ListDevicesResponse {
   devices: DeviceFarmDevice[];
 }
 
@@ -412,35 +418,6 @@ export const devicesApi = {
     return api.get(`devices${query}`);
   },
 }
-
-// User Management API
-export interface User {
-  username: string;
-  email: string;
-  status: string;
-  enabled: boolean;
-  created_at: string;
-  attributes: { [key: string]: string };
-  groups?: string[];
-}
-
-export interface CreateUserRequest {
-  email: string;
-  groups: string[];
-}
-
-export interface CreateUserResponse {
-  username: string;
-  email: string;
-  status: string;
-  groups: string[];
-}
-
-export const userApi = {
-  list: (): Promise<{ users: User[] }> => api.get('users'),
-  create: (userData: CreateUserRequest): Promise<CreateUserResponse> => api.post('users', userData),
-  delete: (username: string): Promise<void> => api.delete(`users/${encodeURIComponent(username)}`),
-};
 
 // OAuth Client API
 export interface OAuthClient {
@@ -472,7 +449,7 @@ export interface CreateOAuthClientRequest {
   teamId: string;
 }
 
-export interface CreateOAuthClientResponse {
+interface CreateOAuthClientResponse {
   client_id: string;
   client_name: string;
   client_secret: string;
@@ -483,19 +460,19 @@ export interface CreateOAuthClientResponse {
   id_token_validity?: number;
 }
 
-export interface RotateSecretResponse {
+interface RotateSecretResponse {
   client_id: string;
   client_secret: string;
   rotated_at: string;
 }
 
-export interface ScopeOption {
+interface ScopeOption {
   value: string;
   label: string;
   description: string;
 }
 
-export interface ListScopesResponse {
+interface ListScopesResponse {
   scopes: ScopeOption[];
   resource_server_identifier: string;
 }
@@ -552,7 +529,7 @@ export interface SuiteExecution {
   results?: SuiteExecutionResult[];
 }
 
-export interface SuiteExecutionResult {
+interface SuiteExecutionResult {
   usecase_id: string;
   usecase_name: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
@@ -577,11 +554,11 @@ export interface UpdateTestSuiteRequest {
   tags?: string[];
 }
 
-export interface AddUsecasesRequest {
+interface AddUsecasesRequest {
   usecase_ids: string[];
 }
 
-export interface AddUsecasesResponse {
+interface AddUsecasesResponse {
   added: number;
   total_usecases: number;
 }
@@ -592,11 +569,14 @@ export interface ScheduleConfig {
   schedule_timezone?: string;
 }
 
-export interface ExecuteSuiteRequest {
+interface ExecuteSuiteRequest {
+  // Suite-level 'OnDemand' is valid: the suite Lambda spawns each use case
+  // headless. It differs from the use-case execute endpoint, which only
+  // accepts OnDemandHeadless / Scheduled / ci_runner.
   trigger_type?: 'OnDemand' | 'ci_runner';
 }
 
-export interface ExecuteSuiteResponse {
+interface ExecuteSuiteResponse {
   suite_execution_id: string;
   status: string;
   total_usecases: number;
@@ -674,4 +654,173 @@ export const testSuites = {
 
   listArtifacts: (suiteId: string, executionId: string): Promise<{ artifacts: SuiteArtifact[] }> =>
     api.get(`test-suites/${suiteId}/executions/${executionId}/artifacts`),
+};
+
+/**
+ * Error thrown by the `api.*` helpers for a non-2xx response: the categorized
+ * `ErrorState` plus the HTTP status and the parsed JSON body (`{}` when the
+ * body was not JSON). Narrow with `(err as Partial<ApiHttpError>).status`.
+ */
+export interface ApiHttpError extends ErrorState {
+  status: number;
+  body: Record<string, any>;
+}
+
+// Application datasets API (`/applications/{id}/datasets`)
+/** List row of `GET /applications/{id}/datasets`: counts instead of the table. */
+export interface ApplicationDatasetSummary {
+  dataset_id: string;
+  name: string;
+  description: string;
+  column_count: number;
+  row_count: number;
+  updated_at: string;
+}
+
+/** Full dataset record (`GET …/datasets/{datasetId}`, and the `dataset` of create / update). */
+export interface ApplicationDataset {
+  dataset_id: string;
+  name: string;
+  description: string;
+  columns: string[];
+  rows: string[][];
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}
+
+/** Body of create (POST) and update (PUT, full replace). */
+export interface ApplicationDatasetRequest {
+  name: string;
+  description?: string;
+  columns: string[];
+  rows: string[][];
+}
+
+export const datasetsApi = {
+  list: (applicationId: string): Promise<{ datasets: ApplicationDatasetSummary[] }> =>
+    api.get(`applications/${applicationId}/datasets`),
+
+  get: (applicationId: string, datasetId: string): Promise<{ dataset: ApplicationDataset }> =>
+    api.get(`applications/${applicationId}/datasets/${datasetId}`),
+
+  create: (applicationId: string, data: ApplicationDatasetRequest): Promise<{ dataset: ApplicationDataset }> =>
+    api.post(`applications/${applicationId}/datasets`, data),
+
+  update: (applicationId: string, datasetId: string, data: ApplicationDatasetRequest): Promise<{ dataset: ApplicationDataset }> =>
+    api.put(`applications/${applicationId}/datasets/${datasetId}`, data),
+
+  /** 204 on success; rejects with an `ApiHttpError` whose `body.usecases` lists the referencing use cases on 409. */
+  delete: (applicationId: string, datasetId: string): Promise<void> =>
+    api.delete(`applications/${applicationId}/datasets/${datasetId}`),
+};
+
+// Cost allocation API (`/applications/{id}/costs`, `/usecase/{id}/costs`, `/dashboard/costs`).
+// Field names mirror `lambdas/endpoints/cost_models.py` 1:1 (snake_case, as the API returns them).
+
+/** Direction of a window vs. the previous window of the same length (±5 % dead band is `flat`). */
+export type CostTrendDirection = 'up' | 'down' | 'flat';
+
+/** One source's share of a ledger row (`cost_models.ServiceCost`). */
+export interface ServiceCost {
+  /** `nova_act` | `compute` (sources are additive, so a plain string). */
+  service: string;
+  /** Allocated Cost Explorer bill (USD). */
+  cost: number;
+  /** usage_seconds / 3600 × list price (USD). */
+  list_cost: number;
+  usage_seconds: number;
+  /** compute only: VM launches. */
+  launches?: number | null;
+}
+
+/** Bill no use-case row carries; application and overall rows only (`cost_models.Buckets`). */
+interface CostBuckets {
+  unassigned: number;
+  unallocated: number;
+  unmetered: number;
+}
+
+/** One dimension's cost on one UTC day (`cost_models.LedgerRow`). */
+export interface LedgerRow {
+  /** `YYYY-MM-DD` */
+  date: string;
+  /** Cost Explorer "Estimated" flag for that day. */
+  estimated: boolean;
+  /** Use case rows: roll-up parent on that date. */
+  application_id?: string | null;
+  cost: ServiceCost[];
+  buckets?: CostBuckets | null;
+  /** ISO 8601 UTC */
+  collected_at: string;
+}
+
+/** Flat per-dimension summary (`cost_models.CostSummary`, the `USAGE#… / SUMMARY` item). */
+export interface CostSummary {
+  /** `YYYY-MM-DD`, newest day included. */
+  as_of: string;
+  window_1d: number;
+  window_1d_trend: CostTrendDirection | null;
+  window_1d_change_pct: number | null;
+  window_1d_list: number;
+  window_7d: number;
+  window_7d_trend: CostTrendDirection | null;
+  window_7d_change_pct: number | null;
+  window_7d_list: number;
+  window_30d: number;
+  window_30d_trend: CostTrendDirection | null;
+  window_30d_change_pct: number | null;
+  window_30d_list: number;
+  /** service → USD over the 30d window. */
+  by_source_30d: Record<string, number>;
+  /** Ledger rows this dimension has (UI: "not enough data"). */
+  days_available: number;
+  /** Rows in the 30d window still "Estimated". */
+  estimated_days: number;
+  /** ISO 8601 UTC */
+  updated_at: string;
+}
+
+/** `GET /usecase/{id}/costs` */
+export interface UsecaseCostsResponse {
+  /** null until the collector has written a SUMMARY item. */
+  summary: CostSummary | null;
+  /** Last 30 ledger rows, oldest first. */
+  days: LedgerRow[];
+}
+
+/** Row of `ApplicationCostsResponse.usecases`. */
+export interface ApplicationUsecaseCost {
+  usecase_id: string;
+  name: string;
+  summary: CostSummary | null;
+}
+
+/** `GET /applications/{id}/costs` */
+export interface ApplicationCostsResponse extends UsecaseCostsResponse {
+  usecases: ApplicationUsecaseCost[];
+}
+
+/** Row of `DashboardCostsResponse.applications`. */
+export interface DashboardApplicationCost {
+  application_id: string;
+  summary: CostSummary | null;
+}
+
+/** `GET /dashboard/costs` (rows filtered to the applications the caller may view). */
+export interface DashboardCostsResponse {
+  overall: CostSummary | null;
+  applications: DashboardApplicationCost[];
+}
+
+export const costsApi = {
+  /** Rejects with an `ApiHttpError` (`status` 403/404) when the caller may not view the application. */
+  application: (applicationId: string): Promise<ApplicationCostsResponse> =>
+    api.get(`applications/${encodeURIComponent(applicationId)}/costs`),
+
+  usecase: (usecaseId: string): Promise<UsecaseCostsResponse> =>
+    api.get(`usecase/${encodeURIComponent(usecaseId)}/costs`),
+
+  dashboard: (): Promise<DashboardCostsResponse> =>
+    api.get('dashboard/costs'),
 };

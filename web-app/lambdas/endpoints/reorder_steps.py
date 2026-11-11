@@ -1,9 +1,9 @@
 import logging
-import json
-from typing import Any, Dict, List
+from typing import Any, Dict
 import boto3
 from utils import create_response, get_table_name, request_log_summary
 from resource_auth import require_resource_access, usecase_from_path
+from step_reorder import parse_step_orders, sort_update_items
 
 # Configure logging
 logger = logging.getLogger()
@@ -28,44 +28,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Get usecase ID from path
         usecase_id = event['pathParameters']['id']  # validated by the resolver
         
-        # Parse request body
-        try:
-            body = json.loads(event.get('body', '{}'))
-        except json.JSONDecodeError:
-            return create_response(400, {'error': 'Invalid request body'})
-        
-        step_orders = body.get('step_orders', [])
-        
-        if not step_orders:
-            return create_response(400, {'error': 'step_orders is required'})
-        
-        # Initialize Amazon DynamoDB client
+        step_orders, error = parse_step_orders(event)
+        if error:
+            return error
+
         dynamodb_client = boto3.client('dynamodb')
         table_name = get_table_name()
-        
-        # Use a transaction to update all steps atomically
-        transact_items = []
-        
-        for step_order in step_orders:
-            step_id = step_order.get('step_id')
-            sort_value = step_order.get('sort')
-            
-            transact_item = {
-                'Update': {
-                    'TableName': table_name,
-                    'Key': {
-                        'pk': {'S': f'USECASE#{usecase_id}'},
-                        'sk': {'S': step_id}
-                    },
-                    'UpdateExpression': 'SET sort = :sort',
-                    'ExpressionAttributeValues': {
-                        ':sort': {'N': str(sort_value)}
-                    }
-                }
-            }
-            
-            transact_items.append(transact_item)
-        
+
+        # The UI sends the full STEP#... sort key as step_id.
+        transact_items = sort_update_items(
+            table_name, f'USECASE#{usecase_id}', step_orders, sk_for=lambda step_id: step_id,
+        )
+
         # Execute the transaction
         dynamodb_client.transact_write_items(TransactItems=transact_items)
         

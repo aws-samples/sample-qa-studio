@@ -1,5 +1,5 @@
-boto3>=1.42.30
-botocore>=1.42.30
+boto3>=1.43.35  # first botocore with the lambda-microvms client (execute_usecase RunMicrovm)
+botocore>=1.43.35
 PyJWT==2.15.1
 cryptography>=41.0.0
 pydantic>=2.0.0

@@ -39,7 +39,3 @@ class BrowserSelection:
     #: ``True`` forces headless, ``False`` forces headful (visible
     #: browser window).
     headless: Optional[bool] = None
-
-    @property
-    def requires_agentcore_extra(self) -> bool:
-        return self.mode == "agentcore"

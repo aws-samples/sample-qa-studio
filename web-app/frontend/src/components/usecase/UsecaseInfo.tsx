@@ -9,6 +9,7 @@ import Badge from "@cloudscape-design/components/badge";
 import EditUsecaseForm from './EditUsecaseForm';
 import { api } from '../../utils/api';
 import { useApiData } from '../common/useAsyncData';
+import { PlatformBadge } from '../common/platform';
 import { ContainerLoading, EmptyState } from '../common/LoadingStates';
 import { regionOptions } from '../../utils/browser_regions';
 
@@ -113,10 +114,23 @@ export default function UsecaseInfo({ usecaseId }: UsecaseInfoProps) {
               label: "Execution Region",
               value: usecase.executing_region,
             },
-            ...(usecase.test_platform === 'mobile' ? [
+            ...(usecase.test_platform === 'electron' ? [
               {
                 label: "Test Platform",
-                value: <Badge color="blue">Mobile</Badge>,
+                value: <PlatformBadge platform="electron" />,
+              },
+              {
+                label: "Execution",
+                value: "CI runner only (qa-studio run --app-path …)",
+              },
+              {
+                label: "Bundle ID",
+                value: usecase.bundle_id || 'not set (no launch check)',
+              },
+            ] : usecase.test_platform === 'mobile' ? [
+              {
+                label: "Test Platform",
+                value: <PlatformBadge platform="mobile" />,
               },
               {
                 label: "Mobile Platform",

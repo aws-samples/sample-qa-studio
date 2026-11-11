@@ -5,6 +5,7 @@ import boto3
 from botocore.exceptions import ClientError
 from utils import create_response, no_content_response, get_secret_prefix, aws_error_code
 from resource_auth import require_resource_access, usecase_from_path
+from secret_names import usecase_secret_name
 
 # Configure logging
 logger = logging.getLogger()
@@ -41,7 +42,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         secrets_client = boto3.client('secretsmanager')
         
         # Build secret name
-        secret_name = f"{get_secret_prefix()}/usecase/{usecase_id}/{secret_key}"
+        secret_name = usecase_secret_name(get_secret_prefix(), usecase_id, secret_key)
         
         # Delete the secret (with immediate deletion)
         try:

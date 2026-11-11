@@ -15,6 +15,11 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 
+def actor_from_identity(user_identity: dict) -> dict:
+    """The ``actor`` of a permission-change entry: the caller's sub and email."""
+    return {'sub': user_identity.get('sub', ''), 'email': user_identity.get('email', '')}
+
+
 def log_permission_change(actor: dict, action: str, target: dict, details: dict) -> None:
     """
     Log a permission change event (role assignment, access grant, etc.).

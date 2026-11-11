@@ -3,10 +3,10 @@ import os
 import logging
 from typing import Any, Dict
 import boto3
-from utils import create_response, require_scopes, aws_error_code
+from utils import create_response, require_scopes, aws_error_code, no_content_response
 import permissions_repo
 import cognito_sync
-from perm_audit import log_permission_change
+from perm_audit import actor_from_identity, log_permission_change
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -73,7 +73,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
         return create_response(500, {'error': 'Failed to delete user from Cognito'})
 
     # Audit log
-    actor = {'sub': user_identity.get('sub', ''), 'email': user_identity.get('email', '')}
+    actor = actor_from_identity(user_identity)
     log_permission_change(
         actor=actor,
         action='user_delete',
@@ -82,12 +82,4 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     logger.info(f"Deleted user")
-    return {
-        'statusCode': 204,
-        'headers': {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
-        'body': '',
-    }
+    return no_content_response()

@@ -1,86 +1,122 @@
-import { useState } from 'react';
-import Modal from "@cloudscape-design/components/modal";
+import { useEffect, useState } from 'react';
 import Box from "@cloudscape-design/components/box";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import Button from "@cloudscape-design/components/button";
-import Input from "@cloudscape-design/components/input";
-import Alert from "@cloudscape-design/components/alert";
+import Spinner from "@cloudscape-design/components/spinner";
+import { api } from '../utils/api';
+import { batchedPromiseAll } from '../utils/batchedPromiseAll';
+import { TypedDeleteModal } from './common/DeleteConfirmModal';
+
+interface TemplateRef {
+  id: string;
+  name: string;
+}
+
+interface TemplateUsage {
+  usecase_id: string;
+  name: string;
+}
+
+interface TemplateUsages {
+  template: TemplateRef;
+  usages: TemplateUsage[];
+}
 
 interface DeleteTemplateModalProps {
   visible: boolean;
   templateName: string;
+  /** Templates about to be deleted; their usages (tests that inserted them) are shown. */
+  templates?: TemplateRef[];
   onDismiss: () => void;
   onConfirm: () => void;
   deleting?: boolean;
 }
 
+function usageSentence({ template, usages }: TemplateUsages): string {
+  if (usages.length === 0) {
+    return `"${template.name}" is not used by any test.`;
+  }
+  const noun = usages.length === 1 ? 'test' : 'tests';
+  return `"${template.name}" is used by ${usages.length} ${noun}: ${usages.map((u) => u.name).join(', ')}`;
+}
+
 export default function DeleteTemplateModal({
   visible,
   templateName,
+  templates = [],
   onDismiss,
   onConfirm,
   deleting = false
 }: DeleteTemplateModalProps) {
-  const [confirmationText, setConfirmationText] = useState('');
-  const requiredText = 'permanently delete';
-  const isConfirmed = confirmationText.toLowerCase() === requiredText;
+  const [usages, setUsages] = useState<TemplateUsages[] | null>(null);
+  const [loadingUsages, setLoadingUsages] = useState(false);
+  // Stable key so the effect re-runs only when the selection changes.
+  const templateKey = templates.map((t) => t.id).join(',');
 
-  const handleDismiss = () => {
-    setConfirmationText('');
-    onDismiss();
-  };
-
-  const handleConfirm = () => {
-    if (isConfirmed) {
-      setConfirmationText('');
-      onConfirm();
+  useEffect(() => {
+    if (!visible || templates.length === 0) {
+      setUsages(null);
+      return;
     }
-  };
+    let cancelled = false;
+    setLoadingUsages(true);
+    setUsages(null);
+    batchedPromiseAll(templates, async (template) => {
+      const data = await api.get(`templates/${template.id}/usages`);
+      return { template, usages: (data?.usages ?? []) as TemplateUsage[] };
+    })
+      .then((loaded) => {
+        if (!cancelled) setUsages(loaded as TemplateUsages[]);
+      })
+      .catch((error) => {
+        // Usage info is advisory: never block the deletion on it.
+        console.error('Failed to load template usages:', error);
+        if (!cancelled) setUsages(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingUsages(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, templateKey]);
+
+  const anyUsage = (usages ?? []).some((u) => u.usages.length > 0);
 
   return (
-    <Modal
+    <TypedDeleteModal
       visible={visible}
-      onDismiss={handleDismiss}
       header="Delete Template"
-      footer={
-        <Box float="right">
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button variant="link" onClick={handleDismiss} disabled={deleting}>
-              Cancel
-            </Button>
-            <Button 
-              variant="primary" 
-              onClick={handleConfirm} 
-              disabled={!isConfirmed || deleting}
-              loading={deleting}
-            >
-              Delete
-            </Button>
-          </SpaceBetween>
-        </Box>
-      }
-    >
-      <SpaceBetween size="m">
-        <Alert type="warning" header="This action cannot be undone">
+      warning={
+        <>
           You are about to permanently delete the template <strong>{templateName}</strong>. 
           This will remove all associated steps and variables.
-        </Alert>
-
+        </>
+      }
+      onConfirm={onConfirm}
+      onDismiss={onDismiss}
+      loading={deleting}
+    >
+      {loadingUsages && (
         <Box>
-          <SpaceBetween size="xs">
-            <Box variant="p">
-              To confirm deletion, please type <strong>{requiredText}</strong> in the field below:
-            </Box>
-            <Input
-              value={confirmationText}
-              onChange={({ detail }) => setConfirmationText(detail.value)}
-              placeholder={requiredText}
-              disabled={deleting}
-              ariaLabel="Confirmation text"
-            />
+          <Spinner size="normal" /> Checking which tests use {templates.length === 1 ? 'this template' : 'these templates'}…
+        </Box>
+      )}
+
+      {!loadingUsages && usages && (
+        <Box>
+          <SpaceBetween size="xxs">
+            {usages.map((entry) => (
+              <Box key={entry.template.id} variant="p">{usageSentence(entry)}</Box>
+            ))}
+            {anyUsage && (
+              <Box variant="p" color="text-body-secondary">
+                Steps in those tests are kept; the template link is removed.
+              </Box>
+            )}
           </SpaceBetween>
         </Box>
-      </SpaceBetween>
-    </Modal>
+      )}
+    </TypedDeleteModal>
   );
 }

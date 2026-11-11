@@ -15,11 +15,12 @@ import { useTeams } from '../../hooks/useTeams';
 import { UserWithTeams } from '../../types/permissions';
 import CreateUserModal from './CreateUserModal';
 import EditUserModal from './EditUserModal';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 const PAGE_SIZE = 10;
 
 const UsersListPage: React.FC = () => {
-  const { users, loading, error, createUser, updateUser } = useUsers();
+  const { users, loading, error, createUser, updateUser, deleteUser } = useUsers();
   const { teams } = useTeams();
 
   const [filterText, setFilterText] = useState('');
@@ -29,6 +30,8 @@ const UsersListPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserWithTeams | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserWithTeams | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const teamFilterOptions: SelectProps.Option[] = [
@@ -74,8 +77,28 @@ const UsersListPage: React.FC = () => {
     setTimeout(() => setSuccessMessage(null), 5000);
   };
 
+  // Deleting a user removes them from Cognito and from every team; the
+  // server writes the audit entry (DELETE /users/{userId}).
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    try {
+      setDeleteError(null);
+      await deleteUser(userToDelete.userId);
+      setSuccessMessage(`User "${userToDelete.email}" deleted`);
+      setTimeout(() => setSuccessMessage(null), 5000);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete user');
+      throw err;
+    }
+  };
+
   return (
     <SpaceBetween direction="vertical" size="l">
+      {deleteError && (
+        <Alert type="error" dismissible onDismiss={() => setDeleteError(null)}>
+          {deleteError}
+        </Alert>
+      )}
       {successMessage && (
         <Alert type="success" dismissible onDismiss={() => setSuccessMessage(null)}>
           {successMessage}
@@ -139,16 +162,26 @@ const UsersListPage: React.FC = () => {
             id: 'actions',
             header: 'Actions',
             cell: (u: UserWithTeams) => (
-              <Button
-                variant="link"
-                onClick={() => {
-                  setEditingUser(u);
-                  setShowEditModal(true);
-                }}
-                data-testid={`user-actions-${u.userId}`}
-              >
-                Edit
-              </Button>
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  variant="link"
+                  onClick={() => {
+                    setEditingUser(u);
+                    setShowEditModal(true);
+                  }}
+                  data-testid={`user-actions-${u.userId}`}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="link"
+                  onClick={() => setUserToDelete(u)}
+                  data-testid={`user-delete-${u.userId}`}
+                  ariaLabel={`Delete user ${u.email}`}
+                >
+                  Delete
+                </Button>
+              </SpaceBetween>
             ),
           },
         ]}
@@ -223,6 +256,14 @@ const UsersListPage: React.FC = () => {
         }}
         user={editingUser}
         availableTeams={teams}
+      />
+
+      <DeleteConfirmationModal
+        visible={userToDelete !== null}
+        onDismiss={() => setUserToDelete(null)}
+        onConfirm={handleDeleteUser}
+        entityType="User"
+        entityName={userToDelete?.email ?? ''}
       />
     </SpaceBetween>
   );

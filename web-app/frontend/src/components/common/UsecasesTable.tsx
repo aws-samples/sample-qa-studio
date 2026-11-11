@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 import Table from '@cloudscape-design/components/table';
 import Link from '@cloudscape-design/components/link';
 import Badge from '@cloudscape-design/components/badge';
+import { PlatformBadge } from './platform';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import TextFilter from '@cloudscape-design/components/text-filter';
 import { formatDateTime } from '../../utils/dateFormat';
+import { formatTimeAgo } from '../../utils/time';
+import { executionStatusType } from '../../utils/executionStatus';
 
 export interface UsecaseItem {
   id: string;
@@ -18,32 +21,18 @@ export interface UsecaseItem {
   test_platform?: string;
 }
 
-function formatTimeAgo(timestamp: string): string {
-  const now = new Date();
-  const past = new Date(timestamp);
-  const diffMs = now.getTime() - past.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return past.toLocaleDateString();
-}
 
-function getStatusType(status: string): 'success' | 'error' | 'in-progress' | 'pending' | 'stopped' {
-  switch (status) {
-    case 'success': return 'success';
-    case 'error':
-    case 'failed': return 'error';
-    case 'running':
-    case 'executing': return 'in-progress';
-    case 'pending': return 'pending';
-    case 'stopped': return 'stopped';
-    default: return 'pending';
-  }
+type SearchableUsecase = Pick<UsecaseItem, 'name' | 'description' | 'tags' | 'last_execution_status'>;
+
+/** Use-case search: name, description, tags or last status contain `searchText` (lower-cased). */
+export function matchesUsecaseSearch(usecase: SearchableUsecase, searchText: string): boolean {
+  return Boolean(
+    usecase.name?.toLowerCase().includes(searchText) ||
+    usecase.description?.toLowerCase().includes(searchText) ||
+    usecase.tags?.some(tag => tag?.toLowerCase().includes(searchText)) ||
+    usecase.last_execution_status?.toLowerCase().includes(searchText)
+  );
 }
 
 interface UsecasesTableProps {
@@ -71,16 +60,10 @@ export function UsecasesTable({
 }: UsecasesTableProps) {
   const [filteringText, setFilteringText] = useState('');
 
-  const filteredItems = items.filter(usecase => {
-    if (!filteringText) return true;
-    const searchText = filteringText.toLowerCase();
-    return (
-      usecase.name?.toLowerCase().includes(searchText) ||
-      usecase.description?.toLowerCase().includes(searchText) ||
-      usecase.tags?.some(tag => tag?.toLowerCase().includes(searchText)) ||
-      usecase.last_execution_status?.toLowerCase().includes(searchText)
-    );
-  });
+  const searchText = filteringText.toLowerCase();
+  const filteredItems = searchText
+    ? items.filter(usecase => matchesUsecaseSearch(usecase, searchText))
+    : items;
 
   const columnDefinitions: any[] = [
     {
@@ -106,12 +89,7 @@ export function UsecasesTable({
       id: 'test_platform',
       header: 'Platform',
       width: 100,
-      cell: (item: UsecaseItem) => {
-        const platform = item.test_platform || 'web';
-        return platform === 'mobile'
-          ? <Badge color="blue">Mobile</Badge>
-          : <Badge color="grey">Web</Badge>;
-      },
+      cell: (item: UsecaseItem) => <PlatformBadge platform={item.test_platform} />,
     });
   }
 
@@ -126,7 +104,7 @@ export function UsecasesTable({
           return <StatusIndicator type="stopped">Never run</StatusIndicator>;
         }
         return (
-          <StatusIndicator type={getStatusType(item.last_execution_status)}>
+          <StatusIndicator type={executionStatusType(item.last_execution_status)}>
             {item.last_execution_status}
           </StatusIndicator>
         );

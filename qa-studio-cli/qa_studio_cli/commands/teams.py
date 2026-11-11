@@ -3,7 +3,7 @@
 import click
 
 from qa_studio_cli.api.client import require_auth
-from qa_studio_cli.models.errors import ApiError
+from qa_studio_cli.commands._admin_output import Column, confirmed, echo_table, exit_on_api_error, list_items
 from qa_studio_cli.models.permissions import SharedAccessGrant, Team
 
 
@@ -25,13 +25,10 @@ def create_team(ctx, name, description):
     if description:
         body["description"] = description
 
-    try:
+    with exit_on_api_error():
         data = client.post("/teams", json_body=body)
         team = Team.model_validate(data)
         click.echo(f"✓ Team created: {team.name} (ID: {team.id})")
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
 
 
 @teams.command("delete")
@@ -43,17 +40,12 @@ def delete_team(ctx, team_id, yes):
     """Delete a team."""
     client = ctx.obj["client"]
 
-    if not yes:
-        if not click.confirm(f"Delete team {team_id}?"):
-            click.echo("Aborted.")
-            return
+    if not confirmed(f"Delete team {team_id}?", yes):
+        return
 
-    try:
+    with exit_on_api_error():
         client.delete(f"/teams/{team_id}")
         click.echo(f"✓ Team {team_id} deleted.")
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
 
 
 @teams.command("list")
@@ -63,33 +55,18 @@ def list_teams(ctx):
     """List all teams."""
     client = ctx.obj["client"]
 
-    try:
+    with exit_on_api_error():
         data = client.get("/teams")
-        items = data.get("teams", data) if isinstance(data, dict) else data
-        teams_list = [Team.model_validate(item) for item in items]
-
+        teams_list = [Team.model_validate(item) for item in list_items(data, "teams")]
         if not teams_list:
             click.echo("No teams found.")
             return
-
-        # Header
-        id_w = max(len(t.id) for t in teams_list)
-        name_w = max(len(t.name) for t in teams_list)
-        id_w = max(id_w, 2)
-        name_w = max(name_w, 4)
-
-        header = f"{'ID':<{id_w}}  {'Name':<{name_w}}  {'Members':>7}  {'Apps':>4}"
-        click.echo(header)
-        click.echo("─" * len(header))
-
-        for t in teams_list:
-            click.echo(
-                f"{t.id:<{id_w}}  {t.name:<{name_w}}  "
-                f"{t.member_count:>7}  {t.application_count:>4}"
-            )
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
+        echo_table(teams_list, [
+            Column("ID", lambda t: t.id),
+            Column("Name", lambda t: t.name),
+            Column("Members", lambda t: t.member_count, width=7, align=">"),
+            Column("Apps", lambda t: t.application_count, width=4, align=">"),
+        ])
 
 
 @teams.command("grant-access")
@@ -113,16 +90,13 @@ def grant_access(ctx, team_id, target_team, app_id, level):
         "access_level": level,
     }
 
-    try:
+    with exit_on_api_error():
         data = client.post(f"/teams/{team_id}/shared-access", json_body=body)
         grant = SharedAccessGrant.model_validate(data)
         click.echo(
             f"✓ Granted {grant.access_level} access to team "
             f"{grant.target_team_name} (grant: {grant.grant_id})"
         )
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
 
 
 @teams.command("revoke-access")
@@ -135,14 +109,11 @@ def revoke_access(ctx, team_id, target_team, app_id):
     """Revoke shared access to an application from another team."""
     client = ctx.obj["client"]
 
-    try:
+    with exit_on_api_error():
         client.delete(
             f"/teams/{team_id}/shared-access/{target_team}/applications/{app_id}"
         )
         click.echo(f"✓ Access revoked for team {target_team} on application {app_id}.")
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
 
 
 @teams.command("list-access")
@@ -153,27 +124,14 @@ def list_access(ctx, team_id):
     """List shared access grants for a team's applications."""
     client = ctx.obj["client"]
 
-    try:
+    with exit_on_api_error():
         data = client.get(f"/teams/{team_id}/shared-access")
-        items = data.get("grants", data) if isinstance(data, dict) else data
-        grants = [SharedAccessGrant.model_validate(item) for item in items]
-
+        grants = [SharedAccessGrant.model_validate(item) for item in list_items(data, "grants")]
         if not grants:
             click.echo("No shared access grants found.")
             return
-
-        # Header
-        gid_w = max(len(g.grant_id) for g in grants)
-        team_w = max(len(g.target_team_name) for g in grants)
-        gid_w = max(gid_w, 8)
-        team_w = max(team_w, 11)
-
-        header = f"{'Grant ID':<{gid_w}}  {'Target Team':<{team_w}}  {'Level':<7}"
-        click.echo(header)
-        click.echo("─" * len(header))
-
-        for g in grants:
-            click.echo(f"{g.grant_id:<{gid_w}}  {g.target_team_name:<{team_w}}  {g.access_level:<7}")
-    except ApiError as e:
-        click.echo(click.style(str(e), fg="red"), err=True)
-        raise SystemExit(1)
+        echo_table(grants, [
+            Column("Grant ID", lambda g: g.grant_id),
+            Column("Target Team", lambda g: g.target_team_name),
+            Column("Level", lambda g: g.access_level, width=7),
+        ])

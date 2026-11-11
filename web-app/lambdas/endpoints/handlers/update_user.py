@@ -8,7 +8,7 @@ from utils import create_response, require_scopes, aws_error_code
 import permissions_repo
 import cognito_sync
 from role_scopes import TEAM_ROLES
-from perm_audit import log_permission_change
+from perm_audit import actor_from_identity, log_permission_change
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -87,7 +87,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
                     UserPoolId=user_pool_id, Username=user_sub, GroupName='admins')
             except Exception as e:
                 logger.warning(f"Failed to add to 'admins' group: {e}")
-        actor = {'sub': user_identity.get('sub', ''), 'email': user_identity.get('email', '')}
+        actor = actor_from_identity(user_identity)
         log_permission_change(actor=actor, action='user_update',
                               target={'user_sub': user_sub}, details={'role': 'admin'})
         return create_response(200, {'userId': user_sub, 'role': 'admin'})
@@ -178,7 +178,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
                 logger.warning(f"Cognito sync failed: {e}")
 
     # Audit log
-    actor = {'sub': user_identity.get('sub', ''), 'email': user_identity.get('email', '')}
+    actor = actor_from_identity(user_identity)
     log_permission_change(
         actor=actor,
         action='user_update',

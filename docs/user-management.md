@@ -61,7 +61,7 @@ Team
 4. Optionally select a team and role (you can assign later)
 5. Click **Create User**
 
-The user receives a temporary password via email. If no team is assigned, the user will see an empty dashboard until they're added to a team.
+The user receives a temporary password via email. If no team is assigned, the user will see an empty applications page until they're added to a team.
 
 ### Creating a Team
 
@@ -86,7 +86,7 @@ This creates the team and provisions 4 Cognito role groups: `team-{id}-team_lead
 New applications can be assigned at creation time via the Team dropdown. For existing applications:
 
 1. Go to **Applications** and click the app name
-2. Click **Assign to team** (visible to admins only)
+2. Open the **Actions** dropdown in the page header and pick **Assign to team** (visible to admins only; the same dropdown holds **Edit** and the **Configuration** pages Variables / Secrets / Datasets)
 3. Select the target team
 4. Click **Reassign**
 
@@ -98,6 +98,16 @@ Once assigned, only that team's members (and admins) can see and interact with t
 2. Click **Edit** next to the user
 3. Change the team and/or role
 4. Click **Save**
+
+### Deleting a User
+
+1. Go to **Administration > Users**
+2. Click **Delete** next to the user
+3. Confirm in the dialog
+
+Deleting a user (`DELETE /users/{userId}`, `api/admin` scope, returns 204) removes them from Cognito **and from
+every team** (their `TEAM#{team_id}` / `MEMBER#{user_sub}` records), and writes a `user_delete` audit entry that
+lists the removed teams. The last member of the global `admins` group cannot be deleted (409).
 
 ## Team Lead Workflows
 
@@ -127,11 +137,11 @@ Navigate through **Applications** → click your app → manage use cases and te
 
 | Role | Sidebar items |
 |------|--------------|
-| Admin | Dashboard, Applications, Use Cases, Test Suites, Templates, Teams, Users, OAuth Clients |
-| Team Lead | Dashboard, Applications, Templates, My Team, OAuth Clients |
-| Editor | Dashboard, Applications, Templates, OAuth Clients |
-| Executor / Viewer | Dashboard, Applications, Templates |
-| Unassigned (no team) | Empty dashboard with "Forbidden" — contact admin |
+| Admin | Applications, Use Cases, Test Suites, Templates, Teams, Users, OAuth Clients |
+| Team Lead | Applications, Templates, My Team, OAuth Clients |
+| Editor | Applications, Templates, OAuth Clients |
+| Executor / Viewer | Applications, Templates |
+| Unassigned (no team) | Empty Applications page with "Forbidden" — contact admin |
 
 **Notes:**
 - The **Use Cases** and **Test Suites** top-level links are admin-only. Non-admins reach use cases and test suites by navigating into an application.
@@ -150,9 +160,13 @@ Navigate through **Applications** → click your app → manage use cases and te
 |--------|-----|-------|
 | Create (`POST /applications`) | Team Lead of the team in `teamId`, or Admin | `teamId` is required (400 without it, 404 for an unknown team). Editors get 403. |
 | Update (`PATCH /applications/{id}`) | Team Lead of the owning team, or Admin | Shared access never allows it, even at **Full**. |
-| Delete (`DELETE /applications/{id}`) | Team Lead of the owning team, or Admin | Returns 204. Revokes the app's shared-access grants. Its use cases lose `application_id` and become orphans (Admin-only). |
+| Delete (`DELETE /applications/{id}`) | Team Lead of the owning team, or Admin | Returns 204. Revokes the app's shared-access grants and deletes the app's secrets in Secrets Manager (the audit entry carries `details.secrets_deleted`); its variables and datasets go with the partition. Its use cases lose `application_id` and become orphans (Admin-only). |
 | Reassign (`POST /applications/{id}/reassign`) | Admin | |
-| Attach / detach use cases (`POST /applications/{id}/usecases`) | Editor on the app **and** edit on each use case's current app | Stops pulling another team's use cases into your app. |
+| Attach / detach use cases (`POST /applications/{id}/usecases`) | Editor on the app **and** edit on each use case's current app | Stops pulling another team's use cases into your app. Attaching is refused (409) while a moved use case has repeat steps that reference datasets of its current app. |
+| Read application variables / secret keys / datasets (`GET /applications/{id}/{variables\|secrets\|datasets}`) | Viewer or above (view on the app), `api/applications.read` | Secret **values** are never returned here. |
+| Write application variables / secrets / datasets (`POST`/`PUT`/`DELETE` under `/applications/{id}/…`) | Editor or above of the owning team, or a team with a **Full** share, `api/applications.write` | Same rule as creating a use case in the app — deliberately looser than Update/Delete of the app itself. The **web UI** is stricter: the Variables / Secrets / Datasets pages are editable only for the Team Lead of the owning team or an Admin (`canManageApplication`); Editors see them read-only and can write through the CLI (`qa-studio apps …`) or the API. |
+
+Application-level variables, secrets and datasets are inherited by every use case of the app (precedence: application < use case < CLI run override). Reading a secret **value** is unchanged: it happens only on the use-case route (`GET /usecase/{id}/secrets/{key}/value`, Executor+), which falls back to the application secret of the same key — see [Secret values](#secret-values). There is no endpoint that returns an application secret's value.
 
 **`base_url` audit.** Changing an application's `base_url` redirects every test of that app, so each change is written to the permission audit log as `app_base_url_change` with `details.old` and `details.new`. Updates that keep the same `base_url` aren't logged.
 
@@ -225,10 +239,23 @@ is limited to callers that are about to run the test:
 | Admin | Always |
 
 Viewers, unbound OAuth clients and other teams get 403. `secret_key` must match
-`^[A-Za-z0-9_.-]{1,128}$` (400 otherwise). Each read is logged with the caller,
-use case and key, never the value. Listing secret **keys**
-(`GET /usecase/{id}/secrets`) needs view; creating, updating and deleting
-secrets need edit (`DELETE` returns 204).
+`^[A-Za-z0-9_.-]{1,128}$` (400 otherwise). The value is resolved **after** the
+access check: the use case's own secret
+(`{prefix}/usecase/{id}/{key}`) first, then the owning application's secret of
+the same key (`{prefix}/application/{app_id}/{key}`); 404 only when both are
+missing. Each read is logged with the caller, use case, key and the layer that
+answered (`source=usecase|application|none`), never the value. Listing secret
+**keys** (`GET /usecase/{id}/secrets`) needs view and returns the use case's
+secrets plus the inherited application secrets that are not shadowed by a
+use-case key, each row with `source: "usecase" | "application"`; creating,
+updating and deleting use-case secrets need edit (`DELETE` returns 204).
+
+Application secrets (`GET`/`POST`/`DELETE /applications/{id}/secrets`) are
+managed on the application route: listing needs **view** on the application
+and `api/applications.read`; create-or-update and delete need **edit**
+(Editor+ of the owning team or a Full share) and `api/applications.write`.
+There is no application-level value endpoint — values are only ever read on the
+use-case route by executors and the worker.
 
 ### OAuth clients (M2M)
 
@@ -256,9 +283,9 @@ team member's:
 ### Worker execution token
 
 The cloud worker uses one shared M2M client, so its identity alone grants
-nothing. When `execute_usecase` starts an ECS task (`Scheduled` or
+nothing. When `execute_usecase` starts a Lambda MicroVM (`Scheduled` or
 `OnDemandHeadless`), it mints a random token, stores only its SHA-256 hash on the
-execution record, and passes the token to the task. The worker sends it as the
+execution record, and passes the token to the VM in the run-hook payload. The worker sends it as the
 `X-QA-Execution-Token` header. The API accepts the worker only on the routes the
 runner needs, only for that execution (and its use case or suite execution), and
 only while the execution is `pending` or `running`. See
@@ -281,7 +308,7 @@ You cannot share an application with the team that already owns it — QA Studio
 - **Last-admin guard.** QA Studio counts the members of the global `admins`
   Cognito group and refuses to demote or delete the final one. Changing the last
   admin to a team role (`PATCH /users/{id}`) fails with 409 "Cannot demote the
-  last admin", and deleting them (`DELETE /users/{username}`) fails with 409
+  last admin", and deleting them (`DELETE /users/{userId}`) fails with 409
   "Cannot delete the last admin". If the check itself fails, the request is
   refused (500) rather than applied. This prevents you from locking yourself out
   of studio-wide administration.
@@ -347,7 +374,7 @@ Plan the upgrade in this order:
 5. **Update callers that create use cases.** `POST /import`,
    `POST /wizard/start` and `POST /templates/{id}/apply` now require
    `application_id`; `qa-studio tests import` and `tests create --from-journey`
-   need `--application-id`. Wizard `step`, `restart` and `command` calls need
+   need `--application-id`. Wizard `step` and `command` calls need
    `usecaseId` in the body (the web UI already sends it).
 6. **Assign orphans.** Use cases and test suites without an application are now
    Admin-only. An Admin assigns them to an app or deletes them.
@@ -389,6 +416,9 @@ then `qa-studio run --suite-id <id>`), or the matching test cases in
   `validate_templates_page`
 - Execution end to end: `network_assertion_full_flow` (cloud run with the worker
   execution token)
+- Application configuration: `uj13_application_variables_inherited`,
+  `uj14_application_secret_in_secret_step`, `uj15_application_dataset_repeat_execution`,
+  `uj16_application_dataset_delete_blocked`
 
 Also check by hand what the suites don't cover yet: a Team Lead creating an
 application, an Editor not seeing **Create Application**, creating an OAuth
@@ -412,7 +442,7 @@ have no visible resources — communicate this before upgrading.
 1. Log in as an admin (the bootstrap admin from the auth stack always qualifies).
 2. Create teams (Administration → Teams).
 3. Assign users to teams with appropriate roles (Administration → Users).
-4. Assign applications to teams (app detail → "Assign to team").
+4. Assign applications to teams (app detail → **Actions** → "Assign to team").
 
 Once an app is assigned to a team, its members gain access per their role. Until
 then it remains admin-only.
@@ -455,7 +485,7 @@ A: The data model supports it (multiple membership records), but the current UI 
 A: Applications lose their `owner_team_id` and become invisible to non-admins. An admin should reassign them first.
 
 **Q: Can I change the owner of an application?**
-A: Yes — admins can click "Assign to team" on any application's detail page.
+A: Yes — admins can pick **Actions** → "Assign to team" on any application's detail page.
 
 **Q: Why does a new user see "Forbidden"?**
 A: They have no team assignment, so they have no scopes. The dashboard API requires `api/applications.read` which they don't have. Add them to a team to grant access.
@@ -471,6 +501,9 @@ A: Its OAuth client was created before clients were bound to a team, so it has n
 
 **Q: A cloud run that was in progress during the upgrade failed with 403 — why?**
 A: It started before the worker execution token existed. Re-run it. Drain running executions before future upgrades of this kind.
+
+**Q: An Editor can change application variables with the CLI but the web page is read-only — is that a bug?**
+A: No. The API allows Editor+ of the owning team to write application variables, secrets and datasets; the web UI gates those pages with the stricter "manage application" rule (Team Lead of the owning team or Admin). See [Application management](#application-management).
 
 **Q: A Viewer/Executor can still edit one use case — is that a bug?**
 A: Probably not. The user who created a use case keeps edit (not delete) access to it even below Editor, as long as they remain in the owning team. See [Creator-retains-edit](#creator-retains-edit).

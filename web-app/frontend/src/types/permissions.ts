@@ -12,7 +12,7 @@ export type Role = 'admin' | 'team_lead' | 'editor' | 'executor' | 'viewer';
  */
 export const TEAM_ROLES = ['team_lead', 'editor', 'executor', 'viewer'] as const;
 
-export type TeamRoleName = (typeof TEAM_ROLES)[number];
+type TeamRoleName = (typeof TEAM_ROLES)[number];
 
 /**
  * OAuth (M2M) clients are bound to one team and may never hold these scopes.

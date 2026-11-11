@@ -2,7 +2,7 @@ import Tiles from "@cloudscape-design/components/tiles";
 import FormField from "@cloudscape-design/components/form-field";
 import Box from "@cloudscape-design/components/box";
 import type { TilesProps } from "@cloudscape-design/components/tiles";
-import type { StepProps, CreationMethod } from '../types';
+import type { TestPlatform, StepProps, CreationMethod } from '../types';
 import { getAvailableMethods } from '../getWizardSteps';
 
 interface MethodOption {
@@ -37,7 +37,7 @@ const allMethods: MethodOption[] = [
   },
 ];
 
-function buildTileItems(testPlatform: 'web' | 'mobile'): TilesProps.TilesDefinition[] {
+function buildTileItems(testPlatform: TestPlatform): TilesProps.TilesDefinition[] {
   const availableMethods = getAvailableMethods(testPlatform);
   const availableSet = new Set(availableMethods);
 

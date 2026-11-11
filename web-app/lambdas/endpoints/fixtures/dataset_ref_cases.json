@@ -1,0 +1,202 @@
+{
+  "_comment": "Shared parity fixture for resolve_dataset_refs (server: web-app/lambdas/endpoints/dataset_ref.py; CLI mirror: qa_studio_cli/runner/dataset_ref.py). Consumed by test_dataset_ref.py and the CLI parity test. Inputs: `steps` (plain step dicts, resource-API shape) and `datasets` ({dataset_id: {columns, rows}} — the fetcher is `datasets.get`). Expected: either `expected` (exact resolved step list: dataset_id kept, repeat_columns/repeat_rows filled from the dataset, every other step untouched) or `error` ({dataset_id} of the DatasetNotFoundError). `fetched` is the exact sequence of dataset ids the fetcher was called with (each distinct id once, in first-seen step order; empty when nothing references a dataset). Optional precedence block: `overrides` ({repeat label: {columns, rows}}, the --dataset-file layer) and `expanded` (exact output of expand_repeat_steps(resolved, overrides)) — the CLI override wins over the application dataset by label.",
+  "cases": [
+    {
+      "name": "inline repeat is untouched and the fetcher is never called",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users",
+         "repeat_columns": ["email"], "repeat_rows": [["a@x.test"], ["b@x.test"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}", "parent_step_id": "r1"},
+        {"id": "p1", "sort": 3, "step_type": "validation", "instruction": "Done"}
+      ],
+      "datasets": {"ds-1": {"columns": ["email"], "rows": [["ignored"]]}},
+      "expected": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users",
+         "repeat_columns": ["email"], "repeat_rows": [["a@x.test"], ["b@x.test"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}", "parent_step_id": "r1"},
+        {"id": "p1", "sort": 3, "step_type": "validation", "instruction": "Done"}
+      ],
+      "fetched": []
+    },
+    {
+      "name": "empty dataset_id is not a reference",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "",
+         "repeat_columns": ["email"], "repeat_rows": [["a@x.test"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "r1"}
+      ],
+      "datasets": {},
+      "expected": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "",
+         "repeat_columns": ["email"], "repeat_rows": [["a@x.test"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "r1"}
+      ],
+      "fetched": []
+    },
+    {
+      "name": "dataset reference fills columns and rows and keeps dataset_id",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "ds-1"},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}", "parent_step_id": "r1"},
+        {"id": "p1", "sort": 3, "step_type": "validation", "instruction": "Done"}
+      ],
+      "datasets": {
+        "ds-1": {"columns": ["email", "role"], "rows": [["a@x.test", "admin"], ["b@x.test", "viewer"]]}
+      },
+      "expected": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "ds-1",
+         "repeat_columns": ["email", "role"], "repeat_rows": [["a@x.test", "admin"], ["b@x.test", "viewer"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}", "parent_step_id": "r1"},
+        {"id": "p1", "sort": 3, "step_type": "validation", "instruction": "Done"}
+      ],
+      "fetched": ["ds-1"]
+    },
+    {
+      "name": "two repeats referencing the same dataset fetch it once",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "First", "dataset_id": "ds-1"},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{a}}", "parent_step_id": "r1"},
+        {"id": "r2", "sort": 3, "step_type": "repeat", "instruction": "Second", "dataset_id": "ds-1"},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "{{a}}", "parent_step_id": "r2"}
+      ],
+      "datasets": {"ds-1": {"columns": ["a"], "rows": [["1"], ["2"]]}},
+      "expected": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "First", "dataset_id": "ds-1",
+         "repeat_columns": ["a"], "repeat_rows": [["1"], ["2"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{a}}", "parent_step_id": "r1"},
+        {"id": "r2", "sort": 3, "step_type": "repeat", "instruction": "Second", "dataset_id": "ds-1",
+         "repeat_columns": ["a"], "repeat_rows": [["1"], ["2"]]},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "{{a}}", "parent_step_id": "r2"}
+      ],
+      "fetched": ["ds-1"]
+    },
+    {
+      "name": "distinct datasets are fetched in step order, inline repeat in between is untouched",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "First", "dataset_id": "ds-1"},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{a}}", "parent_step_id": "r1"},
+        {"id": "r2", "sort": 3, "step_type": "repeat", "instruction": "Inline", "repeat_columns": ["x"], "repeat_rows": [["9"]]},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "{{x}}", "parent_step_id": "r2"},
+        {"id": "r3", "sort": 5, "step_type": "repeat", "instruction": "Third", "dataset_id": "ds-2"},
+        {"id": "c3", "sort": 6, "step_type": "navigation", "instruction": "{{b}}", "parent_step_id": "r3"}
+      ],
+      "datasets": {
+        "ds-1": {"columns": ["a"], "rows": [["1"]]},
+        "ds-2": {"columns": ["b"], "rows": [["2"], ["3"]]}
+      },
+      "expected": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "First", "dataset_id": "ds-1",
+         "repeat_columns": ["a"], "repeat_rows": [["1"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{a}}", "parent_step_id": "r1"},
+        {"id": "r2", "sort": 3, "step_type": "repeat", "instruction": "Inline", "repeat_columns": ["x"], "repeat_rows": [["9"]]},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "{{x}}", "parent_step_id": "r2"},
+        {"id": "r3", "sort": 5, "step_type": "repeat", "instruction": "Third", "dataset_id": "ds-2",
+         "repeat_columns": ["b"], "repeat_rows": [["2"], ["3"]]},
+        {"id": "c3", "sort": 6, "step_type": "navigation", "instruction": "{{b}}", "parent_step_id": "r3"}
+      ],
+      "fetched": ["ds-1", "ds-2"]
+    },
+    {
+      "name": "missing dataset raises with its id after the earlier references were fetched",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "First", "dataset_id": "ds-1"},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{a}}", "parent_step_id": "r1"},
+        {"id": "r2", "sort": 3, "step_type": "repeat", "instruction": "Second", "dataset_id": "ds-missing"},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "x", "parent_step_id": "r2"}
+      ],
+      "datasets": {"ds-1": {"columns": ["a"], "rows": [["1"]]}},
+      "error": {"dataset_id": "ds-missing"},
+      "fetched": ["ds-1", "ds-missing"]
+    },
+    {
+      "name": "no datasets at all: the first reference fails",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "ds-1"},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "r1"}
+      ],
+      "datasets": {},
+      "error": {"dataset_id": "ds-1"},
+      "fetched": ["ds-1"]
+    },
+    {
+      "name": "precedence: application dataset only expands one child per dataset row",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "ds-1"},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}", "parent_step_id": "r1"}
+      ],
+      "datasets": {"ds-1": {"columns": ["email"], "rows": [["a@x.test"], ["b@x.test"]]}},
+      "expected": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "ds-1",
+         "repeat_columns": ["email"], "repeat_rows": [["a@x.test"], ["b@x.test"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}", "parent_step_id": "r1"}
+      ],
+      "fetched": ["ds-1"],
+      "overrides": {},
+      "expanded": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "Type {{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Users", "repeat_row_index": 1, "repeat_row_total": 2,
+         "row_variables": {"email": "a@x.test", "RepeatIndex": "1", "RepeatTotal": "2"}},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Users", "repeat_row_index": 2, "repeat_row_total": 2,
+         "row_variables": {"email": "b@x.test", "RepeatIndex": "2", "RepeatTotal": "2"}}
+      ]
+    },
+    {
+      "name": "precedence: dataset-file override by label wins over the application dataset",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "ds-1"},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}", "parent_step_id": "r1"}
+      ],
+      "datasets": {"ds-1": {"columns": ["email"], "rows": [["a@x.test"], ["b@x.test"]]}},
+      "expected": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "ds-1",
+         "repeat_columns": ["email"], "repeat_rows": [["a@x.test"], ["b@x.test"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}", "parent_step_id": "r1"}
+      ],
+      "fetched": ["ds-1"],
+      "overrides": {"Users": {"columns": ["email"], "rows": [["override@x.test"]]}},
+      "expanded": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "Type {{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Users", "repeat_row_index": 1, "repeat_row_total": 1,
+         "row_variables": {"email": "override@x.test", "RepeatIndex": "1", "RepeatTotal": "1"}}
+      ]
+    },
+    {
+      "name": "precedence: override only touches its label, the other dataset repeat keeps application rows",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "ds-1"},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{email}}", "parent_step_id": "r1"},
+        {"id": "r2", "sort": 3, "step_type": "repeat", "instruction": "Orders", "dataset_id": "ds-2"},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "{{sku}}", "parent_step_id": "r2"}
+      ],
+      "datasets": {
+        "ds-1": {"columns": ["email"], "rows": [["a@x.test"]]},
+        "ds-2": {"columns": ["sku"], "rows": [["sku-1"], ["sku-2"]]}
+      },
+      "expected": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "dataset_id": "ds-1",
+         "repeat_columns": ["email"], "repeat_rows": [["a@x.test"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{email}}", "parent_step_id": "r1"},
+        {"id": "r2", "sort": 3, "step_type": "repeat", "instruction": "Orders", "dataset_id": "ds-2",
+         "repeat_columns": ["sku"], "repeat_rows": [["sku-1"], ["sku-2"]]},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "{{sku}}", "parent_step_id": "r2"}
+      ],
+      "fetched": ["ds-1", "ds-2"],
+      "overrides": {"Users": {"columns": ["email"], "rows": [["o1@x.test"], ["o2@x.test"]]}},
+      "expanded": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "{{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Users", "repeat_row_index": 1, "repeat_row_total": 2,
+         "row_variables": {"email": "o1@x.test", "RepeatIndex": "1", "RepeatTotal": "2"}},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Users", "repeat_row_index": 2, "repeat_row_total": 2,
+         "row_variables": {"email": "o2@x.test", "RepeatIndex": "2", "RepeatTotal": "2"}},
+        {"id": "c2", "sort": 3, "step_type": "navigation", "instruction": "{{sku}}",
+         "repeat_step_id": "r2", "repeat_label": "Orders", "repeat_row_index": 1, "repeat_row_total": 2,
+         "row_variables": {"sku": "sku-1", "RepeatIndex": "1", "RepeatTotal": "2"}},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "{{sku}}",
+         "repeat_step_id": "r2", "repeat_label": "Orders", "repeat_row_index": 2, "repeat_row_total": 2,
+         "row_variables": {"sku": "sku-2", "RepeatIndex": "2", "RepeatTotal": "2"}}
+      ]
+    }
+  ]
+}

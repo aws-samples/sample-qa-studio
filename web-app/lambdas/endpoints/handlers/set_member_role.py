@@ -7,8 +7,7 @@ from utils import create_response, extract_user_identity, validate_path_id
 import permissions_repo
 from resource_auth import require_team_role, validate_team_role
 from role_scopes import TEAM_ROLES
-import cognito_sync
-from perm_audit import log_permission_change
+from perm_audit import actor_from_identity, log_permission_change
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -72,23 +71,12 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     except KeyError:
         return create_response(404, {'error': 'Membership not found'})
 
-    old_role = updated.get('_old_role', '')
-    # Determine old role from the fact that set_member_role returns the updated item
-    # We need to get old role before the update — since set_member_role already updated,
-    # we know the new_role is set. The old role was whatever it was before.
-    # Unfortunately set_member_role doesn't return old_role. We detect a no-op:
-    # if the returned role == new_role AND we didn't get a KeyError, it was either
-    # the same role (no-op) or successfully changed. Either way, sync Cognito.
+    old_role = updated.get('previous_role', '')
 
     # SAGA Step 2: Sync role change to Cognito (add-first-then-remove)
     user_pool_id = os.environ.get('USER_POOL_ID', '')
     if user_pool_id and updated.get('role') == new_role:
-        # We need the old role for the Cognito sync — query the membership's previous state.
-        # Since set_member_role already mutated DynamoDB, we need a different approach.
-        # The cognito_sync.set_user_role function handles add-new, remove-old.
-        # We pass all roles and let Cognito handle idempotently via group membership.
-        # For safety, we iterate over all possible roles and remove the user from any
-        # group that doesn't match the new role.
+        # Add to the new role's group, then leave every other role group (BL-6).
         try:
             _sync_role_to_cognito(user_sub, team_id, new_role, user_pool_id)
         except Exception as e:
@@ -100,12 +88,12 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
             )
 
     # Audit log
-    actor = {'sub': user_identity.get('sub', ''), 'email': user_identity.get('email', '')}
+    actor = actor_from_identity(user_identity)
     log_permission_change(
         actor=actor,
         action='role_change',
         target={'user_sub': user_sub, 'team_id': team_id},
-        details={'new_role': new_role},
+        details={'old_role': old_role, 'new_role': new_role},
     )
 
     response_body = {

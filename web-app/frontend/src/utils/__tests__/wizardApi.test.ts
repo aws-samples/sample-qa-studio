@@ -40,13 +40,6 @@ describe('wizardApi session routes send the session usecaseId (H-2)', () => {
     expect(lastRequest().body.usecaseId).toBe('uc-1');
   });
 
-  it('restart posts usecaseId', async () => {
-    await wizardApi.restart('sess-1', 'uc-1');
-    const req = lastRequest();
-    expect(req.url).toMatch(/wizard\/sess-1\/restart$/);
-    expect(req.body).toEqual({ usecaseId: 'uc-1' });
-  });
-
   it('sendRecordingCommand posts usecaseId and action', async () => {
     await wizardApi.sendRecordingCommand('sess-1', 'uc-1', 'recording_stop');
     const req = lastRequest();
@@ -55,7 +48,7 @@ describe('wizardApi session routes send the session usecaseId (H-2)', () => {
   });
 
   it('encodes the session id in the path', async () => {
-    await wizardApi.restart('a/b', 'uc-1');
-    expect(lastRequest().url).toMatch(/wizard\/a%2Fb\/restart$/);
+    await wizardApi.addStep('a/b', 'uc-1', { instruction: 'x' });
+    expect(lastRequest().url).toMatch(/wizard\/a%2Fb\/step$/);
   });
 });

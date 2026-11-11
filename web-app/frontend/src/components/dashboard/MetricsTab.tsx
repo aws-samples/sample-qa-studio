@@ -111,7 +111,9 @@ export function MetricsTab({ applicationId }: MetricsTabProps) {
           <div>
             <Box variant="awsui-key-label">Failures</Box>
             <Box variant="awsui-value-large" color="text-status-error">
-              {totals ? totals.total_executions - Math.round(totals.total_executions * totals.pass_rate / 100) : 0}
+              {totals
+                ? totals.total_failures ?? totals.total_executions - Math.round(totals.total_executions * totals.pass_rate / 100)
+                : 0}
             </Box>
           </div>
           <div>

@@ -236,8 +236,7 @@ class TestGetSuiteExecution:
                 'usecase_id': 'usecase-2',
                 'usecase_name': 'Checkout Test',
                 'status': 'running',
-                'started_at': '2024-01-01T10:00:00Z',
-                'task_arn': 'arn:aws:ecs:us-east-1:123456789012:task/cluster/task-id'
+                'started_at': '2024-01-01T10:00:00Z'
             },
             {
                 'pk': 'USECASE_EXECUTION#usecase-1',

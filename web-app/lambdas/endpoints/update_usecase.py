@@ -6,6 +6,7 @@ import boto3
 from utils import get_table_name, create_response, extract_user_identity
 from permissions_repo import get_usecase_owner
 from resource_auth import require_resource_access, usecase_from_path, authorize_target_app, is_studio_admin
+from platforms import validate_test_platform
 from cache_invalidation import cleanup_cache_artifacts
 
 # Configure logging
@@ -47,6 +48,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Mobile fields
         test_platform = body.get('test_platform', '')
+        platform_error = validate_test_platform(test_platform)
+        if platform_error:
+            return platform_error
         platform = body.get('platform', '')
         app_package = body.get('app_package', '')
         app_activity = body.get('app_activity', '')

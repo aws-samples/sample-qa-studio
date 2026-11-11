@@ -24,18 +24,3 @@ export function formatDateTime(input?: string | Date | null): string {
   return `${y}-${M}-${d} ${h}:${m}:${s}`;
 }
 
-/**
- * Format a date string to "yyyy-MM-dd" (date only, no time).
- * Returns '-' for falsy/invalid input.
- */
-export function formatDate(input?: string | Date | null): string {
-  if (!input) return '-';
-  const date = typeof input === 'string' ? new Date(input) : input;
-  if (isNaN(date.getTime())) return '-';
-
-  const y = date.getFullYear();
-  const M = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-
-  return `${y}-${M}-${d}`;
-}

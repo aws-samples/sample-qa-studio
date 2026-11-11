@@ -6,7 +6,7 @@ import pytest
 
 from assertion_step import execute_assertion_step
 from models import ExecutionStep
-from transform.date_compare import NAIVE_MIXED_WARNING
+from qa_studio_cli.runner.transform.date_compare import NAIVE_MIXED_WARNING
 
 
 def _make_step(

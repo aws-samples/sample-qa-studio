@@ -7,8 +7,7 @@ import boto3
 from utils import create_response, extract_user_identity, validate_path_id
 import permissions_repo
 from resource_auth import require_team_role, validate_team_role
-import cognito_sync
-from perm_audit import log_permission_change
+from perm_audit import actor_from_identity, log_permission_change
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -21,7 +20,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     Requires api/admin scope OR caller must be team lead of the target team.
     Implements the membership mutation saga:
       1. permissions_repo.add_membership (DynamoDB)
-      2. cognito_sync.set_user_role (Cognito — adds to group)
+      2. _add_user_to_team_group (Cognito — adds to the team-{id}-{role} group)
       On step-2 failure: compensate step-1 (remove membership), return 500.
 
     Path parameters:
@@ -115,7 +114,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
             return create_response(500, {'error': 'Failed to sync team membership. Please retry.'})
 
     # SAGA Step 3: Audit log (best-effort, never fails the request)
-    actor = {'sub': user_identity.get('sub', ''), 'email': user_identity.get('email', '')}
+    actor = actor_from_identity(user_identity)
     log_permission_change(
         actor=actor,
         action='member_add',

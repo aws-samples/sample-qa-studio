@@ -3,29 +3,91 @@
   "description": "Rigorous implementer. Test-first, pattern-following, safety-obsessed. Executes one task at a time from a plan.",
   "prompt": "file://engineer-prompt.md",
   "tools": [
-    "fs_read",
-    "fs_write",
-    "execute_bash",
-    "grep",
-    "glob",
+    "@creds-agent",
     "code",
-    "todo_list"
+    "glob",
+    "grep",
+    "read",
+    "shell",
+    "todo_list",
+    "write",
+    "subagent"
   ],
+  "toolsSettings": {
+    "subagent": {
+      "availableAgents": ["engineer-lane", "reviewer", "context-gatherer"],
+      "trustedAgents": ["engineer-lane", "reviewer", "context-gatherer"]
+    }
+  },
   "allowedTools": [
     "fs_read",
     "fs_write",
     "execute_bash",
     "grep",
     "glob",
-    "code"
+    "code",
+    "@creds-agent"
   ],
-  "hooks": {
-    "agentSpawn": [
+  "hooks": [
+    {
+      "name": "agentSpawn-0",
+      "trigger": "agentSpawn",
+      "action": {
+        "type": "command",
+        "command": "echo '--- Steering Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md') && echo '---' && (ls .kiro/steering/ 2>/dev/null || echo 'No steering docs') && echo '---' && (git status --short 2>/dev/null || echo 'Not a git repo')"
+      },
+      "timeout": 5
+    }
+  ],
+  "welcomeMessage": "Engineer mode. Point me at a task file (docs/<feature>/tasks/<task-name>.md) and I'll implement it test-first.",
+  "permissions": {
+    "rules": [
       {
-        "command": "echo '--- Steering Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md') && echo '---' && (ls .kiro/steering/ 2>/dev/null || echo 'No steering docs') && echo '---' && (git status --short 2>/dev/null || echo 'Not a git repo')",
-        "timeout_ms": 5000
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "fs_write",
+        "effect": "allow"
+      },
+      {
+        "capability": "shell",
+        "effect": "allow"
+      },
+      {
+        "capability": "mcp",
+        "match": [
+          "creds-agent/*"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
+      },
+      {
+        "capability": "subagent",
+        "effect": "allow"
       }
     ]
   },
-  "welcomeMessage": "Engineer mode. Point me at a task file (docs/<feature>/tasks/<task-name>.md) and I'll implement it test-first."
+  "mcpServers": {
+    "creds-agent": {
+      "command": "aim",
+      "args": [
+        "mcp",
+        "start-server",
+        "local-creds-agent-mcp"
+      ],
+      "env": {
+        "AIM_CREDS_AGENT_URL_KIRO": "${AIM_CREDS_AGENT_URL}",
+        "AIM_CREDS_AGENT_INJECTION": "684def72-62f0-473a-a466-ffec25034b2f"
+      }
+    }
+  },
+  "kiroUpgrade": {
+    "revision": 2,
+    "fingerprint": "sha256:389f28c9ee7cdf24b334e4ee9bc24eb1e1ecd2444b6aa032a76781e9e4ef8652",
+    "source": "sha256:5f5f11cc59e0000f9d994509b87afb6b21c74f8006af4fff5d12862e6b53b04e"
+  }
 }

@@ -2,11 +2,11 @@ import lambda_init  # noqa: F401 — must be first import
 import os
 import logging
 from typing import Any, Dict
-from utils import create_response, extract_user_identity, validate_path_id
+from utils import create_response, extract_user_identity, validate_path_id, no_content_response
 import permissions_repo
 from resource_auth import require_team_role
 import cognito_sync
-from perm_audit import log_permission_change
+from perm_audit import actor_from_identity, log_permission_change
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -47,11 +47,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
 
     # Find the membership to determine role (for Cognito cleanup)
     members = permissions_repo.list_team_members(team_id)
-    target_member = None
-    for m in members:
-        if m.get('user_sub') == user_sub:
-            target_member = m
-            break
+    target_member = next((m for m in members if m.get('user_sub') == user_sub), None)
 
     if not target_member:
         return create_response(404, {'error': 'Membership not found'})
@@ -71,7 +67,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
             logger.error(f"Failed to remove member from Cognito group for team {team_id}: {e}")
 
     # Audit log
-    actor = {'sub': user_identity.get('sub', ''), 'email': user_identity.get('email', '')}
+    actor = actor_from_identity(user_identity)
     log_permission_change(
         actor=actor,
         action='member_remove',
@@ -80,12 +76,4 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     logger.info(f"Removed member from team {team_id}")
-    return {
-        'statusCode': 204,
-        'headers': {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
-        'body': '',
-    }
+    return no_content_response()

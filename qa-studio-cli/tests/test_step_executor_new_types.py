@@ -18,7 +18,8 @@ nova_act_mod.NovaAct = type("NovaAct", (), {})
 nova_act_mod.BOOL_SCHEMA = {"type": "boolean"}
 nova_act_mod.Workflow = type("Workflow", (), {})
 
-from qa_studio_cli.runner.step_executor import StepExecutor, _safe_eval_math
+from qa_studio_cli.runner.step_executor import StepExecutor
+from qa_studio_cli.runner.transform.math_evaluator import safe_eval_math as _safe_eval_math
 
 
 class TestSafeEvalMath:

@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from recording_models import WizardSessionRequest
 from resource_auth import require_resource_access, wizard_session_from_path
 from utils import create_response, get_table_name, get_current_timestamp, validate_path_id
+from step_copy import COPYABLE_STEP_FIELDS
 
 # Configure logging
 logger = logging.getLogger()
@@ -70,20 +71,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'temporary': True
         }
         
-        # Add optional fields
-        optional_fields = [
-            'secret_key', 'validation_type', 'validation_operator',
-            'validation_value', 'capture_variable', 'assertion_variable', 'value_type',
-            'enable_advanced_click_types', 'value_source',
-            'browser_action', 'browser_args',
-            'transform_operation', 'transform_args',
-            'network_url_pattern', 'network_method', 'network_request_body',
-            'network_body_match_type', 'network_mock_response',
-            'network_mock_passthrough', 'network_timeout',
-            'network_response_body', 'network_response_body_match_type',
-            'network_response_status',
-        ]
-        for field in optional_fields:
+        # Add optional fields (every authored field, client decides)
+        for field in COPYABLE_STEP_FIELDS:
             if field in body:
                 execution_step[field] = body[field]
         

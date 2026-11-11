@@ -94,21 +94,6 @@ class ExecutionHeaders:
     created_at: str
 
 
-@dataclass
-class ReplayResult:
-    """Result of a trajectory replay attempt."""
-    success: bool
-    duration_ms: int
-    trajectory_s3_key: str
-    error: Optional[str] = None
-
-
-class TrajectoryReplayError(Exception):
-    """Raised when trajectory replay fails."""
-    def __init__(self, message: str, s3_key: str, cause: Optional[Exception] = None):
-        super().__init__(message)
-        self.s3_key = s3_key
-        self.cause = cause
 
 
 from pydantic import BaseModel

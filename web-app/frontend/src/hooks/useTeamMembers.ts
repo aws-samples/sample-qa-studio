@@ -1,26 +1,13 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { api } from '../utils/api';
+import { useApiList } from './useApiList';
 import { Member, Role } from '../types/permissions';
 
 export function useTeamMembers(teamId: string) {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchMembers = useCallback(async () => {
-    if (!teamId) return;
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.get(`teams/${encodeURIComponent(teamId)}/members`);
-      setMembers(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch members');
-      setMembers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [teamId]);
+  const { items: members, loading, error, reload: fetchMembers } = useApiList<Member>(
+    teamId ? `teams/${encodeURIComponent(teamId)}/members` : null,
+    'Failed to fetch members',
+  );
 
   const addMember = useCallback(async (userId: string, role: Role): Promise<void> => {
     await api.post(`teams/${encodeURIComponent(teamId)}/members`, { userId, role });

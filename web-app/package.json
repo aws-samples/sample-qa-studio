@@ -1,9 +1,6 @@
 {
   "name": "cdk",
   "version": "0.1.1-40",
-  "bin": {
-    "cdk": "bin/cdk.js"
-  },
   "scripts": {
     "build": "npm run build:cdk && npm run build:cloudfront",
     "build:cdk": "tsc",
@@ -18,7 +15,6 @@
     "deploy:frontend": "cdk deploy frontend --require-approval never",
     "deploy:frontend-build": "cd frontend && npm run build && cd ..",
     "deploy:worker": "cdk deploy worker --require-approval never",
-    "deploy:worker:versioned": "npm run build && cdk deploy worker --require-approval never",
     "deploy:lambdas": "cdk deploy lambdas --require-approval never",
     "migrate:team-admin": "ts-node scripts/migrate-team-admin-role.ts",
     "config:write": "ts-node scripts/write-config.ts",
@@ -36,7 +32,7 @@
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "22.7.9",
-    "aws-cdk": "2.1144.0",
+    "aws-cdk": "2.1146.1",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
@@ -48,8 +44,7 @@
     "@aws-sdk/client-dynamodb": "3.1008.0",
     "@aws-sdk/client-s3": "^3.1008.0",
     "@aws-sdk/client-sts": "^3.1008.0",
-    "aws-cdk-lib": "2.272.0",
-    "cdk-ecr-deployment": "^4.0.3",
+    "aws-cdk-lib": "2.275.0",
     "cdk-nag": "2.38.2",
     "constructs": "^10.0.0"
   }

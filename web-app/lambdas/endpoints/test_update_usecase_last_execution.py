@@ -185,16 +185,24 @@ class TestEventBridgeDetailType(unittest.TestCase):
     """
 
     def test_detail_type_uses_dots(self):
-        """Read the source to confirm the DetailType string is correct."""
-        import update_execution_status
+        """Read the source to confirm the DetailType string is correct.
+
+        The event is published by the shared terminal transition
+        (``execution_transitions``), not by ``update_execution_status`` itself.
+        """
+        import execution_transitions
         import inspect
 
-        source = inspect.getsource(update_execution_status)
+        source = inspect.getsource(execution_transitions)
         self.assertIn(
             "nova-act-qa-studio.execution.status.changed", source
         )
         self.assertNotIn(
             "nova-act-qa-studio.execution.status-changed", source
+        )
+        self.assertEqual(
+            execution_transitions.EVENT_DETAIL_TYPE,
+            "nova-act-qa-studio.execution.status.changed",
         )
 
 

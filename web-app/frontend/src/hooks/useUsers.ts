@@ -1,29 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { api } from '../utils/api';
+import { useApiList } from './useApiList';
 import { UserWithTeams, Role } from '../types/permissions';
 
 export function useUsers() {
-  const [users, setUsers] = useState<UserWithTeams[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.get('users');
-      setUsers(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch users');
-      setUsers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+  const { items: users, loading, error, reload: fetchUsers } = useApiList<UserWithTeams>(
+    'users',
+    'Failed to fetch users',
+  );
 
   const createUser = useCallback(async (
     email: string,

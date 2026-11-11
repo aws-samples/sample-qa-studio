@@ -124,8 +124,29 @@ def _resource_routes():
         _route('handlers.delete_application', 'owner_team_lead', APP_PATH),
         _route('handlers.associate_usecases', 'edit', APP_PATH, {'usecase_ids': [UC_ID]}),
         _route('handlers.remove_usecase_association', 'edit', {**APP_PATH, 'usecaseId': UC_ID}),
+        # Application-level shared configuration (variables / secrets / datasets):
+        # view for reads, edit (editor+ of the owning team) for writes.
+        _route('handlers.get_application_variables', 'view', APP_PATH),
+        _route('handlers.put_application_variables', 'edit', APP_PATH, {'variables': []}),
+        _route('handlers.get_application_secrets', 'view', APP_PATH),
+        _route('handlers.put_application_secrets', 'edit', APP_PATH, {'secrets': [{'key': 'k', 'value': 'v'}]}),
+        _route('handlers.delete_application_secrets', 'edit', APP_PATH, {'secret_key': 'k'}),
+        _route('handlers.list_application_datasets', 'view', APP_PATH),
+        _route('handlers.create_application_dataset', 'edit', APP_PATH,
+               {'name': 'n', 'columns': ['c'], 'rows': [['v']]}),
+        _route('handlers.get_application_dataset', 'view', {**APP_PATH, 'datasetId': 'ds-1'}),
+        _route('handlers.update_application_dataset', 'edit', {**APP_PATH, 'datasetId': 'ds-1'},
+               {'name': 'n', 'columns': ['c'], 'rows': [['v']]}),
+        _route('handlers.delete_application_dataset', 'edit', {**APP_PATH, 'datasetId': 'ds-1'}),
+        # Cost allocation: read-only, view on the application / use case in the path.
+        _route('handlers.get_application_costs', 'view', APP_PATH),
+        _route('handlers.get_usecase_costs', 'view', UC_PATH),
     ]
     return routes
+
+
+TEMPLATE_FILE = {'templateVersion': '1.0', 'template': {'name': 't'},
+                 'steps': [{'sort': 1, 'step_type': 'action', 'instruction': 'i'}]}
 
 
 def _global_routes():
@@ -136,6 +157,7 @@ def _global_routes():
         _route('list_test_suites', 'scope_only'),
         _route('handlers.list_applications', 'scope_only'),
         _route('handlers.get_dashboard_overview', 'scope_only'),
+        _route('handlers.get_dashboard_costs', 'scope_only'),
         _route('list_models', 'scope_only'),
         _route('list_device_farm_devices', 'scope_only'),
         _route('list_scopes', 'scope_only'),
@@ -156,6 +178,9 @@ def _global_routes():
         _route('delete_template_step', 'scope_only', {**tpl, 'stepId': 's1'}),
         _route('get_template_variables', 'scope_only', tpl),
         _route('create_template_variables', 'scope_only', tpl, {'variables': []}),
+        _route('get_template_usages', 'scope_only', tpl),
+        _route('import_template_definition', 'scope_only', body=TEMPLATE_FILE),
+        _route('replace_template_definition', 'scope_only', tpl, TEMPLATE_FILE),
         # teams: the path team is the owner team
         _route('handlers.list_teams', 'team_lead'),
         _route('handlers.get_team', 'team_member', TEAM_PATH),
@@ -184,7 +209,7 @@ def _global_routes():
         _route('handlers.create_user', 'admin', body={'email': 'new@example.com', 'role': 'viewer'}),
         _route('handlers.update_user', 'admin', {'userId': 'u-1'}, {'role': 'viewer'}),
         _route('get_user', 'admin', {'username': 'u-1'}),
-        _route('delete_user', 'admin', {'username': 'u-1'}),
+        _route('handlers.delete_user', 'admin', {'userId': 'u-1'}),
         _route('update_user_groups', 'admin', {'username': 'u-1'}, {'groups': ['users']}),
     ]
 
@@ -207,8 +232,7 @@ ENV = {
     'TABLE_NAME': 't', 'DYNAMODB_TABLE_NAME': 't', 'SECRET_PREFIX': 'p', 'BUCKET_NAME': 'b', 'S3_BUCKET': 'b',
     'USER_POOL_ID': 'pool', 'SCHEDULER_GROUP_NAME': 'g', 'EXECUTE_USECASE_LAMBDA_ARN': 'arn:x',
     'EXECUTE_SUITE_LAMBDA_ARN': 'arn:x', 'SCHEDULER_TARGET_ROLE_ARN': 'arn:r', 'SNS_TOPIC_ARN': 'arn:sns',
-    'EVENT_BUS_NAME': 'bus', 'WIZARD_EVENT_BUS_NAME': 'bus', 'WIZARD_QUEUE_URL': 'q', 'ECS_CLUSTER': 'c',
-    'ECS_TASK_DEFINITION': 'td', 'SUBNET_ID': 'sn', 'SECURITY_GROUP_ID': 'sg', 'BEDROCK_EXECUTION_ROLE': 'r',
+    'EVENT_BUS_NAME': 'bus', 'WIZARD_EVENT_BUS_NAME': 'bus', 'WIZARD_QUEUE_URL': 'q', 'BEDROCK_EXECUTION_ROLE': 'r',
     'NOVA_ACT_API_KEY_NAME': 'k', 'BEDROCK_MODEL_ID': 'm', 'RESOURCE_SERVER_IDENTIFIER': 'api',
 }
 

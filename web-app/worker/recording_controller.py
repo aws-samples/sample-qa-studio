@@ -240,21 +240,6 @@ class RecordingController:
             # Session might be dead — null it so setup() recreates
             self._cdp_session = None
 
-    def _get_active_page(self):
-        """Find the page matching _last_url, falls back to nova.page."""
-        try:
-            pages = self.nova.page.context.pages
-            if self._last_url:
-                for page in pages:
-                    try:
-                        if page.url == self._last_url:
-                            return page
-                    except Exception:
-                        continue
-        except Exception:
-            pass
-        return self.nova.page
-
     def start_recording(self) -> dict:
         """Send START_RECORDING command to extension and begin collecting actions.
 
@@ -335,15 +320,7 @@ class RecordingController:
             stopped_at = int(time.time() * 1000)
 
             # Strip non-essential fields from collected actions
-            stripped_actions = []
-            for action in self.actions:
-                stripped = {k: v for k, v in action.items() if k not in ACTION_STRIP_FIELDS}
-                if "assertions" in stripped:
-                    stripped["assertions"] = [
-                        {k: v for k, v in a.items() if k not in ASSERTION_STRIP_FIELDS}
-                        for a in stripped["assertions"]
-                    ]
-                stripped_actions.append(stripped)
+            stripped_actions = _strip_recording_data({"actions": self.actions})["actions"]
 
             # Build the RecordingData envelope
             envelope = _build_recording_envelope(

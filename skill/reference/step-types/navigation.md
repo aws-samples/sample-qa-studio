@@ -69,6 +69,6 @@ Reference a variable in the instruction:
 ## Common pitfalls
 
 - **Vague instructions.** "Click the button" — which button? Be specific: name the visible label, the section, or the role. The AI does best with descriptions a human reader could follow.
-- **Mixing actions.** Don't combine "click X and verify Y appears" in one step — the verification belongs in a separate `validation` step. Mixing them makes failures harder to diagnose.
+- **Mixing actions.** Don't combine "click X and verify Y appears" in one step — the verification belongs in a separate `validation` step. Likewise `"Enter the name, enter the description and click Save"` is three `navigation` steps, not one. One gesture per step; see [One action or one check per step](../building-tests.md#one-action-or-one-check-per-step).
 - **Hard-coded values that should be variables.** If the test runs against multiple environments or uses generated data, parameterize via `{{ variable }}` references. Hard-coded values lock the test to one environment.
 - **Brittle phrasing.** Describe what the user sees ("Click 'Add to cart'"), not what the DOM looks like ("Click button.btn-primary"). DOM-level descriptions break with cosmetic UI changes.

@@ -126,4 +126,49 @@ describe('UsersListPage', () => {
       expect(screen.queryByText('bob@example.com')).not.toBeInTheDocument();
     });
   });
+
+  it('deletes a user by userId after confirmation', async () => {
+    const deleteUser = vi.fn().mockResolvedValue(undefined);
+    mockUseUsers.mockReturnValue({
+      users: [{ userId: 'sub-1', email: 'alice@example.com', teams: [] }],
+      loading: false,
+      error: null,
+      fetchUsers: vi.fn(),
+      createUser: vi.fn(),
+      updateUser: vi.fn(),
+      deleteUser,
+    });
+
+    renderPage();
+
+    fireEvent.click(screen.getByTestId('user-delete-sub-1'));
+    expect(await screen.findByText('Delete User')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('delete-confirm'));
+
+    await waitFor(() => expect(deleteUser).toHaveBeenCalledWith('sub-1'));
+    expect(await screen.findByText('User "alice@example.com" deleted')).toBeInTheDocument();
+  });
+
+  it('shows the error and keeps the user when delete fails', async () => {
+    const deleteUser = vi.fn().mockRejectedValue(new Error('Cannot delete the last admin'));
+    mockUseUsers.mockReturnValue({
+      users: [{ userId: 'sub-1', email: 'alice@example.com', teams: [] }],
+      loading: false,
+      error: null,
+      fetchUsers: vi.fn(),
+      createUser: vi.fn(),
+      updateUser: vi.fn(),
+      deleteUser,
+    });
+
+    renderPage();
+
+    fireEvent.click(screen.getByTestId('user-delete-sub-1'));
+    fireEvent.click(await screen.findByTestId('delete-confirm'));
+
+    expect(await screen.findByText('Cannot delete the last admin')).toBeInTheDocument();
+    // The row is still there and no success message was shown.
+    expect(screen.getByTestId('user-delete-sub-1')).toBeInTheDocument();
+    expect(screen.queryByText('User "alice@example.com" deleted')).not.toBeInTheDocument();
+  });
 });

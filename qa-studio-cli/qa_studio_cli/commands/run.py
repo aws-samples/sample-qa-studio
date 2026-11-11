@@ -1,18 +1,48 @@
 """Run command — local Nova Act execution (requires qa-studio[runner] extras)."""
 
+from typing import Optional
+
 import click
 
 from qa_studio_cli.runner.browser.local import list_local_browsers
 
 
+def _parse_usecase_ids(raw: str) -> list:
+    """Split ``--usecase-id`` on whitespace; reject empty and duplicate IDs."""
+    ids = raw.split()
+    if not ids:
+        raise click.UsageError("--usecase-id must contain at least one ID")
+    seen = set()
+    for uid in ids:
+        if uid in seen:
+            raise click.UsageError(f"--usecase-id contains a duplicate ID: {uid}")
+        seen.add(uid)
+    return ids
+
+
 @click.command()
 @click.option("--suite-id", default=None, help="Test suite ID to execute")
-@click.option("--usecase-id", default=None, help="Single use case ID to execute")
+@click.option(
+    "--usecase-id", default=None,
+    help=(
+        "One or more use case IDs separated by whitespace (quote the value, "
+        "e.g. --usecase-id \"id-a id-b\"). Several IDs run sequentially and "
+        "end with a summary."
+    ),
+)
 @click.option(
     "--execution-id", default=None,
     help=(
         "Attach to a pre-created execution record instead of creating a new "
-        "one. Only valid with --usecase-id in remote (non-local-only) mode."
+        "one. Only valid with exactly one --usecase-id in remote "
+        "(non-local-only) mode."
+    ),
+)
+@click.option(
+    "--fail-fast", is_flag=True, default=False,
+    help=(
+        "Stop after the first failed use case; remaining use cases are "
+        "reported as skipped. Only with --usecase-id."
     ),
 )
 @click.option(
@@ -25,10 +55,52 @@ from qa_studio_cli.runner.browser.local import list_local_browsers
     "--var", "variables", multiple=True,
     help="Override variable (key=value, repeatable)",
 )
-@click.option("--region", default=None, help="Override AWS region for browser")
+@click.option(
+    "--dataset-file", "dataset_files", multiple=True,
+    help=(
+        "CSV replacing the stored rows of a repeat step for this run "
+        "([LABEL=]PATH, repeatable). The header row must name the repeat's "
+        "columns; LABEL is the repeat step's label and may be omitted when "
+        "the use case has exactly one repeat. Only with --usecase-id."
+    ),
+)
+@click.option(
+    "--region", default=None,
+    help=(
+        "AWS region for the run's regional AWS calls. Local mode: the S3 "
+        "app-binary download (mobile) and the browser provisioner; suite runs: "
+        "the executions' region. Default: AWS_REGION / AWS profile. Nova Act "
+        "always runs in us-east-1 and Device Farm in us-west-2."
+    ),
+)
 @click.option("--model-id", default=None, help="Override Nova Act model ID")
 @click.option("--device-arn", default=None, help="Override Device Farm device ARN for mobile tests")
-@click.option("--app-path", default=None, help="Path to local .apk/.ipa file for mobile tests (uploads to Device Farm)")
+@click.option(
+    "--app-path", default=None,
+    help=(
+        "Application under test. Mobile: local .apk/.ipa uploaded to Device "
+        "Farm. Electron: the .app bundle or executable to launch (required "
+        "for electron usecases)."
+    ),
+)
+@click.option(
+    "--app-arg", "app_args", multiple=True,
+    help=(
+        "Extra argument for the Electron app, repeatable (e.g. the app "
+        "directory when --app-path is the bare electron binary). Appended "
+        "after QA Studio's own switches. Requires --app-path."
+    ),
+)
+@click.option(
+    "--app-user-data-dir",
+    type=click.Path(file_okay=False, resolve_path=True),
+    default=None,
+    help=(
+        "Electron --user-data-dir to reuse (e.g. a pre-seeded profile). "
+        "Default: a fresh temp dir per run, removed at teardown. "
+        "Requires --app-path."
+    ),
+)
 @click.option(
     "--browser",
     type=click.Choice(["local", "agentcore", "cdp-external"], case_sensitive=False),
@@ -76,7 +148,11 @@ from qa_studio_cli.runner.browser.local import list_local_browsers
 )
 @click.option("--verbose", is_flag=True, help="Enable verbose logging")
 @click.option(
-    "--timeout", type=int, default=3600, help="Global timeout in seconds",
+    "--timeout", type=click.IntRange(min=1), default=None,
+    help=(
+        "Stop the whole run after N seconds (default: no limit). On expiry "
+        "the running test fails, the rest are skipped and the exit code is 3."
+    ),
 )
 @click.option(
     "--keep-artifacts", is_flag=True,
@@ -91,21 +167,25 @@ def run(
     suite_id: str,
     usecase_id: str,
     execution_id: str,
+    fail_fast: bool,
     local_only: bool,
     token_file: str,
     base_url: str,
     variables: tuple,
+    dataset_files: tuple,
     region: str,
     model_id: str,
     device_arn: str,
     app_path: str,
+    app_args: tuple,
+    app_user_data_dir: str,
     browser: str,
     cdp_endpoint_url: str,
     cdp_headers_file: str,
     local_browser: str,
     headful: bool,
     verbose: bool,
-    timeout: int,
+    timeout: Optional[int],
     keep_artifacts: bool,
     output_format: str,
 ) -> None:
@@ -119,6 +199,13 @@ def run(
         raise click.UsageError("--execution-id requires --usecase-id")
     if execution_id and suite_id:
         raise click.UsageError("--execution-id is not supported with --suite-id")
+    if fail_fast and suite_id:
+        raise click.UsageError("--fail-fast is only supported with --usecase-id")
+
+    # ``--usecase-id`` carries one or more whitespace-separated IDs.
+    usecase_ids = _parse_usecase_ids(usecase_id) if usecase_id else []
+    if execution_id and len(usecase_ids) > 1:
+        raise click.UsageError("--execution-id requires exactly one --usecase-id")
 
     # Validate browser-selection combinations.
     browser = (browser or "local").lower()
@@ -150,6 +237,12 @@ def run(
             "--headful is only supported with --browser=local (default)."
         )
 
+    # The electron-only app flags are meaningless without an app to launch.
+    if app_args and not app_path:
+        raise click.UsageError("--app-arg requires --app-path")
+    if app_user_data_dir and not app_path:
+        raise click.UsageError("--app-user-data-dir requires --app-path")
+
     # Parse variables from key=value format
     parsed_vars = {}
     for var in variables:
@@ -159,6 +252,22 @@ def run(
             )
         key, value = var.split("=", 1)
         parsed_vars[key] = value
+
+    # Dataset overrides for repeat steps: read the CSVs now so file / shape
+    # problems are usage errors before any network call.  Label resolution
+    # needs the use case's steps and happens in the runner.
+    if dataset_files and suite_id:
+        raise click.UsageError("--dataset-file requires --usecase-id (not supported with --suite-id)")
+    from qa_studio_cli.runner.dataset_file import (
+        DatasetFileError, parse_dataset_file_option, read_dataset_csv,
+    )
+    repeat_dataset_files = []
+    for raw in dataset_files:
+        try:
+            label, path = parse_dataset_file_option(raw)
+            repeat_dataset_files.append((label, read_dataset_csv(path)))
+        except DatasetFileError as exc:
+            raise click.UsageError(str(exc)) from exc
 
     # Lazy import gate — runner extras required
     try:
@@ -177,8 +286,9 @@ def run(
 
     if usecase_id:
         run_usecase(
-            usecase_id=usecase_id,
+            usecase_ids=usecase_ids,
             local_only=local_only,
+            fail_fast=fail_fast,
             token_file=token_file,
             base_url=base_url,
             variables=parsed_vars,
@@ -188,12 +298,15 @@ def run(
             output_format=output_format,
             device_arn=device_arn,
             app_path=app_path,
+            app_args=list(app_args),
+            app_user_data_dir=app_user_data_dir,
             execution_id=execution_id,
             browser=browser,
             cdp_endpoint_url=cdp_endpoint_url,
             cdp_headers_file=cdp_headers_file,
             local_browser=local_browser,
             headful=headful,
+            repeat_dataset_files=repeat_dataset_files,
         )
     else:
         run_runner(
@@ -209,4 +322,7 @@ def run(
             output_format=output_format,
             local_browser=local_browser,
             headful=headful,
+            app_path=app_path,
+            app_args=list(app_args),
+            app_user_data_dir=app_user_data_dir,
         )

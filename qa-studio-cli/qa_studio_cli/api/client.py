@@ -7,7 +7,12 @@ from typing import Callable, Optional
 
 import click
 import requests
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
 
 from qa_studio_cli.auth.token_manager import get_valid_token
 from qa_studio_cli.models.errors import ApiError, AuthError, ConfigError
@@ -17,6 +22,20 @@ from qa_studio_cli.models.config import CLIConfig
 logger = logging.getLogger(__name__)
 
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+#: Retry schedule for RETRYABLE_STATUS_CODES and connection errors.
+#:
+#: Sized for a suite fan-out: ~20 MicroVMs start within seconds and every
+#: runner's first call is ``GET /usecase/{id}``.  The endpoint Lambdas run
+#: with a small reserved concurrency, so API Gateway answers 500/429 for the
+#: first seconds of the burst.  Exponential backoff from 1 s, capped at 16 s,
+#: plus up to 3 s of jitter (so the retries themselves do not arrive as one
+#: burst again), gives 1+2+4+8+16+16 ≈ 47–65 s of total patience — enough to
+#: ride out the burst, short enough not to hide a dead API.
+RETRY_ATTEMPTS = 7
+RETRY_WAIT_MIN_S = 1
+RETRY_WAIT_MAX_S = 16
+RETRY_JITTER_MAX_S = 3
 
 # Execution-bound worker capability ('{usecase_id}:{execution_id}:{token}'),
 # exported by the worker entrypoint for cloud runs. Sent as a header, never logged.
@@ -97,6 +116,11 @@ class ApiClient:
         response = self._request("PATCH", path, json=json_body)
         return response.json()
 
+    def put(self, path: str, json_body: dict | None = None) -> dict:
+        """Send authenticated PUT request. Returns parsed JSON."""
+        response = self._request("PUT", path, json=json_body)
+        return response.json()
+
     def delete(self, path: str) -> dict | None:
         """Send authenticated DELETE request. Returns parsed JSON or None for 204."""
         response = self._request("DELETE", path)
@@ -113,8 +137,12 @@ class ApiClient:
 
     @retry(
         retry=retry_if_exception_type(_RetryableError),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=4),
+        stop=stop_after_attempt(RETRY_ATTEMPTS),
+        wait=wait_exponential_jitter(initial=RETRY_WAIT_MIN_S, max=RETRY_WAIT_MAX_S, jitter=RETRY_JITTER_MAX_S),
+        before_sleep=lambda state: logger.warning(
+            "API retry %d/%d in %.1fs: %s",
+            state.attempt_number, RETRY_ATTEMPTS, state.next_action.sleep, state.outcome.exception().api_error,
+        ),
         reraise=True,
     )
     def _request_with_retry(self, method: str, path: str, **kwargs) -> requests.Response:

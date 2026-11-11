@@ -13,6 +13,12 @@ logger.setLevel(logging.INFO)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
+    LEGACY — unrouted. DELETE /users/{username} is served by the application
+    router (handlers/delete_user.py), which also removes team memberships and
+    writes an audit entry. This module only backs the Lambda that lambda-stack
+    keeps for one release so its exported ARN stays available; it has no IAM
+    grants any more. Delete together with that Lambda in B9.
+
     Lambda handler to delete a user from Amazon Cognito user pool.
     
     Args:

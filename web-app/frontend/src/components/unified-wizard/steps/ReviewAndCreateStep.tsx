@@ -12,6 +12,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import type { StepProps } from '../types';
 import { api, exportImportApi } from '../../../utils/api';
+import type { SecretListEntry } from '../../SecretsManager';
 
 // --- Label helpers ---
 
@@ -65,6 +66,8 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
   const navigate = useNavigate();
   const [showSecretsForm, setShowSecretsForm] = useState(false);
   const [savingSecrets, setSavingSecrets] = useState(false);
+  /** `missingSecrets` keys the owning application already provides (not asked for). */
+  const [inheritedSecretKeys, setInheritedSecretKeys] = useState<string[]>([]);
   const [createdUsecaseId, setCreatedUsecaseId] = useState<string | null>(null);
   const initialTrigger = useRef(submitTrigger);
 
@@ -134,6 +137,7 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
         model_id: basicInfo.modelId,
         starting_url: basicInfo.startingUrl,
       });
+      if (await showSecretsFormIfMissing(result)) return;
       dispatch({ type: 'SUBMIT_SUCCESS' });
       if (result?.usecaseId || result?.id) {
         navigate(`/usecase/${result.usecaseId || result.id}`);
@@ -150,6 +154,8 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
           ...userJourneyConfig.generatedUsecase,
           application_id: basicInfo.applicationId,
         });
+        // Generated secret steps come back as missingSecrets, like an import.
+        if (await showSecretsFormIfMissing(result)) return;
         dispatch({ type: 'SUBMIT_SUCCESS' });
         if (result?.usecaseId || result?.id) {
           navigate(`/usecase/${result.usecaseId || result.id}`);
@@ -184,6 +190,10 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
       }
       if (mobilePlatform === 'IOS') {
         payload.bundle_id = blankConfig.bundleId;
+      }
+    } else if (testPlatform === 'electron') {
+      if (blankConfig.bundleId.trim()) {
+        payload.bundle_id = blankConfig.bundleId.trim();
       }
     } else {
       payload.starting_url = basicInfo.startingUrl;
@@ -227,28 +237,15 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
 
     const fileContent = await importConfig.file.text();
     const importData = JSON.parse(fileContent);
-    const result = await exportImportApi.importUsecase({ ...importData, application_id: basicInfo.applicationId });
+    const result = await exportImportApi.importUsecase({
+      ...importData,
+      application_id: basicInfo.applicationId,
+      // Optional "Execution region" from the upload step (import_usecase: regionOverride).
+      ...(basicInfo.executionRegion ? { regionOverride: basicInfo.executionRegion } : {}),
+    });
 
     if (result.success) {
-      // Check for missing secrets
-      if (result.missingSecrets && result.missingSecrets.length > 0) {
-        setCreatedUsecaseId(result.usecaseId);
-        // Initialize secret values from state
-        const initialSecretValues: Record<string, string> = {};
-        result.missingSecrets.forEach((secretKey: string) => {
-          initialSecretValues[secretKey] = importConfig.secretValues[secretKey] || '';
-        });
-        dispatch({
-          type: 'UPDATE_IMPORT_CONFIG',
-          payload: {
-            missingSecrets: result.missingSecrets,
-            secretValues: initialSecretValues,
-          },
-        });
-        dispatch({ type: 'SUBMIT_SUCCESS' });
-        setShowSecretsForm(true);
-        return;
-      }
+      if (await showSecretsFormIfMissing(result)) return;
 
       dispatch({ type: 'SUBMIT_SUCCESS' });
       if (result.usecaseId || result.id) {
@@ -262,6 +259,53 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
   };
 
   // --- Secrets handlers ---
+
+  /**
+   * Keys of `missingSecrets` that the use case can already resolve: the
+   * effective list (`GET /usecase/{id}/secrets`) includes the owning
+   * application's secrets, which the executor falls back to. On a load error
+   * every key is treated as missing (asking for too many is the safe side).
+   */
+  const resolvableSecretKeys = async (usecaseId: string, keys: string[]): Promise<Set<string>> => {
+    try {
+      const response = await api.get(`usecase/${usecaseId}/secrets`);
+      const available = new Set(((response?.secrets || []) as SecretListEntry[]).map((secret) => secret.key));
+      return new Set(keys.filter((key) => available.has(key)));
+    } catch (error) {
+      console.error('Failed to load the effective secrets of the new use case:', error);
+      return new Set();
+    }
+  };
+
+  /**
+   * Import and template apply both answer with `missingSecrets` for the secret
+   * steps they created. Keys the application already provides are dropped; if
+   * any remain, switch to the "Configure secrets" form instead of navigating
+   * away. Returns true when the form took over.
+   */
+  const showSecretsFormIfMissing = async (result: { usecaseId?: string; missingSecrets?: string[] }): Promise<boolean> => {
+    if (!result.usecaseId || !result.missingSecrets || result.missingSecrets.length === 0) {
+      return false;
+    }
+    const inherited = await resolvableSecretKeys(result.usecaseId, result.missingSecrets);
+    const stillMissing = result.missingSecrets.filter((key) => !inherited.has(key));
+    if (stillMissing.length === 0) {
+      return false;
+    }
+    setCreatedUsecaseId(result.usecaseId);
+    setInheritedSecretKeys([...inherited]);
+    const initialSecretValues: Record<string, string> = {};
+    stillMissing.forEach((secretKey: string) => {
+      initialSecretValues[secretKey] = importConfig.secretValues[secretKey] || '';
+    });
+    dispatch({
+      type: 'UPDATE_IMPORT_CONFIG',
+      payload: { missingSecrets: stillMissing, secretValues: initialSecretValues },
+    });
+    dispatch({ type: 'SUBMIT_SUCCESS' });
+    setShowSecretsForm(true);
+    return true;
+  };
 
   const handleSaveSecrets = async () => {
     if (!createdUsecaseId) return;
@@ -297,15 +341,23 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
     return (
       <Container
         header={
-          <Header variant="h2" description="Configure secret values for the imported use case">
+          <Header variant="h2" description="Configure secret values for the new use case">
             Configure secrets
           </Header>
         }
       >
         <SpaceBetween direction="vertical" size="l">
           <Alert type="info">
-            The imported use case requires the following secrets. You can configure them now or skip and add them later.
+            The new use case has secret steps that need values. You can configure them now or skip and add them later in the Secrets tab.
           </Alert>
+
+          {inheritedSecretKeys.length > 0 && (
+            <Alert type="info" data-testid="inherited-secrets-hint">
+              {inheritedSecretKeys.join(', ')} {inheritedSecretKeys.length === 1 ? 'is' : 'are'} inherited from the
+              application and already {inheritedSecretKeys.length === 1 ? 'has a value' : 'have values'}. Add a use
+              case secret with the same key on the Secrets tab to override {inheritedSecretKeys.length === 1 ? 'it' : 'them'}.
+            </Alert>
+          )}
 
           {submitError && (
             <Alert type="error">{submitError}</Alert>
@@ -395,12 +447,18 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
             <ColumnLayout columns={2} variant="text-grid">
               <div>
                 <Box variant="awsui-key-label">Test platform</Box>
-                <div>{testPlatform === 'web' ? 'Web' : 'Mobile'}</div>
+                <div>{testPlatform === 'web' ? 'Web' : testPlatform === 'mobile' ? 'Mobile' : 'Electron'}</div>
               </div>
               {testPlatform === 'mobile' && mobilePlatform && (
                 <div>
                   <Box variant="awsui-key-label">Mobile platform</Box>
                   <div>{mobilePlatform}</div>
+                </div>
+              )}
+              {testPlatform === 'electron' && (
+                <div>
+                  <Box variant="awsui-key-label">Execution</Box>
+                  <div>CI runner only (qa-studio run --app-path …)</div>
                 </div>
               )}
             </ColumnLayout>
@@ -428,20 +486,22 @@ export default function ReviewAndCreateStep({ state, dispatch, validationErrors,
 function BlankReview({ state }: { state: StepProps['state'] }) {
   const { testPlatform, mobilePlatform, blankConfig } = state;
   const isWeb = testPlatform === 'web';
+  const isMobile = testPlatform === 'mobile';
+  const isElectron = testPlatform === 'electron';
 
   const items: { label: string; value: string }[] = [];
 
   if (isWeb) {
     items.push({ label: 'Starting URL', value: state.basicInfo.startingUrl || '-' });
   }
-  if (!isWeb && mobilePlatform === 'ANDROID') {
+  if (isMobile && mobilePlatform === 'ANDROID') {
     items.push({ label: 'App Package', value: blankConfig.appPackage || '-' });
     items.push({ label: 'App Activity', value: blankConfig.appActivity || '-' });
   }
-  if (!isWeb && mobilePlatform === 'IOS') {
-    items.push({ label: 'Bundle ID', value: blankConfig.bundleId || '-' });
+  if ((isMobile && mobilePlatform === 'IOS') || isElectron) {
+    items.push({ label: 'Bundle ID', value: blankConfig.bundleId || (isElectron ? 'not set (no launch check)' : '-') });
   }
-  if (!isWeb && blankConfig.deviceArn) {
+  if (isMobile && blankConfig.deviceArn) {
     items.push({ label: 'Device', value: blankConfig.deviceArn });
   }
   items.push({ label: 'Active', value: state.basicInfo.active ? 'Yes' : 'No' });
@@ -537,15 +597,22 @@ function TemplateReview({ state }: { state: StepProps['state'] }) {
 function UserJourneyReview({ state }: { state: StepProps['state'] }) {
   const { userJourneyConfig, testPlatform, mobilePlatform } = state;
   const isMobile = testPlatform === 'mobile';
+  const isElectron = testPlatform === 'electron';
   const generatedStepCount = userJourneyConfig.generatedUsecase?.steps?.length || 0;
 
   return (
     <Container header={<Header variant="h3">User journey</Header>}>
       <ColumnLayout columns={2} variant="text-grid">
-        {!isMobile && (
+        {!isMobile && !isElectron && (
           <div>
             <Box variant="awsui-key-label">Starting URL</Box>
             <div>{state.basicInfo.startingUrl || '-'}</div>
+          </div>
+        )}
+        {isElectron && (
+          <div>
+            <Box variant="awsui-key-label">Bundle ID</Box>
+            <div>{userJourneyConfig.bundleId || 'not set (no launch check)'}</div>
           </div>
         )}
         {isMobile && mobilePlatform === 'ANDROID' && (
@@ -709,7 +776,7 @@ function ImportReview({ state }: { state: StepProps['state'] }) {
             <SpaceBetween direction="vertical" size="xs">
               <Box fontWeight="bold">Secrets configuration required</Box>
               <div>
-                The following secrets will need to be configured after import:
+                The following secrets will need to be configured after import, unless the chosen application already provides them:
               </div>
               <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
                 {importConfig.missingSecrets.map((key) => (

@@ -23,6 +23,17 @@ const platformOptions: TilesProps.TilesDefinition[] = [
     description:
       'Test mobile applications on real devices via AWS Device Farm. Supports Android and iOS with app binary uploads. Some features like step caching and interactive wizard are not available.',
   },
+  {
+    value: 'electron',
+    label: (
+      <Box>
+        <Box fontWeight="bold" display="inline">Electron</Box>{' '}
+        <Box color="text-status-inactive" fontSize="body-s" display="inline">— Experimental</Box>
+      </Box>
+    ),
+    description:
+      'Test Electron desktop applications. The CI runner launches the app (qa-studio run --app-path …) and drives it over CDP; tests cannot be started from this UI. No starting URL, live recording, video, or step caching.',
+  },
 ];
 
 export default function PlatformSelectionStep({ state, dispatch }: StepProps) {
@@ -34,7 +45,7 @@ export default function PlatformSelectionStep({ state, dispatch }: StepProps) {
         onChange={({ detail }: { detail: TilesProps.ChangeDetail }) =>
           dispatch({ type: 'SET_TEST_PLATFORM', payload: detail.value as TestPlatform })
         }
-        columns={2}
+        columns={3}
       />
     </FormField>
   );

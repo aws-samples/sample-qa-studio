@@ -3,6 +3,18 @@
 from datetime import datetime
 from typing import Any, Dict, List
 
+import click
+
+from qa_studio_cli.models.execution import MultiRunSummary
+
+# Coloured mark per multi-run status. Colour is stripped automatically by
+# ``click.echo`` when stdout is not a terminal.
+_MULTI_RUN_MARKS = {
+    "success": click.style("\u2713", fg="green"),
+    "failed": click.style("\u2717", fg="red"),
+    "skipped": click.style("\u25cb", fg="yellow"),
+}
+
 
 class SummaryFormatter:
     """Format execution summary for console output."""
@@ -71,6 +83,9 @@ class SummaryFormatter:
             step_type = step.get("stepType", step.get("step_type", ""))
             instruction = step.get("instruction", "")
             label = f"[{step_type}] {instruction}" if step_type and instruction else f"Step {i}"
+            row_index = step.get("repeat_row_index")
+            if row_index is not None:
+                label = f"[row {row_index}/{step.get('repeat_row_total', '?')}] {label}"
             lines.append(f"  {prefix} {label} ({step_duration})")
             if step.get("status") != "success" and step.get("error"):
                 lines.append(f"    Error: {step['error']}")
@@ -90,6 +105,29 @@ class SummaryFormatter:
                 if logs:
                     lines.append(f"  Logs:  {logs}")
 
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_multi_summary(summary: MultiRunSummary) -> str:
+        """Format the end-of-run summary for a multi-use-case ``qa-studio run``.
+
+        One line per use case in command-line order: a coloured mark
+        (green check, red cross, yellow circle for skipped) followed by
+        the use case name.  Print with ``click.echo`` so colours are
+        dropped when stdout is not a TTY.
+        """
+        lines = [
+            "QA Studio - Run Summary",
+            "",
+            f"Passed: {summary.passed}/{summary.total}",
+        ]
+        if summary.results:
+            lines.append("")
+            for entry in summary.results:
+                line = f"{_MULTI_RUN_MARKS[entry.status]} {entry.usecase_name}"
+                if entry.status == "skipped":
+                    line += " (skipped)"
+                lines.append(line)
         return "\n".join(lines)
 
     @staticmethod

@@ -218,6 +218,12 @@ The following behaviors are assumed from the blog but not yet confirmed against 
 
 ## What gets removed
 
+> **Done** (codebase-health B5): the files below, the `build_cache` Lambda and its `cache_builder_rule`, the worker's
+> cache tier in `navigation_step.py` (which also lost its `enable_cache` / `trajectory_manager` parameters — the
+> wizard never passed a trajectory manager) and `CACHE_ACTION_DELAY_MS` are gone. `test_list_steps_cache.py` was kept
+> (it covers the `cached_steps` / trajectory passthrough on GET). `cached_steps` / `cache_last_updated` stay
+> readable for one release (B9).
+
 - `web-app/worker/cache_parser.py`
 - `web-app/worker/cache_executor.py`
 - `web-app/worker/demo_cache_parser.py`
@@ -250,13 +256,13 @@ What stays:
 - CDK: new EventBridge rules for step mutation events → invalidator; existing failed-execution rule → invalidator (or adapt existing `build_cache` rule and rename)
 - Step mutation endpoints (`create_step.py`, `update_step.py`, `delete_step.py`) — emit the new events (they currently do not)
 - `update_usecase.py` — when `enable_cache` transitions from `true` to `false`, emit `usecase.cache_disabled`
-- Frontend `StepsTable.tsx` — the "Cached" badge per step becomes a usecase-level badge (single source of truth, from S3 listing exposed via a new `GET /usecases/{id}/cache-status` endpoint, or from a derived field on the usecase response)
+- Frontend step view (originally the step table, now `WorkflowStepsCard.tsx`) — the "Cached" badge per step becomes a usecase-level badge (single source of truth, from S3 listing exposed via a new `GET /usecases/{id}/cache-status` endpoint, or from a derived field on the usecase response)
 
 ## Open questions / risks
 
 1. **Probe results may kill this design.** See A1–A5. If the SDK doesn't expose the expected API, we either stay with the current cache (my recommendation if upstream is blocker) or subclass `NovaAct` to capture trajectory data ourselves (more code, more maintenance).
 2. **Silent regression re-baselining** (previously discussed). Accepted trade per user decision: on execution failure, trajectory is deleted. No badge surfaces this state in v1.
-3. **`logs_directory` layout.** The SDK writes trajectory files under `logs_directory/{session_id}/`. The worker currently uses a per-execution logs directory. Need to confirm that `result.trajectory_file_path` returns the path reliably within an ECS task (file IO permissions, lifetime).
+3. **`logs_directory` layout.** The SDK writes trajectory files under `logs_directory/{session_id}/`. The worker currently uses a per-execution logs directory. Need to confirm that `result.trajectory_file_path` returns the path reliably within the cloud worker (file IO permissions, lifetime; the worker was an ECS task when this was written and is a Lambda MicroVM now).
 4. **Replay across sessions.** The blog's `replay.py` opens a fresh `NovaAct()` and calls `replay_trajectory(nova, traj)`. Our worker opens **one** `NovaAct` block per execution and runs N navigation steps inside it. Need to confirm that calling `replay_trajectory` N times within one `NovaAct` context manager works correctly, or whether each replay needs its own NovaAct block (would be a much bigger refactor).
 5. **Extraction steps (`retrieve_value_step`) don't emit trajectories suitable for replay** (A6 above). If that's the case, it's the same as today (extraction steps were never cached). Surfacing in doc so nobody is surprised.
 

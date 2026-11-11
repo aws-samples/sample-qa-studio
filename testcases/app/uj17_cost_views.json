@@ -1,0 +1,159 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-11-06T12:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-17 Cost Views",
+    "description": "Sign in, check that every application card on the Dashboard carries a 'Cost (30d)' value (a dollar amount or the em dash placeholder), open the 'QA Studio' application and its Cost tab and see the Cost card (figures or the 'No cost data yet' empty state), then open one of its use cases and see the Cost card next to Use Case Information",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "dashboard",
+      "application",
+      "usecase",
+      "cost"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "navigation",
+      "instruction": "Click the 'Dashboard' menu item in the left navigation"
+    },
+    {
+      "sort": 5,
+      "step_type": "validation",
+      "instruction": "Is the page heading 'Dashboard' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 6,
+      "step_type": "validation",
+      "instruction": "Does the application card 'QA Studio' show a 'Cost (30d)' label?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 7,
+      "step_type": "validation",
+      "instruction": "Is the value under 'Cost (30d)' on the application card 'QA Studio' either a dollar amount starting with '$' or the dash '—'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 8,
+      "step_type": "navigation",
+      "instruction": "Click the 'Applications' menu item in the left navigation"
+    },
+    {
+      "sort": 9,
+      "step_type": "navigation",
+      "instruction": "Open the application 'QA Studio' (click its card if several applications are listed)"
+    },
+    {
+      "sort": 10,
+      "step_type": "validation",
+      "instruction": "Is the application 'QA Studio' detail page shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 11,
+      "step_type": "validation",
+      "instruction": "Is there a tab labelled 'Cost' next to the 'Metrics' tab?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 12,
+      "step_type": "navigation",
+      "instruction": "Click the 'Cost' tab"
+    },
+    {
+      "sort": 13,
+      "step_type": "validation",
+      "instruction": "Is a container with the heading 'Cost' shown below the tabs?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 14,
+      "step_type": "validation",
+      "instruction": "Does the 'Cost' container show either the text 'No cost data yet' or a 'Last 30 days' figure?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 15,
+      "step_type": "navigation",
+      "instruction": "Click the tab whose label starts with 'Usecases'"
+    },
+    {
+      "sort": 16,
+      "step_type": "navigation",
+      "instruction": "Click the name link of the first use case listed in the table"
+    },
+    {
+      "sort": 17,
+      "step_type": "validation",
+      "instruction": "Is a section with the heading 'Use Case Information' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 18,
+      "step_type": "validation",
+      "instruction": "Is a container with the heading 'Cost' shown to the right of 'Use Case Information'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 19,
+      "step_type": "validation",
+      "instruction": "Does the 'Cost' container show either the text 'No cost data yet' or a 'Last 30 days' figure?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    }
+  ],
+  "variables": [],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Username for login"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Password for login"
+    }
+  ]
+}

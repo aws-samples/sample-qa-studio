@@ -114,7 +114,7 @@ export default function SetupAndRecordStep({ state, dispatch, validationErrors }
         description: state.basicInfo.description.trim(),
         starting_url: state.basicInfo.startingUrl.trim(),
         tags: [],
-        region: state.basicInfo.executionRegion,
+        executing_region: state.basicInfo.executionRegion,
       });
 
       if (!response?.sessionId || !response?.usecaseId) {

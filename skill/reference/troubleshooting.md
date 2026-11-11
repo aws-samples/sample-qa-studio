@@ -11,6 +11,7 @@ Build-time and execute-time failures the agent will see when helping a user. Set
 - [Import validation failed](#import-validation-failed)
 - [Variable not found](#variable-not-found)
 - [Secret not found](#secret-not-found)
+- [Dataset not found (application datasets)](#dataset-not-found-application-datasets)
 - [Authentication errors](#authentication-errors)
 - [Debugging Workflow](#debugging-workflow)
 - [Reading the artifacts](#reading-the-artifacts)
@@ -62,7 +63,7 @@ Error: Execution timed out after 3600 seconds
 Default global timeout is 1 hour. Two paths:
 
 - **The test legitimately takes longer.** Bump the timeout: `qa-studio run --usecase-id <id> --timeout 7200`.
-- **A step is hanging unexpectedly.** Re-run with `--headful --verbose` to watch what the AI is doing. A common cause is the AI looping looking for an element that isn't there — fix by tightening the step instruction or breaking the step into smaller pieces.
+- **A step is hanging unexpectedly.** Re-run with `--headful --verbose` to watch what the AI is doing (the Nova Act think/act trace is only on the console with `--verbose`). A common cause is the AI looping looking for an element that isn't there — fix by tightening the step instruction or breaking the step into smaller pieces.
 
 If the timeout fires during a suite run, raise the timeout for the whole run; the timeout is global, not per-test.
 
@@ -101,6 +102,8 @@ The JSON file failed client-side validation in `qa-studio tests import`. Common 
 - **Missing `sort` or non-positive `sort`.** Each step needs a positive integer.
 - **`exportVersion` not `"1.0"`.** Validators reject other values.
 - **Empty `steps` array.** A test must have at least one step.
+- **Repeat with both or neither row source.** `repeat step cannot have both dataset_id and inline rows` / `repeat step must have either dataset_id or repeat_columns/repeat_rows` — a repeat carries `dataset_id` *or* `repeat_columns` + `repeat_rows`.
+- **`dataset_id` unknown in the target application** (server-side, after validation): `400 dataset not found in this application` with `datasetIds`. Dataset ids belong to one application; import into that application, or inline the rows — see [Dataset not found](#dataset-not-found-application-datasets).
 
 Run `qa-studio tests import <path> --dry-run` to validate without uploading. The error message identifies the failing step by index (`steps.0`, `steps.3`, etc.).
 
@@ -115,6 +118,7 @@ Error: Runtime variable 'order_id' not found
 A step references `{{ order_id }}` but no upstream step set it. Causes:
 
 - **Variable name typo.** The capturing step set `order_idd` (typo); the assertion references `order_id`. Match exactly.
+- **Expected an application variable that is not there.** Variables defined on the application (`qa-studio apps variables list <app-id>`) are inherited only by tests *of that application*; a test's own variable of the same key overrides it and `--var` overrides both. Check `GET /usecase/{id}/variables` — each row says `source: "application"` or `"usecase"`.
 - **Capturing step ran but produced no value.** Earlier steps failed silently; the variable was never written. Check the per-step status before the failing step.
 - **Wrong execution order.** The `assertion_variable` references something captured later in the flow. `sort` order matters; `assertion` can only see variables captured by earlier steps.
 
@@ -131,8 +135,28 @@ The `secret` step references `secret_key: admin_password` but no such secret exi
 - **Typo on `secret_key`.** Doublecheck spelling against the test's `secrets` array.
 - **Secret never registered.** When importing the test, the agent or user must provide a value at the interactive prompt (or via `--skip-secrets` if configured separately). If `--skip-secrets` was used, configure the secret in the web UI.
 - **Re-imported test with new secret name.** If the agent added a secret to a test but didn't re-import, the cloud doesn't know about it yet. Re-import with the secret value at the prompt.
+- **Expected an application secret.** A `secret_key` also resolves to a secret of the test's application (`qa-studio apps secrets list <app-id>`), but only when the test belongs to that application; a test secret of the same key shadows it. Rotate a shared value once with `qa-studio apps secrets set <app-id> KEY`.
 
 Per-run secret overrides on `qa-studio run` are not supported today (no `--secrets-file` flag) — see [executing-tests.md](./executing-tests.md#runtime-overrides).
+
+---
+
+## Dataset not found (application datasets)
+
+```
+400 {"error": "dataset not found", "dataset_id": "0192…"}                     # remote run / Trigger Execution
+dataset 0192… not found in application 7f3a…                                   # qa-studio run --local-only, exit 2
+cannot read dataset 0192… of application 7f3a…: 403 … --local-only with application datasets needs the api/applications.read scope
+409 {"error": "dataset is referenced by repeat steps of this application; remove the references first", "usecases": [...]}
+409 {"error": "use case references application datasets", "usecases": [{"usecase_id", "name", "steps": [...]}]}
+```
+
+A repeat step references an application dataset through `dataset_id` ([repeat.md](./step-types/repeat.md)). Causes and fixes:
+
+- **Dangling reference.** The dataset was deleted or the test was imported into / moved to another application. Point the step at an existing dataset (`qa-studio apps datasets list <app-id>`), inline the rows, or re-create the dataset and swap the id (ids are generated, never reused).
+- **Missing scope in `--local-only` mode.** The CLI fetches the dataset itself and needs `api/applications.read`. User tokens (`qa-studio login`) have it; OAuth-client tokens do not today. Drop `--local-only` (the server resolves the dataset) or use a user token. A `--dataset-file` override does not skip the fetch.
+- **`409` on dataset delete.** Tests still reference it — the body lists them. Switch their repeat steps to inline rows or another dataset first.
+- **`409` on moving a test between applications.** Its repeat steps reference datasets of the old application. Inline the rows (or create the dataset in the new application and repoint after the move), then move again.
 
 ---
 
@@ -162,7 +186,7 @@ When a test fails for a reason that isn't obvious from the error message:
 
 3. **Read the screenshots.** Per-step "before" frames in `~/.qa-studio/artifacts/<id>/screenshots/`. If the recording is long, screenshots are faster to scan.
 
-4. **Read the runner logs.** `~/.qa-studio/artifacts/<id>/logs/`. Show what Nova Act was reasoning, what element it picked, exactly what came back. Useful when the failure is "the AI did the wrong thing" rather than "the page broke".
+4. **Read the runner logs.** `~/.qa-studio/artifacts/<id>/logs/` (always full detail — the console only shows this with `--verbose`). Show what Nova Act was reasoning, what element it picked, exactly what came back. Useful when the failure is "the AI did the wrong thing" rather than "the page broke".
 
 5. **Try `--headful`.** Watch the browser interactively. Useful for timing issues and pop-up dialogs.
 

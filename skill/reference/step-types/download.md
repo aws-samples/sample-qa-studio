@@ -36,7 +36,7 @@ Trigger and verify a download:
 }
 ```
 
-Download after navigating to the relevant page:
+Download behind a confirmation dialog — the click that opens the dialog is a `navigation` step; only the click that actually starts the download is the `download` step:
 
 ```json
 {
@@ -48,8 +48,15 @@ Download after navigating to the relevant page:
 
 ```json
 {
+  "step_type": "navigation",
+  "instruction": "Click the 'Export' button in the report header"
+}
+```
+
+```json
+{
   "step_type": "download",
-  "instruction": "Click the export button and confirm in the dialog if it appears"
+  "instruction": "Click the 'Confirm' button in the export dialog"
 }
 ```
 
@@ -58,4 +65,5 @@ Download after navigating to the relevant page:
 - **No actual download.** If the click doesn't trigger a real browser download (e.g., the link opens a PDF inline rather than downloading), the step fails. Verify the page actually downloads.
 - **Trying to validate the content.** The step only verifies that a download occurred. Any content checks must be performed out-of-band against the saved artifact, not as part of the test.
 - **Multi-file downloads.** Each `download` step expects exactly one file. If the action triggers a zip with multiple files, that's still one download (the zip itself).
+- **Conditional phrasing.** `"...and confirm in the dialog if it appears"` makes the step do one or two things depending on the page. Decide which it is: if a dialog exists, open it in a `navigation` step and confirm it in the `download` step; if not, the download step is just the one click.
 - **Confusing with `network_assertion`.** A click that returns a JSON response intercepted by the browser is not a download; use `network_assertion` to verify HTTP shape, or [`validation`](./validation.md) to check the rendered result.

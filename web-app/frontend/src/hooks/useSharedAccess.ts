@@ -1,26 +1,13 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { api } from '../utils/api';
+import { useApiList } from './useApiList';
 import { SharedAccessGrant, AccessLevel } from '../types/permissions';
 
 export function useSharedAccess(teamId: string) {
-  const [grants, setGrants] = useState<SharedAccessGrant[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchGrants = useCallback(async () => {
-    if (!teamId) return;
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.get(`teams/${encodeURIComponent(teamId)}/shared-access`);
-      setGrants(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch shared access grants');
-      setGrants([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [teamId]);
+  const { items: grants, loading, error, reload: fetchGrants } = useApiList<SharedAccessGrant>(
+    teamId ? `teams/${encodeURIComponent(teamId)}/shared-access` : null,
+    'Failed to fetch shared access grants',
+  );
 
   const grantAccess = useCallback(async (
     targetTeamId: string,

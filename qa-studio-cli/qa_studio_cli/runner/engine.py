@@ -20,14 +20,19 @@ from nova_act import NovaAct, Workflow
 from nova_act.types.errors import StartFailed
 
 from qa_studio_cli.api.executions import ExecutionAPI
+from qa_studio_cli.models.errors import ApiError
 from qa_studio_cli.models.execution import StepResult
 from qa_studio_cli.runner.artifacts import ArtifactCapture
 from qa_studio_cli.runner.artifact_uploader import ArtifactUploader
+from qa_studio_cli.runner.deadline import RunDeadline
 from qa_studio_cli.runner.browser import (
     BrowserSelection,
+    ElectronBrowserProvisioner,
+    ElectronLaunchConfig,
     LocalBrowserProvisioner,
     record_video_supported,
 )
+from qa_studio_cli.runner import progress
 from qa_studio_cli.runner.step_executor import StepExecutor
 from qa_studio_cli.runner.template_parser import TemplateParser
 from qa_studio_cli.runner.workflow_manager import WorkflowManager, NOVA_ACT_REGION
@@ -41,6 +46,18 @@ logger = logging.getLogger(__name__)
 # Detect whether the installed NovaAct supports the `replayable` kwarg.
 # This avoids TypeError on older SDK versions that lack the parameter.
 _replayable_supported = 'replayable' in inspect.signature(NovaAct.__init__).parameters
+
+# Electron has no ``Target.createTarget``; NovaAct must attach to the page
+# the app already opened.  ``cdp_use_existing_page`` exists since NovaAct
+# 3.4 — detect it so an older SDK fails with a clear message, not a
+# TypeError deep inside the constructor.
+_cdp_use_existing_page_supported = (
+    'cdp_use_existing_page' in inspect.signature(NovaAct.__init__).parameters
+)
+
+# ``PATCH …/status`` answers for an execution the API already considers
+# terminal (stopped by the user, or an invalid transition).  Never retried.
+_ALREADY_TERMINAL_STATUS_CODES = frozenset({400, 409})
 
 
 def _extract_session_arn(actuator) -> Optional[str]:
@@ -70,6 +87,30 @@ def _extract_session_arn(actuator) -> Optional[str]:
     return getattr(session_result, "arn", None)
 
 
+def _merge_row_variables(step: Dict[str, Any], variables: Dict[str, str]) -> Dict[str, str]:
+    """Return ``{**variables, **step["row_variables"]}`` for expanded repeat steps.
+
+    Row values override usecase variables; runtime captures (applied by the
+    caller / executor on top) override both.  Steps without
+    ``row_variables`` get the original dict back, untouched.
+    """
+    row_variables = step.get("row_variables")
+    if not isinstance(row_variables, dict) or not row_variables:
+        return variables
+    return {**variables, **row_variables}
+
+
+def _repeat_result_fields(step: Dict[str, Any]) -> Dict[str, Any]:
+    """``StepResultDetail`` kwargs carrying the repeat row metadata (if any)."""
+    if step.get("repeat_row_index") is None:
+        return {}
+    return {
+        "repeat_row_index": step.get("repeat_row_index"),
+        "repeat_row_total": step.get("repeat_row_total"),
+        "repeat_label": step.get("repeat_label"),
+    }
+
+
 class ExecutionEngine:
     """Parallel test execution engine using real Nova Act SDK with local browsers."""
 
@@ -79,6 +120,9 @@ class ExecutionEngine:
         suite_execution_id: str = None,
         keep_artifacts: bool = False,
         browser_selection: Optional[BrowserSelection] = None,
+        electron_launch: Optional[ElectronLaunchConfig] = None,
+        show_test_name_on_steps: bool = False,
+        deadline: Optional[RunDeadline] = None,
     ):
         self.execution_api = execution_api
         self.suite_execution_id = suite_execution_id
@@ -86,10 +130,50 @@ class ExecutionEngine:
         # Default to the local browser so existing callers keep working.
         # Set by main.py from the --browser flag.
         self.browser_selection = browser_selection or BrowserSelection()
+        # How to launch an Electron app for ``test_platform == "electron"``
+        # usecases (from --app-path / --app-arg / --app-user-data-dir).
+        # ``None`` is fine for web/mobile runs; electron usecases fail
+        # with a clear error when it is missing.
+        self.electron_launch = electron_launch
+        # Suite runs prefix every progress step line with the test name
+        # (remote suites run use cases in parallel, so lines interleave).
+        self.show_test_name_on_steps = show_test_name_on_steps
+        # ``--timeout`` / SIGTERM: checked before every step; owned browsers
+        # and in-flight executions are registered for its hard stop.  ``None``
+        # only for library callers that construct the engine directly.
+        self.deadline = deadline
         logger.info(
             "ExecutionEngine initialized (browser=%s)",
             self.browser_selection.mode,
         )
+
+    def _deadline_expired(self) -> bool:
+        return self.deadline is not None and self.deadline.expired()
+
+    def _final_error(self, error: Optional[str]) -> Optional[str]:
+        """The ``error_message`` for a failed execution.
+
+        After SIGTERM the failure is usually a symptom of the kill (the
+        process group took Playwright down and ``nova.act`` raised), so the
+        execution must name the termination first and keep the symptom in
+        brackets.  The cooperative stop already reports the message as-is.
+        """
+        if self.deadline is None or not self.deadline.terminated:
+            return error
+        message = self.deadline.message
+        if not error or error == message:
+            return message
+        return f"{message} ({error})"
+
+    def _register_teardown(self, handle: Any) -> Optional[int]:
+        """Let a ``--timeout`` hard stop release ``handle`` (if it owns anything)."""
+        if self.deadline is None or handle is None or handle.teardown is None:
+            return None
+        return self.deadline.add_cleanup(handle.teardown)
+
+    def _unregister_teardown(self, token: Optional[int]) -> None:
+        if self.deadline is not None:
+            self.deadline.remove_cleanup(token)
 
     # ------------------------------------------------------------------
     # Local-only execution (no remote state management)
@@ -103,11 +187,27 @@ class ExecutionEngine:
         steps: List[Dict[str, Any]],
         variables: Dict[str, str],
         secrets: list,
-        region: str,
+        region: Optional[str],
         model_id: str,
         mobile_config: Dict[str, Any] | None = None,
+        test_platform: str = "web",
+        bundle_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Execute use case locally without remote state management."""
+        """Execute use case locally without remote state management.
+
+        ``test_platform`` selects the browser strategy: ``web`` (default)
+        uses the local provisioner, ``mobile`` needs ``mobile_config`` and
+        ``electron`` needs the engine's ``electron_launch`` config.
+        ``bundle_id`` (electron, optional) is checked against the launched
+        ``.app``'s CFBundleIdentifier.
+
+        ``region`` is the ``--region`` override (``None``: boto's default
+        chain — ``AWS_REGION`` / ``AWS_DEFAULT_REGION``, then the AWS profile).
+        It reaches every regional AWS client this path creates (the S3
+        app-binary download for mobile) and the provisioner context.  Nova
+        Act itself always runs in ``NOVA_ACT_REGION`` (us-east-1) and Device
+        Farm in us-west-2; neither service exists elsewhere.
+        """
         from qa_studio_cli.models.execution import (
             LocalExecutionResult, StepResultDetail, ArtifactPaths,
         )
@@ -125,6 +225,11 @@ class ExecutionEngine:
         step_results: List[StepResultDetail] = []
         overall_status = "success"
         video_path = None
+        # Set when a provisioner owns a resource we must release (electron).
+        browser_handle = None
+        teardown_token: Optional[int] = None
+        is_electron = test_platform == "electron"
+        is_web = not mobile_config and not is_electron
 
         try:
             headless = os.getenv("HEADLESS", "true").lower() != "false"
@@ -136,11 +241,27 @@ class ExecutionEngine:
             # Build mobile actuator if this is a mobile use case
             actuator = None
             if mobile_config:
-                actuator, effective_starting_page = self._build_mobile_actuator(mobile_config)
+                actuator, effective_starting_page = self._build_mobile_actuator(
+                    mobile_config, region=region,
+                )
                 nova_kwargs["actuator"] = actuator
                 nova_kwargs["starting_page"] = effective_starting_page
                 nova_kwargs["ignore_screen_dims_check"] = True
                 nova_kwargs["ignore_https_errors"] = True
+            elif is_electron:
+                browser_handle = self._build_electron_provisioner().provision({
+                    "starting_url": starting_url,
+                    "usecase_id": usecase_id,
+                    "bundle_id": bundle_id,
+                    "region": region,
+                })
+                teardown_token = self._register_teardown(browser_handle)
+                nova_kwargs.update(browser_handle.nova_kwargs)
+                logger.info(
+                    "[local] Electron app launched (pid=%s); HEADLESS/--headful "
+                    "have no effect for electron usecases",
+                    browser_handle.metadata.get("pid"),
+                )
             else:
                 local_handle = LocalBrowserProvisioner(
                     browser_key=self.browser_selection.local_browser,
@@ -148,6 +269,7 @@ class ExecutionEngine:
                 ).provision({
                     "starting_url": starting_url,
                     "usecase_id": usecase_id,
+                    "region": region,
                 })
                 nova_kwargs.update(local_handle.nova_kwargs)
 
@@ -156,7 +278,7 @@ class ExecutionEngine:
             # CDP — see ``record_video_supported`` for the rule. The
             # mobile path flows through Appium and is supported; the
             # local web path depends on the chosen browser (chrome-profile
-            # disables CDP-safe video recording).
+            # disables CDP-safe video recording); electron is always CDP.
             if record_video_supported(nova_kwargs):
                 nova_kwargs["record_video"] = True
             else:
@@ -167,7 +289,7 @@ class ExecutionEngine:
                 )
 
             # Enable trajectory recording for web tests when supported
-            if not mobile_config and _replayable_supported:
+            if is_web and _replayable_supported:
                 if os.getenv("ENABLE_TRAJECTORY_REPLAY", "true").lower() != "false":
                     nova_kwargs["replayable"] = True
                     logger.info("Trajectory recording enabled (replayable=True)")
@@ -206,6 +328,20 @@ class ExecutionEngine:
                         sort_order = step.get("sort", 0)
                         step_start = datetime.utcnow()
 
+                        if self._deadline_expired():
+                            logger.error("[local] %s before step %d", self.deadline.message, sort_order)
+                            step_results.append(StepResultDetail(
+                                step_id=step_id,
+                                step_type=step.get("step_type", ""),
+                                instruction=step.get("instruction", ""),
+                                status="failed",
+                                duration=0,
+                                error=self.deadline.message,
+                                **_repeat_result_fields(step),
+                            ))
+                            overall_status = "failed"
+                            break
+
                         # Validate browser/transform steps before execution
                         is_valid, validation_errors = validate_step(step)
                         if not is_valid:
@@ -218,19 +354,27 @@ class ExecutionEngine:
                                 status="failed",
                                 duration=0,
                                 error=error_msg,
+                                **_repeat_result_fields(step),
                             ))
                             overall_status = "failed"
                             break
 
-                        instruction = template_parser.parse_instruction(step.get("instruction", ""))
+                        row_variables = step.get("row_variables") or None
+                        step_variables = _merge_row_variables(step, variables)
+                        instruction = template_parser.parse_instruction(
+                            step.get("instruction", ""), row_variables=row_variables,
+                        )
                         resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id}
                         if resolved_step.get("validation_value"):
                             resolved_step["validation_value"] = template_parser.parse_instruction(
-                                resolved_step["validation_value"]
+                                resolved_step["validation_value"], row_variables=row_variables,
                             )
 
-                        logger.info("[local] Executing step %d: %s", sort_order, instruction)
-                        step_result: StepResult = executor.execute(resolved_step, variables, runtime_variables)
+                        progress.step_started(
+                            resolved_step, instruction,
+                            test_name=usecase_name if self.show_test_name_on_steps else None,
+                        )
+                        step_result: StepResult = executor.execute(resolved_step, step_variables, runtime_variables)
 
                         step_duration = (datetime.utcnow() - step_start).total_seconds()
                         step_status = "success" if step_result.success else "failed"
@@ -242,6 +386,7 @@ class ExecutionEngine:
                             status=step_status,
                             duration=step_duration,
                             error=sanitize_error_message(step_result.logs) if not step_result.success and step_result.logs else None,
+                            **_repeat_result_fields(step),
                         ))
 
                         if (
@@ -273,6 +418,18 @@ class ExecutionEngine:
             overall_status = "failed"
             logger.error("[local] Execution failed: %s", sanitize_error_message(str(e)))
         finally:
+            # Release the Electron app (or any other owned browser) even
+            # when NovaAct never started.  Local/mobile handles have no
+            # teardown and skip this.
+            self._unregister_teardown(teardown_token)
+            if browser_handle is not None and browser_handle.teardown is not None:
+                try:
+                    browser_handle.teardown()
+                except Exception as teardown_err:
+                    logger.warning(
+                        "[local] Browser teardown raised: %s",
+                        sanitize_error_message(str(teardown_err)),
+                    )
             file_handler.close()
             logging.getLogger().removeHandler(file_handler)
 
@@ -291,8 +448,14 @@ class ExecutionEngine:
         )
         return result.model_dump(by_alias=True)
 
-    def _build_mobile_actuator(self, mobile_config: Dict[str, Any]) -> tuple:
+    def _build_mobile_actuator(
+        self, mobile_config: Dict[str, Any], region: Optional[str] = None,
+    ) -> tuple:
         """Build a DeviceFarmActuator from mobile config fields.
+
+        ``region`` (``--region``) is used for the S3 app-binary download;
+        ``None`` keeps boto's default region resolution.  Device Farm is
+        us-west-2 only and ignores it.
 
         Returns:
             Tuple of (actuator, starting_page_url)
@@ -376,7 +539,10 @@ class ExecutionEngine:
                 tmp_dir = tempfile.mkdtemp(prefix="qa_studio_mobile_")
                 local_path = os.path.join(tmp_dir, filename)
                 logger.info("Downloading app binary from s3://%s/%s", s3_bucket, app_binary_s3_path)
-                s3_client = _boto3.client("s3")
+                s3_client = (
+                    _boto3.client("s3", region_name=region) if region
+                    else _boto3.client("s3")
+                )
                 s3_client.download_file(s3_bucket, app_binary_s3_path, local_path)
                 upload_config = DeviceFarmUploadConfig(
                     app_name=filename,
@@ -435,6 +601,7 @@ class ExecutionEngine:
         usecase_name = execution["usecase_name"]
 
         logger.info("[%s] Starting execution: %s", usecase_name, execution_id)
+        progress.test_started(usecase_name, execution_id=execution_id)
         start_time = datetime.utcnow()
 
         suite_id = self.suite_execution_id or "standalone"
@@ -444,6 +611,8 @@ class ExecutionEngine:
         artifact_capture.setup_recording()
         artifact_capture.setup_logs()
         artifact_uploader = ArtifactUploader(self.execution_api.client)
+        if self.deadline is not None:
+            self.deadline.track_execution(self.execution_api, usecase_id, execution_id)
 
         try:
             await self.execution_api.update_status(
@@ -456,9 +625,11 @@ class ExecutionEngine:
                 self._execute_usecase_sync,
                 execution_details, usecase_id, execution_id,
                 artifact_capture, artifact_uploader,
+                usecase_name=usecase_name,
             )
             duration = (datetime.utcnow() - start_time).total_seconds()
             final_status = "success" if result["success"] else "failed"
+            error = result.get("error") if result["success"] else self._final_error(result.get("error"))
 
             # Upload artifacts and request the recording BEFORE the final
             # status: a cloud worker's execution capability is only valid
@@ -487,10 +658,7 @@ class ExecutionEngine:
                 except Exception as rec_err:
                     logger.warning("[%s] Failed to request recording download: %s", usecase_name, rec_err)
 
-            await self.execution_api.update_status(
-                usecase_id=usecase_id, execution_id=execution_id,
-                status=final_status, error_message=result.get("error"),
-            )
+            await self._update_final_status(usecase_id, execution_id, final_status, error)
 
             status_label = "PASSED" if result["success"] else "FAILED"
             logger.info("[%s] Completed: %s (%.1fs)", usecase_name, status_label, duration)
@@ -500,18 +668,15 @@ class ExecutionEngine:
                 "usecase_id": usecase_id,
                 "usecase_name": usecase_name,
                 "status": final_status,
-                "error": result.get("error"),
+                "error": error,
                 "duration": duration,
             }
         except Exception as e:
             duration = (datetime.utcnow() - start_time).total_seconds()
-            sanitized_error = sanitize_error_message(str(e))
+            sanitized_error = self._final_error(sanitize_error_message(str(e)))
             logger.error("[%s] Failed: %s", usecase_name, sanitized_error)
             try:
-                await self.execution_api.update_status(
-                    usecase_id=usecase_id, execution_id=execution_id,
-                    status="failed", error_message=sanitized_error,
-                )
+                await self._update_final_status(usecase_id, execution_id, "failed", sanitized_error)
             except Exception as api_err:
                 logger.error("Failed to update status: %s", sanitize_error_message(str(api_err)))
             return {
@@ -523,11 +688,36 @@ class ExecutionEngine:
                 "duration": duration,
             }
         finally:
+            if self.deadline is not None:
+                self.deadline.untrack_execution(usecase_id, execution_id)
             if self.keep_artifacts:
                 artifact_capture.close_log_handler()
                 logger.info("Keeping local artifacts at: %s", artifact_capture.temp_dir)
             else:
                 artifact_capture.cleanup()
+
+    async def _update_final_status(
+        self, usecase_id: str, execution_id: str, status: str, error_message: Optional[str],
+    ) -> None:
+        """PATCH the terminal status of an execution.
+
+        A 409/400 means the API already considers the execution terminal —
+        typically ``stop_execution`` wrote ``stopped`` before SIGTERM reached
+        us.  That is logged, not raised: a retry would be rejected as well
+        and the record already carries the right verdict.
+        """
+        try:
+            await self.execution_api.update_status(
+                usecase_id=usecase_id, execution_id=execution_id,
+                status=status, error_message=error_message,
+            )
+        except ApiError as api_err:
+            if api_err.status_code not in _ALREADY_TERMINAL_STATUS_CODES:
+                raise
+            logger.error(
+                "Execution %s is already terminal; final status %r not recorded: %s",
+                execution_id, status, sanitize_error_message(str(api_err)),
+            )
 
     # ------------------------------------------------------------------
     # Synchronous execution (runs inside asyncio.to_thread)
@@ -554,8 +744,12 @@ class ExecutionEngine:
         execution_id: str,
         artifact_capture: ArtifactCapture,
         artifact_uploader: ArtifactUploader,
+        usecase_name: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Synchronous entry point for Nova Act execution."""
+        """Synchronous entry point for Nova Act execution.
+
+        ``usecase_name`` only feeds the progress step lines (suite prefix).
+        """
         artifact_capture.bind_to_current_thread()
 
         # Nova Act's Playwright/browser startup occasionally fails transiently
@@ -567,6 +761,7 @@ class ExecutionEngine:
                 return self._execute_with_nova_act(
                     execution_details, usecase_id, execution_id,
                     artifact_capture, artifact_uploader,
+                    usecase_name=usecase_name,
                 )
             except StartFailed as e:
                 sanitized = sanitize_error_message(str(e))
@@ -595,6 +790,7 @@ class ExecutionEngine:
         execution_id: str,
         artifact_capture: ArtifactCapture,
         artifact_uploader: ArtifactUploader,
+        usecase_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute test steps using real Nova Act GA Service."""
         starting_url = execution_details.get("starting_url", "")
@@ -615,6 +811,8 @@ class ExecutionEngine:
 
         test_platform = execution_details.get("test_platform", "web")
         is_mobile = test_platform == "mobile"
+        is_electron = test_platform == "electron"
+        is_web = not is_mobile and not is_electron
 
         if is_mobile:
             # Parse app_identifier: Android = "package/activity", iOS = "bundle_id"
@@ -645,6 +843,29 @@ class ExecutionEngine:
             nova_kwargs["starting_page"] = effective_starting_page
             nova_kwargs["ignore_screen_dims_check"] = True
             nova_kwargs["ignore_https_errors"] = True
+        elif is_electron:
+            # Electron is always a locally launched process — there is no
+            # remote/cloud variant, so a non-default --browser is a
+            # misconfiguration rather than something to silently ignore.
+            if self.browser_selection.mode != "local":
+                raise RuntimeError(
+                    "Electron usecases launch the app locally; --browser="
+                    f"{self.browser_selection.mode} is not supported. Drop the "
+                    "--browser flag and pass --app-path instead."
+                )
+            local_handle = self._build_electron_provisioner().provision({
+                "starting_url": starting_url,
+                "usecase_id": usecase_id,
+                "execution_id": execution_id,
+                # Copied onto the execution record by the execute lambdas.
+                "bundle_id": execution_details.get("bundle_id") or None,
+            })
+            nova_kwargs.update(local_handle.nova_kwargs)
+            logger.info(
+                "[%s] Electron app launched (pid=%s); HEADLESS has no effect "
+                "for electron usecases",
+                execution_id, local_handle.metadata.get("pid"),
+            )
         else:
             # Remote-path browser provisioning.  For local/cdp-external this
             # is a no-op resolver; for agentcore this creates and starts the
@@ -685,8 +906,10 @@ class ExecutionEngine:
                 execution_id,
             )
 
-        # Enable trajectory recording for web tests when supported
-        if not is_mobile and _replayable_supported:
+        # Enable trajectory recording for web tests when supported.
+        # Electron is excluded in v1 (replay over CDP into an app-owned
+        # window is untested) — see the electron-testing design doc.
+        if is_web and _replayable_supported:
             if os.getenv("ENABLE_TRAJECTORY_REPLAY", "true").lower() != "false":
                 nova_kwargs["replayable"] = True
                 logger.info("Trajectory recording enabled (replayable=True)")
@@ -700,6 +923,7 @@ class ExecutionEngine:
         # an optional teardown callable.  Published and torn down around
         # the NovaAct workflow context below.
         browser_handle = local_handle if not is_mobile else None
+        teardown_token = self._register_teardown(browser_handle)
 
         with Workflow(
             workflow_definition_name=workflow_name,
@@ -719,6 +943,8 @@ class ExecutionEngine:
                     artifact_capture, artifact_uploader, logs_dir,
                     is_mobile=is_mobile,
                     actuator=actuator if is_mobile else None,
+                    is_web=is_web,
+                    usecase_name=usecase_name,
                 )
 
                 # Capture Device Farm session ARN for recording download
@@ -743,6 +969,7 @@ class ExecutionEngine:
                     self._delete_live_view(usecase_id, execution_id)
                 # Tear down the browser if the provisioner gave us a cleanup
                 # callable (AgentCore will; local/cdp-external won't).
+                self._unregister_teardown(teardown_token)
                 if browser_handle is not None and browser_handle.teardown is not None:
                     try:
                         browser_handle.teardown()
@@ -766,8 +993,20 @@ class ExecutionEngine:
         logs_dir: str,
         is_mobile: bool = False,
         actuator: Any = None,
+        is_web: Optional[bool] = None,
+        usecase_name: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Open NovaAct context and execute steps sequentially."""
+        """Open NovaAct context and execute steps sequentially.
+
+        ``is_web`` gates the browser-navigation extras (header injection,
+        ``go_to_url(starting_url)``, trajectory cache).  It defaults to
+        ``not is_mobile`` for existing callers; the electron path passes
+        ``False`` explicitly because the app owns its own navigation.
+        ``usecase_name`` prefixes the progress step lines when
+        ``show_test_name_on_steps`` is set (suite runs).
+        """
+        if is_web is None:
+            is_web = not is_mobile
         suite_id = self.suite_execution_id or "standalone"
         downloads_dir = Path.home() / ".ci_runner" / suite_id / execution_id / "downloads"
         downloads_dir.mkdir(parents=True, exist_ok=True)
@@ -799,13 +1038,14 @@ class ExecutionEngine:
                         device_farm_session_arn=start_arn,
                     )
 
-            # Headers and URL navigation are browser-only
+            # Headers and URL navigation are browser-only (web): mobile has
+            # no HTTP layer to inject into, electron owns its navigation.
             template_parser = TemplateParser(
                 execution_id=execution_id,
                 created_at=datetime.utcnow().isoformat(),
                 variables=variables,
             )
-            if headers and not is_mobile:
+            if headers and is_web:
                 parsed_headers = {
                     k: template_parser.parse_instruction(v) for k, v in headers.items()
                 }
@@ -813,10 +1053,11 @@ class ExecutionEngine:
                 nova.go_to_url(starting_url)
 
             # Trajectory cache — web tests only.  Mobile runs skip cache
-            # because AgentCore's trajectory format doesn't apply.
+            # because AgentCore's trajectory format doesn't apply; electron
+            # is excluded in v1.
             trajectory_manager = None
             enable_cache = False
-            if not is_mobile and self.execution_api is not None:
+            if is_web and self.execution_api is not None:
                 from qa_studio_cli.runner.trajectory import TrajectoryManager
                 replayable_supported = TrajectoryManager.detect_replayable_support(NovaAct)
                 enable_cache = (
@@ -846,6 +1087,22 @@ class ExecutionEngine:
                 execution_step_id = sk.replace("EXECUTION_STEP#", "") if sk.startswith("EXECUTION_STEP#") else step.get("step_id", "")
                 sort_order = step.get("sort", 0)
 
+                if self._deadline_expired():
+                    error_msg = self.deadline.message
+                    logger.error("%s before step %d", error_msg, sort_order)
+                    try:
+                        self._run_async(
+                            self.execution_api.update_step_status(
+                                usecase_id=usecase_id, execution_id=execution_id,
+                                step_id=execution_step_id, status="failed",
+                                error_message=error_msg,
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning("Failed to update step status: %s", sanitize_error_message(str(e)))
+                    result = {"success": False, "error": error_msg}
+                    break
+
                 # Validate browser/transform steps before execution
                 is_valid, validation_errors = validate_step(step)
                 if not is_valid:
@@ -864,17 +1121,24 @@ class ExecutionEngine:
                     result = {"success": False, "error": error_msg}
                     break
 
-                instruction = template_parser.parse_instruction(step.get("instruction", ""))
+                row_variables = step.get("row_variables") or None
+                step_variables = _merge_row_variables(step, variables)
+                instruction = template_parser.parse_instruction(
+                    step.get("instruction", ""), row_variables=row_variables,
+                )
                 resolved_step = {**step, "instruction": instruction, "usecase_id": usecase_id, "execution_id": execution_id}
                 # Also resolve templates in validation_value so runtime
                 # variables (e.g. {{LAST_EXECUTION}}) work in assertions.
                 if resolved_step.get("validation_value"):
                     resolved_step["validation_value"] = template_parser.parse_instruction(
-                        resolved_step["validation_value"]
+                        resolved_step["validation_value"], row_variables=row_variables,
                     )
 
-                logger.info("Executing step %d: %s", sort_order, instruction)
-                step_result: StepResult = executor.execute(resolved_step, variables, runtime_variables)
+                progress.step_started(
+                    resolved_step, instruction,
+                    test_name=usecase_name if self.show_test_name_on_steps else None,
+                )
+                step_result: StepResult = executor.execute(resolved_step, step_variables, runtime_variables)
 
                 step_status = "success" if step_result.success else "failed"
                 # Drain any cache-field cleanups the navigation-step tier 1
@@ -1003,6 +1267,27 @@ class ExecutionEngine:
             )
             return AgentCoreBrowserProvisioner()
         raise RuntimeError(f"Unknown browser mode: {mode!r}")
+
+    def _build_electron_provisioner(self) -> ElectronBrowserProvisioner:
+        """Resolve the Electron provisioner for a ``test_platform=electron`` run.
+
+        Raises at call time when the engine has no launch config (the
+        operator forgot ``--app-path``) or when the installed NovaAct SDK
+        predates ``cdp_use_existing_page`` — Electron cannot create new
+        targets, so without that kwarg NovaAct cannot attach at all.
+        """
+        if self.electron_launch is None:
+            raise RuntimeError(
+                "Electron usecases require --app-path pointing at the .app "
+                "bundle or executable to launch.",
+            )
+        if not _cdp_use_existing_page_supported:
+            raise RuntimeError(
+                "The installed nova-act SDK does not support "
+                "cdp_use_existing_page, which Electron testing requires. "
+                "Upgrade with: pip install --upgrade 'nova-act>=3.4'",
+            )
+        return ElectronBrowserProvisioner(self.electron_launch)
 
     def _persist_mobile_metadata(
         self,

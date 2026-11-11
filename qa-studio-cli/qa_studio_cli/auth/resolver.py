@@ -81,8 +81,9 @@ class TokenResolver:
             from qa_studio_cli.auth.token_manager import get_valid_token
             token = get_valid_token()
             logger.debug("Using stored user token from token.json")
-            # Wrap in a simple lambda-like provider for caching
-            self._provider = _StaticTokenProvider(token)
+            # Re-resolve on every call: get_valid_token refreshes the stored
+            # token when it expires, so long runs keep a valid token.
+            self._provider = _StoredUserTokenProvider()
             return token
         except AuthError:
             pass
@@ -96,11 +97,9 @@ class TokenResolver:
         )
 
 
-class _StaticTokenProvider:
-    """Wraps a pre-resolved token string as a provider."""
-
-    def __init__(self, token: str):
-        self._token = token
+class _StoredUserTokenProvider:
+    """The token from `qa-studio login`, refreshed by token_manager when expired."""
 
     def get_token(self) -> str:
-        return self._token
+        from qa_studio_cli.auth.token_manager import get_valid_token
+        return get_valid_token()

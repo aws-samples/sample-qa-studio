@@ -1,0 +1,177 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-10-29T08:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-4 Add Use Cases and Test Suites Pickers",
+    "description": "Suite and application Add pages list candidates, mark and disable items already added, and Cancel goes back",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "suite",
+      "application",
+      "picker"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "browser",
+      "instruction": "Open /test-suites/019daf8c-b71e-f580-e34e-8e5a8ad91906",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/test-suites/019daf8c-b71e-f580-e34e-8e5a8ad91906\"}"
+    },
+    {
+      "sort": 5,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add Use Cases' button"
+    },
+    {
+      "sort": 6,
+      "step_type": "validation",
+      "instruction": "Is the page heading 'Add Use Cases to Suite' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 7,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Validation App] Login' in the search field above the table"
+    },
+    {
+      "sort": 8,
+      "step_type": "validation",
+      "instruction": "Is the row '[QA Validation App] Login' marked with an 'Already in suite' badge?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 9,
+      "step_type": "navigation",
+      "instruction": "Click the selection checkbox of the row '[QA Validation App] Login'"
+    },
+    {
+      "sort": 10,
+      "step_type": "validation",
+      "instruction": "Does the button to the right of 'Cancel' at the top of the page read 'Add Selected (0)'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 11,
+      "step_type": "navigation",
+      "instruction": "Click the 'Cancel' button"
+    },
+    {
+      "sort": 12,
+      "step_type": "validation",
+      "instruction": "Is the test suite 'QA Studio Application tests' detail page shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 13,
+      "step_type": "browser",
+      "instruction": "Open /applications/019e4f0f-5c02-7fe0-963e-f877a3314666/add-usecases",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/applications/019e4f0f-5c02-7fe0-963e-f877a3314666/add-usecases\"}"
+    },
+    {
+      "sort": 14,
+      "step_type": "validation",
+      "instruction": "Is the page heading 'Add Use Cases to Application' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 15,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Validation App] Login' in the search field above the table"
+    },
+    {
+      "sort": 16,
+      "step_type": "validation",
+      "instruction": "Is the row '[QA Validation App] Login' marked with an 'Already in application' badge?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 17,
+      "step_type": "navigation",
+      "instruction": "Click the selection checkbox of the row '[QA Validation App] Login'"
+    },
+    {
+      "sort": 18,
+      "step_type": "validation",
+      "instruction": "Does the button to the right of 'Cancel' at the top of the page read 'Add Selected (0)'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 19,
+      "step_type": "navigation",
+      "instruction": "Click the 'Cancel' button"
+    },
+    {
+      "sort": 20,
+      "step_type": "validation",
+      "instruction": "Is the application 'QA Studio' detail page shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 21,
+      "step_type": "browser",
+      "instruction": "Open /applications/019e4f0f-5c02-7fe0-963e-f877a3314666/add-test-suites",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/applications/019e4f0f-5c02-7fe0-963e-f877a3314666/add-test-suites\"}"
+    },
+    {
+      "sort": 22,
+      "step_type": "validation",
+      "instruction": "Is the page heading 'Add Test Suites to Application' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 23,
+      "step_type": "validation",
+      "instruction": "Is a 'Search test suites by name or description' search field shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 24,
+      "step_type": "navigation",
+      "instruction": "Click the 'Cancel' button"
+    }
+  ],
+  "variables": []
+}

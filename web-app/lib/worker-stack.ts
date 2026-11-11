@@ -2,29 +2,28 @@ import { Duration, RemovalPolicy, Aws, CfnResource } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket, HttpMethods, BucketEncryption, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
-import { PolicyStatement, Policy, Effect, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, Policy, Effect, Role, IRole, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { CfnScheduleGroup } from 'aws-cdk-lib/aws-scheduler';
-import { Repository } from 'aws-cdk-lib/aws-ecr';
-import { OperatingSystemFamily, FargateTaskDefinition, Cluster, CpuArchitecture, ContainerImage, LogDrivers, Secret as EcsSecret } from 'aws-cdk-lib/aws-ecs';
-import { Vpc, IVpc, GatewayVpcEndpointAwsService, InterfaceVpcEndpointAwsService, SecurityGroup, ISecurityGroup } from 'aws-cdk-lib/aws-ec2';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
-import { Function } from 'aws-cdk-lib/aws-lambda';
+import { Function, CfnMicrovmImage, LoggingFormat } from 'aws-cdk-lib/aws-lambda';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
-import { Platform, DockerImageAsset } from 'aws-cdk-lib/aws-ecr-assets';
-import { ECRDeployment, DockerImageName } from 'cdk-ecr-deployment';
-import { RetentionDays } from 'aws-cdk-lib/aws-logs';
+import { LogGroup, MetricFilter, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
-import { Rule, EventBus } from 'aws-cdk-lib/aws-events';
+import { Rule, EventBus, Schedule } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
+import { Alarm, ComparisonOperator, MathExpression, Metric, TreatMissingData } from 'aws-cdk-lib/aws-cloudwatch';
+import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Topic } from 'aws-cdk-lib/aws-sns';
 import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
+import { NagSuppressions } from 'cdk-nag';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 import { loadConfig } from './config';
-import { resolveAgentCoreAzNames } from './agentcore-az';
+import { WorkerImageAsset } from './worker-image-asset';
+import { BrowserVpc } from './browser-vpc';
 
 const config = loadConfig();
-const { defaultRegion, enabledRegions, vpcId, workerSecurityGroupId, createVpcEndpoints, agentCoreVPC } = config;
+const { defaultRegion, enabledRegions } = config;
 
 interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
   baseName: string
@@ -45,7 +44,38 @@ interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStack
   apiDeploymentStage: string
   tableReadPolicy: ManagedPolicy
   tableWritePolicy: ManagedPolicy
+  /** Package version; recorded as the MicroVM image `Description`. */
   version: string
+  /**
+   * Hard ceiling of one batch execution in minutes (MicroVM
+   * `maximumDurationInSeconds` / 60). Defaults to configuration.json
+   * `maxExecutionDurationMinutes`.
+   */
+  maxExecutionDurationMinutes?: number
+  /**
+   * Hard ceiling of one wizard session in minutes (MicroVM
+   * `maximumDurationInSeconds` / 60 of the session VM). Defaults to
+   * configuration.json `maxWizardSessionMinutes`.
+   */
+  maxWizardSessionMinutes?: number
+}
+
+/**
+ * Cost allocation tag on the worker MicroVM image (the only taggable MicroVM
+ * object). Activate the key as a cost allocation tag in the payer account to
+ * separate QA Studio's MicroVM spend from other MicroVM users of the account.
+ */
+export const MICROVM_IMAGE_COST_TAG = { key: 'application', value: 'qa-studio' } as const;
+
+/**
+ * Inputs of the worker runtime permission set that are stack-local values
+ * (not members), see `attachWorkerRuntimePolicies`.
+ */
+interface WorkerRuntimePolicyContext {
+  table: Table
+  novaActApiKeySecret: Secret
+  notificationQueue: Queue
+  recordingQueue: Queue
 }
 
 /**
@@ -53,32 +83,33 @@ interface NovaActQAStudioWorkerStackCreateProps extends NovaActQAStudioBaseStack
  * 
  * Key Components:
  * - SQS Queue for work processing
- * - VPC with public/private subnets and VPC endpoints
- * - ECS Fargate cluster and task definition
  * - EventBridge Scheduler group for scheduling tasks
- * - ECR deployment pipeline
+ * - Lambda MicroVM image (the only worker compute), its build/execution
+ *   roles, log group and S3 code artifact
+ * 
+ * The worker MicroVM is never in a VPC; it egresses to the internet directly.
+ * AgentCore browsers run in PUBLIC network mode unless config `vpcId` is set:
+ * then `BrowserVpc` looks the VPC up, selects the browser subnets, imports or
+ * creates the browser security group and adds `AGENT_CORE_VPC` / `AC_*` to the
+ * image env (browser-vpc.ts). Without `vpcId` the stack has no EC2 resource.
  * 
  * Readable Attributes:
- * - workerSecurityGroup: Security group for ECS tasks
- * - taskDefinition: Fargate task definition for worker containers  
  * - schedulerGroup: EventBridge scheduler group for managing schedules
+ * - microvmImageArn / microvmImageVersion: the worker MicroVM image and its
+ *   latest ACTIVE version (what `RunMicrovm` takes)
+ * - microvmExecutionRole: role the MicroVM assumes at runtime
+ * - microvmLogGroup: image build + VM runtime logs
  * 
  * Required Props:
  * - baseName: Base name for resource naming
- * - registry: ECR repository for worker container images
  * - table: DynamoDB table for data storage
  * - this.artefactsBucket: S3 bucket for artifacts
  * - novaActApiKeySecret: Secrets Manager secret for Nova Act API key
  * - notificationQueue: SQS queue for notifications
  */
 export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
-  public readonly workerSecurityGroup: ISecurityGroup
   public readonly artefactsBucket: Bucket
-  public readonly taskDefinition: FargateTaskDefinition
   public readonly schedulerGroup: CfnScheduleGroup
-  public readonly cluster: Cluster
-  public readonly vpc: IVpc
-  public readonly subnetId: string
   public readonly wizardQueue: Queue
   public readonly recordingQueueUrl: string
   public readonly recordingQueueArn: string
@@ -93,16 +124,15 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
   public readonly restartWizardLambda: Function
   public readonly terminateWizardLambda: Function
   public readonly notificationTopicArn: string
+  public readonly microvmImageArn: string
+  public readonly microvmImageVersion: string
+  public readonly microvmExecutionRole: Role
+  public readonly microvmLogGroup: LogGroup
   private readonly regionalBucketArns: string[] = []
 
   constructor(scope: Construct, id: string, props: NovaActQAStudioWorkerStackCreateProps) {
     super(scope, id, props);
 
-    const registry = new Repository(this, 'images_repository', {
-      removalPolicy: RemovalPolicy.DESTROY,
-      emptyOnDelete: true,
-      imageScanOnPush: true,
-    });
     // S3 access log bucket for artefacts
     const artefactsLogBucket = new Bucket(this, 'artefacts-logs', {
       bucketName: `${this.account}-${this.baseName}-artefacts-logs-${this.region}`,
@@ -257,39 +287,6 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
 
     this.log('aggregationRule', aggregationRule.ruleName);
 
-    // Cache Builder Lambda - builds step caches from Nova Act responses
-    const buildCacheLambda = this.createPythonLambda({
-      path: 'build_cache',
-      timeout: Duration.seconds(60),
-      memorySize: 512,
-      environment: {
-        DYNAMODB_TABLE_NAME: props.table.tableName,
-        S3_BUCKET: this.artefactsBucket.bucketName
-      }
-    });
-
-    // Grant S3 read access to artefacts bucket
-    this.artefactsBucket.grantRead(buildCacheLambda);
-
-    // Grant DynamoDB read/write access
-    buildCacheLambda.role?.addManagedPolicy(props.tableReadPolicy);
-    buildCacheLambda.role?.addManagedPolicy(props.tableWritePolicy);
-
-    // EventBridge rule for cache builder - triggers on successful execution completion
-    const cacheBuilderRule = new Rule(this, 'cache_builder_rule', {
-      ruleName: this.cdkName('cache-builder'),
-      description: 'Triggers cache builder after successful execution',
-      eventBus: eventBus,
-      eventPattern: {
-        source: ['qa-studio.worker'],
-        detailType: ['usecase.execution.completed']
-      }
-    });
-
-    cacheBuilderRule.addTarget(new LambdaFunction(buildCacheLambda));
-
-    this.log('cacheBuilderRule', cacheBuilderRule.ruleName);
-
     // Device Farm Recording Downloader — async pattern:
     // Worker sends delayed SQS message (5 min) after mobile execution completes.
     // Lambda picks it up and downloads the video from Device Farm → S3.
@@ -351,159 +348,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       eventBusName: this.cdkName('wizard-events')
     });
 
-    // VPC Configuration: Use existing VPC or create new one
-    let shouldCreateVpcEndpoints: boolean;
-
-    // When AgentCore browsers are attached to a VPC, they can only run in
-    // specific Availability Zones (see agentcore-az.ts). Resolve the set of
-    // supported AZ *names* for this account/region up front so we can (a) pin
-    // a created VPC's subnets to supported zones, and (b) validate that an
-    // imported VPC actually has a subnet in a supported zone. Only resolved on
-    // the VPC path so non-VPC deploys stay env-agnostic (no synth-time AWS call).
-    const agentCoreAzNames = agentCoreVPC
-      ? resolveAgentCoreAzNames(process.env.CDK_DEFAULT_REGION || defaultRegion)
-      : undefined;
-
-    if (vpcId) {
-      // Use existing VPC - automatically discovers subnets
-      this.vpc = Vpc.fromLookup(this, 'existing-vpc', {
-        vpcId: vpcId
-      });
-
-      // Validate that the VPC has private subnets with NAT Gateway routes for internet access
-      if (this.vpc.privateSubnets.length === 0) {
-        throw new Error(`Existing VPC ${vpcId} must have at least one private subnet with NAT Gateway for ECS tasks and AgentCore browsers`);
-      }
-
-      // When VPC-attaching AgentCore browsers, the imported VPC must have at
-      // least one private subnet in an AgentCore-supported AZ — otherwise
-      // browser creation fails at runtime and can't be fixed without changing
-      // the VPC's subnets. Fail fast at synth with an actionable message.
-      if (agentCoreAzNames) {
-        const supportedSubnets = this.vpc.privateSubnets.filter((s) =>
-          agentCoreAzNames.includes(s.availabilityZone),
-        );
-        if (supportedSubnets.length === 0) {
-          const vpcAzs = this.vpc.privateSubnets.map((s) => s.availabilityZone);
-          throw new Error(
-            `agentCoreVPC is enabled but imported VPC ${vpcId} has no private ` +
-              `subnet in an AgentCore-supported Availability Zone. ` +
-              `VPC private-subnet AZs: ${vpcAzs.join(', ') || '(none)'}. ` +
-              `AgentCore-supported AZs in this region: ${agentCoreAzNames.join(', ')}. ` +
-              `Add a private subnet (with NAT Gateway internet access) in one of ` +
-              `the supported AZs.`,
-          );
-        }
-      }
-
-      // Only create VPC endpoints if explicitly requested for existing VPC
-      shouldCreateVpcEndpoints = createVpcEndpoints ?? false;
-    } else {
-      // Create new VPC. When AgentCore VPC mode is on, pin the VPC's subnets to
-      // AgentCore-supported AZs (one NAT Gateway per AZ for internet access);
-      // otherwise fall back to the default two-AZ layout.
-      this.vpc = new Vpc(this, 'vpc', {
-        vpcName: this.cdkName('vpc'),
-        // Pin to the first two supported AZs (AgentCore recommends >= 2). Two
-        // AZs matches the previous default footprint and the NAT cap, keeping
-        // the created VPC small and avoiding a third-AZ expansion.
-        ...(agentCoreAzNames
-          ? { availabilityZones: agentCoreAzNames.slice(0, 2), natGateways: 2 }
-          : { maxAzs: 2, natGateways: 2 }),
-      });
-
-      // Always create VPC endpoints for new VPC
-      shouldCreateVpcEndpoints = true;
-    }
-
-    // Choose a private subnet in an AgentCore-supported AZ to hand to the
-    // browser. For a created VPC every private subnet already qualifies (we
-    // pinned the AZs above); for an imported VPC we pick the first supported
-    // one (validated to exist above).
-    const agentCoreSubnet = agentCoreAzNames
-      ? this.vpc.privateSubnets.find((s) => agentCoreAzNames.includes(s.availabilityZone))!
-      : this.vpc.privateSubnets[0];
-
-    // Create VPC endpoints if needed
-    if (shouldCreateVpcEndpoints) {
-      this.vpc.addGatewayEndpoint('S3Endpoint', {
-        service: GatewayVpcEndpointAwsService.S3
-      });
-
-      this.vpc.addInterfaceEndpoint('EcrDockerEndpoint', {
-        service: InterfaceVpcEndpointAwsService.ECR_DOCKER
-      });
-
-      this.vpc.addInterfaceEndpoint('EcrEndpoint', {
-        service: InterfaceVpcEndpointAwsService.ECR
-      });
-
-      this.vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
-        service: InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS
-      });
-
-      this.vpc.addGatewayEndpoint('DynamoDbEndpoint', {
-        service: GatewayVpcEndpointAwsService.DYNAMODB
-      });
-    }
-
-    // Store subnet ID for Lambda access
-    this.subnetId = this.vpc.privateSubnets[0].subnetId;
-
-    // Security Group for ECS tasks: Use existing or create new
-    if (workerSecurityGroupId) {
-      // Import existing security group
-      this.workerSecurityGroup = SecurityGroup.fromSecurityGroupId(
-        this,
-        'ImportedSecurityGroup',
-        workerSecurityGroupId
-      );
-    } else {
-      // Create new security group in the VPC (works for both new and existing VPC)
-      this.workerSecurityGroup = new SecurityGroup(this, 'EcsTaskSecurityGroup', {
-        vpc: this.vpc,
-        description: 'Security group for ECS tasks',
-        allowAllOutbound: true
-      });
-
-      // Suppress cfn_nag W40/W5 — worker needs unrestricted egress for browser automation and AWS API access
-      const cfnSg = this.workerSecurityGroup.node.defaultChild as CfnResource;
-      cfnSg.addMetadata('cfn_nag', {
-        rules_to_suppress: [
-          { id: 'W40', reason: 'Worker requires unrestricted egress for browser automation (Nova Act) and AWS API access' },
-          { id: 'W5', reason: 'Worker requires unrestricted egress for browser automation (Nova Act) and AWS API access' },
-        ]
-      });
-    }
-
-    // ECS Cluster
-    this.cluster = new Cluster(this, 'cluster', {
-      vpc: this.vpc,
-      clusterName: this.cdkName('cluster'),
-    });
-
-    // ECS Task Definition
-    this.taskDefinition = new FargateTaskDefinition(this, 'task_definition', {
-      memoryLimitMiB: 1024,
-      cpu: 512,
-      runtimePlatform: {
-        operatingSystemFamily: OperatingSystemFamily.LINUX,
-        cpuArchitecture: CpuArchitecture.ARM64
-      },
-      taskRole: new Role(this, 'TaskRole', {
-        roleName: this.cdkName('task-role'),
-        assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
-      }),
-      executionRole: new Role(this, 'ExecutionRole', {
-        roleName: this.cdkName('execution-role'),
-        assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
-        managedPolicies: [
-          ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy')
-        ]
-      }),
-    });
-
-    // Prepare base environment variables
+    // Image-level environment of the worker MicroVM (stack constants only).
     const baseEnvironment = {
       DYNAMO_TABLE: props.table.tableName,
       S3_BUCKET: this.artefactsBucket.bucketName,
@@ -523,68 +368,725 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       NETWORK_ASSERTION_BODY_MAX_BYTES: this.networkAssertionBodyMaxBytes.toString(),
     };
 
-    // Add VPC environment variables if agentCoreVPC is enabled
-    const containerEnvironment = agentCoreVPC ? {
-      ...baseEnvironment,
-      // VPC configuration for AgentCore browsers
-      AGENT_CORE_VPC: 'true',
-      AC_VPC_ID: this.vpc.vpcId,
-      AC_SUBNET_ID: agentCoreSubnet.subnetId,
-      AC_SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
-    } : baseEnvironment;
-
-    // CLI-unified-runner additions.  Injected as plain env:
-    //   QA_STUDIO_API_URL_SSM — SSM parameter name the entrypoint reads
-    //     to resolve the API Gateway URL.  api-stack writes the parameter
-    //     post-deploy; worker grants read access on it via IAM below.
-    // And as ECS-managed secrets (populated at container start, not
-    // baked into the image):
-    //   QA_STUDIO_CLIENT_ID
-    //   QA_STUDIO_CLIENT_SECRET
+    // CLI-unified-runner additions:
+    //   QA_STUDIO_API_URL_SSM / QA_STUDIO_TOKEN_ENDPOINT_SSM — SSM parameter
+    //     names the supervisor resolves inside /run (api-stack and auth-stack
+    //     write the parameters; the MicroVM execution role gets read access
+    //     in attachWorkerRuntimePolicies).
+    // The M2M credentials themselves are fetched from Secrets Manager at
+    // /run, never baked into the image.
     const runnerEnvironment = {
-      ...containerEnvironment,
+      ...baseEnvironment,
       QA_STUDIO_API_URL_SSM: `/qa-studio/${this.baseName}/api-url`,
       QA_STUDIO_API_STAGE: props.apiDeploymentStage,
       QA_STUDIO_TOKEN_ENDPOINT_SSM: `/qa-studio/${this.baseName}/cognito-token-endpoint`,
     };
 
-    // Add container to task definition
-    this.taskDefinition.addContainer('container', {
-      image: ContainerImage.fromEcrRepository(registry, props.version),
-      logging: LogDrivers.awsLogs({
-        streamPrefix: this.cdkName('logs'),
-        logRetention: RetentionDays.FIVE_DAYS,
-      }),
-      environment: runnerEnvironment,
-      secrets: {
-        // ECS injects these as env vars at container start.  The
-        // SecretString on workerCredentialsSecret is stored as a JSON
-        // object {"client_id": "...", "client_secret": "..."}; the
-        // second argument picks the field.  Names chosen to match the
-        // CLI's TokenResolver env-var contract (OAUTH_CLIENT_ID /
-        // OAUTH_CLIENT_SECRET in qa_studio_cli/auth/resolver.py), so
-        // the entrypoint does not need to rename them.
-        OAUTH_CLIENT_ID: EcsSecret.fromSecretsManager(
-          props.workerCredentialsSecret, 'client_id',
-        ),
-        OAUTH_CLIENT_SECRET: EcsSecret.fromSecretsManager(
-          props.workerCredentialsSecret, 'client_secret',
-        ),
+    this.agentCoreExecutionRole = new Role(this, 'agent_core_execution_role', {
+      roleName: this.cdkName('agent_core_execution_role'),
+      assumedBy: new ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+    })
+
+    // Grant S3 permissions for all regional buckets
+    const s3Resources: string[] = [];
+    this.regionalBucketArns.forEach(bucketArn => {
+      s3Resources.push(bucketArn);
+      s3Resources.push(`${bucketArn}/*`);
+    });
+
+    this.agentCoreExecutionRole.attachInlinePolicy(new Policy(this, 'agent_core_execution_role_s3', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            "s3:PutObject",
+            "s3:GetObject",
+            "s3:GetObjectVersion",
+            "s3:ListMultipartUploadParts",
+            "s3:AbortMultipartUpload"
+          ],
+          resources: s3Resources
+        })
+      ]
+    }))
+
+    const runtimePolicyContext: WorkerRuntimePolicyContext = {
+      table: props.table,
+      novaActApiKeySecret: props.novaActApiKeySecret,
+      notificationQueue,
+      recordingQueue,
+    };
+
+    this.schedulerGroup = new CfnScheduleGroup(this, 'schedule_group', {
+      name: this.cdkName('schedules')
+    });
+
+    // ── Lambda MicroVM image ──
+    // Lambda builds the image from the zipped, .dockerignore-filtered repo root
+    // (Dockerfile at the zip root, see worker-image-asset.ts) on the managed
+    // AL2023 base; CloudFormation waits for the build (several minutes).
+    // Build and VM runtime logs share one stack-owned log group; build logs
+    // land in stream `<version>/<build-id>`.
+    this.microvmLogGroup = new LogGroup(this, 'microvm_log_group', {
+      logGroupName: `/qa-studio/${this.baseName}/microvm`,
+      retention: RetentionDays.FIVE_DAYS,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    const microvmLogsWrite = new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['logs:CreateLogStream', 'logs:PutLogEvents', 'logs:DescribeLogStreams'],
+      resources: [this.microvmLogGroup.logGroupArn],
+    });
+
+    const microvmImageAsset = new WorkerImageAsset(this, 'microvm_image_asset');
+
+    // Both roles are assumed by the Lambda MicroVM service with session tags.
+    const microvmPrincipal = () => new ServicePrincipal('lambda.amazonaws.com').withSessionTags();
+
+    const microvmBuildRole = new Role(this, 'microvm_build_role', {
+      roleName: this.cdkName('microvm-build-role'),
+      assumedBy: microvmPrincipal(),
+      description: 'Assumed by Lambda to build the worker MicroVM image: reads the S3 code artifact, writes build logs',
+    });
+    const microvmBuildPolicy = new Policy(this, 'microvm_build_role_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['s3:GetObject'],
+          resources: [microvmImageAsset.bucket.arnForObjects(microvmImageAsset.s3ObjectKey)],
+        }),
+        microvmLogsWrite,
+      ],
+    });
+    microvmBuildRole.attachInlinePolicy(microvmBuildPolicy);
+
+    // Runtime role of the VM: the worker permission set, plus the worker M2M
+    // credentials secret (the supervisor resolves it at /run) and the VM
+    // lifecycle calls the supervisor makes on itself.
+    this.microvmExecutionRole = new Role(this, 'microvm_execution_role', {
+      roleName: this.cdkName('microvm-execution-role'),
+      assumedBy: microvmPrincipal(),
+      description: 'Assumed by the worker MicroVM at runtime',
+    });
+    this.attachWorkerRuntimePolicies(this.microvmExecutionRole, (name) => `microvm_exec_${name}`, runtimePolicyContext);
+    props.workerCredentialsSecret.grantRead(this.microvmExecutionRole);
+
+    // Image-level env is baked into the snapshot: stack constants only, never
+    // per-execution values or secret values. AWS_REGION is a reserved key the
+    // platform injects at runtime (ValidationException if set here).
+    const microvmEnvironment: Record<string, string> = {
+      ...runnerEnvironment,
+      BEDROCK_EXECUTION_ROLE: this.agentCoreExecutionRole.roleArn,
+      WORKER_CREDENTIALS_SECRET_ARN: props.workerCredentialsSecret.secretArn,
+      // supervisor.py BATCH_REQUIRED_IMAGE_ENV / WIZARD_REQUIRED_IMAGE_ENV: the
+      // names execute_usecase.py / start_wizard_session.py pass per task today.
+      DYNAMODB_TABLE_NAME: props.table.tableName,
+      S3_BUCKET_PREFIX: `${this.account}-${this.baseName}-artefacts`,
+      SECRETS_PREFIX: this.baseName,
+      WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
+      // Read by the runner engine; `true` is its default, pinned for visibility.
+      ENABLE_TRAJECTORY_REPLAY: 'true',
+      // VPC-attached AgentCore browsers (CLI provisioner + wizard), only with vpcId.
+      ...this.browserVpcEnvironment(),
+    };
+    delete microvmEnvironment.AWS_REGION;
+
+    const microvmImage = new CfnMicrovmImage(this, 'microvm_image', {
+      // Name is replacement-on-change: derived from baseName only.
+      name: `${this.baseName}-worker`,
+      description: props.version,
+      baseImageArn: `arn:aws:lambda:${Aws.REGION}:aws:microvm-image:al2023-1`,
+      baseImageVersion: '2',
+      buildRoleArn: microvmBuildRole.roleArn,
+      codeArtifact: { uri: `s3://${microvmImageAsset.s3BucketName}/${microvmImageAsset.s3ObjectKey}` },
+      // ARM_64 is the only accepted architecture; the Dockerfile builds LINUX_ARM64.
+      cpuConfigurations: [{ architecture: 'ARM_64' }],
+      resources: [{ minimumMemoryInMiB: 1024 }],
+      additionalOsCapabilities: [],
+      // Egress defaults to INTERNET_EGRESS; passing the connector ARN explicitly
+      // is rejected by the platform (spike). Ingress is set per VM at launch.
+      egressNetworkConnectors: [],
+      environmentVariables: Object.entries(microvmEnvironment).map(([key, value]) => ({ key, value })),
+      hooks: {
+        port: 8080,
+        microvmHooks: {
+          run: 'ENABLED', runTimeoutInSeconds: 60,
+          terminate: 'ENABLED', terminateTimeoutInSeconds: 60,
+          suspend: 'DISABLED', resume: 'DISABLED',
+        },
+        microvmImageHooks: {
+          ready: 'ENABLED', readyTimeoutInSeconds: 600,
+          validate: 'ENABLED', validateTimeoutInSeconds: 120,
+        },
+      },
+      logging: { cloudWatch: { logGroup: this.microvmLogGroup.logGroupName } },
+      // Cost allocation (.kiro/docs/cost-allocation/design.md): MicroVMs have no ARN
+      // and RunMicrovm takes no tags, so the image is the only taggable object. If
+      // MicroVM line items inherit it, this tag separates QA Studio's MicroVM spend
+      // from other MicroVM users in the account (activate `application` as a cost
+      // allocation tag in the payer account). It can never tell use cases apart;
+      // that split comes from the execution records (cost_sources/compute.py).
+      tags: [{ key: MICROVM_IMAGE_COST_TAG.key, value: MICROVM_IMAGE_COST_TAG.value }],
+    });
+    // The build must not start before the build role can read the artifact.
+    microvmImage.node.addDependency(microvmBuildPolicy);
+    this.microvmImageArn = microvmImage.attrImageArn;
+    this.microvmImageVersion = microvmImage.attrLatestActiveImageVersion;
+
+    // The supervisor terminates its own VM when the child exits and the
+    // reconciler/stop Lambdas look VMs up; VMs have no ARN of their own in the
+    // API, so the image ARN is the resource they are scoped to.
+    this.microvmExecutionRole.attachInlinePolicy(new Policy(this, 'microvm_exec_lifecycle_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:TerminateMicrovm', 'lambda:GetMicrovm'],
+          resources: [microvmImage.attrImageArn],
+        }),
+        microvmLogsWrite,
+      ],
+    }));
+
+    this.log('microvmImageArn', this.microvmImageArn);
+    this.log('microvmImageVersion', this.microvmImageVersion);
+    this.log('microvmLogGroup', this.microvmLogGroup.logGroupName);
+
+    this.schedulerRole = new Role(this, 'event_bridge_scheduler_role', {
+      roleName: this.cdkName('scheduler-role'),
+      assumedBy: new ServicePrincipal('scheduler.amazonaws.com'),
+    });
+
+    // MICROVM_* and MAX_EXECUTION_DURATION_MINUTES feed microvm_launch.launch_microvm.
+    const maxExecutionDurationMinutes = props.maxExecutionDurationMinutes ?? config.maxExecutionDurationMinutes ?? 60;
+
+    this.executeUsecaseLambda = this.createPythonLambda({
+      path: 'execute_usecase',
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        S3_BUCKET_PREFIX: `${this.account}-${this.baseName}-artefacts`,
+        DEFAULT_REGION: defaultRegion,
+        MICROVM_IMAGE_ARN: this.microvmImageArn,
+        MICROVM_IMAGE_VERSION: this.microvmImageVersion,
+        MICROVM_EXECUTION_ROLE_ARN: this.microvmExecutionRole.roleArn,
+        MICROVM_LOG_GROUP: this.microvmLogGroup.logGroupName,
+        MAX_EXECUTION_DURATION_MINUTES: maxExecutionDurationMinutes.toString(),
+      }
+    });
+
+    props.table.grantReadWriteData(this.executeUsecaseLambda)
+
+    // RunMicrovm permissions. One Policy construct with every statement:
+    // cdk.json sets createNewPoliciesWithAddToRolePolicy, so each
+    // addToRolePolicy() would be its own AWS::IAM::Policy resource.
+    this.executeUsecaseLambda.role!.attachInlinePolicy(new Policy(this, 'execute_usecase_microvm_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:RunMicrovm', 'lambda:GetMicrovmImage'],
+          resources: [this.microvmImageArn],
+        }),
+        // The spike could not confirm whether RunMicrovm is authorised against
+        // the image ARN or the (not yet existing) VM; allow the account's
+        // microvm resources in this region as well so the launch is not denied
+        // on the second interpretation. Narrow once verified in phase-1 tests.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:RunMicrovm'],
+          resources: [`arn:aws:lambda:${Aws.REGION}:${Aws.ACCOUNT_ID}:microvm/*`],
+        }),
+        // RunMicrovm "passes" the Lambda-managed network connectors to the VM
+        // (NO_INGRESS explicitly, INTERNET_EGRESS as the default) and IAM
+        // authorises that like PassRole: without it the launch is denied with
+        // "not authorized to perform: lambda:PassNetworkConnector on
+        // arn:aws:lambda:<region>:aws:network-connector:aws-network-connector:INTERNET_EGRESS".
+        // Only the AWS-managed connectors (account "aws"), never a customer VPC connector.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:PassNetworkConnector'],
+          resources: [`arn:aws:lambda:${Aws.REGION}:aws:network-connector:aws-network-connector:*`],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['iam:PassRole'],
+          resources: [this.microvmExecutionRole.roleArn],
+          conditions: { StringEquals: { 'iam:PassedToService': 'lambda.amazonaws.com' } },
+        }),
+      ],
+    }));
+
+    // Grant scheduler role permission to invoke executeUsecaseLambda
+    this.executeUsecaseLambda.grantInvoke(this.schedulerRole);
+
+    // Stop Execution Lambda - terminates the execution's MicroVM
+    this.stopExecutionLambda = this.createPythonLambda({
+      path: 'stop_execution',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        MICROVM_IMAGE_ARN: this.microvmImageArn,
+      }
+    });
+
+    props.table.grantReadWriteData(this.stopExecutionLambda)
+
+    // TerminateMicrovm permissions. One Policy construct with every statement:
+    // cdk.json sets createNewPoliciesWithAddToRolePolicy, so each
+    // addToRolePolicy() would be its own AWS::IAM::Policy resource.
+    this.stopExecutionLambda.role!.attachInlinePolicy(new Policy(this, 'stop_execution_microvm_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:TerminateMicrovm', 'lambda:GetMicrovm'],
+          resources: [this.microvmImageArn],
+        }),
+        // The spike could not confirm whether TerminateMicrovm is authorised
+        // against the image ARN or the VM; allow the account's microvm
+        // resources in this region as well so the stop is not denied on the
+        // second interpretation. Narrow once verified in phase-1 tests.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:TerminateMicrovm', 'lambda:GetMicrovm'],
+          resources: [`arn:aws:lambda:${Aws.REGION}:${Aws.ACCOUNT_ID}:microvm/*`],
+        }),
+      ],
+    }));
+
+    // Execution reconciler — every 5 minutes, queries RUNNING_EXECUTIONS, asks
+    // GetMicrovm about each VM and marks executions whose VM is TERMINATED /
+    // gone / past deadline as failed through the shared terminal transition.
+    // Placed after the image + stop Lambda because it needs this.microvmImageArn.
+    const reconcileExecutionsLambda = this.createPythonLambda({
+      path: 'reconcile_executions',
+      // ≤ ~50 tracking records × (GetMicrovm + GetItem [+ UpdateItem ×≤4 + PutEvents]).
+      timeout: Duration.seconds(60),
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        MICROVM_IMAGE_ARN: this.microvmImageArn,
       },
     });
 
-    // Grant the ECS execution role read access on the M2M credentials
-    // secret so ECS can populate the `secrets:` fields above.
-    props.workerCredentialsSecret.grantRead(this.taskDefinition.executionRole!);
+    reconcileExecutionsLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    reconcileExecutionsLambda.role?.addManagedPolicy(props.tableWritePolicy);
 
-    // Grant the ECS task role read access on the SSM parameter the
-    // entrypoint consults to discover the API URL.  The parameter is
-    // written by the api-stack post-deploy.
-    // Grant the ECS task role read access on the SSM parameters the
-    // entrypoint consults (API URL + Cognito token endpoint).  Both are
-    // written by other stacks: the api-stack writes the api-url; the
-    // auth-stack writes the cognito-token-endpoint.
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_ssm_runner_params', {
+    // One Policy construct with every statement: cdk.json sets
+    // createNewPoliciesWithAddToRolePolicy, so each addToRolePolicy() would be
+    // its own AWS::IAM::Policy resource.
+    reconcileExecutionsLambda.role!.attachInlinePolicy(new Policy(this, 'reconcile_executions_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:GetMicrovm'],
+          resources: [this.microvmImageArn],
+        }),
+        // The spike could not confirm whether GetMicrovm is authorised against
+        // the image ARN or the VM; allow the account's microvm resources in
+        // this region as well so the lookup is not denied on the second
+        // interpretation. Narrow once verified in phase-1 tests.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:GetMicrovm'],
+          resources: [`arn:aws:lambda:${Aws.REGION}:${Aws.ACCOUNT_ID}:microvm/*`],
+        }),
+        // PutMetricData has no resource-level scoping; the namespace condition
+        // is the narrowest grant available.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['cloudwatch:PutMetricData'],
+          resources: ['*'],
+          conditions: { StringEquals: { 'cloudwatch:namespace': 'QAStudio/Worker' } },
+        }),
+        // The shared terminal transition publishes execution.status.changed.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['events:PutEvents'],
+          resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/default`],
+        }),
+      ],
+    }));
+
+    new Rule(this, 'reconcile_executions_rule', {
+      ruleName: this.cdkName('reconcile-executions'),
+      description: 'Reconciles executions whose MicroVM is TERMINATED, gone or past its deadline',
+      schedule: Schedule.rate(Duration.minutes(5)),
+      targets: [new LambdaFunction(reconcileExecutionsLambda)],
+    });
+
+    // Steady state is zero reconciled executions: any non-zero sum means the
+    // supervisor or runner failed to report and is a bug signal.
+    new Alarm(this, 'reconciled_executions_alarm', {
+      alarmName: this.cdkName('reconciled-executions'),
+      alarmDescription: 'An execution had to be reconciled because its MicroVM died or overran without reporting',
+      metric: new Metric({
+        namespace: 'QAStudio/Worker',
+        metricName: 'ReconciledExecutions',
+        statistic: 'Sum',
+        period: Duration.minutes(5),
+      }),
+      threshold: 0,
+      comparisonOperator: ComparisonOperator.GREATER_THAN_THRESHOLD,
+      evaluationPeriods: 1,
+      treatMissingData: TreatMissingData.NOT_BREACHING,
+    }).addAlarmAction(new SnsAction(notificationTopic));
+
+    if (config.costAllocation.enabled) {
+      this.createCostCollector(props, notificationTopic);
+    }
+
+    this.createScheduleLambda = this.createPythonLambda({
+      path: 'create_schedule',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        SCHEDULER_GROUP_NAME: this.schedulerGroup.name!,
+        EXECUTE_USECASE_LAMBDA_ARN: this.executeUsecaseLambda.functionArn,
+        SCHEDULER_TARGET_ROLE_ARN: this.schedulerRole.roleArn
+      }
+    });
+
+    // Wizard mode Lambda functions. The wizard worker runs on a MicroVM too
+    // (phase 2): start_wizard_session launches it with RunPayload(mode='wizard')
+    // and the session's own ceiling, MAX_WIZARD_SESSION_MINUTES.
+    const maxWizardSessionMinutes = props.maxWizardSessionMinutes ?? config.maxWizardSessionMinutes ?? 240;
+
+    this.startWizardLambda = this.createPythonLambda({
+      path: 'start_wizard_session',
+      // RunMicrovm retries ThrottlingException with up to 15 s of backoff (same as execute_usecase).
+      timeout: Duration.seconds(30),
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        S3_BUCKET_PREFIX: `${this.account}-${this.baseName}-artefacts`,
+        DEFAULT_REGION: defaultRegion,
+        MICROVM_IMAGE_ARN: this.microvmImageArn,
+        MICROVM_IMAGE_VERSION: this.microvmImageVersion,
+        MICROVM_EXECUTION_ROLE_ARN: this.microvmExecutionRole.roleArn,
+        MICROVM_LOG_GROUP: this.microvmLogGroup.logGroupName,
+        MAX_WIZARD_SESSION_MINUTES: maxWizardSessionMinutes.toString(),
+      }
+    });
+
+    // RunMicrovm permissions — same set as execute_usecase_microvm_policy, in
+    // ONE Policy construct (cdk.json sets createNewPoliciesWithAddToRolePolicy).
+    this.startWizardLambda.role!.attachInlinePolicy(new Policy(this, 'start_wizard_microvm_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:RunMicrovm', 'lambda:GetMicrovmImage'],
+          resources: [this.microvmImageArn],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:RunMicrovm'],
+          resources: [`arn:aws:lambda:${Aws.REGION}:${Aws.ACCOUNT_ID}:microvm/*`],
+        }),
+        // RunMicrovm passes the Lambda-managed network connectors (NO_INGRESS
+        // explicitly, INTERNET_EGRESS as the default); denied without this.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:PassNetworkConnector'],
+          resources: [`arn:aws:lambda:${Aws.REGION}:aws:network-connector:aws-network-connector:*`],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['iam:PassRole'],
+          resources: [this.microvmExecutionRole.roleArn],
+          conditions: { StringEquals: { 'iam:PassedToService': 'lambda.amazonaws.com' } },
+        }),
+      ],
+    }));
+
+    this.addWizardStepLambda = this.createPythonLambda({
+      path: 'add_wizard_step',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
+        WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
+      }
+    });
+
+    // Unrouted since W4 (POST /wizard/{id}/restart has no client). Kept for one
+    // release only so its ARN stays exported for api stacks deployed before
+    // the route was removed (CloudFormation refuses to delete an export that
+    // is still imported); it can no longer reach the queue or bus. Remove in B9.
+    this.restartWizardLambda = this.createPythonLambda({
+      path: 'restart_wizard',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
+        WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
+      }
+    });
+
+    this.exportValue(this.restartWizardLambda.functionArn);
+
+    this.terminateWizardLambda = this.createPythonLambda({
+      path: 'terminate_wizard_session',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
+        WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
+        MICROVM_IMAGE_ARN: this.microvmImageArn,
+      }
+    });
+
+    // TerminateMicrovm permissions — same set as stop_execution_microvm_policy,
+    // in ONE Policy construct (cdk.json sets createNewPoliciesWithAddToRolePolicy).
+    this.terminateWizardLambda.role!.attachInlinePolicy(new Policy(this, 'terminate_wizard_microvm_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:TerminateMicrovm', 'lambda:GetMicrovm'],
+          resources: [this.microvmImageArn],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:TerminateMicrovm', 'lambda:GetMicrovm'],
+          resources: [`arn:aws:lambda:${Aws.REGION}:${Aws.ACCOUNT_ID}:microvm/*`],
+        }),
+      ],
+    }));
+
+    // EventBridge command processor Lambda
+    const processWizardCommandLambda = this.createPythonLambda({
+      path: 'process_wizard_command',
+      environment: {
+        TABLE_NAME: props.table.tableName,
+      }
+    });
+
+    // EventBridge rule to process wizard commands
+    new Rule(this, 'wizard_command_rule', {
+      eventBus: this.wizardEventBus,
+      eventPattern: {
+        source: ['wizard.commands'],
+        detailType: ['WizardCommand'],
+      },
+      targets: [new LambdaFunction(processWizardCommandLambda)],
+    });
+
+    // Grant permissions for wizard Lambdas
+    props.table.grantReadWriteData(this.startWizardLambda);
+    props.table.grantReadWriteData(this.addWizardStepLambda);
+    props.table.grantReadWriteData(this.terminateWizardLambda);
+    props.table.grantReadWriteData(processWizardCommandLambda);
+
+    // Need table read for the require_resource_access owner lookup (these
+    // routes have no other table access). Guarded by
+    // lib/__tests__/ownership-check-iam.test.ts.
+    [this.createScheduleLambda, this.restartWizardLambda]
+      .forEach(lambda => lambda.role?.addManagedPolicy(props.tableReadPolicy));
+
+    this.wizardQueue.grantSendMessages(this.addWizardStepLambda);
+    this.wizardQueue.grantSendMessages(this.terminateWizardLambda);
+
+    // Grant EventBridge permissions
+    this.wizardEventBus.grantPutEventsTo(this.addWizardStepLambda);
+    this.wizardEventBus.grantPutEventsTo(this.terminateWizardLambda);
+
+    // Grant EventBridge Scheduler permissions
+    this.createScheduleLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: [
+        'scheduler:CreateSchedule',
+        'scheduler:DeleteSchedule',
+        'scheduler:GetSchedule'
+      ],
+      resources: [
+        `arn:aws:scheduler:${Aws.REGION}:${Aws.ACCOUNT_ID}:schedule/${this.schedulerGroup.name}/*`
+      ]
+    }));
+
+    // Grant permission to pass the scheduler role to EventBridge
+    this.createScheduleLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['iam:PassRole'],
+      resources: [this.schedulerRole.roleArn]
+    }));
+
+    // Grant EventBridge permissions to executeUsecaseLambda
+    this.executeUsecaseLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['events:PutEvents'],
+      resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/default`]
+    }));
+
+    this.log('schedulerGroup', this.schedulerGroup.name!)
+    this.log('artefactsBucket', this.artefactsBucket.bucketName)
+  }
+
+  /**
+   * Daily cost allocation (design: .kiro/docs/cost-allocation/design.md).
+   * One Lambda, `cost_collector`, runs on `costAllocation.scheduleUtc`,
+   * allocates the Cost Explorer bill of the last `lookbackDays` days per use
+   * case / application / overall, writes the NDJSON ledgers under
+   * `cost_allocation/` in the artefacts bucket and the `USAGE#... / SUMMARY`
+   * items. A manual invoke with `{"days": [...]}` or `{"from", "to"}`
+   * re-processes or backfills; a range that does not fit in 15 minutes
+   * continues by invoking this function again (hence `lambda:InvokeFunction`
+   * on its own ARN, built from the name: a Ref on the function would make the
+   * role depend on the function and the function on the role).
+   *
+   * Env-var contract (read by cost_collector.py and cost_sources/*.py):
+   * TABLE_NAME, S3_BUCKET, LOOKBACK_DAYS, NOVA_ACT_CE_SERVICE_NAME,
+   * COMPUTE_COST_ENABLED, COMPUTE_CE_SERVICE,
+   * COMPUTE_CE_COMPUTE_USAGE_TYPE_PREFIXES, COMPUTE_CE_SNAPSHOT_USAGE_TYPE_PREFIXES
+   * (the two lists comma-separated).
+   *
+   * Two alarms on the notification topic: `Errors` (the run did not finish) and
+   * `unmetered` (the run finished but `unmetered_usd > 0.5 * billed_usd`, i.e.
+   * allocation and bill disagree). The latter reads the structured
+   * `cost_collector.run` log line: the function logs with the JSON log format,
+   * so the dict the handler passes to the logger is the `message` object and two
+   * metric filters lift `unmetered_usd` / `billed_usd` into `QAStudio/CostAllocation`.
+   */
+  private createCostCollector(props: NovaActQAStudioWorkerStackCreateProps, alarmTopic: Topic): void {
+    const { costAllocation } = config;
+    // Same derivation as createPythonLambda's functionName (base-stack.ts).
+    const functionName = this.cdkName(this.snakeToPascal('cost_collector'));
+
+    const costCollectorLambda = this.createPythonLambda({
+      path: 'cost_collector',
+      timeout: Duration.minutes(15),
+      memorySize: 1024,
+      loggingFormat: LoggingFormat.JSON,
+      environment: {
+        TABLE_NAME: props.table.tableName,
+        S3_BUCKET: this.artefactsBucket.bucketName,
+        LOOKBACK_DAYS: costAllocation.lookbackDays.toString(),
+        NOVA_ACT_CE_SERVICE_NAME: costAllocation.novaActServiceName,
+        COMPUTE_COST_ENABLED: costAllocation.compute.enabled.toString(),
+        COMPUTE_CE_SERVICE: costAllocation.compute.ceService,
+        COMPUTE_CE_COMPUTE_USAGE_TYPE_PREFIXES: costAllocation.compute.ceComputeUsageTypePrefixes.join(','),
+        COMPUTE_CE_SNAPSHOT_USAGE_TYPE_PREFIXES: costAllocation.compute.ceSnapshotUsageTypePrefixes.join(','),
+      },
+    });
+
+    // BatchGetItem on USECASE metadata (+ Query for the compute source) and PutItem on SUMMARY.
+    costCollectorLambda.role?.addManagedPolicy(props.tableReadPolicy);
+    costCollectorLambda.role?.addManagedPolicy(props.tableWritePolicy);
+
+    // One Policy construct with every statement: cdk.json sets
+    // createNewPoliciesWithAddToRolePolicy, so each addToRolePolicy() would be
+    // its own AWS::IAM::Policy resource.
+    const costCollectorPolicy = new Policy(this, 'cost_collector_policy', {
+      statements: [
+        // Read-only billing and Nova Act list APIs; none of them has a resource ARN.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['ce:GetCostAndUsage', 'pricing:GetProducts', 'nova-act:ListWorkflowDefinitions', 'nova-act:ListActs'],
+          resources: ['*'],
+        }),
+        // The ledgers: read-modify-write of one NDJSON file per dimension.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['s3:GetObject', 's3:PutObject'],
+          resources: [`${this.artefactsBucket.bucketArn}/cost_allocation/*`],
+        }),
+        // ListObjectsV2 on the ledger prefix only (zeroes out ledgers a re-run did not touch).
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['s3:ListBucket'],
+          resources: [this.artefactsBucket.bucketArn],
+          conditions: { StringLike: { 's3:prefix': 'cost_allocation/*' } },
+        }),
+        // Backfill continuation: asynchronous self-invocation with the remaining days.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:InvokeFunction'],
+          resources: [`arn:aws:lambda:${Aws.REGION}:${Aws.ACCOUNT_ID}:function:${functionName}`],
+        }),
+      ],
+    });
+    costCollectorLambda.role!.attachInlinePolicy(costCollectorPolicy);
+    const wildcardReason = 'ce:GetCostAndUsage, pricing:GetProducts, nova-act:ListWorkflowDefinitions and nova-act:ListActs are read-only APIs without resource ARNs; the S3 and Lambda statements are scoped to the cost_allocation/ prefix and the function itself';
+    NagSuppressions.addResourceSuppressions(costCollectorPolicy, [
+      { id: 'AwsSolutions-IAM5', appliesTo: ['Resource::*'], reason: wildcardReason },
+    ]);
+    (costCollectorPolicy.node.defaultChild as CfnResource).addMetadata('cfn_nag', {
+      rules_to_suppress: [{ id: 'W12', reason: wildcardReason }],
+    });
+
+    new Rule(this, 'cost_collector_rule', {
+      ruleName: this.cdkName('cost-collector'),
+      description: 'Runs the daily cost allocation collector (Cost Explorer bill per use case, application and overall)',
+      schedule: Schedule.expression(costAllocation.scheduleUtc),
+      targets: [new LambdaFunction(costCollectorLambda)],
+    });
+
+    // One run per day: any invocation error means the day's ledgers were not written.
+    new Alarm(this, 'cost_collector_errors_alarm', {
+      alarmName: this.cdkName('cost-collector-errors'),
+      alarmDescription: 'The daily cost collector failed; the cost ledgers of the last run were not updated. Re-run: aws lambda invoke --function-name '
+        + functionName + ' --payload {"days":["YYYY-MM-DD"]}',
+      metric: costCollectorLambda.metricErrors({ statistic: 'Sum', period: Duration.days(1) }),
+      threshold: 1,
+      comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      evaluationPeriods: 1,
+      treatMissingData: TreatMissingData.NOT_BREACHING,
+    }).addAlarmAction(new SnsAction(alarmTopic));
+
+    // unmetered_usd / billed_usd of the run report. fn.logGroup resolves to the
+    // log group the Custom::LogRetention resource creates (Fn::GetAtt), so the
+    // filters are ordered after the group exists.
+    const runLineMetric = (id: string, metricName: string, field: string): Metric =>
+      new MetricFilter(this, id, {
+        logGroup: costCollectorLambda.logGroup,
+        filterPattern: { logPatternString: '{ $.message.event = "cost_collector.run" }' },
+        metricNamespace: 'QAStudio/CostAllocation',
+        metricName,
+        metricValue: `$.message.${field}`,
+      }).metric({ statistic: 'Sum', period: Duration.days(1) });
+    const unmetered = runLineMetric('cost_collector_unmetered_usd_filter', 'UnmeteredUsd', 'unmetered_usd');
+    const billed = runLineMetric('cost_collector_billed_usd_filter', 'BilledUsd', 'billed_usd');
+
+    new Alarm(this, 'cost_collector_unmetered_alarm', {
+      alarmName: this.cdkName('cost-collector-unmetered'),
+      alarmDescription: 'The daily cost collector finished but more than half of the bill had no usage to attribute it to (unmetered_usd > 0.5 * billed_usd): '
+        + 'Cost Explorer and Nova Act / execution metering disagree. Compare billed_usd, allocated_usd and unmetered_usd in the '
+        + 'cost_collector.run log line, check the sources, then re-run the day: aws lambda invoke --function-name '
+        + functionName + ' --payload {"days":["YYYY-MM-DD"]}',
+      metric: new MathExpression({
+        expression: 'IF(unmetered > 0.5 * billed, 1, 0)',
+        usingMetrics: { unmetered, billed },
+        period: Duration.days(1),
+      }),
+      threshold: 1,
+      comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      evaluationPeriods: 1,
+      treatMissingData: TreatMissingData.NOT_BREACHING,
+    }).addAlarmAction(new SnsAction(alarmTopic));
+
+    this.log('costCollectorLambda', functionName);
+  }
+
+  /**
+   * `AGENT_CORE_VPC` / `AC_*` image env when config `vpcId` is set (one
+   * `Vpc.fromLookup`, at most one created security group); `{}` otherwise,
+   * so deploys without `vpcId` have no EC2 resource and env-agnostic synth.
+   */
+  private browserVpcEnvironment(): Record<string, string> {
+    if (!config.vpcId) return {};
+    return new BrowserVpc(this, 'browser_vpc', {
+      vpcId: config.vpcId,
+      vpcSubnetIds: config.vpcSubnetIds,
+      workerSecurityGroupId: config.workerSecurityGroupId,
+    }).environment;
+  }
+
+  /**
+   * Attach the worker runtime permission set to `role`: SSM runner params,
+   * recording/notification/wizard queues, DynamoDB, regional artefact
+   * buckets, EventBridge, Nova Act GA (if enabled), Secrets Manager (API key +
+   * use case secrets), AgentCore browsers, Device Farm and PassRole on the
+   * AgentCore execution role. Attached to the MicroVM execution role.
+   *
+   * Permissions stay split over several `Policy` constructs so no single
+   * policy exceeds the inline-policy size limit; `id` maps the policy name
+   * to a construct id.
+   */
+  private attachWorkerRuntimePolicies(role: IRole, id: (name: string) => string, ctx: WorkerRuntimePolicyContext): void {
+    // SSM parameters the worker consults at start (API URL + Cognito token
+    // endpoint). Both are written by other stacks: the api-stack writes the
+    // api-url; the auth-stack writes the cognito-token-endpoint.
+    role.attachInlinePolicy(new Policy(this, id('ssm_runner_params'), {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -597,13 +1099,12 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       ],
     }));
 
-    // Grant the ECS task role permission to send messages to the recording queue
-    // (moved here because taskDefinition is created later in the stack)
-    recordingQueue.grantSendMessages(this.taskDefinition.taskRole!);
+    // Recording queue: the worker enqueues Device Farm recording downloads.
+    ctx.recordingQueue.grantSendMessages(role);
 
-    // Grant permissions to task roles using separate policies to keep SPCM < 25
+    // Separate policies keep each document small (SPCM < 25).
     // SQS permissions
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_sqs_policy', {
+    role.attachInlinePolicy(new Policy(this, id('sqs_policy'), {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -616,13 +1117,13 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         new PolicyStatement({
           effect: Effect.ALLOW,
           actions: ['sqs:SendMessage'],
-          resources: [notificationQueue.queueArn],
+          resources: [ctx.notificationQueue.queueArn],
         }),
       ],
     }));
 
     // DynamoDB permissions
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_dynamodb_policy', {
+    role.attachInlinePolicy(new Policy(this, id('dynamodb_policy'), {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -631,13 +1132,13 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem',
             'dynamodb:DeleteItem', 'dynamodb:Query', 'dynamodb:Scan',
           ],
-          resources: [props.table.tableArn, `${props.table.tableArn}/index/*`],
+          resources: [ctx.table.tableArn, `${ctx.table.tableArn}/index/*`],
         }),
       ],
     }));
 
     // S3 permissions
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_s3_policy', {
+    role.attachInlinePolicy(new Policy(this, id('s3_policy'), {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -645,13 +1146,15 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             's3:GetObject*', 's3:GetBucket*', 's3:List*',
             's3:PutObject*', 's3:DeleteObject*', 's3:Abort*',
           ],
-          resources: [this.artefactsBucket.bucketArn, `${this.artefactsBucket.bucketArn}/*`],
+          // Every regional artefact bucket: runs and wizard sessions write to
+          // the bucket of their executing region.
+          resources: this.regionalBucketArns.flatMap((arn: string) => [arn, `${arn}/*`]),
         }),
       ],
     }));
 
     // EventBridge permissions
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_eventbridge_policy', {
+    role.attachInlinePolicy(new Policy(this, id('eventbridge_policy'), {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -661,29 +1164,10 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       ]
     }));
 
-    // ECR pull permissions
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_ecr_policy', {
-      statements: [
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: [
-            'ecr:BatchCheckLayerAvailability', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage',
-          ],
-          resources: [registry.repositoryArn],
-        }),
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: ['ecr:GetAuthorizationToken'],
-          resources: ['*'],
-        }),
-      ],
-    }));
-
-    registry.grantPull(this.taskDefinition.executionRole!);
 
     // Nova Act GA Service permissions (only if enabled)
     if (config.useNovaActGa) {
-      this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'nova_act_ga_policy', {
+      role.attachInlinePolicy(new Policy(this, id('nova_act_ga_policy'), {
         statements: [
           // Nova Act workflow permissions
           new PolicyStatement({
@@ -744,26 +1228,25 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       }));
     }
 
-    // Secrets Manager access.
-    // - Execution role: only needs the worker M2M credentials secret, which
-    //   ECS injects as OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET. CDK grants that
-    //   automatically via EcsSecret.fromSecretsManager, so no extra policy.
-    // - Task role: the Nova Act API key (used when USE_NOVA_ACT_GA=false) and
-    //   this deployment's use case secrets (`${baseName}/usecase/...`). The
-    //   trailing `*` covers the 6-character random ARN suffix.
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_secrets_manager_policy', {
+    // Secrets Manager access: the Nova Act API key (used when
+    // USE_NOVA_ACT_GA=false) and this deployment's use case secrets
+    // (`${baseName}/usecase/...`). The trailing `*` covers the 6-character
+    // random ARN suffix. The worker M2M credentials secret is NOT part of this
+    // set: the MicroVM execution role gets an explicit grant (the supervisor
+    // fetches it at /run).
+    role.attachInlinePolicy(new Policy(this, id('secrets_manager_policy'), {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
           actions: ['secretsmanager:GetSecretValue'],
           resources: [
-            props.novaActApiKeySecret.secretArn,
+            ctx.novaActApiKeySecret.secretArn,
             `arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:${this.baseName}/usecase/*`,
           ]
         })
       ]
     }));
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_bedrock_agentscore', {
+    role.attachInlinePolicy(new Policy(this, id('bedrock_agentscore'), {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -780,11 +1263,13 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
             "bedrock-agentcore:ConnectBrowserAutomationStream",
             "bedrock-agentcore:ConnectBrowserLiveViewStream",
           ],
-          resources: [
-            `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser/*`,
-            `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser-custom/*`,
-            `arn:aws:bedrock-agentcore:${Aws.REGION}:${Aws.ACCOUNT_ID}:browser-session/*`
-          ]
+          // The browser is created in the use case's executing region, which
+          // can be any enabled region, not only the stack's region.
+          resources: [...new Set([Aws.REGION, ...enabledRegions])].flatMap((region: string) => [
+            `arn:aws:bedrock-agentcore:${region}:${Aws.ACCOUNT_ID}:browser/*`,
+            `arn:aws:bedrock-agentcore:${region}:${Aws.ACCOUNT_ID}:browser-custom/*`,
+            `arn:aws:bedrock-agentcore:${region}:${Aws.ACCOUNT_ID}:browser-session/*`,
+          ])
         }),
         // Allow creation of the AgentCore network service-linked role. This is
         // required the first time an AgentCore browser is attached to a VPC —
@@ -816,7 +1301,7 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
     // us-west-2 resources rather than a single project ARN.
     const deviceFarmArn = (type: string, account: string = this.account) =>
       `arn:aws:devicefarm:us-west-2:${account}:${type}:*`;
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_device_farm', {
+    role.attachInlinePolicy(new Policy(this, id('device_farm'), {
       statements: [
         // No resource-level permissions for these actions ("*" required).
         // ListArtifacts is called with a session ARN, which is not one of its
@@ -853,56 +1338,9 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
         }),
       ],
     }));
-    this.schedulerGroup = new CfnScheduleGroup(this, 'schedule_group', {
-      name: this.cdkName('schedules')
-    });
 
-    const workerImage = new DockerImageAsset(this, 'MyDockerImage', {
-      // Build context is the repo root so the Dockerfile can COPY both
-      // web-app/worker/ and the sibling qa-studio-cli/ source (needed
-      // to pip install the unified runner).  A .dockerignore at the
-      // repo root keeps the context small.
-      directory: '..',
-      file: 'web-app/worker/Dockerfile',
-      platform: Platform.LINUX_ARM64
-    });
-
-    // Deploy with version tag only
-    new ECRDeployment(this, 'container_deployment', {
-      src: new DockerImageName(workerImage.imageUri),
-      dest: new DockerImageName(`${Aws.ACCOUNT_ID}.dkr.ecr.${Aws.REGION}.amazonaws.com/${registry.repositoryName}:${props.version}`),
-    });
-
-    this.agentCoreExecutionRole = new Role(this, 'agent_core_execution_role', {
-      roleName: this.cdkName('agent_core_execution_role'),
-      assumedBy: new ServicePrincipal('bedrock-agentcore.amazonaws.com'),
-    })
-
-    // Grant S3 permissions for all regional buckets
-    const s3Resources: string[] = [];
-    this.regionalBucketArns.forEach(bucketArn => {
-      s3Resources.push(bucketArn);
-      s3Resources.push(`${bucketArn}/*`);
-    });
-
-    this.agentCoreExecutionRole.attachInlinePolicy(new Policy(this, 'agent_core_execution_role_s3', {
-      statements: [
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          actions: [
-            "s3:PutObject",
-            "s3:GetObject",
-            "s3:GetObjectVersion",
-            "s3:ListMultipartUploadParts",
-            "s3:AbortMultipartUpload"
-          ],
-          resources: s3Resources
-        })
-      ]
-    }))
-
-    // Allow task role to pass the AgentCore execution role to the browser service
-    this.taskDefinition.taskRole!.attachInlinePolicy(new Policy(this, 'task_role_pass_agentcore_role', {
+    // Allow the worker to pass the AgentCore execution role to the browser service
+    role.attachInlinePolicy(new Policy(this, id('pass_agentcore_role'), {
       statements: [
         new PolicyStatement({
           effect: Effect.ALLOW,
@@ -912,247 +1350,6 @@ export class NovaActQAStudioWorkerStack extends NovaActQAStudioBaseStack {
       ]
     }));
 
-    // Inject the AgentCore execution role ARN into the container so the
-    // CLI's AgentCore browser provisioner can pass it to create_browser().
-    // Done here (not in runnerEnvironment above) because the role is
-    // created after the container definition.
-    this.taskDefinition.defaultContainer!.addEnvironment(
-      'BEDROCK_EXECUTION_ROLE', this.agentCoreExecutionRole.roleArn,
-    );
-
-    this.schedulerRole = new Role(this, 'event_bridge_scheduler_role', {
-      roleName: this.cdkName('scheduler-role'),
-      assumedBy: new ServicePrincipal('scheduler.amazonaws.com'),
-    });
-
-    // Get the log group name and stream prefix from the task definition container
-    const containerDefinition = this.taskDefinition.defaultContainer;
-    const logGroupName = containerDefinition?.logDriverConfig?.options?.['awslogs-group'] || `/ecs/${this.cdkName('logs')}`;
-    const logStreamPrefix = containerDefinition?.logDriverConfig?.options?.['awslogs-stream-prefix'] || this.cdkName('logs');
-
-    this.executeUsecaseLambda = this.createPythonLambda({
-      path: 'execute_usecase',
-      timeout: Duration.seconds(30),
-      environment: {
-        ECS_CLUSTER: this.cluster.clusterArn,
-        ECS_TASK_DEFINITION: this.taskDefinition.taskDefinitionArn,
-        SUBNET_ID: this.vpc.privateSubnets[0].subnetId,
-        SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
-        TABLE_NAME: props.table.tableName,
-        S3_BUCKET: this.artefactsBucket.bucketName,
-        S3_BUCKET_PREFIX: `${this.account}-${this.baseName}-artefacts`,
-        DEFAULT_REGION: defaultRegion,
-        BEDROCK_EXECUTION_ROLE: this.agentCoreExecutionRole.roleArn,
-        NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
-        SECRETS_PREFIX: props.baseName,
-        LOG_GROUP_NAME: logGroupName,
-        LOG_STREAM_PREFIX: logStreamPrefix
-      }
-    });
-
-    props.table.grantReadWriteData(this.executeUsecaseLambda)
-
-    // Grant scheduler role permission to invoke executeUsecaseLambda
-    this.executeUsecaseLambda.grantInvoke(this.schedulerRole);
-
-    // Stop Execution Lambda - stops running ECS tasks
-    this.stopExecutionLambda = this.createPythonLambda({
-      path: 'stop_execution',
-      environment: {
-        TABLE_NAME: props.table.tableName,
-        ECS_CLUSTER: this.cluster.clusterArn
-      }
-    });
-
-    props.table.grantReadWriteData(this.stopExecutionLambda)
-
-    // Grant ECS StopTask permissions to stopExecutionLambda
-    this.stopExecutionLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: [
-        'ecs:StopTask',
-        'ecs:DescribeTasks'
-      ],
-      resources: [
-        `arn:aws:ecs:${Aws.REGION}:${Aws.ACCOUNT_ID}:task/${this.cluster.clusterName}/*`
-      ]
-    }));
-
-    this.createScheduleLambda = this.createPythonLambda({
-      path: 'create_schedule',
-      environment: {
-        TABLE_NAME: props.table.tableName,
-        SCHEDULER_GROUP_NAME: this.schedulerGroup.name!,
-        EXECUTE_USECASE_LAMBDA_ARN: this.executeUsecaseLambda.functionArn,
-        SCHEDULER_TARGET_ROLE_ARN: this.schedulerRole.roleArn
-      }
-    });
-
-    // Wizard mode Lambda functions
-    this.startWizardLambda = this.createPythonLambda({
-      path: 'start_wizard_session',
-      environment: {
-        TABLE_NAME: props.table.tableName,
-        ECS_CLUSTER: this.cluster.clusterArn,
-        ECS_TASK_DEFINITION: this.taskDefinition.taskDefinitionArn,
-        SUBNET_ID: this.vpc.privateSubnets[0].subnetId,
-        SECURITY_GROUP_ID: this.workerSecurityGroup.securityGroupId,
-        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
-        S3_BUCKET: this.artefactsBucket.bucketName,
-        BEDROCK_EXECUTION_ROLE: this.agentCoreExecutionRole.roleArn,
-        NOVA_ACT_API_KEY_NAME: props.novaActApiKeySecret.secretName,
-      }
-    });
-
-    this.addWizardStepLambda = this.createPythonLambda({
-      path: 'add_wizard_step',
-      environment: {
-        TABLE_NAME: props.table.tableName,
-        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
-        WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
-      }
-    });
-
-    this.restartWizardLambda = this.createPythonLambda({
-      path: 'restart_wizard',
-      environment: {
-        TABLE_NAME: props.table.tableName,
-        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
-        WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
-      }
-    });
-
-    this.terminateWizardLambda = this.createPythonLambda({
-      path: 'terminate_wizard_session',
-      environment: {
-        TABLE_NAME: props.table.tableName,
-        WIZARD_QUEUE_URL: this.wizardQueue.queueUrl,
-        WIZARD_EVENT_BUS_NAME: this.wizardEventBus.eventBusName,
-      }
-    });
-
-    // EventBridge command processor Lambda
-    const processWizardCommandLambda = this.createPythonLambda({
-      path: 'process_wizard_command',
-      environment: {
-        TABLE_NAME: props.table.tableName,
-      }
-    });
-
-    // EventBridge rule to process wizard commands
-    new Rule(this, 'wizard_command_rule', {
-      eventBus: this.wizardEventBus,
-      eventPattern: {
-        source: ['wizard.commands'],
-        detailType: ['WizardCommand'],
-      },
-      targets: [new LambdaFunction(processWizardCommandLambda)],
-    });
-
-    // Grant permissions for wizard Lambdas
-    props.table.grantReadWriteData(this.startWizardLambda);
-    props.table.grantReadWriteData(this.addWizardStepLambda);
-    props.table.grantReadWriteData(this.terminateWizardLambda);
-    props.table.grantReadWriteData(processWizardCommandLambda);
-
-    // Need table read for the require_resource_access owner lookup (these
-    // routes have no other table access). Guarded by
-    // lib/__tests__/ownership-check-iam.test.ts.
-    [this.createScheduleLambda, this.restartWizardLambda]
-      .forEach(lambda => lambda.role?.addManagedPolicy(props.tableReadPolicy));
-
-    this.wizardQueue.grantSendMessages(this.startWizardLambda);
-    this.wizardQueue.grantSendMessages(this.addWizardStepLambda);
-    this.wizardQueue.grantSendMessages(this.restartWizardLambda);
-    this.wizardQueue.grantSendMessages(this.terminateWizardLambda);
-
-    // Grant EventBridge permissions
-    this.wizardEventBus.grantPutEventsTo(this.addWizardStepLambda);
-    this.wizardEventBus.grantPutEventsTo(this.restartWizardLambda);
-    this.wizardEventBus.grantPutEventsTo(this.terminateWizardLambda);
-
-    this.startWizardLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['ecs:RunTask', 'iam:PassRole'],
-      resources: [
-        this.taskDefinition.taskDefinitionArn,
-        this.taskDefinition.taskRole.roleArn,
-        this.taskDefinition.executionRole!.roleArn
-      ]
-    }));
-
-    // Grant EventBridge Scheduler permissions
-    this.createScheduleLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: [
-        'scheduler:CreateSchedule',
-        'scheduler:DeleteSchedule',
-        'scheduler:GetSchedule'
-      ],
-      resources: [
-        `arn:aws:scheduler:${Aws.REGION}:${Aws.ACCOUNT_ID}:schedule/${this.schedulerGroup.name}/*`
-      ]
-    }));
-
-    // Grant permission to pass the scheduler role to EventBridge
-    this.createScheduleLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['iam:PassRole'],
-      resources: [this.schedulerRole.roleArn]
-    }));
-
-    // Grant ECS RunTask permissions to executeUsecaseLambda
-    this.executeUsecaseLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: [
-        'ecs:RunTask',
-        'iam:PassRole'
-      ],
-      resources: [
-        this.taskDefinition.taskDefinitionArn,
-        this.taskDefinition.taskRole.roleArn,
-        this.taskDefinition.executionRole!.roleArn
-      ]
-    }));
-
-    // Grant EventBridge permissions to executeUsecaseLambda
-    this.executeUsecaseLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['events:PutEvents'],
-      resources: [`arn:aws:events:${Aws.REGION}:${Aws.ACCOUNT_ID}:event-bus/default`]
-    }));
-
-    // Task State Change Handler Lambda - monitors ECS task failures
-    const taskStateChangeLambda = this.createPythonLambda({
-      path: 'handle_task_state_change',
-      environment: {
-        TABLE_NAME: props.table.tableName
-      }
-    });
-
-    props.table.grantReadWriteData(taskStateChangeLambda);
-
-    // EventBridge Rule to capture ECS task state changes
-    const taskStateChangeRule = new Rule(this, 'TaskStateChangeRule', {
-      eventPattern: {
-        source: ['aws.ecs'],
-        detailType: ['ECS Task State Change'],
-        detail: {
-          clusterArn: [this.cluster.clusterArn],
-          lastStatus: ['STOPPED']
-        }
-      },
-      description: 'Captures ECS task state changes for failure detection'
-    });
-
-    // Add Lambda as target for the EventBridge rule
-    taskStateChangeRule.addTarget(new LambdaFunction(taskStateChangeLambda));
-
-    this.log('clusterName', this.cluster.clusterName)
-    this.log('taskDefinition', this.taskDefinition.taskDefinitionArn)
-    this.log('schedulerGroup', this.schedulerGroup.name!)
-    this.log('artefactsBucket', this.artefactsBucket.bucketName)
-    this.log('registry', registry.repositoryName)
   }
 
   /**

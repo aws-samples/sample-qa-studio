@@ -1,6 +1,6 @@
 # Step Types
 
-QA Studio has 9 active step types plus one deprecated. Each file in this directory documents a single step type with the same template:
+QA Studio has 10 active step types plus one deprecated. Each file in this directory documents a single step type with the same template:
 
 - **When to use** — the scenarios this step is for.
 - **When NOT to use** — wrong fits and what to use instead.
@@ -29,12 +29,15 @@ Load only the file(s) you need; each is self-contained.
 | Download a file from the page | [`download`](./download.md) |
 | Compute or format a value (math, strings, dates) between steps | [`transform`](./transform.md) |
 | Verify or mock an HTTP call triggered by a UI action | [`network_assertion`](./network_assertion.md) |
+| Run the same actions for several inputs (several users, products, search terms) | [`repeat`](./repeat.md) with the inputs as rows |
 
 The deprecated [`url`](./url.md) step type is kept for reading existing tests; new tests should use `browser` with `navigate`.
 
 ---
 
 ## Authoring rule of thumb
+
+**One step = one action or one check of one value.** `"Verify the form shows a 'Name' field, a 'Description' field and a 'Save' button"` is three `validation` steps, not one. Count the nouns being acted on or checked — that is the step count. Full rule and before/after example: [One action or one check per step](../building-tests.md#one-action-or-one-check-per-step).
 
 The agent's job is usually to glue together a small set of these. A typical end-to-end shape:
 
@@ -49,5 +52,7 @@ The agent's job is usually to glue together a small set of these. A typical end-
 ```
 
 `network_assertion` and `download` are special-purpose; reach for them only when the test goal is specifically about an HTTP call or file download.
+
+`repeat` wraps a sub-sequence of the shape above and runs it once per dataset row. Decision rule: **same actions for several inputs → one `repeat` with the inputs as rows, not N copies of the steps.**
 
 When a test is failing in a way that's not about UI, look at `network_assertion` — most often the bug is "the click triggered the wrong API call" rather than "the UI didn't render."

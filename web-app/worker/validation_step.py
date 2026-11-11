@@ -4,8 +4,8 @@ from nova_act import NovaAct, BOOL_SCHEMA
 from models import ExecutionStep
 
 from utils import STRING_SCHEMA, NUMBER_SCHEMA
-from transform.date_compare import evaluate_date_assertion
-from transform.date_parser import DateParseError
+from qa_studio_cli.runner.transform.date_compare import evaluate_date_assertion
+from qa_studio_cli.runner.transform.date_parser import DateParseError
 
 logger = logging.getLogger(__name__)
 

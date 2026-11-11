@@ -83,6 +83,7 @@ yarn-error.log*
 .kiro/design
 .kiro/specs
 .kiro/docs
+.kiro/settings/mcp.json
 *.egg-info
 skill-workspace
 

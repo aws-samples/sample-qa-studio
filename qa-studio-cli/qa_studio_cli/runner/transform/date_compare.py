@@ -1,9 +1,7 @@
 """Date assertion helper.
 
-Mirror of ``web-app/worker/transform/date_compare.py``. The two
-implementations MUST stay in lockstep — see
-``tests/test_transform_registry_consistency.py`` for the cross-package
-check that includes :data:`DATE_OPERATORS`.
+The wizard worker (``web-app/worker``) imports this module directly; there is
+no second copy to keep in lockstep.
 
 The :mod:`qa_studio_cli.runner.transform.date_parser` module handles
 parsing. This module layers operator dispatch, the ``equals_within``

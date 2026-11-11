@@ -34,7 +34,11 @@ def invoke_create(runner, mock_client, extra_args=None):
     ]
     if extra_args:
         args.extend(extra_args)
+    return invoke_cli(runner, mock_client, args)
 
+
+def invoke_cli(runner, mock_client, args):
+    """Invoke the CLI with auth mocked out and ``mock_client`` as the API client."""
     with patch("qa_studio_cli.api.client.config_exists", return_value=True), \
          patch("qa_studio_cli.api.client.load_config") as mock_config, \
          patch("qa_studio_cli.api.client.get_valid_token", return_value="fake-token"), \
@@ -160,4 +164,28 @@ class TestTestsCreateApplicationId:
             mock_config.return_value = MagicMock(api_url="https://fake-api.example.com")
             result = runner.invoke(cli, args)
         assert result.exit_code == 2
+        mock_client.post.assert_not_called()
+
+
+def invoke_run(runner, mock_client, extra_args):
+    return invoke_cli(runner, mock_client, ["tests", "run", *extra_args])
+
+
+class TestTestsRunTriggerType:
+    """`tests run --trigger-type` only offers trigger types the API accepts."""
+
+    def test_default_is_ondemand_headless(self, runner, mock_client):
+        mock_client.post.return_value = {
+            "status": "task started", "usecaseId": "u-1", "executionId": "e-1",
+        }
+        result = invoke_run(runner, mock_client, ["u-1"])
+        assert result.exit_code == 0, result.output
+        mock_client.post.assert_called_once_with(
+            "/usecase/u-1/execute", params={"trigger-type": "OnDemandHeadless"},
+        )
+
+    def test_ondemand_choice_removed(self, runner, mock_client):
+        result = invoke_run(runner, mock_client, ["u-1", "--trigger-type", "OnDemand"])
+        assert result.exit_code == 2
+        assert "Invalid value for '--trigger-type'" in result.output
         mock_client.post.assert_not_called()

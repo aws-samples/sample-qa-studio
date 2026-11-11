@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import Modal from '@cloudscape-design/components/modal';
 import Box from '@cloudscape-design/components/box';
-import SpaceBetween from '@cloudscape-design/components/space-between';
-import Button from '@cloudscape-design/components/button';
 import FormField from '@cloudscape-design/components/form-field';
 import Select, { SelectProps } from '@cloudscape-design/components/select';
 import { AccessLevel, Team } from '../../types/permissions';
+import FormModal from '../common/FormModal';
 
 interface GrantAccessModalProps {
   visible: boolean;
@@ -33,8 +31,6 @@ const GrantAccessModal: React.FC<GrantAccessModalProps> = ({
   const [selectedTeam, setSelectedTeam] = useState<SelectProps.Option | null>(null);
   const [selectedApp, setSelectedApp] = useState<SelectProps.Option | null>(null);
   const [selectedLevel, setSelectedLevel] = useState<SelectProps.Option | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const teamOptions: SelectProps.Option[] = availableTeams.map((t) => ({
     label: t.name,
@@ -48,101 +44,67 @@ const GrantAccessModal: React.FC<GrantAccessModalProps> = ({
 
   const handleSubmit = async () => {
     if (!selectedTeam) {
-      setError('Target team is required');
-      return;
+      throw new Error('Target team is required');
     }
     if (!selectedApp) {
-      setError('Application is required');
-      return;
+      throw new Error('Application is required');
     }
     if (!selectedLevel) {
-      setError('Access level is required');
-      return;
+      throw new Error('Access level is required');
     }
-    try {
-      setSubmitting(true);
-      setError(null);
-      await onSubmit(
-        selectedTeam.value!,
-        selectedApp.value!,
-        selectedLevel.value as AccessLevel
-      );
-      setSelectedTeam(null);
-      setSelectedApp(null);
-      setSelectedLevel(null);
-      onDismiss();
-    } catch (err: any) {
-      setError(err.message || 'Failed to grant access');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDismiss = () => {
-    setSelectedTeam(null);
-    setSelectedApp(null);
-    setSelectedLevel(null);
-    setError(null);
-    onDismiss();
+    await onSubmit(selectedTeam.value!, selectedApp.value!, selectedLevel.value as AccessLevel);
   };
 
   return (
-    <Modal
+    <FormModal
       visible={visible}
-      onDismiss={handleDismiss}
-      closeAriaLabel="Close"
       header="Grant Shared Access"
-      footer={
-        <Box float="right">
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button variant="link" onClick={handleDismiss} data-testid="grant-access-cancel">
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              loading={submitting}
-              data-testid="grant-access-submit"
-            >
-              Grant Access
-            </Button>
-          </SpaceBetween>
-        </Box>
-      }
+      submitLabel="Grant Access"
+      onSubmit={handleSubmit}
+      onDismiss={onDismiss}
+      onReset={() => {
+        setSelectedTeam(null);
+        setSelectedApp(null);
+        setSelectedLevel(null);
+      }}
+      errorFallback="Failed to grant access"
+      testIdPrefix="grant-access"
     >
-      <SpaceBetween direction="vertical" size="m">
-        {error && (
-          <Box color="text-status-error">{error}</Box>
-        )}
-        <FormField label="Target team">
-          <Select
-            selectedOption={selectedTeam}
-            onChange={({ detail }) => setSelectedTeam(detail.selectedOption)}
-            options={teamOptions}
-            placeholder="Select a team to share with"
-            data-testid="grant-access-team-select"
-          />
-        </FormField>
-        <FormField label="Application">
-          <Select
-            selectedOption={selectedApp}
-            onChange={({ detail }) => setSelectedApp(detail.selectedOption)}
-            options={appOptions}
-            placeholder="Select an application"
-            data-testid="grant-access-app-select"
-          />
-        </FormField>
-        <FormField label="Access level">
-          <Select
-            selectedOption={selectedLevel}
-            onChange={({ detail }) => setSelectedLevel(detail.selectedOption)}
-            options={ACCESS_LEVEL_OPTIONS}
-            placeholder="Select access level"
-            data-testid="grant-access-level-select"
-          />
-        </FormField>
-      </SpaceBetween>
-    </Modal>
+      {(error) => (
+        <>
+          {error && (
+            <Box color="text-status-error">{error}</Box>
+          )}
+          <FormField label="Target team">
+            <Select
+              selectedOption={selectedTeam}
+              onChange={({ detail }) => setSelectedTeam(detail.selectedOption)}
+              options={teamOptions}
+              placeholder="Select a team to share with"
+              data-testid="grant-access-team-select"
+            />
+          </FormField>
+          <FormField label="Application">
+            <Select
+              selectedOption={selectedApp}
+              onChange={({ detail }) => setSelectedApp(detail.selectedOption)}
+              options={appOptions}
+              placeholder="Select an application"
+              data-testid="grant-access-app-select"
+            />
+          </FormField>
+          <FormField label="Access level">
+            <Select
+              selectedOption={selectedLevel}
+              onChange={({ detail }) => setSelectedLevel(detail.selectedOption)}
+              options={ACCESS_LEVEL_OPTIONS}
+              placeholder="Select access level"
+              data-testid="grant-access-level-select"
+            />
+          </FormField>
+        </>
+      )}
+    </FormModal>
   );
 };
 

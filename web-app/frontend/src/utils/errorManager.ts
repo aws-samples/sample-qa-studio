@@ -11,7 +11,7 @@ export interface ErrorState {
   maxRetries: number;
 }
 
-export interface ErrorCategory {
+interface ErrorCategory {
   title: string;
   description: string;
   icon: 'error' | 'warning' | 'info';
@@ -122,17 +122,6 @@ export class ErrorManager {
     return error;
   }
 
-  enhanceApiError(apiError: ApiError): ErrorState {
-    return this.createError(
-      apiError.type,
-      apiError.message,
-      {
-        details: apiError.details,
-        retryable: apiError.retryable
-      }
-    );
-  }
-
   categorizeHttpError(status: number, message?: string): ErrorState {
     if (status === 401 || status === 403) {
       return this.createError('authentication', 
@@ -236,18 +225,6 @@ export class ErrorManager {
       default:
         return 0;
     }
-  }
-
-  // Analytics and monitoring
-  getErrorStats(): { type: string; count: number }[] {
-    const stats = new Map<string, number>();
-    
-    this.errorHistory.forEach(error => {
-      const count = stats.get(error.type) || 0;
-      stats.set(error.type, count + 1);
-    });
-    
-    return Array.from(stats.entries()).map(([type, count]) => ({ type, count }));
   }
 
   clearHistory(): void {

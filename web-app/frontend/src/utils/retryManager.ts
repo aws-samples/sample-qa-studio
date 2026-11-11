@@ -145,26 +145,3 @@ export class RetryManager {
     state.lastFailure = 0;
   }
 }
-
-// Hook for React components
-export function useRetry() {
-  const executeWithRetry = async <T>(
-    operation: () => Promise<T>,
-    config?: Partial<RetryConfig>
-  ): Promise<RetryResult<T>> => {
-    return RetryManager.executeWithRetry(operation, config);
-  };
-
-  const executeWithCircuitBreaker = async <T>(
-    operation: () => Promise<T>,
-    circuitBreakerKey: string,
-    config?: Partial<RetryConfig>
-  ): Promise<RetryResult<T>> => {
-    return RetryManager.executeWithCircuitBreaker(operation, circuitBreakerKey, config);
-  };
-
-  return {
-    executeWithRetry,
-    executeWithCircuitBreaker
-  };
-}

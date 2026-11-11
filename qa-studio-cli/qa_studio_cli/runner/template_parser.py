@@ -16,7 +16,14 @@ Built-ins cannot be overridden by user variables or runtime variables —
 ``add_runtime_variable`` raises ``ValueError`` on collision.
 
 Runtime variables take precedence over user-defined variables of the same
-name (matches the worker's dict-rebuild order).
+name (matches the worker's dict-rebuild order).  Row variables — the
+dataset row of an expanded ``repeat`` step, passed per call to
+``parse_instruction(text, row_variables=...)`` — sit between the two:
+
+    user variables < row variables < runtime variables < built-ins
+
+The worker never sees row variables (repeat steps are a CLI-runner feature
+in v1), so this is an additive extension of the mirrored contract.
 
 The implementation is intentionally plain ``str.replace`` to match the
 worker — Go-template syntax was the original spec.
@@ -58,16 +65,18 @@ class TemplateParser:
     # Substitution
     # ------------------------------------------------------------------
 
-    def parse_instruction(self, text: str) -> str:
+    def parse_instruction(self, text: str, row_variables: Optional[Dict[str, str]] = None) -> str:
         """Replace every ``{{key}}`` in ``text`` with the resolved value.
 
-        Lookup order: built-ins > runtime variables > user variables.
-        Unknown placeholders are left untouched.
+        Lookup order: built-ins > runtime variables > row variables > user
+        variables.  ``row_variables`` (a repeat step's dataset row) apply to
+        this call only — they are not stored on the parser.  Unknown
+        placeholders are left untouched.
         """
         if not text:
             return text
         parsed = text
-        for key, value in self._merged_variables().items():
+        for key, value in self._merged_variables(row_variables).items():
             parsed = parsed.replace(f"{{{{{key}}}}}", str(value))
         return parsed
 
@@ -99,8 +108,8 @@ class TemplateParser:
     # Internals
     # ------------------------------------------------------------------
 
-    def _merged_variables(self) -> Dict[str, str]:
-        """Variables in precedence order: user < runtime < built-ins.
+    def _merged_variables(self, row_variables: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        """Variables in precedence order: user < row < runtime < built-ins.
 
         Built-ins sit on top so the worker's contract (built-ins never
         overridable) is enforced even if a runtime variable slips past
@@ -108,6 +117,8 @@ class TemplateParser:
         """
         merged: Dict[str, str] = {}
         merged.update(self._user_variables)
+        if row_variables:
+            merged.update(row_variables)
         merged.update(self._runtime_variables)
         merged.update(self._builtins)
         return merged

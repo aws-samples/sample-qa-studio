@@ -420,3 +420,31 @@ class TestImportApplicationId:
         import_calls = [c for c in mock_client.post.call_args_list if c.args[0] == "/import"]
         assert len(import_calls) == 1
         assert import_calls[0].kwargs["json_body"]["application_id"] == "app-9"
+
+
+class TestImportExitCodeWithInvalidFiles:
+    """A folder with valid and invalid files imports the valid ones but must
+    not report success: invalid files were not imported."""
+
+    def _folder(self, tmp_path):
+        _write_test_json(tmp_path, with_secrets=False)
+        (tmp_path / "broken.json").write_text(json.dumps({"exportVersion": "1.0", "steps": "nope"}))
+        return tmp_path
+
+    def test_mixed_folder_imports_valid_files_and_exits_1(self, runner, mock_client, tmp_path):
+        mock_client.post.side_effect = _make_mock_post()
+
+        result = _invoke_import(runner, mock_client, [str(self._folder(tmp_path)), "-y"])
+
+        assert result.exit_code == 1, result.output
+        assert "✗ Invalid" in result.output
+        assert "✓ Imported" in result.output
+        assert [c.args[0] for c in mock_client.post.call_args_list] == ["/import"]
+
+    def test_all_valid_folder_exits_0(self, runner, mock_client, tmp_path):
+        _write_test_json(tmp_path, with_secrets=False)
+        mock_client.post.side_effect = _make_mock_post()
+
+        result = _invoke_import(runner, mock_client, [str(tmp_path), "-y"])
+
+        assert result.exit_code == 0, result.output

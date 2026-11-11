@@ -19,9 +19,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
+import microvm_launch
 from authz_test_support import (
     ALL_SCOPES, APP_ID, EXEC_ID, TEAM_A, UC_ID, make_event, owned_resources, share, worker_header,
 )
+from run_payload import RunPayload
 
 SESSION_ID = EXEC_ID  # a wizard session is an execution of its use case
 
@@ -53,25 +55,31 @@ MODULE_CLIENTS = {
     'terminate_wizard_session': ('dynamodb', 'sqs', 'eventbridge'),
     'restart_wizard': ('sqs', 'eventbridge'),
     'send_recording_command': ('eventbridge',),
-    'start_wizard_session': ('dynamodb', 'ecs'),
+    'start_wizard_session': ('dynamodb',),
     'generate_usecase': ('bedrock_runtime',),
 }
 
 
 @pytest.fixture(autouse=True)
 def aws(monkeypatch):
-    """boto3 fully mocked; module-level clients replaced too."""
+    """boto3 fully mocked; module-level clients replaced too. The lazily created
+    ``lambda-microvms`` client of start_wizard_session resolves to ``client()``."""
     for name, value in {'TABLE_NAME': 't', 'SECRET_PREFIX': 'p', 'BUCKET_NAME': 'b', 'S3_BUCKET': 'b',
-                        'WIZARD_EVENT_BUS_NAME': 'bus', 'WIZARD_QUEUE_URL': 'q', 'ECS_CLUSTER': 'c',
-                        'ECS_TASK_DEFINITION': 'td', 'SUBNET_ID': 'sn', 'SECURITY_GROUP_ID': 'sg',
+                        'WIZARD_EVENT_BUS_NAME': 'bus', 'WIZARD_QUEUE_URL': 'q',
                         'BEDROCK_EXECUTION_ROLE': 'r', 'NOVA_ACT_API_KEY_NAME': 'k',
-                        'BEDROCK_MODEL_ID': 'm'}.items():
+                        'BEDROCK_MODEL_ID': 'm', 'S3_BUCKET_PREFIX': '123-studio-artefacts',
+                        'DEFAULT_REGION': 'eu-central-1', 'AWS_REGION': 'eu-central-1',
+                        'MICROVM_IMAGE_ARN': 'arn:aws:lambda:eu-central-1:1:microvm-image:w',
+                        'MICROVM_IMAGE_VERSION': '1.0', 'MICROVM_EXECUTION_ROLE_ARN': 'arn:aws:iam::1:role/vm',
+                        'MICROVM_LOG_GROUP': '/qa-studio/t/microvm', 'MAX_WIZARD_SESSION_MINUTES': '240'}.items():
         monkeypatch.setenv(name, value)
     resource, client = MagicMock(name='resource'), MagicMock(name='client')
+    client.return_value.run_microvm.return_value = {'microvmId': 'vm-test', 'state': 'PENDING'}
     for module, attrs in MODULE_CLIENTS.items():
         mod = importlib.import_module(module)
         for attr in attrs:
             monkeypatch.setattr(mod, attr, client)
+    monkeypatch.setattr(microvm_launch, '_client', None)
     with patch('boto3.resource', resource), patch('boto3.client', client):
         yield resource, client
 
@@ -441,3 +449,45 @@ class TestGenerateUsecaseManifest:
         with patch('generate_usecase.invoke_bedrock', side_effect=RuntimeError('stop')):
             response = _run('generate_usecase', make_event('editor_b', body=body))
         assert response['statusCode'] == 502
+
+
+# ---------------------------------------------------------------------------
+# /wizard/start: the browser region and its same-region artefact bucket
+# ---------------------------------------------------------------------------
+
+class TestWizardStartRegion:
+    START = CREATE_ROUTES[0]
+
+    def _payload(self, aws):
+        """The RunPayload handed to RunMicrovm (``boto3.client()`` is ``aws[1]()``)."""
+        microvms = aws[1].return_value
+        return RunPayload.from_hook_payload(microvms.run_microvm.call_args.kwargs['runHookPayload'])
+
+    def _start(self, aws, **body):
+        module, path, base, scopes = self.START
+        return _create_call((module, path, {**base, **body}, scopes), 'editor_a')
+
+    def test_uses_requested_region_and_its_bucket(self, aws):
+        response = self._start(aws, executing_region='us-east-1')
+        assert response['statusCode'] == 201, response
+        assert _stored_usecase(self.START, aws)['executing_region'] == 'us-east-1'
+        payload = self._payload(aws)
+        assert (payload.region, payload.s3_bucket) == ('us-east-1', '123-studio-artefacts-us-east-1')
+
+    def test_defaults_to_default_region(self, aws):
+        response = self._start(aws)
+        assert response['statusCode'] == 201, response
+        assert _stored_usecase(self.START, aws)['executing_region'] == 'eu-central-1'
+        payload = self._payload(aws)
+        assert (payload.region, payload.s3_bucket) == ('eu-central-1', '123-studio-artefacts-eu-central-1')
+
+    @pytest.mark.parametrize('region', ['us-east-1/../x', 'US-EAST-1', 'nowhere', 'eu-central-1 '])
+    def test_invalid_region_400_before_any_write(self, aws, region):
+        if region.strip() != region:
+            # surrounding whitespace is trimmed, so this one is valid
+            assert self._start(aws, executing_region=region)['statusCode'] == 201
+            return
+        response = self._start(aws, executing_region=region)
+        assert response['statusCode'] == 400, response
+        assert not aws[1].put_item.called
+        assert not aws[1].return_value.run_microvm.called

@@ -11,6 +11,10 @@ The runner has to work across three browser provisioning shapes:
   via ``--cdp-endpoint-url`` + ``--cdp-headers-file``.  Used by advanced
   integrations and by the worker wrapper once AgentCore provisioning is
   separate.
+- **electron** — the CLI launches an Electron desktop app with a loopback
+  DevTools port and attaches over CDP.  Selected by the usecase's
+  ``test_platform == "electron"`` (not by ``--browser``) and configured
+  via ``--app-path`` / ``--app-arg`` / ``--app-user-data-dir``.
 
 Each strategy implements :class:`BrowserProvisioner` and returns a
 :class:`BrowserHandle` describing the NovaAct connection parameters and
@@ -21,6 +25,14 @@ and the migration plan that introduces the non-local strategies.
 """
 
 from qa_studio_cli.runner.browser.cdp_external import CdpExternalBrowserProvisioner
+from qa_studio_cli.runner.browser.electron import (
+    ElectronBrowserProvisioner,
+    ElectronExecutable,
+    ElectronLaunchConfig,
+    ElectronStartError,
+    resolve_electron_executable,
+    verify_bundle_id,
+)
 from qa_studio_cli.runner.browser.handle import BrowserHandle
 from qa_studio_cli.runner.browser.local import (
     LOCAL_BROWSER_OPTIONS,
@@ -36,6 +48,12 @@ __all__ = [
     "BrowserProvisioner",
     "BrowserSelection",
     "CdpExternalBrowserProvisioner",
+    "ElectronBrowserProvisioner",
+    "ElectronExecutable",
+    "ElectronLaunchConfig",
+    "ElectronStartError",
+    "resolve_electron_executable",
+    "verify_bundle_id",
     "LOCAL_BROWSER_OPTIONS",
     "LocalBrowserOption",
     "LocalBrowserProvisioner",
@@ -71,20 +89,3 @@ def record_video_supported(nova_kwargs: "dict[str, object]") -> bool:
     if nova_kwargs.get("use_default_chrome_browser"):
         return False
     return True
-
-
-def _agentcore_provisioner_cls():
-    """Lazy accessor for ``AgentCoreBrowserProvisioner``.
-
-    Returns the class — import is deferred so the base CLI (without the
-    ``[agentcore]`` extra) can still load this package.  The
-    ``bedrock_agentcore`` dependency only materialises when an AgentCore
-    provisioner is actually instantiated.  Raises
-    :class:`AgentCoreNotInstalledError` on use when the extra is missing.
-    """
-    from qa_studio_cli.runner.browser.agentcore import (
-        AgentCoreBrowserProvisioner,
-        AgentCoreNotInstalledError,  # noqa: F401 — re-exported for tests
-    )
-
-    return AgentCoreBrowserProvisioner

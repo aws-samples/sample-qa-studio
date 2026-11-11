@@ -438,7 +438,8 @@ class TestSuiteAddTestsCommand:
 
     def test_sends_post_with_usecase_ids(self):
         mock_client = MagicMock()
-        mock_client.post.return_value = {"added": 2, "totalUsecases": 5}
+        # Backend (add_usecases_to_suite.py) returns snake_case keys.
+        mock_client.post.return_value = {"added": 2, "total_usecases": 5}
 
         runner = CliRunner()
         result = _invoke_with_mock(
@@ -448,10 +449,41 @@ class TestSuiteAddTestsCommand:
         )
 
         assert result.exit_code == 0
-        assert "2" in result.output
-        assert "5" in result.output
-        call_body = mock_client.post.call_args[1]["json_body"]
-        assert call_body["usecaseIds"] == ["uc-aaa", "uc-bbb"]
+        assert "Added 2 test(s)" in result.output
+        assert "Total usecases in suite: 5" in result.output
+        mock_client.post.assert_called_once_with(
+            "/test-suites/suite-001/usecases",
+            json_body={"usecase_ids": ["uc-aaa", "uc-bbb"]},
+        )
+
+    def test_reports_zero_added_when_all_already_in_suite(self):
+        mock_client = MagicMock()
+        mock_client.post.return_value = {"added": 0, "total_usecases": 3}
+
+        runner = CliRunner()
+        result = _invoke_with_mock(
+            runner,
+            mock_client,
+            ["add-tests", "suite-001", "uc-aaa"],
+        )
+
+        assert result.exit_code == 0
+        assert "Added 0 test(s)" in result.output
+        assert "Total usecases in suite: 3" in result.output
+
+    def test_shows_backend_error_on_400(self):
+        mock_client = MagicMock()
+        mock_client.post.side_effect = ApiError(400, "usecase_ids cannot be empty")
+
+        runner = CliRunner()
+        result = _invoke_with_mock(
+            runner,
+            mock_client,
+            ["add-tests", "suite-001", "uc-aaa"],
+        )
+
+        assert result.exit_code == 1
+        assert "usecase_ids cannot be empty" in result.output
 
     def test_shows_not_found_on_404(self):
         mock_client = MagicMock()

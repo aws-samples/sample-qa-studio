@@ -1,8 +1,9 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 import boto3
 from utils import create_response, get_table_name, validate_path_id, request_log_summary
 from resource_auth import require_resource_access, execution_from_path
+from variable_merge import variables_from_item
 
 # Configure logging
 logger = logging.getLogger()
@@ -74,12 +75,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             )
             
             if 'Item' in execution_response:
-                runtime_variables = execution_response['Item'].get('runtime_variables', [])
-                # Also read merged variables stored by execute_test_suite
-                # These contain usecase vars + CLI overrides already merged
-                merged_vars = execution_response['Item'].get('variables', {})
-                if isinstance(merged_vars, dict) and merged_vars:
-                    execution_variables = merged_vars
+                execution_item = execution_response['Item']
+                runtime_variables = execution_item.get('runtime_variables', [])
+                # The run's merged variable snapshot (application + use case + overrides):
+                # a list of {key, value} from execute_usecase, a map from execute_test_suite.
+                execution_variables = variables_from_item(execution_item)
         except Exception as e:
             logger.warning(f"Error querying execution variables: {str(e)}")
         

@@ -117,3 +117,23 @@
   font-style: italic;
   margin-top: 4px;
 }
+
+
+/* Repeat blocks: children are indented under their repeat with a left rail */
+.workflow-step-children {
+  margin-left: 32px;
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 3px solid #42B4FF;
+}
+
+.workflow-step-card-child {
+  border-radius: 6px;
+}
+
+.step-child-marker {
+  padding-top: 6px;
+  color: #5f6b7a;
+  font-size: 16px;
+  user-select: none;
+}

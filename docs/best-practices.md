@@ -354,7 +354,7 @@ Test 2: Login with pre-existing test account
 
 **What to Monitor**:
 - Lambda function errors
-- ECS task failures
+- `QAStudio/Worker` `ReconciledExecutions` (a MicroVM died without the runner reporting; alarm when > 0)
 - API Gateway errors
 - Worker execution logs
 
@@ -388,10 +388,10 @@ Test 2: Login with pre-existing test account
 - Optimize function memory allocation
 - Reduce cold starts with provisioned concurrency (if needed)
 
-**ECS Fargate**:
-- Tasks are billed per second
-- Optimize test execution time
-- Use appropriate task size (CPU/memory)
+**Lambda MicroVM (worker)**:
+- VMs are billed per second of allocated memory (1 GB each) until they terminate
+- Optimize test execution time; every VM is capped by `maxExecutionDurationMinutes` (default 60) and wizard sessions by `maxWizardSessionMinutes` (default 240)
+- Keep the ceilings as low as your longest test allows; the reconciler returns the memory of anything that slips through
 
 **Bedrock (Nova Act)**:
 - Billed per API call

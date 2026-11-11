@@ -1,11 +1,9 @@
 import boto3
-import uuid
-import os
 import time
 import logging
 from datetime import datetime
-from utils import get_region, validate_vpc_configuration, get_vpc_configuration
 from bedrock_agentcore.tools.browser_client import BrowserClient
+from qa_studio_cli.runner.browser.agentcore import build_browser_config
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -21,136 +19,69 @@ def _create_client(region: str):
 
 
 def create_browser(unique_id: str, execution_id: str, artefact_bucket: str, artefact_prefix: str, region: str, browser_policy_s3_path: str = None):
-  # Validate VPC configuration from environment variables
-  is_valid, validation_message = validate_vpc_configuration()
-  if not is_valid:
-    logger.error(f"VPC configuration validation failed: {validation_message}")
-    raise Exception(f"VPC configuration validation failed: {validation_message}")
-  
-  logger.info(f"Configuration validation: {validation_message}")
-  
-  # Determine network configuration based on AGENT_CORE_VPC environment variable
-  agent_core_vpc = os.getenv('AGENT_CORE_VPC', 'false').lower() == 'true'
-  
-  cp_client = _create_client(region)
-  
-  if agent_core_vpc:
-    # Get VPC Configuration from environment variables set by CDK worker-stack.ts
-    vpc_config = get_vpc_configuration()
-    
-    if not vpc_config:
-      raise Exception("AgentCoreVPC is enabled but VPC configuration could not be retrieved")
-    
-    vpc_id = vpc_config['vpc_id']
-    subnet_id = vpc_config['subnet_id']
-    security_group_id = vpc_config['security_group_id']
-    
-    logger.info(f"Creating browser with VPC settings from CDK stack:")
-    logger.info(f"  VPC ID: {vpc_id}")
-    logger.info(f"  Subnet ID: {subnet_id}")
-    logger.info(f"  Security Group ID: {security_group_id}")
-    
-    # Browser configuration with VPC network settings
-    browser_config = {
-      'name': f"nova_act_qa_studio_{unique_id}",
-      'description': f"VPC browser for {execution_id}",
-      'networkConfiguration': {
-          'networkMode': 'VPC',
-          'vpcConfig': {
-              'securityGroups': [security_group_id],
-              'subnets': [subnet_id]
-          }
-      },
-      'executionRoleArn': os.getenv('BEDROCK_EXECUTION_ROLE'),
-      'clientToken': str(uuid.uuid4()),
-      'recording': {
-          'enabled': True,
-          's3Location': {
-              'bucket': artefact_bucket,
-              'prefix': artefact_prefix
-          }
-      }
-    }
-  else:
-    # Public network configuration
-    logger.info("Creating browser with PUBLIC network settings")
-    
-    browser_config = {
-      'name': f"nova_act_qa_studio_{unique_id}",
-      'description': f"Public browser for {execution_id}",
-      'networkConfiguration': {
-          'networkMode': 'PUBLIC'
-      },
-      'executionRoleArn': os.getenv('BEDROCK_EXECUTION_ROLE'),
-      'clientToken': str(uuid.uuid4()),
-      'recording': {
-          'enabled': True,
-          's3Location': {
-              'bucket': artefact_bucket,
-              'prefix': artefact_prefix
-          }
-      }
-    }
-  
+  """Create an AgentCore browser for a wizard session and wait until READY.
+
+  The request body (network mode from ``AGENT_CORE_VPC`` / ``AC_*``, recording,
+  enterprise policy) comes from the CLI's ``build_browser_config`` so batch and
+  wizard browsers are configured by one implementation.  A VPC
+  misconfiguration raises before any AWS client is created.
+  """
+  browser_config = build_browser_config(
+    unique_id=unique_id,
+    execution_id=execution_id,
+    artefact_bucket=artefact_bucket,
+    artefact_prefix=artefact_prefix,
+    browser_policy_s3_path=browser_policy_s3_path,
+  )
+  network = browser_config['networkConfiguration']
+  network_type = network['networkMode']
+  vpc_config = network.get('vpcConfig') or {}
+
   logger.info("Browser configuration:")
   logger.info(f"  Name: {browser_config['name']}")
-  logger.info(f"  Network Mode: {browser_config['networkConfiguration']['networkMode']}")
-
-  # Add enterprise policies if a browser policy file is configured
+  logger.info(f"  Network Mode: {network_type}")
+  if vpc_config:
+    logger.info(f"  Subnet IDs: {vpc_config['subnets']}")
+    logger.info(f"  Security Group IDs: {vpc_config['securityGroups']}")
   if browser_policy_s3_path:
-    browser_config['enterprisePolicies'] = [
-      {
-        'type': 'MANAGED',
-        'location': {
-          's3': {
-            'bucket': artefact_bucket,
-            'prefix': browser_policy_s3_path
-          }
-        }
-      }
-    ]
     logger.info(f"  Enterprise Policy: s3://{artefact_bucket}/{browser_policy_s3_path}")
-  if agent_core_vpc:
-    logger.info(f"  VPC ID: {vpc_id}")
-    logger.info(f"  Subnet IDs: {browser_config['networkConfiguration']['vpcConfig']['subnets']}")
-    logger.info(f"  Security Group IDs: {browser_config['networkConfiguration']['vpcConfig']['securityGroups']}")
   logger.info(f"  Recording Bucket: {browser_config['recording']['s3Location']['bucket']}")
   logger.info(f"  Recording Prefix: {browser_config['recording']['s3Location']['prefix']}")
-  
+
+  cp_client = _create_client(region)
+
   try:
     # Start timing browser creation
     creation_start_time = time.time()
     logger.info(f"Starting browser creation at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
+
     response = cp_client.create_browser(**browser_config)
     browser_id = response['browserId']
     logger.info(f"Browser creation request submitted with ID: {browser_id}")
-    
+
     # Log additional response details if available
     if 'browserArn' in response:
         logger.info(f"Browser ARN: {response['browserArn']}")
     if 'status' in response:
         logger.info(f"Initial Browser Status: {response['status']}")
-    
+
     # Wait for browser to be ready (both VPC and PUBLIC modes need this)
-    network_type = "VPC" if agent_core_vpc else "PUBLIC"
     logger.info(f"Waiting for {network_type} browser to be ready...")
     browser_id = _wait_for_browser_ready(cp_client, browser_id, creation_start_time)
-    
+
     return browser_id
-    
+
   except Exception as e:
-    network_type = "VPC" if agent_core_vpc else "PUBLIC"
     logger.error(f"Failed to create {network_type} browser: {e}")
     logger.error(f"Error type: {type(e).__name__}")
-    
+
     # Try to provide more specific error information
     if hasattr(e, 'response'):
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
         error_message = e.response.get('Error', {}).get('Message', str(e))
         logger.error(f"AWS Error Code: {error_code}")
         logger.error(f"AWS Error Message: {error_message}")
-    
+
     raise
 
 

@@ -1,0 +1,590 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-10-30T12:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-15 Application Dataset Repeat Execution",
+    "description": "Create a dataset on the application's Datasets page, add a Repeat step on a new use case with Dataset source 'Application dataset', add two steps inside, trigger an execution and verify the execution lists four steps tagged Row 1/2 and Row 2/2, then delete the use case and the dataset",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "application",
+      "datasets",
+      "repeat",
+      "usecase",
+      "execution",
+      "delete"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "navigation",
+      "instruction": "Click the 'Applications' menu item in the left navigation"
+    },
+    {
+      "sort": 5,
+      "step_type": "navigation",
+      "instruction": "Open the application 'QA Studio' (click its card if several applications are listed)"
+    },
+    {
+      "sort": 6,
+      "step_type": "validation",
+      "instruction": "Is the application 'QA Studio' detail page shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 7,
+      "step_type": "navigation",
+      "instruction": "Open the 'Actions' dropdown in the application page header"
+    },
+    {
+      "sort": 8,
+      "step_type": "navigation",
+      "instruction": "Select 'Datasets' under 'Configuration' in the dropdown"
+    },
+    {
+      "sort": 9,
+      "step_type": "validation",
+      "instruction": "Is the page heading 'Datasets' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 10,
+      "step_type": "validation",
+      "instruction": "Is the breadcrumb 'Applications > QA Studio > Datasets' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 11,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create dataset' button"
+    },
+    {
+      "sort": 12,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Create dataset' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 13,
+      "step_type": "navigation",
+      "instruction": "Type '{{dataset_name}}' in the Name field of the dialog"
+    },
+    {
+      "sort": 14,
+      "step_type": "navigation",
+      "instruction": "Type 'Journey test dataset' in the Description field of the dialog"
+    },
+    {
+      "sort": 15,
+      "step_type": "navigation",
+      "instruction": "Clear the 'Column 1 name' field and type 'email'"
+    },
+    {
+      "sort": 16,
+      "step_type": "navigation",
+      "instruction": "Click the 'Column' button to add a column"
+    },
+    {
+      "sort": 17,
+      "step_type": "navigation",
+      "instruction": "Clear the 'Column 2 name' field and type 'role'"
+    },
+    {
+      "sort": 18,
+      "step_type": "navigation",
+      "instruction": "Type 'alice@example.com' in the 'Row 1, email' field"
+    },
+    {
+      "sort": 19,
+      "step_type": "navigation",
+      "instruction": "Type 'admin' in the 'Row 1, role' field"
+    },
+    {
+      "sort": 20,
+      "step_type": "navigation",
+      "instruction": "Click the 'Row' button to add a row"
+    },
+    {
+      "sort": 21,
+      "step_type": "navigation",
+      "instruction": "Type 'bob@example.com' in the 'Row 2, email' field"
+    },
+    {
+      "sort": 22,
+      "step_type": "navigation",
+      "instruction": "Type 'viewer' in the 'Row 2, role' field"
+    },
+    {
+      "sort": 23,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button in the dialog"
+    },
+    {
+      "sort": 24,
+      "step_type": "validation",
+      "instruction": "Is the dataset '{{dataset_name}}' listed in the Datasets table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 25,
+      "step_type": "validation",
+      "instruction": "Does the row of dataset '{{dataset_name}}' show 2 in the Columns column?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 26,
+      "step_type": "validation",
+      "instruction": "Does the row of dataset '{{dataset_name}}' show 2 in the Rows column?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 27,
+      "step_type": "navigation",
+      "instruction": "Click the 'Use cases' menu item in the left navigation"
+    },
+    {
+      "sort": 28,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Use case' button"
+    },
+    {
+      "sort": 29,
+      "step_type": "navigation",
+      "instruction": "Select the 'Create New' option"
+    },
+    {
+      "sort": 30,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 31,
+      "step_type": "navigation",
+      "instruction": "Select the 'Web' platform option"
+    },
+    {
+      "sort": 32,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 33,
+      "step_type": "navigation",
+      "instruction": "Type '{{usecase_name}}' in the Name field"
+    },
+    {
+      "sort": 34,
+      "step_type": "navigation",
+      "instruction": "Type 'https://example.com' in the Starting URL field"
+    },
+    {
+      "sort": 35,
+      "step_type": "navigation",
+      "instruction": "Select 'eu-central-1' in the Execution Region dropdown"
+    },
+    {
+      "sort": 36,
+      "step_type": "navigation",
+      "instruction": "Select 'nova-act-v1.0' in the Model dropdown"
+    },
+    {
+      "sort": 37,
+      "step_type": "navigation",
+      "instruction": "Select 'QA Studio' in the Application dropdown"
+    },
+    {
+      "sort": 38,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 39,
+      "step_type": "navigation",
+      "instruction": "Select the 'Create Blank' option"
+    },
+    {
+      "sort": 40,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 41,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 42,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button"
+    },
+    {
+      "sort": 43,
+      "step_type": "navigation",
+      "instruction": "Click the 'Workflow Steps' tab"
+    },
+    {
+      "sort": 44,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add Step' button"
+    },
+    {
+      "sort": 45,
+      "step_type": "navigation",
+      "instruction": "Type 'Repeat' in the 'Search step types...' field"
+    },
+    {
+      "sort": 46,
+      "step_type": "navigation",
+      "instruction": "Select the 'Repeat' option"
+    },
+    {
+      "sort": 47,
+      "step_type": "navigation",
+      "instruction": "Type 'Login as each user' in the Label field"
+    },
+    {
+      "sort": 48,
+      "step_type": "validation",
+      "instruction": "Does the 'Dataset source' field offer the option 'Application dataset'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 49,
+      "step_type": "navigation",
+      "instruction": "Select the 'Application dataset' option under 'Dataset source'"
+    },
+    {
+      "sort": 50,
+      "step_type": "navigation",
+      "instruction": "Open the 'Application dataset' dropdown"
+    },
+    {
+      "sort": 51,
+      "step_type": "validation",
+      "instruction": "Does the option '{{dataset_name}}' in the open dropdown show the description '2 columns × 2 rows'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 52,
+      "step_type": "navigation",
+      "instruction": "Select the option '{{dataset_name}}'"
+    },
+    {
+      "sort": 53,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Step' button"
+    },
+    {
+      "sort": 54,
+      "step_type": "validation",
+      "instruction": "Does the Workflow Steps list show a step with the 'Repeat' badge?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 55,
+      "step_type": "validation",
+      "instruction": "Does the Repeat step show the summary 'Application dataset: {{dataset_name}} · 2 rows · 2 columns'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 56,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add step inside' link on the Repeat step card"
+    },
+    {
+      "sort": 57,
+      "step_type": "validation",
+      "instruction": "Does the dialog show the hint 'Inside: Login as each user'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 58,
+      "step_type": "navigation",
+      "instruction": "Type 'Type {{email}} into the email field' in the Instruction field"
+    },
+    {
+      "sort": 59,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Step' button"
+    },
+    {
+      "sort": 60,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add step inside' link on the Repeat step card"
+    },
+    {
+      "sort": 61,
+      "step_type": "navigation",
+      "instruction": "Type 'Check that the role {{role}} is shown' in the Instruction field"
+    },
+    {
+      "sort": 62,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Step' button"
+    },
+    {
+      "sort": 63,
+      "step_type": "retrieve_value",
+      "instruction": "Return the number of step cards indented under the Repeat step that are marked with '↳'",
+      "capture_variable": "child_step_count",
+      "value_type": "number"
+    },
+    {
+      "sort": 64,
+      "step_type": "assertion",
+      "instruction": "Two steps are indented under the Repeat step",
+      "assertion_variable": "child_step_count",
+      "validation_type": "number",
+      "validation_operator": "equals",
+      "validation_value": "2"
+    },
+    {
+      "sort": 65,
+      "step_type": "navigation",
+      "instruction": "Click the 'Trigger Execution' button"
+    },
+    {
+      "sort": 66,
+      "step_type": "navigation",
+      "instruction": "Click the 'Execution History' tab"
+    },
+    {
+      "sort": 67,
+      "step_type": "navigation",
+      "instruction": "Click the radio button of the most recent execution, the first row in the 'Execution History' table; a panel opens at the bottom of the page"
+    },
+    {
+      "sort": 68,
+      "step_type": "navigation",
+      "instruction": "Scroll down inside the panel at the bottom of the page to the table with the heading 'Execution Steps'"
+    },
+    {
+      "sort": 69,
+      "step_type": "retrieve_value",
+      "instruction": "Return the number of rows in the 'Execution Steps' table that show a step number in the '#' column",
+      "capture_variable": "execution_step_count",
+      "value_type": "number"
+    },
+    {
+      "sort": 70,
+      "step_type": "assertion",
+      "instruction": "The repeat was unrolled into 2 dataset rows x 2 steps",
+      "assertion_variable": "execution_step_count",
+      "validation_type": "number",
+      "validation_operator": "equals",
+      "validation_value": "4"
+    },
+    {
+      "sort": 71,
+      "step_type": "validation",
+      "instruction": "Does the 'Execution Steps' table show the badge 'Row 1/2'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 72,
+      "step_type": "validation",
+      "instruction": "Does the 'Execution Steps' table show the badge 'Row 2/2'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 73,
+      "step_type": "validation",
+      "instruction": "Does the 'Execution Steps' table show the row header 'Login as each user — row 1 of 2'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 74,
+      "step_type": "navigation",
+      "instruction": "Click the 'Use cases' menu item in the left navigation"
+    },
+    {
+      "sort": 75,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] AppDataset {{UniqueID}}' in the search bar"
+    },
+    {
+      "sort": 76,
+      "step_type": "navigation",
+      "instruction": "Click the checkbox in front of use case '{{usecase_name}}'"
+    },
+    {
+      "sort": 77,
+      "step_type": "navigation",
+      "instruction": "Open the actions dropdown above the table"
+    },
+    {
+      "sort": 78,
+      "step_type": "navigation",
+      "instruction": "Select 'Delete Selected (1)' from the dropdown"
+    },
+    {
+      "sort": 79,
+      "step_type": "navigation",
+      "instruction": "Type 'permanently delete' in the confirmation field of the dialog"
+    },
+    {
+      "sort": 80,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the dialog"
+    },
+    {
+      "sort": 81,
+      "step_type": "validation",
+      "instruction": "Is use case '{{usecase_name}}' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 82,
+      "step_type": "navigation",
+      "instruction": "Click the 'Applications' menu item in the left navigation"
+    },
+    {
+      "sort": 83,
+      "step_type": "navigation",
+      "instruction": "Open the application 'QA Studio' (click its card if several applications are listed)"
+    },
+    {
+      "sort": 84,
+      "step_type": "validation",
+      "instruction": "Is the application 'QA Studio' detail page shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 85,
+      "step_type": "navigation",
+      "instruction": "Open the 'Actions' dropdown in the application page header"
+    },
+    {
+      "sort": 86,
+      "step_type": "navigation",
+      "instruction": "Select 'Datasets' under 'Configuration' in the dropdown"
+    },
+    {
+      "sort": 87,
+      "step_type": "validation",
+      "instruction": "Is the page heading 'Datasets' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 88,
+      "step_type": "validation",
+      "instruction": "Is the breadcrumb 'Applications > QA Studio > Datasets' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 89,
+      "step_type": "navigation",
+      "instruction": "Select the row of dataset '{{dataset_name}}' in the Datasets table"
+    },
+    {
+      "sort": 90,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button above the Datasets table"
+    },
+    {
+      "sort": 91,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Delete Dataset' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 92,
+      "step_type": "navigation",
+      "instruction": "Type 'permanently delete' in the confirmation field of the dialog"
+    },
+    {
+      "sort": 93,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the dialog"
+    },
+    {
+      "sort": 94,
+      "step_type": "validation",
+      "instruction": "Is the dataset '{{dataset_name}}' listed in the Datasets table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    }
+  ],
+  "variables": [
+    {
+      "Key": "usecase_name",
+      "Value": "[QA Test] AppDataset {{UniqueID}}"
+    },
+    {
+      "Key": "dataset_name",
+      "Value": "QA Customers {{UniqueID}}"
+    }
+  ],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Username for login"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Password for login"
+    }
+  ]
+}

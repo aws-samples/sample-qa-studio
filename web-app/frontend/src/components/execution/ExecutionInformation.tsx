@@ -7,6 +7,7 @@ import Link from "@cloudscape-design/components/link";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import { RecordingPlayer } from '../RecordingPlayer';
 import { formatDateTime } from '../../utils/dateFormat';
+import { executionStatusType } from '../../utils/executionStatus';
 
 interface ExecutionInformationProps {
   execution: any;
@@ -14,19 +15,6 @@ interface ExecutionInformationProps {
   executionId: string;
 }
 
-// Helper function to map execution status to StatusIndicator type
-function getStatusType(status: string) {
-  switch (status) {
-    case 'success': return 'success';
-    case 'error': 
-    case 'failed': return 'error';
-    case 'running':
-    case 'executing': return 'in-progress';
-    case 'pending': return 'pending';
-    case 'stopped': return 'stopped';
-    default: return 'pending';
-  }
-}
 
 export default function ExecutionInformation({ 
   execution, 
@@ -56,7 +44,7 @@ export default function ExecutionInformation({
           },
           {
             label: "Status",
-            value: <StatusIndicator type={getStatusType(execution.status)}>
+            value: <StatusIndicator type={executionStatusType(execution.status)}>
               {execution.status}
             </StatusIndicator>,
           },

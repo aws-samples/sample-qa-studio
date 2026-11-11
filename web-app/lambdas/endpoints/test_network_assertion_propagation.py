@@ -37,12 +37,10 @@ NETWORK_FIELDS = (
 PROPAGATION_ENDPOINTS = [
     "create_step.py",
     "update_step.py",
-    "execute_usecase.py",
-    "execute_test_suite.py",
-    "export_usecase.py",
-    "import_usecase.py",
-    "clone_usecase.py",
+    "execution_steps.py",  # shared EXECUTION_STEP# builder used by execute_usecase / execute_test_suite
+    "step_copy.py",  # shared copy list used by export_usecase / import_usecase / clone_usecase
     "apply_template.py",
+    "template_expansion.py",  # shared expansion used by import_template / import_usecase (placeholders)
     "import_template.py",
     "create_template_step.py",
     "update_template_step.py",
@@ -52,14 +50,27 @@ PROPAGATION_ENDPOINTS = [
 ]
 
 
+#: An endpoint that copies via the shared list propagates every field by
+#: construction (``step_copy.COPYABLE_STEP_FIELDS`` is pinned by
+#: ``test_step_copy_parity.py``).  ``template_expansion`` copies via that
+#: list too, so delegating to it counts.  ``step_copy.py`` itself must spell
+#: the fields out.
+_SHARED_LIST_MARKERS = (
+    "from step_copy import", "COPYABLE_STEP_FIELDS", "copy_step_fields",
+    "from template_expansion import", "build_linked_steps",
+)
+
+
 class TestStaticFieldPropagation:
-    """Every propagation endpoint must mention every network_* field."""
+    """Every propagation endpoint must mention every network_* field or use the shared list."""
 
     def test_every_endpoint_mentions_every_field(self):
         missing = []
         for endpoint in PROPAGATION_ENDPOINTS:
             path = _ENDPOINTS_DIR / endpoint
             source = path.read_text()
+            if endpoint != "step_copy.py" and any(marker in source for marker in _SHARED_LIST_MARKERS):
+                continue
             for field in NETWORK_FIELDS:
                 if field not in source:
                     missing.append(f"{endpoint} missing {field}")

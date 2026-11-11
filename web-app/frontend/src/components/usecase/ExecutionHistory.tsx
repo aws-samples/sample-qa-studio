@@ -1,132 +1,64 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Button from "@cloudscape-design/components/button";
 import Table from "@cloudscape-design/components/table";
-import Link from "@cloudscape-design/components/link";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Box from "@cloudscape-design/components/box";
-import Flashbar from "@cloudscape-design/components/flashbar";
-import { api, ExecutionModel } from '../../utils/api';
+import Flashbar, { FlashbarProps } from "@cloudscape-design/components/flashbar";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import { api, ExecutionModel, executionIdOf } from '../../utils/api';
 import { formatDateTime } from '../../utils/dateFormat';
-import { batchedPromiseAll } from '../../utils/batchedPromiseAll';
+import { executionStatusType } from '../../utils/executionStatus';
 import { useApiData } from '../common/useAsyncData';
 import { ContainerLoading } from '../common/LoadingStates';
-import { SpaceBetween } from '@cloudscape-design/components';
-import DeleteExecutionsModal from '../DeleteExecutionsModal';
+import DeleteConfirmModal from '../common/DeleteConfirmModal';
 
 interface ExecutionHistoryProps {
   usecaseId: string;
+  /** Bare execution id of the selected row; `null` for no selection. Controlled by the parent. */
+  selectedExecutionId: string | null;
+  onSelectExecution: (id: string | null) => void;
 }
 
-interface BatchDeleteResult {
-  executionId: string;
-  success: boolean;
-  error?: string;
-}
-
-export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
-  const navigate = useNavigate();
-  const [selectedItems, setSelectedItems] = useState<ExecutionModel[]>([]);
+export default function ExecutionHistory({ usecaseId, selectedExecutionId, onSelectExecution }: ExecutionHistoryProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [flashbarItems, setFlashbarItems] = useState<any[]>([]);
+  const [flashbarItems, setFlashbarItems] = useState<FlashbarProps.MessageDefinition[]>([]);
 
   const { data: executionsData, loading, refetch } = useApiData(
     () => api.get(`usecase/${usecaseId}/executions`),
     [usecaseId]
   );
 
-  const executions = executionsData?.executions || [];
+  const executions: ExecutionModel[] = executionsData?.executions || [];
+  const selectedExecution = executions.find((item) => executionIdOf(item) === selectedExecutionId) ?? null;
+  const selectedItems = selectedExecution ? [selectedExecution] : [];
 
-  const handleDeleteClick = () => {
-    if (selectedItems.length === 0) {
-      setFlashbarItems([{
-        type: 'warning',
-        content: 'Please select at least one execution to delete',
-        dismissible: true,
-        onDismiss: () => setFlashbarItems([])
-      }]);
-      return;
-    }
-    setShowDeleteModal(true);
+  const showFlash = (type: 'success' | 'error', content: string) => {
+    setFlashbarItems([{ type, content, dismissible: true, onDismiss: () => setFlashbarItems([]) }]);
   };
 
-  const handleBatchDelete = async () => {
+  const handleDelete = async () => {
+    if (!selectedExecution) return;
+    const executionId = executionIdOf(selectedExecution);
     setShowDeleteModal(false);
     setDeleting(true);
-    setFlashbarItems([{
-      type: 'info',
-      content: `Deleting ${selectedItems.length} execution(s)...`,
-      loading: true
-    }]);
-
-    const results = await batchedPromiseAll(selectedItems, async (execution) => {
-      try {
-        const cleanExecutionId = execution.sk.replace('EXECUTION#', '');
-        await api.delete(`usecase/${usecaseId}/executions/${cleanExecutionId}`);
-        return {
-          executionId: cleanExecutionId,
-          success: true
-        } as BatchDeleteResult;
-      } catch (error) {
-        return {
-          executionId: execution.sk.replace('EXECUTION#', ''),
-          success: false,
-          error: (error as Error).message
-        } as BatchDeleteResult;
-      }
-    });
-    
-    const successCount = results.filter(r => r.success).length;
-    const failureCount = results.filter(r => !r.success).length;
-
-    const resultItems = [];
-    
-    if (successCount > 0) {
-      resultItems.push({
-        type: 'success' as const,
-        content: `Successfully deleted ${successCount} execution(s)`,
-        dismissible: true,
-        onDismiss: () => setFlashbarItems([])
-      });
-    }
-
-    if (failureCount > 0) {
-      const failedExecutions = results
-        .filter(r => !r.success)
-        .map(r => r.executionId)
-        .join(', ');
-      
-      resultItems.push({
-        type: 'error' as const,
-        content: `Failed to delete ${failureCount} execution(s): ${failedExecutions}`,
-        dismissible: true,
-        onDismiss: () => setFlashbarItems([])
-      });
-    }
-
-    setFlashbarItems(resultItems);
-    setSelectedItems([]);
-    setDeleting(false);
-    await refetch();
-  };
-
-  const getStatusType = (status: string) => {
-    switch (status) {
-      case 'success': return 'success';
-      case 'error':
-      case 'failed': return 'error';
-      case 'running':
-      case 'executing': return 'in-progress';
-      default: return 'pending';
+    try {
+      await api.delete(`usecase/${usecaseId}/executions/${executionId}`);
+      showFlash('success', `Deleted execution ${executionId}`);
+      await refetch();
+      onSelectExecution(null);
+    } catch (error) {
+      console.error('Failed to delete execution:', { usecaseId, executionId, error });
+      showFlash('error', `Failed to delete execution ${executionId}: ${(error as Error).message}`);
+    } finally {
+      setDeleting(false);
     }
   };
 
   if (loading) {
     return (
-      <ContainerLoading 
+      <ContainerLoading
         title="Execution History"
         text="Loading execution history..."
       />
@@ -136,65 +68,69 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
   return (
     <SpaceBetween direction='vertical' size="m">
       <Flashbar items={flashbarItems} />
-      
-      <Header
-        variant="h1"
-        actions={
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button
-              iconName="refresh"
-              onClick={refetch}
-              disabled={loading || deleting}
-              ariaLabel="Refresh execution history"
-            >
-              Refresh
-            </Button>
-            <Button
-              iconName="remove"
-              onClick={handleDeleteClick}
-              disabled={selectedItems.length === 0 || deleting}
-              loading={deleting}
-            >
-              Delete Selected ({selectedItems.length})
-            </Button>
-          </SpaceBetween>
-        }
-      />
+
       <Table
+        header={
+          <Header
+            variant="h2"
+            actions={
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  iconName="refresh"
+                  onClick={refetch}
+                  disabled={loading || deleting}
+                  ariaLabel="Refresh execution history"
+                >
+                  Refresh
+                </Button>
+                <Button
+                  iconName="remove"
+                  onClick={() => setShowDeleteModal(true)}
+                  disabled={!selectedExecution || deleting}
+                  loading={deleting}
+                >
+                  Delete
+                </Button>
+              </SpaceBetween>
+            }
+          >
+            Execution History
+          </Header>
+        }
         columnDefinitions={[
-          { 
-            id: 'pk', 
-            header: 'Execution ID', 
-            cell: (item: ExecutionModel) => (
-              <Link onClick={() => navigate(`/usecase/${usecaseId}/execution/${item.sk.replace('EXECUTION#', '')}`)}>  
-                {item.sk.replace('EXECUTION#', '')}
-              </Link>
-            ),
+          {
+            id: 'pk',
+            header: 'Execution ID',
+            cell: (item: ExecutionModel) => executionIdOf(item),
           },
-          { 
-            id: 'status', 
-            header: 'Status', 
+          {
+            id: 'status',
+            header: 'Status',
             cell: item => (
-              <StatusIndicator type={getStatusType(item.status)}>
+              <StatusIndicator type={executionStatusType(item.status)}>
                 {item.status}
               </StatusIndicator>
             ),
           },
-          { 
-            id: 'created_at', 
-            header: 'Created', 
+          {
+            id: 'created_at',
+            header: 'Created',
             cell: item => formatDateTime(item.created_at),
           },
-          { 
-            id: 'trigger_type', 
-            header: 'Trigger', 
+          {
+            id: 'trigger_type',
+            header: 'Trigger',
             cell: item => item.trigger_type || 'Manual',
           }
         ]}
         items={executions}
-        selectionType="multi"
+        trackBy="sk"
+        selectionType="single"
         selectedItems={selectedItems}
-        onSelectionChange={({ detail }) => setSelectedItems(detail.selectedItems)}
+        onSelectionChange={({ detail }) => {
+          const [selected] = detail.selectedItems;
+          onSelectExecution(selected ? executionIdOf(selected) : null);
+        }}
         empty={
           <Box textAlign="center">
             <Box variant="strong">No executions</Box>
@@ -205,12 +141,14 @@ export default function ExecutionHistory({ usecaseId }: ExecutionHistoryProps) {
         }
       />
 
-      <DeleteExecutionsModal
+      <DeleteConfirmModal
         visible={showDeleteModal}
-        executionCount={selectedItems.length}
+        count={1}
+        noun={{ singular: 'execution', plural: 'executions', title: 'Executions' }}
+        consequences="This will remove all associated data including steps, logs, and results."
         onDismiss={() => setShowDeleteModal(false)}
-        onConfirm={handleBatchDelete}
-        deleting={deleting}
+        onConfirm={handleDelete}
+        loading={deleting}
       />
     </SpaceBetween>
   );

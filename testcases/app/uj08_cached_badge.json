@@ -1,0 +1,88 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-10-29T08:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-8 Cached Badge",
+    "description": "Navigation steps with a recorded trajectory show the Cached badge on their step card; secret and validation steps do not",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "cache",
+      "trajectory",
+      "steps"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "browser",
+      "instruction": "Open /usecase/c4436469-f986-4173-b791-c7adc7d01ec8",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/usecase/c4436469-f986-4173-b791-c7adc7d01ec8\"}"
+    },
+    {
+      "sort": 5,
+      "step_type": "navigation",
+      "instruction": "Click the 'Workflow Steps' tab"
+    },
+    {
+      "sort": 6,
+      "step_type": "validation",
+      "instruction": "Are the workflow steps shown as cards, each with a step type badge and an 'Add step below' link?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 7,
+      "step_type": "validation",
+      "instruction": "Does the step card 'Click the 'Sign in' button' show a green 'Cached' badge next to its step type badge?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 8,
+      "step_type": "validation",
+      "instruction": "Below the instruction on the step card 'Click the 'Sign in' button', is there a detail line that starts with 'Cached' followed by an age or a date (for example 'Cached 1h ago')?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 9,
+      "step_type": "validation",
+      "instruction": "Does the step card 'focus username field' show a 'Cached' badge?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 10,
+      "step_type": "validation",
+      "instruction": "Does the step card 'Verify search bar exists above the table' show a 'Cached' badge?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    }
+  ],
+  "variables": []
+}

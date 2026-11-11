@@ -1,12 +1,11 @@
 import logging
-import json
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
-from botocore.exceptions import ClientError
 from utils import create_response, get_table_name, extract_user_identity
 from resource_auth import require_resource_access, usecase_from_path
+from sns_filter_policy import find_email_subscription, remove_usecase
 
 # Configure logging
 logger = logging.getLogger()
@@ -73,153 +72,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
 
 def remove_usecase_from_filter_policy(sns_client, email: str, usecase_id_to_remove: str):
-    """
-    Remove a usecase from the user's SNS filter policy.
-    
-    Args:
-        sns_client: Boto3 SNS client
-        email: User email address
-        usecase_id_to_remove: Usecase ID to remove from filter
-    """
-    logger.info(f"=== Starting remove_usecase_from_filter_policy, usecase: {usecase_id_to_remove} ===")
-    
+    """Remove the use case from ``email``'s filter policy (unsubscribing when it
+    was the last one). Never fails the request: SNS errors are logged."""
     topic_arn = os.environ.get('SNS_TOPIC_ARN')
     if not topic_arn:
         logger.info("SNS_TOPIC_ARN not set, skipping SNS filter policy update")
         return
-    
-    logger.info(f"Using SNS topic ARN: {topic_arn}")
-    
+
     try:
-        # Find the user's SNS subscription
-        logger.info(f"Listing subscriptions for topic: {topic_arn}")
-        response = sns_client.list_subscriptions_by_topic(TopicArn=topic_arn)
-        
-        subscriptions = response.get('Subscriptions', [])
-        logger.info(f"Found {len(subscriptions)} total subscriptions")
-        
-        subscription_arn = None
-        for subscription in subscriptions:
-            endpoint = subscription.get('Endpoint')
-            protocol = subscription.get('Protocol')
-            arn = subscription.get('SubscriptionArn')
-            
-            
-            if endpoint == email and protocol == 'email' and arn != 'PendingConfirmation':
-                subscription_arn = arn
-                logger.info(f"Found matching subscription: {subscription_arn}")
-                break
-        
+        subscription_arn = find_email_subscription(sns_client, topic_arn, email, confirmed_only=True)
         if not subscription_arn:
-            logger.info(f"No confirmed SNS subscription found")
+            logger.info("No confirmed SNS subscription found")
             return  # Not an error - user might not have SNS subscription
-        
-        # Get current filter policy from SNS subscription (ONLY source of truth)
-        current_usecases = get_current_filter_policy_usecases(sns_client, subscription_arn)
-        logger.info(f"Current SNS filter policy usecases: {current_usecases}, removing: {usecase_id_to_remove}")
-        
-        # Check if the usecase is actually in the current filter policy
-        usecase_found = False
-        logger.info(f"Looking for usecase '{usecase_id_to_remove}' (length: {len(usecase_id_to_remove)}) in current usecases:")
-        for i, id in enumerate(current_usecases):
-            match = id == usecase_id_to_remove
-            logger.info(f"  [{i}] '{id}' (length: {len(id)}) - match: {match}")
-            if match:
-                usecase_found = True
-                break
-        
-        if not usecase_found:
-            logger.error(f"ERROR: Usecase '{usecase_id_to_remove}' not found in current filter policy {current_usecases} - nothing to remove")
-            logger.error("This might be a case sensitivity or whitespace issue")
-            return  # Nothing to do
-        
-        logger.info(f"SUCCESS: Found usecase '{usecase_id_to_remove}' in filter policy, proceeding with removal")
-        
-        # Remove the usecase we're unsubscribing from the current list
-        filtered_usecases = [id for id in current_usecases if id != usecase_id_to_remove]
-        removed_count = len(current_usecases) - len(filtered_usecases)
-        logger.info(f"Removed {removed_count} instances of usecase {usecase_id_to_remove}")
-        logger.info(f"Remaining usecases: {filtered_usecases}")
-        
-        # If no usecases left, unsubscribe completely
-        if not filtered_usecases:
-            logger.info(f"User has no remaining usecase subscriptions, unsubscribing from SNS")
-            sns_client.unsubscribe(SubscriptionArn=subscription_arn)
-            logger.info(f"Successfully unsubscribed from SNS topic")
-            return
-        
-        # Update filter policy with remaining usecases
-        filter_policy = create_filter_policy_json(filtered_usecases)
-        logger.info(f"Updating filter policy with remaining usecases {filtered_usecases}: {filter_policy}")
-        
-        logger.info(f"About to call set_subscription_attributes with:")
-        logger.info(f"  SubscriptionArn: {subscription_arn}")
-        logger.info(f"  AttributeName: FilterPolicy")
-        logger.info(f"  AttributeValue: {filter_policy}")
-        
-        sns_client.set_subscription_attributes(
-            SubscriptionArn=subscription_arn,
-            AttributeName='FilterPolicy',
-            AttributeValue=filter_policy
-        )
-        
-        logger.info("SUCCESS: set_subscription_attributes completed successfully")
-        logger.info(f"Successfully updated filter policy: {filter_policy}")
-        
-        # Verify the update by reading the filter policy again
-        logger.info("Verifying filter policy update...")
-        verify_usecases = get_current_filter_policy_usecases(sns_client, subscription_arn)
-        logger.info(f"Verified filter policy after update: {verify_usecases}")
-        
+        remove_usecase(sns_client, subscription_arn, usecase_id_to_remove)
     except Exception as e:
         logger.error(f"Error: Could not update SNS filter policy: {str(e)}", exc_info=True)
         # Continue anyway - don't fail the unsubscribe operation
-
-
-def get_current_filter_policy_usecases(sns_client, subscription_arn: str) -> List[str]:
-    """
-    Get the current usecase_id array from SNS filter policy.
-    
-    Args:
-        sns_client: Boto3 SNS client
-        subscription_arn: SNS subscription ARN
-        
-    Returns:
-        List of usecase IDs in the current filter policy
-    """
-    try:
-        response = sns_client.get_subscription_attributes(SubscriptionArn=subscription_arn)
-        
-        filter_policy_str = response.get('Attributes', {}).get('FilterPolicy')
-        if not filter_policy_str:
-            logger.info(f"No existing filter policy found for subscription {subscription_arn}")
-            return []
-        
-        logger.info(f"Current filter policy: {filter_policy_str}")
-        
-        # Parse the filter policy JSON
-        filter_policy = json.loads(filter_policy_str)
-        logger.info(f"Parsed filter policy: {filter_policy}")
-        
-        # Extract usecase_id array
-        usecases = filter_policy.get('usecase_id', [])
-        logger.info(f"Final parsed usecases: {usecases}")
-        
-        return usecases
-        
-    except Exception as e:
-        logger.error(f"Error: Could not parse filter policy JSON: {str(e)}")
-        raise
-
-
-def create_filter_policy_json(usecase_ids: List[str]) -> str:
-    """
-    Create the SNS filter policy JSON for multiple usecases.
-    
-    Args:
-        usecase_ids: List of usecase IDs
-        
-    Returns:
-        JSON string for SNS filter policy
-    """
-    return json.dumps({'usecase_id': usecase_ids})

@@ -5,7 +5,7 @@ import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import FormField from "@cloudscape-design/components/form-field";
-import { api } from '../../utils/api';
+import { hooksApi } from '../../utils/api';
 import { ContainerLoading } from '../common/LoadingStates';
 
 // Lazy load the code editor to reduce bundle size
@@ -35,7 +35,7 @@ export default function UsecaseHooks({ usecaseId }: UsecaseHooksProps) {
     setError(null);
     
     try {
-      const response = await api.get(`usecase/${usecaseId}/hooks`);
+      const response = await hooksApi.get(usecaseId);
       const hooksData = {
         before_script: response.before_script || '',
         after_script: response.after_script || ''
@@ -69,7 +69,7 @@ export default function UsecaseHooks({ usecaseId }: UsecaseHooksProps) {
     setError(null);
     
     try {
-      await api.post(`usecase/${usecaseId}/hooks`, localHooks);
+      await hooksApi.create(usecaseId, localHooks);
       setHooks(localHooks); // Update the server state
       console.log('Hooks saved successfully');
     } catch (err: any) {

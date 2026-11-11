@@ -71,6 +71,6 @@ Per `05_coding.md`: 70% unit. The deletion of ~5 cache test files is compensated
 
 ## Not tested (explicit)
 
-- SDK behavior itself (`replayable=True`, `replay_trajectory`). Mocked in unit tests. The E2E test exercises real SDK behavior in a Fargate task; if the SDK breaks, the E2E will fail and the probe assumptions in `trajectory-replay.md` need revisiting.
+- SDK behavior itself (`replayable=True`, `replay_trajectory`). Mocked in unit tests. The E2E test exercises real SDK behavior in the cloud worker (a Lambda MicroVM today; an ECS task when this was written); if the SDK breaks, the E2E will fail and the probe assumptions in `trajectory-replay.md` need revisiting.
 - Validation during replay. We pass `strict=False` and do not verify validator output. If the SDK emits warnings from disabled-but-still-running validators, they're ignored.
 - Race conditions between invalidation events and in-flight executions. Accepted: an execution that starts while invalidation is processing may either replay (old trajectories) or run live (trajectories gone). Both are correct behaviors.

@@ -5,11 +5,16 @@ import Link from '@cloudscape-design/components/link';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Grid from '@cloudscape-design/components/grid';
-import Box from '@cloudscape-design/components/box';
+import Box, { BoxProps } from '@cloudscape-design/components/box';
 import LineChart from '@cloudscape-design/components/line-chart';
 import { DashboardOverviewItem } from '../../types/application';
+import { CostSummary } from '../../utils/api';
+import { CostTrend } from '../common/cost/CostTrend';
 
-function formatRelativeTime(isoString: string): string {
+const COST_WINDOW_HINT = 'Allocated bill over the last 30 days, compared with the 30 days before';
+export const NO_COST_DATA_HINT = 'No cost data yet';
+
+export function formatRelativeTime(isoString: string): string {
   if (!isoString) return 'Never';
   const diff = Date.now() - new Date(isoString).getTime();
   const minutes = Math.floor(diff / 60000);
@@ -21,13 +26,13 @@ function formatRelativeTime(isoString: string): string {
   return `${days}d ago`;
 }
 
-function getPassRateColor(rate: number): string {
+export function getPassRateColor(rate: number): BoxProps.Color {
   if (rate >= 90) return 'text-status-success';
   if (rate >= 70) return 'text-status-warning';
   return 'text-status-error';
 }
 
-function getStatusType(status: string): 'success' | 'error' | 'warning' | 'info' | 'stopped' {
+export function getStatusType(status: string): 'success' | 'error' | 'warning' | 'info' | 'stopped' {
   if (status === 'success') return 'success';
   if (status === 'failed') return 'error';
   return 'info';
@@ -37,9 +42,27 @@ interface ApplicationMetricsCardProps {
   app: DashboardOverviewItem;
   onClick?: () => void;
   hideHeader?: boolean;
+  /**
+   * 30-day cost of the application (`/dashboard/costs` row). Omit to render
+   * no cost column (the application detail page shows the full `CostCard`);
+   * `null` = no summary yet → "—".
+   */
+  cost?: CostSummary | null;
 }
 
-export function ApplicationMetricsCard({ app, onClick, hideHeader }: ApplicationMetricsCardProps) {
+/** Fourth large value of the card: the 30-day cost with its trend, or "—" when no summary exists. */
+function CostValue({ cost }: { cost: CostSummary | null }) {
+  if (cost === null) {
+    return (
+      <Box variant="awsui-value-large" color="text-body-secondary">
+        <span title={NO_COST_DATA_HINT}>—</span>
+      </Box>
+    );
+  }
+  return <CostTrend amount={cost.window_30d} trend={cost.window_30d_trend} changePct={cost.window_30d_change_pct} />;
+}
+
+export function ApplicationMetricsCard({ app, onClick, hideHeader, cost }: ApplicationMetricsCardProps) {
   const header = hideHeader ? undefined : (
     <Header
       variant="h2"
@@ -58,7 +81,7 @@ export function ApplicationMetricsCard({ app, onClick, hideHeader }: Application
   );
 
   return (
-    <Container header={header}>
+    <Container header={header} data-testid="application-metrics-card">
       <Grid gridDefinition={[{ colspan: 4 }, { colspan: 8 }]}>
         <SpaceBetween direction="horizontal" size="xl">
           <div>
@@ -77,6 +100,12 @@ export function ApplicationMetricsCard({ app, onClick, hideHeader }: Application
               {app.failure_count || 0}
             </Box>
           </div>
+          {cost !== undefined && (
+            <div title={COST_WINDOW_HINT}>
+              <Box variant="awsui-key-label">Cost (30d)</Box>
+              <CostValue cost={cost} />
+            </div>
+          )}
         </SpaceBetween>
         <div>
           {app.series && app.series.dates.length > 0 && (

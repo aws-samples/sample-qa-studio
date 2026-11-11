@@ -20,8 +20,28 @@ ROUTE_MAP = {
     ('GET', '/applications/{id}/failures'): 'handlers.get_application_failures',
     ('GET', '/applications/{id}/flaky'): 'handlers.get_application_flaky',
     ('POST', '/applications/{id}/reassign'): 'handlers.reassign_application',
+    # Application-level shared configuration (variables / secrets / datasets).
+    # These ride the existing /applications/{proxy+} resource on purpose: the api stack
+    # is within ~20 resources of the 500 CloudFormation limit (see
+    # .kiro/docs/application-shared-config/design.md, "Resource ceiling").
+    ('GET', '/applications/{id}/variables'): 'handlers.get_application_variables',
+    ('POST', '/applications/{id}/variables'): 'handlers.put_application_variables',
+    ('GET', '/applications/{id}/secrets'): 'handlers.get_application_secrets',
+    ('POST', '/applications/{id}/secrets'): 'handlers.put_application_secrets',
+    ('DELETE', '/applications/{id}/secrets'): 'handlers.delete_application_secrets',
+    ('GET', '/applications/{id}/datasets'): 'handlers.list_application_datasets',
+    ('POST', '/applications/{id}/datasets'): 'handlers.create_application_dataset',
+    ('GET', '/applications/{id}/datasets/{datasetId}'): 'handlers.get_application_dataset',
+    ('PUT', '/applications/{id}/datasets/{datasetId}'): 'handlers.update_application_dataset',
+    ('DELETE', '/applications/{id}/datasets/{datasetId}'): 'handlers.delete_application_dataset',
+    # Cost allocation (.kiro/docs/cost-allocation/design.md, "API"): read-only views of
+    # the USAGE#… / SUMMARY items and S3 ledgers the collector writes. The application
+    # route rides /applications/{proxy+}; the other two are explicit API Gateway resources.
+    ('GET', '/applications/{id}/costs'): 'handlers.get_application_costs',
+    ('GET', '/usecase/{id}/costs'): 'handlers.get_usecase_costs',
     # Dashboard
     ('GET', '/dashboard/overview'): 'handlers.get_dashboard_overview',
+    ('GET', '/dashboard/costs'): 'handlers.get_dashboard_costs',
     # Team CRUD
     ('GET', '/teams'): 'handlers.list_teams',
     ('POST', '/teams'): 'handlers.create_team',
@@ -43,6 +63,7 @@ ROUTE_MAP = {
     ('GET', '/users'): 'handlers.list_users',
     ('POST', '/users'): 'handlers.create_user',
     ('PATCH', '/users/{userId}'): 'handlers.update_user',
+    ('DELETE', '/users/{userId}'): 'handlers.delete_user',
 }
 
 _handler_cache: Dict[str, Any] = {}

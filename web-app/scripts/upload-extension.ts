@@ -2,11 +2,13 @@
 /**
  * Build the NovaActRecorder Chrome extension zip and upload it to S3.
  *
- * Bucket:  ${account}-${baseName}-artefacts-${region}
+ * Buckets: ${account}-${baseName}-artefacts-${region} for the default region and
+ *          every enabled region (one artefact bucket per region, see worker-stack)
  * Key:     extensions/nova-act-recorder.zip
  *
- * The worker already expects the extension at that location
- * (see EXTENSION_S3_PREFIX default in wizard_worker.py).
+ * The wizard worker loads the extension from the artefact bucket of the
+ * browser's region (AgentCore only reads a same-region bucket; see
+ * EXTENSION_S3_PREFIX in wizard_worker.py), so every regional bucket needs it.
  */
 import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
@@ -16,6 +18,17 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 
 const S3_KEY = 'extensions/nova-act-recorder.zip';
+
+export interface ExtensionTarget { region: string; bucket: string }
+
+/** One upload per artefact bucket: the default region plus every enabled region. */
+export function extensionTargets(
+  account: string,
+  config: { baseName: string; defaultRegion: string; enabledRegions: string[] },
+): ExtensionTarget[] {
+  const regions = [...new Set([config.defaultRegion, ...config.enabledRegions])];
+  return regions.map(region => ({ region, bucket: `${account}-${config.baseName}-artefacts-${region}` }));
+}
 
 async function main() {
   const config = loadConfig();
@@ -29,8 +42,6 @@ async function main() {
     process.exit(1);
   }
 
-  const bucketName = `${account}-${config.baseName}-artefacts-${region}`;
-
   // 1. Build the extension zip
   const buildScript = join(__dirname, '..', '..', 'chrome-extension', 'build-extension.sh');
   const zipPath = join(__dirname, '..', '..', 'nova-act-recorder.zip');
@@ -38,22 +49,23 @@ async function main() {
   console.log('📦 Building extension zip…');
   execSync(`bash "${buildScript}" "${zipPath}"`, { stdio: 'inherit' });
 
-  // 2. Upload to S3
-  console.log(`⬆️  Uploading to s3://${bucketName}/${S3_KEY}…`);
-  const s3 = new S3Client({ region });
+  // 2. Upload to every regional artefact bucket
   const body = readFileSync(zipPath);
-
-  await s3.send(new PutObjectCommand({
-    Bucket: bucketName,
-    Key: S3_KEY,
-    Body: body,
-    ContentType: 'application/zip',
-  }));
-
-  console.log(`✅ Extension uploaded to s3://${bucketName}/${S3_KEY}`);
+  for (const target of extensionTargets(account, config)) {
+    console.log(`⬆  Uploading to s3://${target.bucket}/${S3_KEY}…`);
+    await new S3Client({ region: target.region }).send(new PutObjectCommand({
+      Bucket: target.bucket,
+      Key: S3_KEY,
+      Body: body,
+      ContentType: 'application/zip',
+    }));
+    console.log(`✅ Extension uploaded to s3://${target.bucket}/${S3_KEY}`);
+  }
 }
 
-main().catch((err) => {
-  console.error('❌ Extension upload failed:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('❌ Extension upload failed:', err);
+    process.exit(1);
+  });
+}

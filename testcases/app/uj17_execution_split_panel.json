@@ -1,0 +1,234 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-11-05T08:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-17 Execution Split Panel",
+    "description": "Selecting a run in the Execution History table opens its details in a split panel at the bottom of the use case page (header 'Execution <id>', Execution Steps table, deep link ?tab=history&execution=<id>); closing the panel clears the selection and the URL; Delete removes the selected run and closes the panel",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "execution",
+      "usecase",
+      "split-panel",
+      "delete"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "browser",
+      "instruction": "Open /usecase/069b14f8-9c4e-4fe7-a0bb-02467a31bb49",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/usecase/069b14f8-9c4e-4fe7-a0bb-02467a31bb49\"}"
+    },
+    {
+      "sort": 5,
+      "step_type": "validation",
+      "instruction": "Is the use case '[QA Validation App] Login' shown in the page header?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 6,
+      "step_type": "navigation",
+      "instruction": "Click the 'Trigger Execution' button"
+    },
+    {
+      "sort": 7,
+      "step_type": "navigation",
+      "instruction": "Click the 'Execution History' tab"
+    },
+    {
+      "sort": 8,
+      "step_type": "navigation",
+      "instruction": "Click the 'Refresh' button above the 'Execution History' table"
+    },
+    {
+      "sort": 9,
+      "step_type": "validation",
+      "instruction": "Does the first row of the 'Execution History' table have a radio button in its first cell?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 10,
+      "step_type": "validation",
+      "instruction": "Is there a panel at the bottom of the page whose header starts with 'Execution'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 11,
+      "step_type": "navigation",
+      "instruction": "Click the radio button of the first row in the 'Execution History' table; a panel opens at the bottom of the page"
+    },
+    {
+      "sort": 12,
+      "step_type": "validation",
+      "instruction": "Is there a panel at the bottom of the page whose header starts with 'Execution'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 13,
+      "step_type": "retrieve_value",
+      "instruction": "tab=history&execution=[0-9a-f-]+",
+      "capture_variable": "panel_url_part",
+      "value_source": "url"
+    },
+    {
+      "sort": 14,
+      "step_type": "assertion",
+      "instruction": "The URL carries the history tab and the selected execution",
+      "assertion_variable": "panel_url_part",
+      "validation_type": "string",
+      "validation_operator": "contains",
+      "validation_value": "tab=history&execution="
+    },
+    {
+      "sort": 15,
+      "step_type": "validation",
+      "instruction": "Is there a section with the heading 'Execution Information' in the panel at the bottom of the page?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 16,
+      "step_type": "navigation",
+      "instruction": "Scroll down inside the panel at the bottom of the page to the table with the heading 'Execution Steps'"
+    },
+    {
+      "sort": 17,
+      "step_type": "validation",
+      "instruction": "Is there a table with the heading 'Execution Steps' in the panel at the bottom of the page?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 18,
+      "step_type": "navigation",
+      "instruction": "Click the 'Close panel' icon button (the X) in the header of the panel at the bottom of the page; the panel disappears"
+    },
+    {
+      "sort": 19,
+      "step_type": "validation",
+      "instruction": "Is there a panel at the bottom of the page whose header starts with 'Execution'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 20,
+      "step_type": "retrieve_value",
+      "instruction": "\\?tab=history$",
+      "capture_variable": "closed_url_part",
+      "value_source": "url"
+    },
+    {
+      "sort": 21,
+      "step_type": "assertion",
+      "instruction": "Closing the panel dropped the execution parameter from the URL",
+      "assertion_variable": "closed_url_part",
+      "validation_type": "string",
+      "validation_operator": "exact",
+      "validation_value": "?tab=history"
+    },
+    {
+      "sort": 22,
+      "step_type": "validation",
+      "instruction": "Is the radio button of the first row in the 'Execution History' table selected?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 23,
+      "step_type": "navigation",
+      "instruction": "Click the radio button of the first row in the 'Execution History' table; a panel opens at the bottom of the page"
+    },
+    {
+      "sort": 24,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button above the 'Execution History' table"
+    },
+    {
+      "sort": 25,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Delete Executions' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 26,
+      "step_type": "validation",
+      "instruction": "Does the dialog say 'You are about to permanently delete 1 execution.'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 27,
+      "step_type": "navigation",
+      "instruction": "Type 'permanently delete' in the confirmation field of the dialog"
+    },
+    {
+      "sort": 28,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the dialog"
+    },
+    {
+      "sort": 29,
+      "step_type": "validation",
+      "instruction": "Is the 'Delete Executions' dialog closed?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 30,
+      "step_type": "validation",
+      "instruction": "Is there a panel at the bottom of the page whose header starts with 'Execution'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    }
+  ],
+  "variables": [],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Username for login"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Password for login"
+    }
+  ]
+}

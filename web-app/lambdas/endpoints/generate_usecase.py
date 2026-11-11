@@ -973,9 +973,6 @@ def handler(event, context):
     if error:
         return error
     
-    # Extract user info
-    user_email = user_identity.get('email') or user_identity.get('identity', 'unknown')
-    
     print(f'[INFO] [{request_id}] Processing generate usecase request')
     
     # Parse request body

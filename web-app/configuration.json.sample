@@ -13,11 +13,31 @@
   "defaultRegion": "us-east-1",
   "deviceFarmRegion": "us-west-2",
   "useNovaActGa": true,
-  "vpcId": null,
-  "workerSecurityGroupId": null,
-  "createVpcEndpoints": false,
-  "agentCoreVPC": false,
   "apiGatewayUrl": "",
   "enableExtensionAuthentication": true,
-  "cliCallbackUrl": "http://localhost:19847/callback"
+  "cliCallbackUrl": "http://localhost:19847/callback",
+  "maxExecutionDurationMinutes": 60,
+  "maxWizardSessionMinutes": 240,
+  "vpcId": null,
+  "vpcSubnetIds": null,
+  "workerSecurityGroupId": null,
+  "costAllocation": {
+    "enabled": true,
+    "scheduleUtc": "cron(0 6 * * ? *)",
+    "lookbackDays": 3,
+    "novaActServiceName": "NovaAct",
+    "compute": {
+      "enabled": true,
+      "ceService": "AWS Lambda",
+      "ceComputeUsageTypePrefixes": [
+        "Lambda-MicroVM-vCPU-Second",
+        "Lambda-MicroVM-Memory-GB-Second"
+      ],
+      "ceSnapshotUsageTypePrefixes": [
+        "Lambda-MicroVM-Snapshot-Read-GB",
+        "Lambda-MicroVM-Snapshot-Storage-GB-Hour",
+        "Lambda-MicroVM-Snapshot-Write-GB"
+      ]
+    }
+  }
 }

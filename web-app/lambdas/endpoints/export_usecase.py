@@ -8,6 +8,7 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from utils import create_response, get_table_name, get_secret_prefix
 from resource_auth import require_resource_access, usecase_from_path
+from step_copy import copy_step_fields, nest_repeat_children
 
 # Configure logging
 logger = logging.getLogger()
@@ -81,45 +82,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         steps = []
         for item in steps_response.get('Items', []):
-            # Convert to clean export format (no IDs)
+            # Clean export format: no pk/sk/timestamps.  ``id`` and
+            # ``parent_step_id`` are kept only to build the nested repeat
+            # shape and are stripped by ``nest_repeat_children``.
             step_export = {
                 'sort': item.get('sort', 0),
-                'instruction': item.get('instruction', ''),
-                'step_type': item.get('step_type', '')
+                **copy_step_fields(item),
+                'id': item.get('id'),
+                'parent_step_id': item.get('parent_step_id'),
             }
-            
-            # Add optional fields if present
-            if item.get('secret_key'):
-                step_export['secret_key'] = item['secret_key']
-            if item.get('capture_variable'):
-                step_export['capture_variable'] = item['capture_variable']
-            if item.get('validation_type'):
-                step_export['validation_type'] = item['validation_type']
-            if item.get('validation_operator'):
-                step_export['validation_operator'] = item['validation_operator']
-            if item.get('validation_value'):
-                step_export['validation_value'] = item['validation_value']
-            if item.get('assertion_variable'):
-                step_export['assertion_variable'] = item['assertion_variable']
-            if item.get('value_step'):
-                step_export['value_step'] = item['value_step']
-            if item.get('value_type'):
-                step_export['value_type'] = item['value_type']
-
-            for network_field in (
-                'network_url_pattern', 'network_method', 'network_request_body',
-                'network_body_match_type', 'network_mock_response',
-                'network_mock_passthrough', 'network_timeout',
-                'network_response_body', 'network_response_body_match_type',
-                'network_response_status',
-            ):
-                if network_field in item:
-                    step_export[network_field] = item[network_field]
-            
             steps.append(step_export)
         
-        # Sort steps by sort property
-        steps.sort(key=lambda x: x.get('sort', 0))
+        # Sort by sort property and nest repeat children under their repeat
+        steps = nest_repeat_children(steps)
         
         # Get variables - initialize as empty list to avoid null in JSON
         variables = []

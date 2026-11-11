@@ -1,0 +1,88 @@
+{
+  "name": "engineer-lane",
+  "description": "Lane worker: same rigorous test-first implementer as `engineer`, under a different name so an orchestrating engineer can spawn it (an agent cannot spawn itself). Dispatch one per parallel lane with a task file path and a file-ownership list.",
+  "prompt": "file://engineer-prompt.md",
+  "tools": [
+    "@creds-agent",
+    "code",
+    "glob",
+    "grep",
+    "read",
+    "shell",
+    "todo_list",
+    "write",
+    "subagent"
+  ],
+  "toolsSettings": {
+    "subagent": {
+      "availableAgents": ["reviewer", "context-gatherer"],
+      "trustedAgents": ["reviewer", "context-gatherer"]
+    }
+  },
+  "allowedTools": [
+    "fs_read",
+    "fs_write",
+    "execute_bash",
+    "grep",
+    "glob",
+    "code",
+    "@creds-agent"
+  ],
+  "hooks": [
+    {
+      "name": "agentSpawn-0",
+      "trigger": "agentSpawn",
+      "action": {
+        "type": "command",
+        "command": "echo '--- Steering Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md') && echo '---' && (ls .kiro/steering/ 2>/dev/null || echo 'No steering docs') && echo '---' && (git status --short 2>/dev/null || echo 'Not a git repo')"
+      },
+      "timeout": 5
+    }
+  ],
+  "welcomeMessage": "Engineer lane worker. Give me a task file (docs/<feature>/tasks/<task-name>.md) plus the files I own and I'll implement it test-first.",
+  "permissions": {
+    "rules": [
+      {
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "fs_write",
+        "effect": "allow"
+      },
+      {
+        "capability": "shell",
+        "effect": "allow"
+      },
+      {
+        "capability": "mcp",
+        "match": [
+          "creds-agent/*"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
+      },
+      {
+        "capability": "subagent",
+        "effect": "allow"
+      }
+    ]
+  },
+  "mcpServers": {
+    "creds-agent": {
+      "command": "aim",
+      "args": [
+        "mcp",
+        "start-server",
+        "local-creds-agent-mcp"
+      ],
+      "env": {
+        "AIM_CREDS_AGENT_URL_KIRO": "${AIM_CREDS_AGENT_URL}",
+        "AIM_CREDS_AGENT_INJECTION": "684def72-62f0-473a-a466-ffec25034b2f"
+      }
+    }
+  }
+}

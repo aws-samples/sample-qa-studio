@@ -1,8 +1,9 @@
 import type { WizardState } from './types';
+import { BUNDLE_ID_PATTERN } from '../common/platform';
 
 // --- Parsed Import Data ---
 
-export interface ParsedImportData {
+interface ParsedImportData {
   usecase: any;
   exportVersion: string;
   name: string;
@@ -15,13 +16,13 @@ export interface ParsedImportData {
 
 // --- Parse Result ---
 
-export type ParseImportResult =
+type ParseImportResult =
   | { success: true; data: ParsedImportData }
   | { success: false; error: string };
 
 // --- Per-Step Validation Functions ---
 
-export function validateHowToStart(state: WizardState): Record<string, string> {
+function validateHowToStart(state: WizardState): Record<string, string> {
   if (!state.creationPath) {
     return { creationPath: 'Please select how you want to start' };
   }
@@ -55,11 +56,11 @@ export function validateBasicInfo(state: WizardState): Record<string, string> {
   return errors;
 }
 
-export function validatePlatformSelection(state: WizardState): Record<string, string> {
+function validatePlatformSelection(state: WizardState): Record<string, string> {
   return {};
 }
 
-export function validateCreationMethod(state: WizardState): Record<string, string> {
+function validateCreationMethod(state: WizardState): Record<string, string> {
   if (!state.creationMethod) {
     return { creationMethod: 'Please select a creation method' };
   }
@@ -68,6 +69,14 @@ export function validateCreationMethod(state: WizardState): Record<string, strin
 
 export function validatePlatformConfig(state: WizardState): Record<string, string> {
   const errors: Record<string, string> = {};
+
+  if (state.testPlatform === 'electron') {
+    const bundleId = state.blankConfig.bundleId.trim();
+    if (bundleId && !BUNDLE_ID_PATTERN.test(bundleId)) {
+      errors.bundleId = 'Bundle ID must be a reverse-DNS identifier such as com.example.app';
+    }
+    return errors;
+  }
 
   if (state.testPlatform === 'mobile' && !state.mobilePlatform) {
     errors.mobilePlatform = 'Please select a mobile platform';
@@ -95,7 +104,7 @@ export function validatePlatformConfig(state: WizardState): Record<string, strin
   return errors;
 }
 
-export function validateSelectSource(state: WizardState): Record<string, string> {
+function validateSelectSource(state: WizardState): Record<string, string> {
   if (!state.cloneConfig.selectedUsecaseId) {
     return { selectedUsecaseId: 'Please select a source use case' };
   }
@@ -119,7 +128,7 @@ export function validateUploadFile(state: WizardState): Record<string, string> {
   return errors;
 }
 
-export function validateSelectTemplate(state: WizardState): Record<string, string> {
+function validateSelectTemplate(state: WizardState): Record<string, string> {
   if (!state.templateConfig.selectedTemplateId) {
     return { selectedTemplateId: 'Please select a template' };
   }
@@ -128,8 +137,15 @@ export function validateSelectTemplate(state: WizardState): Record<string, strin
 
 export function validateDescribeAndGenerate(state: WizardState): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!state.userJourneyConfig.userJourneyText.trim()) {
+  // A browser recording can stand in for the description (same rule as the generator).
+  if (!state.userJourneyConfig.userJourneyText.trim() && !state.userJourneyConfig.recordingData) {
     errors.userJourneyText = 'User journey description is required';
+  }
+  if (state.testPlatform === 'electron') {
+    const bundleId = state.userJourneyConfig.bundleId.trim();
+    if (bundleId && !BUNDLE_ID_PATTERN.test(bundleId)) {
+      errors.bundleId = 'Bundle ID must be a reverse-DNS identifier such as com.example.app';
+    }
   }
   if (!state.userJourneyConfig.generatedUsecase) {
     errors.generatedUsecase = 'Please generate a use case before proceeding';

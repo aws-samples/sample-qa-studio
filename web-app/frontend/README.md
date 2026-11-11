@@ -26,8 +26,10 @@ src/                            React source code
   App.tsx                       Main App component, configures routing, auth, and layout
   components/                   React components
     common/                     Shared reusable components (ErrorDisplay, LoadingStates, etc.)
+      splitPanel.tsx            SplitPanelProvider / useSplitPanel: pages hand their split panel to the root AppLayout
     dcv/                        DCV viewer integration components
-    execution/                  Execution detail and live view components
+    execution/                  Execution details panel (split panel on the use case page) and live view components
+    ExecutionRedirect.tsx       Redirects /usecase/:u/execution/:e to /usecase/:u?tab=history&execution=:e
     templates/                  Template library and detail views
     usecase/                    Use case detail sub-components
     wizard/                     Interactive wizard flow components

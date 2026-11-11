@@ -1,6 +1,6 @@
 import { Duration, Stack, StackProps, CfnOutput, CfnResource } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { Runtime, Architecture, Code, Function } from 'aws-cdk-lib/aws-lambda';
+import { Runtime, Architecture, Code, Function, LoggingFormat } from 'aws-cdk-lib/aws-lambda';
 import { ManagedPolicy } from 'aws-cdk-lib/aws-iam';
 
 export interface NovaActQAStudioBaseStackCreateProps extends StackProps {
@@ -17,6 +17,8 @@ export interface createPythonLambdaProps {
   timeout?: Duration,
   runtime?: Runtime,
   codeDirectory?: string,
+  /** Runtime log format; unset keeps the Lambda default (TEXT). JSON lets a dict passed to the logger land as a JSON object under `message` (metric filters). */
+  loggingFormat?: LoggingFormat,
 }
 
 export class NovaActQAStudioBaseStack extends Stack {
@@ -61,6 +63,7 @@ export class NovaActQAStudioBaseStack extends Stack {
       environment: { ...baseEnvironment, ...(props.environment || {}) },
       logRetention: 5,
       reservedConcurrentExecutions: this.lambdaConcurrency || undefined,
+      loggingFormat: props.loggingFormat,
     });
 
     // Attach AWSLambdaBasicExecutionRole for CloudWatch Logs permissions

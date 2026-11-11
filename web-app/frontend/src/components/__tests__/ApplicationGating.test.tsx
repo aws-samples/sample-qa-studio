@@ -11,6 +11,7 @@ vi.mock('../../auth', async () => {
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
+const mockCostsDashboard = vi.fn();
 vi.mock('../../utils/api', () => ({
   api: {
     get: (...args: any[]) => mockGet(...args),
@@ -18,9 +19,12 @@ vi.mock('../../utils/api', () => ({
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue(null),
   },
+  costsApi: {
+    dashboard: () => mockCostsDashboard(),
+  },
 }));
 
-import ApplicationSettings from '../ApplicationSettings';
+import ApplicationsPage from '../applications/ApplicationsPage';
 import EditApplication from '../EditApplication';
 import { CreateApplicationModal } from '../dashboard/CreateApplicationModal';
 
@@ -36,8 +40,11 @@ const perms = (isAdmin: boolean, teams: Array<{ team_id: string; role: string }>
 describe('Application gating (H-3)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCostsDashboard.mockRejectedValue(new Error('no costs in gating tests'));
     mockGet.mockImplementation(async (endpoint: string) => {
       if (endpoint === 'applications') return [];
+      if (endpoint.startsWith('dashboard/overview')) return [];
+      if (endpoint === 'test-suites') return { suites: [] };
       if (endpoint.startsWith('applications/')) {
         return { id: 'app-1', name: 'App', base_url: 'https://a', description: '', team: 'A',
           owner_team_id: 'team-a', environments: [] };
@@ -52,7 +59,7 @@ describe('Application gating (H-3)', () => {
 
   it('hides Create application for an editor', async () => {
     mockUsePermissions.mockReturnValue(perms(false, [{ team_id: 'team-a', role: 'editor' }]));
-    render(<MemoryRouter><ApplicationSettings /></MemoryRouter>);
+    render(<MemoryRouter><ApplicationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('No applications yet')).toBeTruthy());
     expect(screen.queryByText('Create application')).toBeNull();
     expect(screen.queryByText('Create your first application')).toBeNull();
@@ -60,11 +67,11 @@ describe('Application gating (H-3)', () => {
 
   it('shows Create application for a team lead and an admin', async () => {
     mockUsePermissions.mockReturnValue(perms(false, [{ team_id: 'team-a', role: 'team_lead' }]));
-    const { unmount } = render(<MemoryRouter><ApplicationSettings /></MemoryRouter>);
+    const { unmount } = render(<MemoryRouter><ApplicationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Create application')).toBeTruthy());
     unmount();
     mockUsePermissions.mockReturnValue(perms(true, []));
-    render(<MemoryRouter><ApplicationSettings /></MemoryRouter>);
+    render(<MemoryRouter><ApplicationsPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('Create application')).toBeTruthy());
   });
 

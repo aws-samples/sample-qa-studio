@@ -102,23 +102,10 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     dynamodb = boto3.client('dynamodb')
     table_name = get_table_name()
 
-    def to_dynamo(item: dict) -> dict:
-        result = {}
-        for k, v in item.items():
-            if isinstance(v, str):
-                result[k] = {'S': v}
-            elif isinstance(v, bool):
-                result[k] = {'BOOL': v}
-            elif isinstance(v, int):
-                result[k] = {'N': str(v)}
-            elif isinstance(v, list):
-                result[k] = {'L': [{'S': i} for i in v]}
-        return result
-
     dynamodb.transact_write_items(
         TransactItems=[
-            {'Put': {'TableName': table_name, 'Item': to_dynamo(application)}},
-            {'Put': {'TableName': table_name, 'Item': to_dynamo(index_record)}},
+            {'Put': {'TableName': table_name, 'Item': permissions_repo.to_dynamo(application)}},
+            {'Put': {'TableName': table_name, 'Item': permissions_repo.to_dynamo(index_record)}},
         ]
     )
 

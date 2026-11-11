@@ -25,7 +25,6 @@ export class CfnNagSuppressions implements IAspect {
           logicalId.includes('CustomResource') ||
           logicalId.includes('CustomS3AutoDelete') ||
           logicalId.includes('CustomCDKBucketDeployment') ||
-          logicalId.includes('CDKECRDeployment') ||
           logicalId.includes('FrontendDeployment')
         ) {
           this.addSuppressions(node, [

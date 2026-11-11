@@ -194,10 +194,8 @@ class TuiApi:
     ) -> Dict[str, Any]:
         """Fetch just the execution's metadata record.
 
-        Split out from :meth:`get_execution_detail` so callers that
-        want progressive rendering (the TUI) can request the main
-        record independently from steps / variables / headers and
-        paint it as soon as it arrives.
+        Fetched independently from the steps so the TUI can paint the
+        main record as soon as it arrives (progressive rendering).
 
         Errors bubble up — the TUI's progressive loader turns each
         section failure into an inline message rather than aborting
@@ -220,68 +218,6 @@ class TuiApi:
             f"/usecase/{usecase_id}/executions/{execution_id}/steps"
         )
         return response.get("steps", []) or []
-
-    def get_execution_detail(
-        self, usecase_id: str, execution_id: str
-    ) -> Dict[str, Any]:
-        """Compose the execution detail payload in a single sync call.
-
-        Mirrors :meth:`ExecutionAPI.get_execution` but is
-        synchronous so it can be called from a Textual ``@work(thread=True)``
-        worker without wrapping in ``asyncio.run``. The returned dict
-        carries the usual execution metadata plus ``steps`` /
-        ``variables`` / ``headers`` sub-payloads. Sub-resource failures
-        are swallowed (empty fallback) because older executions may
-        not have every endpoint available.
-
-        Note: the TUI's :class:`ExecutionDetailScreen` no longer calls
-        this composite. It now drives the two rendered sections
-        (``get_execution_metadata`` and ``get_execution_steps``) in
-        parallel via :mod:`asyncio`. The composite is kept for
-        callers that want a single blocking call (and for the direct
-        tests in ``test_tui_execution_detail``).
-        """
-        execution = self._client.get(
-            f"/usecase/{usecase_id}/executions/{execution_id}"
-        )
-
-        try:
-            steps_response = self._client.get(
-                f"/usecase/{usecase_id}/executions/{execution_id}/steps"
-            )
-            execution["steps"] = steps_response.get("steps", []) or []
-        except Exception:
-            execution["steps"] = []
-
-        try:
-            vars_response = self._client.get(
-                f"/usecase/{usecase_id}/executions/{execution_id}/variables"
-            )
-            exec_vars = vars_response.get("execution_variables", {})
-            if isinstance(exec_vars, dict) and exec_vars:
-                execution["variables"] = exec_vars
-            else:
-                raw_vars = vars_response.get("variables", [])
-                merged: Dict[str, str] = {}
-                if isinstance(raw_vars, list):
-                    for entry in raw_vars:
-                        if isinstance(entry, dict) and "key" in entry and "value" in entry:
-                            merged[entry["key"]] = entry["value"]
-                elif isinstance(raw_vars, dict):
-                    merged = raw_vars
-                execution["variables"] = merged
-        except Exception:
-            execution["variables"] = {}
-
-        try:
-            headers_response = self._client.get(
-                f"/usecase/{usecase_id}/executions/{execution_id}/headers"
-            )
-            execution["headers"] = headers_response.get("headers", {}) or {}
-        except Exception:
-            execution["headers"] = {}
-
-        return execution
 
     # ------------------------------------------------------------------
     # Test suites

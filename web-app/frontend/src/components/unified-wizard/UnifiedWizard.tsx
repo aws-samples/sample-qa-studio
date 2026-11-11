@@ -1,4 +1,4 @@
-import { useReducer, useState, useMemo, useEffect } from 'react';
+import { useReducer, useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Wizard from "@cloudscape-design/components/wizard";
 import BreadcrumbGroup from "@cloudscape-design/components/breadcrumb-group";
@@ -6,12 +6,17 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { wizardReducer, initialWizardState } from './wizardReducer';
 import { getWizardSteps } from './getWizardSteps';
 import { getStepValidation } from './validation';
+import { deepLinkActions } from './deepLink';
 
 /**
  * UnifiedWizard — top-level page component at /create/new
  *
  * Renders a Cloudscape Wizard with dynamically computed steps based on
  * the user's selected creation path, creation method, and test platform.
+ *
+ * Deep links: ?applicationId= preselects the application; ?path=, ?method=
+ * and ?sourceId= preselect the creation path / method / clone source
+ * (deepLink.ts).
  *
  * State is managed via useReducer (wizardReducer). Validation errors are
  * tracked in local state (UI-only concern, not part of the reducer).
@@ -29,6 +34,15 @@ export default function UnifiedWizard() {
     if (appId && !state.basicInfo.applicationId) {
       dispatch({ type: 'UPDATE_BASIC_INFO', payload: { applicationId: appId } });
     }
+  }, [searchParams]);
+
+  // Deep link (?path=&method=&sourceId=, see deepLink.ts): applied once on
+  // mount so navigating inside the wizard never re-applies it.
+  const deepLinkApplied = useRef(false);
+  useEffect(() => {
+    if (deepLinkApplied.current) return;
+    deepLinkApplied.current = true;
+    deepLinkActions(searchParams).forEach(dispatch);
   }, [searchParams]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitTrigger, setSubmitTrigger] = useState(0);
