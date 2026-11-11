@@ -14,6 +14,7 @@ import Badge from "@cloudscape-design/components/badge";
 import { regionOptions, findRegionOptions } from './../../utils/browser_regions';
 import { useModels } from '../../hooks/useModels';
 import { api } from '../../utils/api';
+import { BUNDLE_ID_HELP, PlatformBadge, isElectron, isValidBundleId } from '../common/platform';
 import { devicesApi } from '../../utils/api';
 
 const platformOptions: SelectProps.Options = [
@@ -40,6 +41,9 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
 
   // Mobile-specific state
   const isMobile = (usecase.test_platform || 'web') === 'mobile';
+  const electron = isElectron(usecase.test_platform);
+  // Starting URL and browser policy are web-only.
+  const isWeb = !isMobile && !electron;
   const [mobilePlatform, setMobilePlatform] = useState<SelectProps.Option | null>(
     usecase.platform ? platformOptions.find(o => (o as SelectProps.Option).value === usecase.platform) as SelectProps.Option || null : null
   );
@@ -158,7 +162,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
     }
 
     // Upload browser policy if a new file was selected (web tests only)
-    if (!isMobile && policyFiles.length > 0) {
+    if (isWeb && policyFiles.length > 0) {
       const uploaded = await uploadBrowserPolicy(policyFiles[0]);
       if (!uploaded) {
         return; // Don't save if upload failed
@@ -168,7 +172,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
     const updatedUsecase: Record<string, any> = {
       name,
       description,
-      starting_url,
+      starting_url: electron ? '' : starting_url,
       active,
       enableCache,
       executing_region: selectedRegion.value,
@@ -176,6 +180,10 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
       tags: tags.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0),
       test_platform: usecase.test_platform || 'web',
     };
+
+    if (electron && bundleId.trim()) {
+      updatedUsecase.bundle_id = bundleId.trim();
+    }
 
     if (isMobile) {
       updatedUsecase.platform = mobilePlatform?.value;
@@ -203,6 +211,25 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
           This is a <Badge color="blue">Mobile</Badge> use case. Device Farm operations run in us-west-2.
         </Alert>
       )}
+      {electron && (
+        <>
+          <Alert type="info">
+            This is an <PlatformBadge platform="electron" /> use case. It runs through the CI runner
+            (<code>qa-studio run --app-path …</code>) and cannot be triggered from this UI.
+          </Alert>
+          <FormField
+            label="Bundle ID"
+            description={BUNDLE_ID_HELP}
+            errorText={bundleId.trim() && !isValidBundleId(bundleId) ? 'Bundle ID must be a reverse-DNS identifier such as com.example.app' : undefined}
+          >
+            <Input
+              value={bundleId}
+              onChange={({ detail }) => setBundleId(detail.value)}
+              placeholder="com.example.desktop"
+            />
+          </FormField>
+        </>
+      )}
 
       <FormField label="Name">
         <Input
@@ -221,7 +248,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
         />
       </FormField>
 
-      {!isMobile && (
+      {isWeb && (
         <FormField label="Starting URL">
           <Input
             value={starting_url}
@@ -333,7 +360,7 @@ export default function EditUsecaseForm({ usecase, onSave, onCancel }: EditUseca
         </>
       )}
 
-      {!isMobile && (
+      {isWeb && (
       <FormField
         label="Browser policy"
         description={

@@ -634,3 +634,153 @@ def _access_granted():
     """Handler-logic tests: ownership is covered by test_execution_routes_access.py."""
     with _resource_access_granted():
         yield
+
+
+class TestTerminalStateGuard(unittest.TestCase):
+    """A terminal record (success, failed, stopped, error, completed, timeout)
+    is never overwritten: ``stop_execution`` writes ``stopped`` before
+    terminating the worker, so the runner's late ``failed`` PATCH must be
+    rejected (409) and a repeated identical PATCH must be a no-op (200,
+    nothing written or counted).  ``timeout`` is written by the wizard
+    worker's inactivity path.
+    """
+
+    TERMINAL = ['success', 'failed', 'stopped', 'error', 'completed', 'timeout']
+
+    def setUp(self):
+        os.environ["TABLE_NAME"] = "test-table"
+
+    @staticmethod
+    def _item(status, with_suite=True):
+        item = {
+            "pk": {"S": "USECASE_EXECUTION#uc-g"},
+            "sk": {"S": "EXECUTION#exec-g"},
+            "status": {"S": status},
+        }
+        if with_suite:
+            item["suite_execution_id"] = {"S": "se-g"}
+            item["suite_id"] = {"S": "s-g"}
+        return {"Item": item}
+
+    def _patch(self, current, requested, with_suite=True):
+        event = _build_event("uc-g", "exec-g", {"status": requested, "error_message": "late"})
+        with patch("update_execution_status.dynamodb") as mock_ddb, \
+             patch("update_execution_status.eventbridge") as mock_eb, \
+             patch("update_execution_status.cleanup_cache_artifacts") as mock_cleanup:
+            mock_ddb.get_item.return_value = self._item(current, with_suite)
+            response = handler(event, None)
+        return response, mock_ddb, mock_eb, mock_cleanup
+
+    def test_different_status_on_terminal_record_is_409_with_no_writes(self):
+        for current in self.TERMINAL:
+            for requested in ["pending", "running", "completed", "failed", "success"]:
+                if requested == current:
+                    continue
+                response, mock_ddb, mock_eb, mock_cleanup = self._patch(current, requested)
+                self.assertEqual(response["statusCode"], 409, f"{current} -> {requested}")
+                body = json.loads(response["body"])
+                self.assertEqual(body, {"error": "execution already terminal", "status": current})
+                mock_ddb.update_item.assert_not_called()
+                mock_ddb.put_item.assert_not_called()
+                mock_eb.put_events.assert_not_called()
+                mock_cleanup.assert_not_called()
+
+    def test_timeout_record_rejects_a_different_status_with_409(self):
+        for requested in ["pending", "running", "completed", "failed", "success"]:
+            response, mock_ddb, mock_eb, mock_cleanup = self._patch("timeout", requested)
+            self.assertEqual(response["statusCode"], 409, requested)
+            self.assertEqual(json.loads(response["body"]), {"error": "execution already terminal", "status": "timeout"})
+            mock_ddb.update_item.assert_not_called()
+            mock_eb.put_events.assert_not_called()
+            mock_cleanup.assert_not_called()
+
+    def test_same_terminal_status_is_an_idempotent_200_no_op(self):
+        for current in ["completed", "failed", "success"]:
+            response, mock_ddb, mock_eb, mock_cleanup = self._patch(current, current)
+            self.assertEqual(response["statusCode"], 200, current)
+            body = json.loads(response["body"])
+            self.assertEqual(body["execution_id"], "exec-g")
+            self.assertEqual(body["status"], current)
+            self.assertIn("updated_at", body)
+            # no second write, no counter double-count, no second event, no cache wipe
+            mock_ddb.update_item.assert_not_called()
+            mock_eb.put_events.assert_not_called()
+            mock_cleanup.assert_not_called()
+
+    def test_non_terminal_record_is_updated_as_before(self):
+        for current in ["pending", "running"]:
+            response, mock_ddb, mock_eb, _ = self._patch(current, "failed", with_suite=False)
+            self.assertEqual(response["statusCode"], 200, current)
+            mock_ddb.update_item.assert_called_once()
+            self.assertEqual(
+                mock_ddb.update_item.call_args[1]["ExpressionAttributeValues"][":status"], {"S": "failed"})
+            mock_eb.put_events.assert_called_once()
+
+    def test_record_without_status_attribute_is_treated_as_non_terminal(self):
+        event = _build_event("uc-g", "exec-g", {"status": "running"})
+        with patch("update_execution_status.dynamodb") as mock_ddb, \
+             patch("update_execution_status.eventbridge"):
+            mock_ddb.get_item.return_value = {"Item": {"pk": {"S": "x"}}}
+            response = handler(event, None)
+        self.assertEqual(response["statusCode"], 200)
+        mock_ddb.update_item.assert_called_once()
+
+
+class TestRunningExecutionRecordCleared(unittest.TestCase):
+    """A terminal transition deletes the RUNNING_EXECUTIONS tracking record
+    (best-effort); non-terminal statuses and the guard branches leave it alone."""
+
+    RUNNING_KEY = {"pk": {"S": "RUNNING_EXECUTIONS"}, "sk": {"S": "EXECUTION#exec-r"}}
+
+    def setUp(self):
+        os.environ["TABLE_NAME"] = "test-table"
+
+    def _patch(self, requested, current="running"):
+        event = _build_event("uc-r", "exec-r", {"status": requested})
+        with patch("update_execution_status.dynamodb") as mock_ddb, \
+             patch("update_execution_status.eventbridge") as mock_eb, \
+             patch("update_execution_status.cleanup_cache_artifacts"):
+            mock_ddb.get_item.return_value = {"Item": {
+                "pk": {"S": "USECASE_EXECUTION#uc-r"}, "sk": {"S": "EXECUTION#exec-r"},
+                "status": {"S": current}}}
+            mock_eb.put_events.return_value = {}
+            response = handler(event, None)
+        return response, mock_ddb
+
+    def test_terminal_statuses_clear_the_record(self):
+        for status in ["success", "failed", "completed"]:
+            response, mock_ddb = self._patch(status)
+            self.assertEqual(response["statusCode"], 200, status)
+            mock_ddb.delete_item.assert_called_once_with(TableName="test-table", Key=self.RUNNING_KEY)
+
+    def test_record_is_cleared_after_the_status_write(self):
+        _, mock_ddb = self._patch("success")
+        names = [c[0] for c in mock_ddb.method_calls if c[0] in ("update_item", "delete_item")]
+        self.assertLess(names.index("update_item"), names.index("delete_item"))
+
+    def test_non_terminal_statuses_keep_the_record(self):
+        for status in ["pending", "running"]:
+            response, mock_ddb = self._patch(status, current="pending")
+            self.assertEqual(response["statusCode"], 200, status)
+            mock_ddb.delete_item.assert_not_called()
+
+    def test_guard_branches_do_not_touch_the_record(self):
+        for current, requested in [("failed", "failed"), ("stopped", "failed")]:
+            _, mock_ddb = self._patch(requested, current=current)
+            mock_ddb.delete_item.assert_not_called()
+
+    def test_clear_failure_does_not_fail_the_request(self):
+        event = _build_event("uc-r", "exec-r", {"status": "failed"})
+        with patch("update_execution_status.dynamodb") as mock_ddb, \
+             patch("update_execution_status.eventbridge") as mock_eb, \
+             patch("update_execution_status.cleanup_cache_artifacts"):
+            mock_ddb.get_item.return_value = {"Item": {"pk": {"S": "x"}, "status": {"S": "running"}}}
+            mock_ddb.delete_item.side_effect = ClientError(
+                {"Error": {"Code": "ProvisionedThroughputExceededException", "Message": "slow"}}, "DeleteItem")
+            mock_eb.put_events.return_value = {}
+            response = handler(event, None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(json.loads(response["body"])["status"], "failed")
+
+
+from botocore.exceptions import ClientError  # noqa: E402

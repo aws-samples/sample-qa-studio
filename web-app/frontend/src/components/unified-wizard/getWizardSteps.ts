@@ -41,6 +41,8 @@ export function getWizardSteps(
     if (creationMethod === 'blank') {
       if (testPlatform === 'mobile') {
         steps.push({ title: 'App configuration', description: 'Configure your mobile app settings, device, and binary.', component: PlatformConfigStep });
+      } else if (testPlatform === 'electron') {
+        steps.push({ title: 'App configuration', description: 'Identify the Electron app this test targets.', component: PlatformConfigStep });
       } else {
         steps.push({ title: 'Browser configuration', description: 'Configure browser-specific settings for your test case.', component: PlatformConfigStep });
       }
@@ -68,7 +70,8 @@ export function getWizardSteps(
  * Returns the available creation methods for a given test platform.
  *
  * - Web: all four methods
- * - Mobile: only blank and user-journey (interactive-wizard and template are web-only)
+ * - Mobile and Electron: only blank and user-journey (interactive-wizard and
+ *   template need a cloud browser and are web-only)
  */
 export function getAvailableMethods(testPlatform: TestPlatform): CreationMethod[] {
   if (testPlatform === 'web') {

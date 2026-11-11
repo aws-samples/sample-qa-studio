@@ -2,7 +2,7 @@ import logging
 from nova_act import NovaAct
 from models import ExecutionStep
 from utils import STRING_SCHEMA, NUMBER_SCHEMA, BOOL_SCHEMA
-from transform.date_parser import DateParseError, parse_to_utc
+from qa_studio_cli.runner.transform.date_parser import DateParseError, parse_to_utc
 
 logger = logging.getLogger(__name__)
 

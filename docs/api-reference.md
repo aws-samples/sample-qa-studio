@@ -22,12 +22,37 @@ Nova Act QA Studio provides a RESTful API for managing test automation workflows
   - [Get Usecase](#get-usecase)
   - [Update Usecase](#update-usecase)
   - [Get Usecase Steps](#get-usecase-steps)
+  - [Step Definition Fields](#step-definition-fields)
+  - [Import Usecase](#import-usecase)
+- [Template Endpoints](#template-endpoints)
+  - [Import Template Definition](#import-template-definition)
+  - [Apply Template](#apply-template)
+  - [Import Template into Usecase](#import-template-into-usecase)
+  - [Update Step from Template](#update-step-from-template)
+  - [Check Template Updates](#check-template-updates)
+  - [Template Versioning](#template-versioning)
+- [Application Configuration Endpoints](#application-configuration-endpoints)
+  - [Application Variables](#application-variables)
+  - [Application Secrets](#application-secrets)
+  - [Application Datasets](#application-datasets)
+  - [Effective Use Case Variables and Secrets](#effective-use-case-variables-and-secrets)
+  - [Dataset References on Repeat Steps](#dataset-references-on-repeat-steps)
+- [Cost Endpoints](#cost-endpoints)
+  - [Application Costs](#application-costs)
+  - [Use Case Costs](#use-case-costs)
+  - [Dashboard Costs](#dashboard-costs)
+  - [Cost Summary and Ledger Row Fields](#cost-summary-and-ledger-row-fields)
 - [Execution Endpoints](#execution-endpoints)
   - [Execute Usecase](#execute-usecase)
+  - [Update Execution Status](#update-execution-status)
+  - [Stop Execution](#stop-execution)
   - [Update Execution Step Status](#update-execution-step-status)
   - [Generate Execution Artifact Presigned URL](#generate-execution-artifact-presigned-url)
   - [Generate Step Artifact Presigned URL](#generate-step-artifact-presigned-url)
   - [Request Recording Download](#request-recording-download)
+- [Wizard Session Endpoints](#wizard-session-endpoints)
+  - [Start Wizard Session](#start-wizard-session)
+  - [Terminate Wizard Session](#terminate-wizard-session)
 - [Device Farm Endpoints](#device-farm-endpoints)
   - [List Devices](#list-devices)
 - [Test Suite Endpoints](#test-suite-endpoints)
@@ -37,6 +62,8 @@ Nova Act QA Studio provides a RESTful API for managing test automation workflows
   - [List OAuth Clients](#list-oauth-clients)
   - [Delete OAuth Client](#delete-oauth-client)
   - [Rotate Client Secret](#rotate-client-secret)
+- [User Management Endpoints](#user-management-endpoints)
+  - [Delete User](#delete-user)
 - [Error Handling](#error-handling)
 - [Rate Limiting](#rate-limiting)
 - [Pagination](#pagination)
@@ -140,9 +167,10 @@ Scopes follow the pattern `api/{resource}.{permission}`:
 | `api/usecases.read` | Read use case data | Read |
 | `api/suite.write` | Create, update, delete and execute test suites | Write |
 | `api/suite.read` | Read test suites and suite executions | Read |
-| `api/applications.write` | Create, update, delete applications (Team Lead of the owning team only) | Write |
-| `api/applications.read` | Read applications | Read |
-| `api/templates.write` / `api/templates.read` | Manage / read templates | Write / Read |
+| `api/applications.write` | Create, update, delete applications (Team Lead of the owning team only); write application variables, secrets and datasets (Editor+ of the owning team) | Write |
+| `api/applications.read` | Read applications and their variables, secret keys and datasets | Read |
+| `api/templates.write` | Create and edit templates and template steps | Write |
+| `api/templates.read` | Read templates; required alongside `api/usecases.*` for the usecase↔template endpoints | Read |
 | `api/oauth-clients.write` | Create, delete, and rotate OAuth clients | Write |
 | `api/oauth-clients.read` | List OAuth clients | Read |
 
@@ -163,6 +191,15 @@ Scopes follow the pattern `api/{resource}.{permission}`:
 | `POST /generate-s3-url` (`html`, `video`) | `api/executions.read` | view |
 | `GET /models` | `api/usecases.read` | – |
 | Manage OAuth clients | `api/oauth-clients.write`, `api/oauth-clients.read` | Editor+ of the client's team |
+| Create usecase from template (`POST /templates/{id}/apply`) | `api/templates.read`, `api/usecases.write` | edit (on the target application) |
+| Insert template into usecase (`POST /usecase/{id}/import-template`) | `api/usecases.write`, `api/templates.read` | edit |
+| Update step from template (`POST /usecase/{id}/steps/{stepId}/update-from-template`) | `api/usecases.write`, `api/templates.read` | edit |
+| Check template updates (`GET /usecase/{id}/template-updates`) | `api/usecases.read`, `api/templates.read` | view |
+| Replace a template definition (`PUT /templates/{id}`) | `api/templates.write` | – |
+| Delete a template (`DELETE /templates/{id}`) | `api/templates.write` (also unlinks the use-case steps that came from it — no per-usecase check) | – |
+| List the tests using a template (`GET /templates/{id}/usages`) | `api/templates.read` | – |
+| Read application variables / secret keys / datasets (`GET /applications/{id}/{variables\|secrets\|datasets}`) | `api/applications.read` | view (on the application) |
+| Write application variables / secrets / datasets (`POST`, `PUT`, `DELETE` under `/applications/{id}/…`) | `api/applications.write` | edit (Editor+ of the owning team or a Full share) |
 
 **Best Practice**: Grant only the minimum scopes required for your use case.
 
@@ -179,10 +216,10 @@ Scopes alone aren't enough. Every route on a team-owned resource (application, u
 
 | Status | When |
 |--------|------|
-| `400` | Invalid path/body ID; missing `teamId` or `application_id`; missing `usecaseId` on wizard step/restart/command; `role: "admin"` on a team member endpoint; forbidden scope on an OAuth client; invalid `secret_key` |
+| `400` | Invalid path/body ID; missing `teamId` or `application_id`; missing `usecaseId` on wizard step/command; `role: "admin"` on a team member endpoint; forbidden scope on an OAuth client; invalid `secret_key` |
 | `403` | Missing scope; no role (or too low a role) in the owning team; share level too low; orphan resource for a non-admin; unbound OAuth client; worker without a valid execution token; application update/delete by anyone but the owning Team Lead or an Admin |
 | `404` | Unknown resource; execution not under the use case in the path (or suite execution not under the suite); wizard session not under the use case; use case hidden by a visibility override; unknown `teamId` |
-| `409` | Demoting or deleting the last member of the `admins` group |
+| `409` | Demoting or deleting the last member of the `admins` group; creating or renaming an application dataset to a name already used in the application; deleting a dataset that repeat steps still reference; moving a use case into an application while its repeat steps reference datasets (see [Application Datasets](#application-datasets)); `PATCH …/executions/{executionId}/status` with a different status on an execution that is already terminal (see [Update Execution Status](#update-execution-status)) |
 
 #### `X-QA-Execution-Token` header
 
@@ -197,14 +234,15 @@ Header name matching is case-insensitive. Human and CI callers don't need it; a 
 | Endpoint | Change |
 |----------|--------|
 | `POST /applications` | `teamId` (string) required. Caller must be Team Lead of that team or Admin. 404 for an unknown team |
-| `PATCH /applications/{id}`, `DELETE /applications/{id}` | Team Lead of the owning team or Admin. `DELETE` returns 204 |
+| `PATCH /applications/{id}`, `DELETE /applications/{id}` | Team Lead of the owning team or Admin. `DELETE` returns 204 and also deletes the application's Secrets Manager secrets (by `application_id` tag); its `VARIABLES` and `DATASET#` records go with the partition |
+| `POST /applications/{id}/usecases` | `409 {error: "use case references application datasets", usecases: [{usecase_id, name, steps: [{id, instruction}]}]}` when a use case being moved in has a repeat step with `dataset_id` (the id belongs to the application it is leaving). Nothing is written. |
 | `POST /oauth-clients` | `teamId` (string) required; caller must be Editor+ in it. Response adds `team_id`, `team_role` |
 | `POST /usecase` | `application_id` required (edit on that app); 404 for an unknown app |
 | `POST /import`, `POST /wizard/start`, `POST /templates/{id}/apply` | `application_id` (string) required; edit on that app. The new use case gets `application_id` and `owner_team_id` |
 | `POST /usecase/{id}/clone` | Optional `application_id` (defaults to the source's app); edit on that app |
 | `POST /usecase/{id}/steps` | The use case comes from the path; a different body `usecaseId` returns 400 |
 | `PATCH /usecase/{id}`, `PUT /test-suites/{suite_id}` | Changing `application_id` needs edit on the target app; clearing it is Admin-only |
-| `POST /wizard/{sessionId}/step`, `/restart`, `/command` | `usecaseId` (string, required) in the body |
+| `POST /wizard/{sessionId}/step`, `/command` | `usecaseId` (string, required) in the body |
 | `POST /test-suites/{suite_id}/usecases` | Each use case must belong to the suite's owning team (Admins exempt) |
 | `POST /generate-usecase` | `screenshot_manifest_key` must be `{usecase_id}/{session_id}/screenshot_manifest.json` for a session the caller can edit |
 | `POST /teams/{id}/members`, `PATCH /teams/{id}/members/{userId}` | `role` must be `team_lead`, `editor`, `executor` or `viewer`; `admin` returns 400 |
@@ -255,11 +293,11 @@ Create a new test usecase with optional step caching enabled.
 - `description` (string, optional) - Usecase description
 - `steps` (array, required) - List of test steps
 - `enableCache` (boolean, optional, default: false) - Enable step caching for navigation steps
-- `test_platform` (string, optional, default: "web") - Test platform: `"web"` or `"mobile"`
+- `test_platform` (string, optional, default: "web") - Test platform: `"web"`, `"mobile"` or `"electron"`. Electron usecases need no `starting_url` and no mobile fields; they can only be executed by the CI runner (`qa-studio run --app-path …`), never from the UI or a schedule.
 - `platform` (string, optional) - Mobile platform: `"ANDROID"` or `"IOS"` (required when test_platform is "mobile")
 - `app_package` (string, optional) - Android app package name (e.g., `"com.example.myapp"`)
 - `app_activity` (string, optional) - Android app activity (e.g., `"com.example.myapp.MainActivity"`)
-- `bundle_id` (string, optional) - iOS bundle identifier (e.g., `"com.example.myapp"`)
+- `bundle_id` (string, optional) - iOS bundle identifier (e.g., `"com.example.myapp"`); for `test_platform: "electron"` the desktop app's `CFBundleIdentifier`, verified by the CI runner against the launched `.app`
 - `device_arn` (string, optional) - Device Farm device ARN (auto-selects newest device if omitted)
 
 **Response (201 Created)**:
@@ -547,32 +585,23 @@ else:
 
 ### Cache Field Reference
 
-The following table summarizes all cache-related fields across usecase endpoints:
+Step caching is native trajectory replay done by the runner (`qa-studio run`). Fields (snake_case, as returned):
 
-| Field | Type | Default | Endpoints | Description |
-|-------|------|---------|-----------|-------------|
-| `enableCache` | boolean | false | POST /usecases, PATCH /usecases, GET /usecases | Whether step caching is enabled for this usecase |
-| `cachedSteps` | string (JSON) | null | GET /usecases/{id}/steps | JSON-serialized list of cached Playwright actions |
-| `cacheLastUpdated` | string (ISO8601) | null | GET /usecases/{id}/steps | Timestamp when cache was last built |
-| `cacheable` | boolean | - | GET /usecases/{id}/steps | Whether a specific step type can be cached (read-only, computed field) |
+| Field | Type | Default | Where | Description |
+|-------|------|---------|-------|-------------|
+| `enable_cache` | boolean | false | use case (POST/PATCH/GET), copied to the execution record | Step caching setting of the use case |
+| `trajectory_s3_key` | string | null | STEP# / EXECUTION_STEP#, `GET /usecase/{id}/steps` | S3 key of the recorded trajectory a navigation step replays. Drives the UI "Cached" badge |
+| `trajectory_last_updated` | string (ISO 8601) | null | same | When the trajectory was recorded |
+| `cached_steps`, `cache_last_updated` | string / string | null | same | **Deprecated.** Written only by the removed bbox step cache; still returned for one release, then dropped |
 
-**Cache Building Process**:
-1. Usecase executes successfully with `enableCache: true`
-2. EventBridge triggers cache builder Lambda asynchronously
-3. Lambda parses Nova Act responses from S3
-4. Lambda stores cached Playwright actions in DynamoDB
-5. Subsequent executions use cached actions for navigation steps
+**Replay**:
+1. A successful navigation step records its trajectory through `POST …/steps/{stepId}/trajectory/upload-url`
+   (`trajectory_s3_key` / `trajectory_last_updated` are set on the STEP record).
+2. Later runs download it (`GET …/trajectory/download-url`) and replay it instead of calling the model.
+3. A failed replay falls back to Nova Act and clears the step's fields (`clear_cache_fields` on the step-status call).
 
-**Cache Execution Behavior**:
-- First execution: Cache miss (normal execution time)
-- Subsequent executions: Cache hit (40-60% faster for navigation steps)
-- Cache failures: Automatic fallback to Nova Act
-
-**Notes**:
-- Only navigation steps are cacheable (goto, goBack, goForward, reload)
-- Cache builds asynchronously after successful execution
-- Cache is invalidated when usecase steps are modified
-- Cache execution failures automatically fall back to Nova Act
+**Invalidation**: a failed execution clears every trajectory of the use case; switching `enable_cache` from true to
+false does the same.
 
 ---
 
@@ -635,6 +664,550 @@ The captured response body is always size-checked, even when no response body as
 
 ---
 
+### Repeat Step Fields
+
+Fields specific to steps of type `repeat` (a data-driven loop) and to its children. Validation is shared by `POST /usecase/{id}/steps`, `PATCH /usecase/{id}/steps/{step_id}` and `POST /import`; violations return `400` with the joined error list.
+
+| Field | Type | Default | Applies to | Description |
+|-------|------|---------|------------|-------------|
+| `step_type` | string | — | repeat | `"repeat"` |
+| `instruction` | string | — (required) | repeat | Human label. Must be unique among the repeat steps of the usecase; `repeat_datasets` / `--dataset-file` address the repeat by it. |
+| `dataset_id` | string | absent | repeat | Id of an [application dataset](#application-datasets) of the usecase's application. **Exactly one** of `dataset_id` or `repeat_columns` + `repeat_rows` must be present: both → `400 repeat step cannot have both dataset_id and inline rows`; neither → `400 repeat step must have either dataset_id or repeat_columns/repeat_rows`; unknown id or usecase without an application → `400 dataset not found in this application`. Rejected on template steps (`400 dataset references (dataset_id) are not supported in templates`). |
+| `repeat_columns` | list[string] | — (required unless `dataset_id`) | repeat | 1–20 identifiers matching `^[A-Za-z_][A-Za-z0-9_]*$`, unique, not one of `UniqueID`, `Time`, `ExecutionID`, `CreatedAt`, `RepeatIndex`, `RepeatTotal`. |
+| `repeat_rows` | list[list[string]] | — (required unless `dataset_id`) | repeat | 1–100 rows, each with exactly `len(repeat_columns)` string cells. `json.dumps(columns) + json.dumps(rows)` ≤ 200 KB. |
+| `parent_step_id` | string | absent | child | `id` of a `repeat` step of the same usecase. The parent must itself have no `parent_step_id` (one nesting level); a child may not be of type `repeat`. |
+
+Behaviour:
+
+- `DELETE /usecase/{id}/steps/{step_id}` on a repeat also deletes its children (`204 No Content`).
+- `PATCH` that changes a repeat's `step_type` to anything else while it still has children → `400`. Changing `repeat_columns` re-validates the stored rows.
+- `POST /templates/{id}/steps` and `PATCH /templates/{id}/steps/{step_id}` reject `step_type: "repeat"` and any `parent_step_id` with `400 "repeat steps are not supported in templates"`.
+- `GET /usecase/{id}/export` nests children under the repeat as `steps: [...]`; `POST /import` accepts that shape (and the flat `id` + `parent_step_id` shape), assigns new ids and remaps `parent_step_id`. `dataset_id` is exported as-is (never inlined); import and clone validate it against the **target** application (see [Dataset References on Repeat Steps](#dataset-references-on-repeat-steps)).
+- `PATCH /usecase/{id}/steps/{step_id}` treats the body as naming the source: a body with `dataset_id` switches the step to the dataset (stored inline rows are dropped); a body with `repeat_columns` + `repeat_rows` switches back to inline (`dataset_id` is dropped).
+
+**Expanded execution steps.** The repeat itself produces no execution step. When an execution is created, each child is copied once per row (row-major, children in `sort` order); `sort` is renumbered 1..n over the flattened list. `GET /usecase/{id}/executions/{execution_id}/steps` returns these additional fields on expanded steps:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `repeat_step_id` | string | absent | `id` of the repeat the step came from |
+| `repeat_label` | string | absent | The repeat's `instruction` |
+| `repeat_row_index` | number | absent | 1-based row index |
+| `repeat_row_total` | number | absent | Row count |
+| `row_variables` | map[string,string] | absent | `{column: cell}` for the row plus `RepeatIndex` and `RepeatTotal` |
+
+`trajectory_s3_key`, `trajectory_last_updated`, `cached_steps` and `cache_last_updated` are never copied onto expanded steps (trajectory replay is off inside a repeat). A repeat with `dataset_id` is resolved into columns/rows at execution creation (`dataset_ref.py`), so expanded steps carry the dataset's `row_variables` and no `dataset_id`; a missing dataset fails the execute call with `400 {"error": "dataset not found", "dataset_id": "…"}` before anything is written.
+
+---
+
+### Step Definition Fields
+
+Every optional, authored step field below is preserved verbatim by **all** step-copying endpoints: `GET /usecase/{id}/export`, `POST /import`, `POST /usecase/{id}/clone`, `POST /templates/{id}/steps`, `PATCH /templates/{id}/steps/{step_id}`, `POST /templates/{id}/apply`, `POST /usecase/{id}/import-template`, `POST /usecase/{id}/steps/{step_id}/update-from-template`, the wizard step endpoints, and execution creation (`EXECUTION_STEP#` records). The list is a single constant on the server (`step_copy.COPYABLE_STEP_FIELDS`) that a test keeps identical to the CLI's `ExportStep` model, so a field cannot be dropped on one path only.
+
+Copy rule: a field is copied when it is present and neither `null` nor `""`; `false` and `0` (e.g. `network_mock_passthrough: false`, `network_timeout: 0`) are kept.
+
+| Field | Type | Step types | Description |
+|-------|------|------------|-------------|
+| `secret_key` | string | secret | Key of the usecase secret typed into the focused field |
+| `capture_variable` | string | retrieve_value, transform, download | Variable the step's result is stored in |
+| `assertion_variable` | string | assertion | Variable compared by the assertion |
+| `validation_type` | string | validation, assertion | `string`, `number`, `date`, … |
+| `validation_operator` | string | validation, assertion | e.g. `exact`, `contains`, `greater_than` |
+| `validation_value` | string | validation, assertion | Expected value |
+| `value_type` | string | retrieve_value | `text`, `number`, `date`, … |
+| `value_source` | string | retrieve_value | Where the value is read from |
+| `value_format` | string | retrieve_value | Date format when `value_type: "date"` |
+| `value_step` | string | (legacy) | Kept for very old exports; no runtime meaning |
+| `enable_advanced_click_types` | boolean | navigation | Allow double/right-click actions |
+| `browser_action` | string | browser | `navigate`, `reload`, `back`, `forward`, … |
+| `browser_args` | string (JSON) | browser | Action arguments, e.g. `{"url": "…"}` |
+| `transform_operation` | string | transform | `math`, `date`, `string`, … |
+| `transform_args` | string (JSON) | transform | Operation arguments |
+| `network_*` (10 fields) | see [Network Assertion Fields](#network-assertion-fields) | network_assertion | Request / mock / response / timing fields |
+| `repeat_columns`, `repeat_rows` | see [Repeat Step Fields](#repeat-step-fields) | repeat | Inline dataset (not allowed on template steps; not copied onto execution steps) |
+| `dataset_id` | string | repeat | Application dataset reference, alternative to the inline dataset (not allowed on template steps; not copied onto execution steps — the resolved rows are) |
+
+Runtime state (`cached_steps`, `cache_last_updated`, `trajectory_s3_key`, `trajectory_last_updated`) is **not** a definition field: it is copied only from `STEP#` to `EXECUTION_STEP#` and never by export, clone or template operations.
+
+### Import Usecase
+
+Create a usecase from an export JSON (the shape produced by `GET /usecase/{id}/export`; this is what `qa-studio tests import` posts).
+
+**Endpoint**: `POST /import`
+**Required Scopes**: `api/usecases.write` — plus `api/templates.read` when the body contains template placeholder steps.
+
+**Request Body**: the export JSON (`exportVersion: "1.0"`, `usecase`, `steps`, `variables`, `secrets`, `hooks`, optional `regionOverride`). Every entry of `steps` is either a regular step or a **template placeholder**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sort` | integer > 0 | yes | Slot where the template's steps are inserted |
+| `step_type` | `"template"` | yes | Marks the placeholder; not an executable step type |
+| `template_id` | string (UUID) | yes | Template to expand. UUIDs are environment-specific. |
+
+A placeholder may carry **no other field** (`400`). Placeholders are allowed only at the top level of `steps` (not under a `repeat`); the same template may be referenced several times. Templates cannot contain placeholders.
+
+Processing order — **nothing is written until all checks pass**:
+
+1. Placeholder shape check (`400 {"success": false, "message": "steps[i]: …"}`).
+2. Scope check for `api/templates.read` if any placeholder is present (`403`).
+3. Every referenced template is loaded; any missing → `400 {"success": false, "error": "Template not found", "templateIds": ["…"]}`.
+3a. Every `dataset_id` on a repeat step is looked up in the **target** application (`application_id` of the body); any missing → `400 {"success": false, "error": "dataset not found in this application", "message": "dataset not found in this application: <id>[, <id>]", "datasetIds": ["…"]}`. Files without `dataset_id` read nothing. `POST /usecase/{id}/clone` applies the same check against the clone's application.
+4. Steps are emitted in file order; each placeholder is replaced by the template's steps (new ids, all [step definition fields](#step-definition-fields), and the linkage `template_id` / `template_step_id` / `template_version`); final `sort` is `1..n`.
+5. Template `variables` are merged into the file's `variables` (the file's value wins on a duplicate key). Template `secret_key`s join the file's `secrets` (deduplicated) and get `SECRET#` placeholder records like file secrets.
+
+**Response** (200):
+
+```json
+{
+  "success": true,
+  "usecaseId": "7a7a…",
+  "message": "Usecase imported successfully",
+  "missingSecrets": ["shop_username", "shop_password"],
+  "templatesApplied": [{"templateId": "3f1c…", "version": 4, "stepsCreated": 3}]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `usecaseId` | string | Id of the created usecase (a new usecase is always created; nothing is overwritten) |
+| `missingSecrets` | string[] | Omitted when empty. Keys that still need a value via `POST /usecase/{id}/secrets`. |
+| `templatesApplied` | object[] | Omitted when no placeholder was present. One entry per placeholder, in file order. |
+
+Files without placeholders behave exactly as before (no template read, no `templatesApplied`).
+
+---
+
+## Template Endpoints
+
+Templates are reusable step blueprints stored at `pk=TEMPLATES, sk=TEMPLATE#{id}` (metadata, incl. `version`) with steps at `pk=TEMPLATE#{id}, sk=STEP#{uuid}`. Template CRUD (`/templates`, `/templates/{id}`, `/templates/{id}/steps…`) requires `api/templates.write` (or `.read` for `GET`s). The endpoints below connect templates to usecases.
+
+### Import Template Definition
+
+Create a template — metadata, steps and variables — from a template file in **one** call (used by `qa-studio templates create`). A failed request leaves no half-built template behind.
+
+**Endpoint**: `POST /templates/import`
+**Required Scopes**: `api/templates.write`
+
+**Request Body** (the template file format):
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `templateVersion` | `"1.0"` | yes | — | File format version |
+| `template.name` | string, min 1 | yes | — | |
+| `template.description` | string | no | `""` | |
+| `template.category` | string | no | `""` | |
+| `template.tags` | string[] | no | `[]` | |
+| `steps` | step[], min 1 | yes | — | Same shape as export-JSON steps (`sort`, `step_type`, `instruction` + [step definition fields](#step-definition-fields)). Renumbered `1..n` in `sort` order. |
+| `variables` | `{key: string (min 1), value: string}[]` | no | `[]` | Written as the template's `VARIABLES` record when non-empty |
+
+Secrets are not declared — they are the `secret_key`s of the `secret` steps.
+
+**Errors**: `400 {"error": "templates cannot contain template steps"}` for a `step_type: "template"` step; `400 {"error": "repeat steps are not supported in templates"}` for a `repeat` step or a `parent_step_id`; `400 {"error": "Invalid template file", "message": "<field>: <problem>; …"}` for schema violations; `403` without `api/templates.write`.
+
+**Response** (201):
+
+```json
+{"id": "3f1c…", "name": "Login – Shop", "stepsCreated": 4}
+```
+
+Records written: `TEMPLATES / TEMPLATE#{id}` (`version: 1`, `created_by` = caller), `TEMPLATE#{id} / STEP#{uuid}` per step, and `TEMPLATE#{id} / VARIABLES` when variables are present. A `steps[].id` in the body is accepted and ignored (new step ids are always generated — see `PUT /templates/{id}` for id-aware updates).
+
+### Replace Template Definition
+
+Replace a template's metadata, steps and variables **atomically** from a template file (used by `qa-studio templates update`). The body is the same format as `POST /templates/import`; steps may carry the `id` of an existing template step.
+
+**Endpoint**: `PUT /templates/{id}`
+**Required Scopes**: `api/templates.write`
+
+**Step matching**:
+
+| Step in body | Existing template step | Action |
+|---|---|---|
+| has `id`, matches | yes | Whole-item put: `id` and `created_at` kept, `sort` = position in the body, every other field from the body (a field removed from the body disappears) |
+| has `id`, no match | — | `400 {"error": "steps[i]: id <id> does not belong to template <tid>"}` — nothing written |
+| no `id` | — | Put with a fresh uuid |
+| — | exists, absent from body | Deleted |
+
+Everything — step puts/deletes, one metadata `Update` (`name`, `description`, `category`, `tags`, `updated_at`, `version + 1`), and a `VARIABLES` put (non-empty) or delete (empty) — goes into **one** `transact_write_items`, so there is exactly one version bump and a failure leaves the template unchanged. DynamoDB transactions hold 100 items; a body with more than **98 steps** is `400 {"error": "template too large for an atomic update (max 98 steps)"}`.
+
+**Errors**: `400` for schema violations (`{"error": "Invalid template file", "message": "steps: duplicate step id …"}` incl. duplicate ids), `step_type: "template"` steps, `repeat` steps, unknown ids, oversize; `404` when the template does not exist; `403` without `api/templates.write`.
+
+**Response** (200):
+
+```json
+{"id": "3f1c…", "name": "Login – Shop", "version": 7, "stepsCreated": 1, "stepsUpdated": 4, "stepsDeleted": 0}
+```
+
+`stepsUpdated` counts every step matched by `id` (whether or not its content changed). Use-case steps linked to a template step that was deleted keep their `template_step_id`; readers already tolerate that.
+
+### Template Usages
+
+The use cases that have steps linked to a template (via `POST /usecase/{id}/import-template` or placeholder expansion in `POST /import`). Shown by `qa-studio templates get` / `templates delete` and by the web UI's delete dialog *before* a template is deleted.
+
+**Endpoint**: `GET /templates/{id}/usages`
+**Required Scopes**: `api/templates.read`
+
+**Response** (200), sorted by `name`:
+
+```json
+{"usages": [{"usecase_id": "7b2d…", "name": "Checkout"}, {"usecase_id": "9c01…", "name": "Refund"}], "count": 2}
+```
+
+Backed by the `TEMPLATE#{id} / USAGE#{usecase_id}` records (see [Template usage tracking](architecture.md#template-usage-tracking)); a record whose use case no longer exists is skipped and logged — this endpoint never writes. `404` when the template does not exist.
+
+### Delete Template
+
+**Endpoint**: `DELETE /templates/{id}`
+**Required Scopes**: `api/templates.write`
+
+Order of operations: (1) for every `USAGE#` record, the linked use-case steps lose their `template_id` / `template_step_id` / `template_version` attributes (the steps themselves are kept — they become plain steps; the update is conditional on `template_id` still matching, so a step relinked concurrently is skipped); (2) the whole `TEMPLATE#{id}` partition (steps, variables, usages) is deleted; (3) the metadata record is deleted last, so a Lambda that dies halfway leaves a template that can simply be deleted again. The unlink runs under `api/templates.write` without per-use-case authorization — it is a system side effect of deleting a shared resource.
+
+**Response**: `204 No Content` (previously `200 {"message"}`). `404` when the template does not exist.
+
+### Apply Template
+
+Create a **new** usecase from a template.
+
+**Endpoint**: `POST /templates/{id}/apply`
+**Required Scopes**: `api/templates.read`, `api/usecases.write`
+
+**Request Body**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | yes | Name of the new usecase |
+| `description` | string | no | Description |
+| `starting_url` | string | no | Starting URL |
+
+**Response** (200):
+
+```json
+{
+  "success": true,
+  "usecaseId": "7f3c…",
+  "message": "Use case created from template successfully",
+  "missingSecrets": ["username", "password"]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `usecaseId` | string | Id of the created usecase |
+| `missingSecrets` | string[] | Omitted when empty. Distinct `secret_key` values of the copied `secret` steps. Nothing is stored for them yet — the caller collects the values and stores them via `POST /usecase/{id}/secrets` (the web UI shows one password field per key on the template form; until a value is set, a run fails at that step). |
+
+All [step definition fields](#step-definition-fields) of the template steps are copied; template variables become the usecase's variables. The created usecase has no `application_id` and its steps carry no template linkage.
+
+### Import Template into Usecase
+
+Insert a template's steps into an **existing** usecase.
+
+**Endpoint**: `POST /usecase/{id}/import-template`
+**Required Scopes**: `api/usecases.write`, `api/templates.read`
+**Resource authorization**: `edit` access to the usecase's application (creator-retains-edit applies). `404` when the usecase does not exist.
+
+**Request Body**:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `template_id` | string | yes | — | Template to insert |
+| `insert_position` | integer | no | `-1` | **Ordinal** position: the template's first step becomes step N. See the contract below. |
+
+| `insert_position` | Meaning |
+|---|---|
+| omitted / `-1` | append after the last step |
+| `0` | treated as `1` (back-compat with the web UI's "At the beginning") |
+| `1 … n+1` | template's first step becomes step N (`n` = current step count) |
+| `> n+1`, `< -1`, non-integer | `400 {"error": "insert_position must be …"}`; nothing is written |
+
+After the insert **all** steps of the usecase are renumbered `1..n` contiguously (gaps in historical `sort` values disappear); only steps whose `sort` changed are rewritten.
+
+**Response** (201):
+
+```json
+{
+  "message": "Template imported successfully",
+  "steps_created": 4,
+  "missingSecrets": ["username", "password"]
+}
+```
+
+`missingSecrets` has the same meaning as for Apply Template and is omitted when empty. The web UI only asks for keys the use case does not have yet (`GET /usecase/{id}/secrets`). Inserted steps carry `template_id`, `template_step_id` and `template_version` (the template's `version` at insert time); template variables are merged into the usecase variables without overwriting existing keys.
+
+### Update Step from Template
+
+Replace a linked usecase step with the current content of its template step.
+
+**Endpoint**: `POST /usecase/{id}/steps/{stepId}/update-from-template`
+**Required Scopes**: `api/usecases.write`, `api/templates.read`
+**Resource authorization**: `edit` access to the usecase's application. `404` when the usecase, step, template or template step does not exist; `400` when the step has no `template_id`.
+
+**Response** (200):
+
+```json
+{ "message": "Step updated from template", "previous_version": 3, "new_version": 5 }
+```
+
+`pk`, `sk`, `id`, `sort` and `created_at` are kept; `instruction`, `step_type` and every [step definition field](#step-definition-fields) are taken from the template step (fields the template step no longer has are removed); `template_version` becomes the template's current `version`.
+
+### Check Template Updates
+
+List the usecase's template-linked steps and whether their template has changed since they were inserted.
+
+**Endpoint**: `GET /usecase/{id}/template-updates`
+**Required Scopes**: `api/usecases.read`, `api/templates.read`
+**Resource authorization**: `view` access to the usecase's application. `404` when the usecase does not exist.
+
+**Response** (200):
+
+```json
+{
+  "updates": [
+    {
+      "step_id": "…", "template_id": "…", "template_step_id": "…",
+      "current_version": 3, "latest_version": 5, "has_update": true
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `step_id` | string | Usecase step id |
+| `template_id` / `template_step_id` | string | Linkage written at insert time |
+| `current_version` | number | `template_version` stored on the step |
+| `latest_version` | number | Template's current `version` |
+| `has_update` | boolean | `latest_version > current_version` |
+
+Steps without `template_id`, and steps whose template no longer exists, are not listed.
+
+### Template Versioning
+
+`version` is **template-level** (one number per template, starting at `1`) and is incremented by every write to the template:
+
+| Operation | Endpoint | Effect on `version` |
+|-----------|----------|---------------------|
+| Edit metadata | `PATCH /templates/{id}` | +1 |
+| Replace definition | `PUT /templates/{id}` | +1 per request (atomic with the step puts/deletes) |
+| Create step | `POST /templates/{id}/steps` | +1 |
+| Update step | `PATCH /templates/{id}/steps/{step_id}` | +1 |
+| Delete step | `DELETE /templates/{id}/steps/{step_id}` | +1 |
+| Reorder steps | `PATCH /templates/{id}/steps/reorder` | +1 per request (atomic with the reorder) |
+
+Consequently any step change flags **all** linked steps of that template as having an update; per-step versioning is not implemented. The bump is conditional on the metadata record existing (no upsert).
+
+---
+
+## Application Configuration Endpoints
+
+Variables, secrets and repeat datasets can be defined once on an application and are inherited by every use case stamped with its `application_id`. **Precedence (lowest → highest): Application → Use case → CLI run override** (`--var`, `--dataset-file`). Variables and secrets merge per key (a use-case key shadows the application key); datasets do not merge — a repeat step references an application dataset **or** carries inline rows.
+
+All routes below are dispatched by the `application_router` Lambda (`/applications/{proxy+}`); none is an explicit API Gateway resource (the `api` stack is at 489/500 resources — see [Architecture → Resource ceiling](architecture.md#application-level-configuration)). Authorization uses the application in the path: reads need `api/applications.read` plus **view** on the application; writes need `api/applications.write` plus **edit** (Editor+ of the owning team or a Full share — the same rule as creating a use case in the application, and looser than `PATCH /applications/{id}`, which is Team Lead only). Status codes shared by all routes: `400` invalid application or dataset id / malformed JSON, `403` missing scope or role, `404` unknown application (or dataset).
+
+### Application Variables
+
+| Method | Endpoint | Scope / access | Body | Response |
+|--------|----------|----------------|------|----------|
+| GET | `/applications/{id}/variables` | `api/applications.read`, view | — | `200 {"variables": [{"key", "value"}]}` (`[]` when none) |
+| POST | `/applications/{id}/variables` | `api/applications.write`, edit | `{"variables": [{"key", "value"}]}` | `200 {"variables": [...]}` |
+
+POST **replaces** the whole list (same as `POST /usecase/{id}/variables`): send every variable to keep. Rules: `key` matches `^[A-Za-z_][A-Za-z0-9_]*$`, keys are unique (`400 duplicate key <k>`), at most 100 entries, `value` is a string. Stored at `APPLICATION#{id}` / `VARIABLES` with `updated_at` and `updated_by`.
+
+```bash
+curl -X POST 'https://api.example.com/applications/app-123/variables' \
+  -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' \
+  -d '{"variables": [{"key": "base_api", "value": "https://api.staging.example.com"}]}'
+```
+
+### Application Secrets
+
+| Method | Endpoint | Scope / access | Body | Response |
+|--------|----------|----------------|------|----------|
+| GET | `/applications/{id}/secrets` | `api/applications.read`, view | — | `200 {"secrets": [{"key", "secret_name", "description", "created_at"}]}` — keys only, never values |
+| POST | `/applications/{id}/secrets` | `api/applications.write`, edit | `{"secrets": [{"key", "value"}]}` | `201 {"created": ["<key>"], "updated": ["<key>"]}` |
+| DELETE | `/applications/{id}/secrets` | `api/applications.write`, edit | `{"secret_key": "<key>"}` | `204 No Content`; `404 {"error": "Secret '<key>' not found"}` |
+
+Secrets live in AWS Secrets Manager as `{SECRET_PREFIX}/application/{app_id}/{key}`, tagged `application_id` (listing filters by tag and name prefix). `key` matches `^[A-Za-z0-9_.-]{1,128}$` (`400 Invalid secret key`); `value` must not be empty (`400 value must not be empty` — Secrets Manager cannot store an empty string); the list must be non-empty and keys unique. Every entry is validated before the first write. POST creates missing keys and updates existing ones; DELETE removes the secret without a recovery window. There is **no application-level value endpoint** — values are only read through `GET /usecase/{id}/secrets/{key}/value` by executors and the worker (see below). `DELETE /applications/{id}` removes all application secrets by tag.
+
+```bash
+curl -X POST 'https://api.example.com/applications/app-123/secrets' \
+  -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' \
+  -d '{"secrets": [{"key": "admin_password", "value": "'"$ADMIN_PASSWORD"'"}]}'
+# → 201 {"created": ["admin_password"], "updated": []}
+```
+
+### Application Datasets
+
+A dataset is a named `columns` + `rows` table (`APPLICATION#{id}` / `DATASET#{dataset_id}`) that repeat steps of the application's use cases reference by `dataset_id` instead of carrying inline rows.
+
+| Method | Endpoint | Scope / access | Body | Response |
+|--------|----------|----------------|------|----------|
+| GET | `/applications/{id}/datasets` | `api/applications.read`, view | — | `200 {"datasets": [{"dataset_id", "name", "description", "column_count", "row_count", "updated_at"}]}` sorted by name (summaries, no rows) |
+| POST | `/applications/{id}/datasets` | `api/applications.write`, edit | `{"name", "description"?, "columns", "rows"}` | `201 {"dataset": {...}}` |
+| GET | `/applications/{id}/datasets/{datasetId}` | `api/applications.read`, view | — | `200 {"dataset": {"dataset_id", "name", "description", "columns", "rows", "created_at", "updated_at", "created_by"}}` |
+| PUT | `/applications/{id}/datasets/{datasetId}` | `api/applications.write`, edit | `{"name", "description"?, "columns", "rows"}` (full replace) | `200 {"dataset": {...}}` |
+| DELETE | `/applications/{id}/datasets/{datasetId}` | `api/applications.write`, edit | — | `204 No Content`, or `409 {"error": "dataset is referenced by repeat steps of this application; remove the references first", "usecases": [{"usecase_id", "name"}]}` |
+
+Validation (`400 {"error": "<joined>", "errors": ["<rule>", ...]}`, one entry per failed rule, same strings as inline repeat steps):
+
+| Field | Type | Required | Rule |
+|-------|------|----------|------|
+| `name` | string | yes | `^[A-Za-z_][A-Za-z0-9_ -]{0,63}$` (letters, digits, spaces, `_`, `-`; starts with a letter or `_`; ≤ 64 chars). Unique within the application, case-insensitive: `409 {"error": "a dataset named \"<name>\" already exists in this application"}` on create and on rename |
+| `description` | string | no (`""`) | — |
+| `columns` | list[string] | yes | 1–20 identifiers `^[A-Za-z_][A-Za-z0-9_]*$`, unique, none of `UniqueID`, `Time`, `ExecutionID`, `CreatedAt`, `RepeatIndex`, `RepeatTotal` |
+| `rows` | list[list[string]] | yes | 1–100 rows, each with exactly `len(columns)` string cells; `json.dumps(columns) + json.dumps(rows)` ≤ 200 KB |
+
+PUT keeps `dataset_id`, `created_at` and `created_by`. The delete check walks the application's use cases and their steps (bounded queries, no scan); the `usecases` list is sorted by name.
+
+```bash
+curl -X POST 'https://api.example.com/applications/app-123/datasets' \
+  -H 'Authorization: Bearer <token>' -H 'Content-Type: application/json' \
+  -d '{"name": "customers", "columns": ["first_name", "last_name", "email"],
+       "rows": [["Ada", "Lovelace", "ada@example.com"], ["Alan", "Turing", "alan@example.com"]]}'
+# → 201 {"dataset": {"dataset_id": "0192…", "name": "customers", "columns": [...], "rows": [...], ...}}
+```
+
+### Effective Use Case Variables and Secrets
+
+The use-case routes return the **effective** configuration, so the CLI, TUI and worker keep reading `key`/`value` and see inherited values without any change:
+
+| Endpoint | Change |
+|----------|--------|
+| `GET /usecase/{id}/variables` | Returns the application layer merged with the use case's own rows. Each row carries `"source": "application" \| "usecase"`. Application rows that the use case does not shadow come first, sorted by key; then the use-case rows in stored order. `POST /usecase/{id}/variables` is unchanged and must receive only the use case's own rows (the web UI never posts inherited rows back). |
+| `GET /usecase/{id}/secrets` | Lists the use case's secrets followed by the owning application's secrets whose key is not shadowed; each row carries `source`. Values are never returned. |
+| `GET /usecase/{id}/secrets/{key}/value` | Resolves the use-case secret first, then the application secret of the same key; `404` only when both are missing. The access log line gains `source=usecase\|application\|none`. Scope and access are unchanged (`api/usecases.execute`, execute). |
+| `POST /usecase/{id}/execute`, `POST /test-suites/{id}/execute` | Snapshot the same effective variable list onto the execution (`EXECUTION#{id}` variables record) and resolve `dataset_id` repeat steps before expansion (see below). |
+
+Example `GET /usecase/{id}/variables`:
+
+```json
+{
+  "variables": [
+    {"key": "base_api", "value": "https://api.staging.example.com", "source": "application"},
+    {"key": "environment", "value": "staging", "source": "usecase"}
+  ]
+}
+```
+
+A use case without an application resolves exactly as before (every row `source: "usecase"`).
+
+`GET /usecase/{id}/executions/{executionId}/variables` (scope `api/executions.read`, view access; the run's worker token is accepted too) returns three fields:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `variables` | `list[{key: str, value: str}]` | The use case's **current** `USECASE_VARIABLES` rows (no application rows; edits made after the run show up here). Kept for compatibility. |
+| `runtime_variables` | `list[{key: str, value: str}]` | Variables captured during the run (`retrieve_value` / `transform`), final value per key. |
+| `execution_variables` | `dict[str, str]` | Snapshot of the merged variables the run started with (application + use case + overrides), read from `EXECUTION#{id} / EXECUTION_VARIABLES`. Filled for single runs (stored as a `{key, value}` list) and suite runs (stored as a map); `{}` when nothing was recorded. |
+
+Clients should prefer `execution_variables` and fall back to `variables` only when it is empty (the CLI does).
+
+### Dataset References on Repeat Steps
+
+| Endpoint | Behaviour |
+|----------|-----------|
+| `POST /usecase/{id}/steps`, `PATCH /usecase/{id}/steps/{step_id}` | Accept `dataset_id` on `repeat` steps (XOR with `repeat_columns` + `repeat_rows`; see [Repeat Step Fields](#repeat-step-fields)). The dataset must exist in the use case's application: `400 {"error": "dataset not found in this application"}`. |
+| `POST /templates/{id}/steps`, `PATCH /templates/{id}/steps/{step_id}` | `400 dataset references (dataset_id) are not supported in templates`. |
+| `GET /usecase/{id}/export` | Keeps `dataset_id` on the step (rows are not inlined), so the export is byte-stable and round-trips within the same application. |
+| `POST /import`, `POST /usecase/{id}/clone` | Validate every `dataset_id` against the target application before writing anything: `400 {"success": false, "error": "dataset not found in this application", "message": "…: <id>", "datasetIds": ["<id>"]}`. |
+| `POST /applications/{id}/usecases` (move in) | `409 {"error": "use case references application datasets", "usecases": [{"usecase_id", "name", "steps": [{"id", "instruction"}]}]}` — switch those steps to inline rows (or re-create the dataset in the target application and repoint them) first. Removing use cases from an application is not affected. |
+| `POST /usecase/{id}/execute`, `POST /test-suites/{id}/execute` | Copy the dataset's columns/rows onto the referencing steps before `expand_repeat_steps`, so `repeat_datasets` / `--dataset-file` overrides still replace the table by label. Missing dataset → `400 {"error": "dataset not found", "dataset_id": "…"}` (suite: plus `details.usecase_id`) before any record is written. |
+
+---
+
+## Cost Endpoints
+
+Read-only views of the cost allocation the daily collector writes (design: `.kiro/docs/cost-allocation/design.md`). Nothing is computed on request: each route returns the dimension's `USAGE#… / SUMMARY` item from DynamoDB and, where the response has `days`, the last 30 rows of the dimension's S3 ledger (`cost_allocation/…ndjson`). All three routes are served by the `application_router` Lambda; `GET /applications/{id}/costs` rides `/applications/{proxy+}`, the other two are explicit API Gateway resources (the `api` stack is at 489/500 resources after them).
+
+Until the collector has run for a dimension, `summary` is `null` and `days` is `[]` — still `200`, never `404`. No new scope: reads reuse `api/applications.read` / `api/usecases.read` plus **view** on the resource in the path (team members, Viewer+, or a share at any level); `/dashboard/costs` filters rows exactly like `/dashboard/overview`.
+
+| Method | Endpoint | Scope / access | Response |
+|--------|----------|----------------|----------|
+| GET | `/applications/{id}/costs` | `api/applications.read`, view on the application | `200 {"summary": <CostSummary>\|null, "days": [<LedgerRow>…], "usecases": [{"usecase_id", "name", "summary": <CostSummary>\|null}]}` |
+| GET | `/usecase/{id}/costs` | `api/usecases.read`, view on the use case | `200 {"summary": <CostSummary>\|null, "days": [<LedgerRow>…]}` |
+| GET | `/dashboard/costs` | `api/applications.read`; rows filtered to visible applications | `200 {"overall": <CostSummary>\|null, "applications": [{"application_id", "summary": <CostSummary>\|null}]}` |
+
+Shared status codes: `400` invalid id, `403` missing scope or no view access, `404` unknown application / use case (or a use case hidden by a per-test-case override), `500` when the summary item or ledger could not be read.
+
+### Application Costs
+
+`GET /applications/{id}/costs` — the application's summary, its 30-day series and one row per associated use case (`APPLICATION#{id} / USECASE#…`), sorted by `window_30d` descending; use cases without a summary come last with `summary: null`. Use case summaries and names are fetched with one `BatchGetItem` (chunked at 100 keys).
+
+```bash
+curl 'https://api.example.com/applications/app-123/costs' -H 'Authorization: Bearer <token>'
+```
+
+```json
+{
+  "summary": {
+    "as_of": "2026-11-04",
+    "window_1d": 1.42,  "window_1d_trend": "up",  "window_1d_change_pct": 29.1, "window_1d_list": 1.5,
+    "window_7d": 9.8,   "window_7d_trend": "up",  "window_7d_change_pct": 10.1, "window_7d_list": 10.2,
+    "window_30d": 42.1, "window_30d_trend": null, "window_30d_change_pct": null, "window_30d_list": 44.0,
+    "by_source_30d": {"nova_act": 39.0, "compute": 3.1},
+    "days_available": 31,
+    "estimated_days": 1,
+    "updated_at": "2026-11-05T06:02:11Z"
+  },
+  "days": [
+    {"date": "2026-10-06", "estimated": false, "application_id": null,
+     "cost": [{"service": "nova_act", "cost": 0.9, "list_cost": 0.95, "usage_seconds": 720.0, "launches": null}],
+     "buckets": {"unassigned": 0.0, "unallocated": 0.07, "unmetered": 0.0},
+     "collected_at": "2026-10-07T06:02:11Z"},
+    "…"
+  ],
+  "usecases": [
+    {"usecase_id": "0192…", "name": "Checkout", "summary": {"as_of": "2026-11-04", "window_30d": 30.0, "…": "…"}},
+    {"usecase_id": "0193…", "name": "Brand new", "summary": null}
+  ]
+}
+```
+
+### Use Case Costs
+
+`GET /usecase/{id}/costs` — the use case's summary and 30-day series. `days` comes from the use case's **current** ledger file, i.e. the one under the application it belongs to now (`cost_allocation/_unassigned/…` for a use case without an application, which only studio admins can view). Rows written while the use case belonged to a previous application stay in that application's folder as history and are **not** returned, so the series restarts when a use case is moved.
+
+```bash
+curl 'https://api.example.com/usecase/0192…/costs' -H 'Authorization: Bearer <token>'
+# → 200 {"summary": {...}, "days": [{"date": "2026-10-06", "application_id": "app-123", "cost": [...], "buckets": null, ...}, "…"]}
+```
+
+### Dashboard Costs
+
+`GET /dashboard/costs` — one `{application_id, summary}` row per application the caller may view (own teams' applications plus shared ones; studio admins see all), sorted by `window_30d` descending with missing summaries last. `overall` is the studio-wide `USAGE#OVERALL / SUMMARY` and is returned **only to studio admins** (`isAdmin` or the `api/admin` scope); every other caller gets `"overall": null`. The `unassigned` / `unallocated` / `unmetered` buckets are not broken out as rows (they are visible per day in the overall ledger's `buckets`). This route reads SUMMARY items only — one `BatchGetItem` per 100 applications — and never a ledger.
+
+```bash
+curl 'https://api.example.com/dashboard/costs' -H 'Authorization: Bearer <token>'
+# → 200 {"overall": {"as_of": "2026-11-04", "window_30d": 99.0, "…": "…"},
+#        "applications": [{"application_id": "app-123", "summary": {...}}, {"application_id": "app-456", "summary": null}]}
+```
+
+### Cost Summary and Ledger Row Fields
+
+`CostSummary` (the `summary` / `overall` object; the SUMMARY item minus `pk`/`sk`). Money is USD, serialised with 6 decimals.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `as_of` | `YYYY-MM-DD` | Newest day included |
+| `window_1d`, `window_7d`, `window_30d` | number | Allocated bill over the last 1 / 7 / 30 days ending at `as_of` |
+| `window_1d_trend`, `window_7d_trend`, `window_30d_trend` | `"up"` \| `"down"` \| `"flat"` \| null | Current window vs. the previous window of the same length; `null` until `2 × window` days of data exist; `flat` within ±5 % |
+| `window_1d_change_pct`, `window_7d_change_pct`, `window_30d_change_pct` | number \| null | Percentage behind the trend; `null` when the previous window is 0 |
+| `window_1d_list`, `window_7d_list`, `window_30d_list` | number | The same windows at list price |
+| `by_source_30d` | map `source → number` | `nova_act`, `compute` |
+| `days_available` | integer | Ledger rows that exist for the dimension (UI: "not enough data") |
+| `estimated_days` | integer | Rows in the 30-day window still flagged `Estimated` by Cost Explorer |
+| `updated_at` | ISO 8601 | When the collector last wrote the summary |
+
+`LedgerRow` (one entry of `days`, oldest first, at most 30):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | `YYYY-MM-DD` | UTC day |
+| `estimated` | boolean | Cost Explorer `Estimated` flag for that day |
+| `application_id` | string \| null | Use case rows only: the application the use case belonged to on that day |
+| `cost[]` | list | One entry per source: `{"service": "nova_act" \| "compute", "cost", "list_cost", "usage_seconds", "launches": integer \| null}` (`launches` is set for `compute` only) |
+| `buckets` | object \| null | Application and overall rows only: `{"unassigned", "unallocated", "unmetered"}` in USD |
+| `collected_at` | ISO 8601 | Last (re-)processing time of the row |
+
+---
+
 ## Execution Endpoints
 
 ### Execute Usecase
@@ -647,40 +1220,56 @@ Create and start a usecase execution.
 - `id` (string, required) - Usecase ID
 
 **Query Parameters**:
-- `trigger-type` (string, optional) - Execution trigger type
-  - `OnDemand` (default) - Queue execution for worker processing
-  - `Scheduled` - Direct ECS task execution (used by EventBridge)
-  - `OnDemandHeadless` - Direct ECS task execution (used by UI)
-  - `ci_runner` - Create execution record only, no ECS task (for CI/CD)
+- `trigger-type` (string, optional, default `OnDemandHeadless`) - Execution trigger type:
+
+  | Value | Behaviour | Used by |
+  |-------|-----------|---------|
+  | `OnDemandHeadless` (default) | Starts a cloud worker: one Lambda MicroVM per execution | UI "Trigger Execution", suite runs, API callers without the parameter |
+  | `Scheduled` | Starts a cloud worker (one Lambda MicroVM per execution) | EventBridge schedules |
+  | `ci_runner` | Creates the execution record only, no cloud worker. The **only** trigger allowed for `test_platform: "electron"` use cases | CI/CD runner (`qa-studio run`) |
+
+  Any other value, including the removed use-case-level `OnDemand`, returns `400` naming the valid values, before
+  any record is written. (`OnDemand` is still valid on `POST /test-suites/{id}/execute`, where it means "spawn each
+  use case headless".) Historical execution records may still carry `trigger_type: "OnDemand"`.
 - `suite-execution-id` (string, optional) - Suite execution ID if part of a suite
 - `suite-id` (string, optional) - Suite ID if part of a suite
 
 **Required Scopes**: `api/usecases.execute` or `api/admin`, plus **execute** on the use case's owning application (Executor+ of the owning team, a team with an Execute/Full share, or an OAuth client bound to such a team). Orphan use cases (no application) are Admin-only. The worker identity can't start executions.
 
-For `Scheduled` and `OnDemandHeadless` runs the execution record gets a `worker_token_hash` and the ECS task gets the matching token (see [`X-QA-Execution-Token`](#x-qa-execution-token-header)). The token is never returned in the response.
+For `Scheduled` and `OnDemandHeadless` runs the execution record gets a `worker_token_hash` and the worker gets the matching token as `execution_token` in the MicroVM run-hook payload (see [`X-QA-Execution-Token`](#x-qa-execution-token-header)). The token is never returned in the response.
 
-**Request Body**: None
+**Request Body** (optional JSON):
 
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `repeat_datasets` | object | absent | `{"<repeat label>": {"columns": [...], "rows": [[...]]}}` — replaces the stored rows of the labelled repeat step for this execution. Columns must equal the repeat's columns (order-insensitive; rows are re-ordered to the stored column order). Same caps as stored datasets. |
 
-**Response (OnDemand)**:
 ```json
 {
-  "status": "usecase queued",
-  "usecaseId": "usecase-123"
+  "repeat_datasets": {
+    "Login as each user": {
+      "columns": ["email", "role"],
+      "rows": [["alice@staging.example", "Administrator"], ["bob@staging.example", "Viewer"]]
+    }
+  }
 }
 ```
+
+`400` (no records written) when: malformed JSON, unknown label, column mismatch, caps exceeded, or a repeat step that cannot be unrolled (zero rows, zero children). `POST /test-suites/{id}/execute` rejects `repeat_datasets` with `400 "repeat_datasets is not supported for suites"`.
+
 
 **Response (Scheduled/OnDemandHeadless)**:
 ```json
 {
-  "status": "task started",
+  "status": "microvm started",
   "usecaseId": "usecase-123",
   "executionId": "execution-456",
-  "taskArn": "arn:aws:ecs:us-east-1:123456789:task/cluster/task-id",
-  "taskId": "task-id",
+  "microvmId": "mvm-0123456789abcdef0",
   "cloudWatchLogsUrl": "https://console.aws.amazon.com/cloudwatch/..."
 }
 ```
+
+`cloudWatchLogsUrl` is a deep link to the worker's log stream (`/qa-studio/<baseName>/microvm`, stream named after the execution id). `microvmId` is the VM's identifier; both are stored on the execution record as `microvm_id` and `cloudwatch_logs_url`. If the launch fails (after the `RunMicrovm` throttling retries, 5 attempts) the response is `500 {"error": "Failed to start MicroVM: …"}` and the execution is marked `failed` with that message.
 
 **Response (ci_runner)**:
 ```json
@@ -693,6 +1282,8 @@ For `Scheduled` and `OnDemandHeadless` runs the execution record gets a `worker_
 
 **Error Responses**:
 - `400 Bad Request` - Missing usecase ID or invalid trigger type
+- `400 Bad Request` - `{"error": "Electron usecases can only be executed by the CI runner (qa-studio run)"}` when `test_platform` is `electron` and `trigger-type` is not `ci_runner`. Returned before any execution record is written. The suite execute endpoint returns the same error with `details.usecase_ids` listing the offending usecases.
+- `400 Bad Request` - `{"error": "dataset not found", "dataset_id": "…"}` when a repeat step references an application dataset that no longer exists in the use case's application (or the use case has no application). Returned before any execution record is written. The suite execute endpoint returns the same body with `details.usecase_id`. A `repeat_datasets` override for that label does not bypass the check.
 - `401 Unauthorized` - Missing or invalid token
 - `403 Forbidden` - Missing `api/usecases.execute`, no execute access on the owning application, orphan use case, unbound OAuth client, or worker identity
 - `404 Not Found` - Usecase not found
@@ -743,6 +1334,53 @@ console.log(`Execution created: ${data.executionId}`);
 
 ---
 
+### Update Execution Status
+
+Set the status of an execution. Called by the runner (worker token or `api/executions.write`) when the run starts and when it finishes; CI runners use it the same way.
+
+**Endpoint**: `PATCH /usecase/{id}/executions/{executionId}/status`
+
+**Required Scopes**: `api/executions.write` or `api/admin`, or a valid [`X-QA-Execution-Token`](#x-qa-execution-token-header)
+
+**Request Body**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `status` | string | yes | `pending`, `running`, `completed`, `failed`, `success` |
+| `error_message` | string | no | Stored on the record for `failed`; the runner uses the prefixes `timeout:` and `terminated:` for runs stopped by a ceiling or SIGTERM, the reconciler uses `reconciler:` |
+| `nova_session_id` | string | no | Nova Act session id for the artifact browser |
+
+**Response**: `200 {"execution_id", "status", "updated_at"}`. On a terminal transition (`success`, `failed`) the Lambda also records the VM's lifetime on the execution record (`microvm_started_at` / `microvm_terminated_at` from `GetMicrovm`, best-effort; see [MicroVM attributes](architecture.md#data-storage)), emits `nova-act-qa-studio.execution.status.changed`, updates suite counters, clears cache artifacts (`failed`) and deletes the `RUNNING_EXECUTIONS` tracking record (MicroVM).
+
+**Error Responses**:
+- `400 Bad Request` - Missing or invalid `status`
+- `404 Not Found` - Execution not found
+- `409 Conflict` - `{"error": "execution already terminal", "status": "<current>"}`: the record is already `success`, `failed`, `stopped`, `error` or `completed` and the request carries a *different* status. Nothing is written. Repeating the same terminal status returns `200` (idempotent no-op). This is how a `stopped` execution stays `stopped` when the terminated runner reports `failed` a few seconds later.
+
+---
+
+### Stop Execution
+
+Stop a running cloud execution and terminate its worker.
+
+**Endpoint**: `POST /usecase/{id}/executions/{executionId}/stop`
+
+**Required Scopes**: `api/executions.write` or `api/admin`, plus **execute** on the owning application
+
+**Behaviour**: the record is set to `stopped` *first*, then `TerminateMicrovm(microvm_id)` is called; the platform's `/terminate` hook SIGTERMs the runner, whose own `failed` report is rejected with `409`. The VM's lifetime is then recorded on the execution record (`microvm_started_at` from `GetMicrovm.startedAt`, `microvm_terminated_at` = the stop time, because the VM is still winding down; best-effort) and the `RUNNING_EXECUTIONS` tracking record is deleted. On dev the VM reaches `TERMINATED` about 22 s after the call.
+
+**Response**:
+```json
+{ "status": "stopped", "executionId": "execution-456", "microvmId": "mvm-0123456789abcdef0", "stoppedAt": "2026-05-01T10:35:00Z" }
+```
+
+**Error Responses**:
+- `400 Bad Request` - `execution has no associated MicroVM` (a `ci_runner` execution, or a record from before the MicroVM runner that only carries `task_arn` — those are all terminal), or `execution is already in terminal state: <status>`
+- `404 Not Found` - Execution not found
+- `500 Internal Server Error` - Server error (a failed `TerminateMicrovm` is logged, not returned: the record is already `stopped`)
+
+---
+
 ### Update Execution Step Status
 
 Update the status of an individual execution step. Used by CI/CD runners to report step progress.
@@ -754,7 +1392,7 @@ Update the status of an individual execution step. Used by CI/CD runners to repo
 - `executionId` (string, required) - Execution ID
 - `stepId` (string, required) - Step ID
 
-**Required Scopes**: `api/execution.write` or `api/admin`
+**Required Scopes**: `api/executions.write` or `api/admin`
 
 **Request Body**:
 ```json
@@ -857,7 +1495,7 @@ Generate a presigned S3 URL for uploading execution-level artifacts (recording, 
 - `id` (string, required) - Usecase ID
 - `executionId` (string, required) - Execution ID
 
-**Required Scopes**: `api/execution.write` or `api/admin`
+**Required Scopes**: `api/executions.write` or `api/admin`
 
 **Request Body**:
 ```json
@@ -998,7 +1636,7 @@ Generate a presigned S3 URL for uploading step-level artifacts (screenshots, tra
 - `executionId` (string, required) - Execution ID
 - `stepId` (string, required) - Step ID
 
-**Required Scopes**: `api/execution.write` or `api/admin`
+**Required Scopes**: `api/executions.write` or `api/admin`
 
 **Request Body**:
 ```json
@@ -1271,6 +1909,19 @@ Partial update for Device Farm session metadata on a mobile execution. Called by
 
 ---
 
+### Use Case Headers
+
+Custom HTTP headers sent with every request of the use case's executions. Stored as one `HEADERS` record per use case.
+
+| Method | Endpoint | Scope | Body / Response |
+|--------|----------|-------|-----------------|
+| GET | `/api/usecase/{id}/headers` | `api/usecases.read` | `{"headers": {"<name>": "<value>"}}` (`{}` when none) |
+| POST | `/api/usecase/{id}/headers` | `api/usecases.write` | Body `{"headers": {"<name>": "<value>"}}`; responds `{"message": "Headers saved successfully"}` |
+
+POST **replaces** the whole map: send every header to keep. The web UI's Headers tab merges new rows into the current map on save and posts the map without the key on delete.
+
+---
+
 ### Get Execution Headers
 
 Read-only access to custom HTTP headers stored on an execution. The runner reads these and calls `nova.page.set_extra_http_headers(...)` before navigation. Returns `{"headers": {}}` (not 404) when no headers are configured.
@@ -1365,6 +2016,63 @@ The server does a combined `SET status = …, REMOVE trajectory_s3_key, trajecto
 
 ---
 
+## Wizard Session Endpoints
+
+The interactive wizard runs `wizard_worker.py` on a Lambda MicroVM started with `mode: wizard` — the same image and supervisor as batch executions (see [architecture → Stop and timeout paths](architecture.md#stop-and-timeout-paths)). The session is bounded by `maxWizardSessionMinutes` (default 240) and ends after 30 minutes without activity. Only the two endpoints that touch the VM are listed here; the step/accept/reject/command/recording routes are UI-internal.
+
+### Start Wizard Session
+
+**Endpoint**: `POST /wizard/start`
+
+**Required Scopes**: `api/usecases.write` or `api/admin`, plus **edit** on the application in the body
+
+**Request Body**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `application_id` | string | Yes | Application the new use case belongs to |
+| `name` | string | Yes | Name of the use case the wizard creates |
+| `starting_url` | string | Yes | URL the wizard browser opens first |
+| `description` | string | No | Use-case description |
+| `executing_region` | string | No | Region the AgentCore browser runs in (default: the stack's default region) |
+| `model_id` | string | No | Nova Act model id (default `nova-act-v1.0`) |
+| `tags` | string[] | No | Tags for the new use case |
+
+**Response** (`201 Created`):
+```json
+{
+  "sessionId": "01a18ed0-…",
+  "usecaseId": "usecase-123",
+  "status": "initializing",
+  "microvmId": "mvm-0123456789abcdef0"
+}
+```
+
+The session id is also the execution id of the wizard's execution record (`status: pending`, `wizard_status: active`, `microvm_id`, `cloudwatch_logs_url`). A launch failure returns `500 {"error": "Failed to start MicroVM: …"}` and leaves the session `failed`.
+
+### Terminate Wizard Session
+
+**Endpoint**: `POST /wizard/{sessionId}/terminate/{usecaseId}`
+
+**Required Scopes**: `api/usecases.write` or `api/admin`, plus **edit** on the use case
+
+**Behaviour**: the execution record is made terminal *first* (`status = success`, `wizard_status = closed`, `completed_at`; an already `failed` / `timeout` record keeps its status), then the `terminate` command is sent to the worker, then `TerminateMicrovm(microvm_id)` is called, the VM's lifetime is recorded on the execution record (`microvm_started_at` / `microvm_terminated_at` from `GetMicrovm`; the VM's own `terminatedAt` when the worker already ended the session, otherwise the terminate time; best-effort) and the `RUNNING_EXECUTIONS` record is deleted. The worker's SIGTERM handler only cleans up the browser.
+
+**Response** (`200 OK`):
+```json
+{ "status": "terminated", "microvmId": "mvm-0123456789abcdef0" }
+```
+
+`microvmId` is omitted when the session's record carries no `microvm_id` (a session started before the MicroVM runner).
+
+**Error Responses**:
+- `400 Bad Request` - Missing or invalid `sessionId` / `usecaseId`
+- `403 Forbidden` - Insufficient scopes or no edit access to the use case
+- `404 Not Found` - Session not found under the use case
+- `500 Internal Server Error` - Error terminating the session (a failed `TerminateMicrovm` is logged, not returned)
+
+---
+
 ## Device Farm Endpoints
 
 ### List Devices
@@ -1418,14 +2126,14 @@ curl -X GET \
 
 ### Execute Test Suite
 
-Create a suite execution record and execution records for all usecases in a test suite with overrides applied. This endpoint is designed for CI/CD runners and does not spawn ECS tasks.
+Create a suite execution record and execution records for all usecases in a test suite with overrides applied. This endpoint is designed for CI/CD runners and does not start cloud workers.
 
 **Endpoint**: `POST /test-suites/{id}/execute`
 
 **Path Parameters**:
 - `id` (string, required) - Test suite UUID
 
-**Required Scopes**: `api/suite.write`, `api/execution.write`
+**Required Scopes**: `api/suite.write`, `api/executions.write`
 
 **Request Body**:
 ```json
@@ -1488,8 +2196,8 @@ Create a suite execution record and execution records for all usecases in a test
 ```json
 {
   "error": "Forbidden",
-  "message": "Missing required scopes: api/suite.write, api/execution.write",
-  "required_scopes": ["api/suite.write", "api/execution.write"],
+  "message": "Missing required scopes: api/suite.write, api/executions.write",
+  "required_scopes": ["api/suite.write", "api/executions.write"],
   "token_scopes": ["api/suite.read"]
 }
 ```
@@ -1588,7 +2296,7 @@ console.log(`Created ${data.execution_ids.length} executions`);
 ```
 
 **Notes**:
-- No ECS tasks are spawned when using `trigger_type=ci_runner`
+- No cloud workers (MicroVMs) are started when using `trigger_type=ci_runner`
 - All execution records are created with `status=pending`
 - Base URL override replaces only the scheme and domain, preserving path and query parameters
 - Variable merge precedence: CLI overrides > usecase variables (secret values are not merged)
@@ -1616,7 +2324,7 @@ Create a new OAuth client with specified scopes for CI/CD authentication.
   "scopes": [
     "api/suite.read",
     "api/suite.write",
-    "api/execution.write"
+    "api/executions.write"
   ]
 }
 ```
@@ -1637,7 +2345,7 @@ Create a new OAuth client with specified scopes for CI/CD authentication.
   "scopes": [
     "api/suite.read",
     "api/suite.write",
-    "api/execution.write"
+    "api/executions.write"
   ],
   "created_date": "2026-02-16T12:00:00Z",
   "created_by": "user@example.com",
@@ -1701,7 +2409,7 @@ response = requests.post(
         'scopes': [
             'api/suite.read',
             'api/suite.write',
-            'api/execution.write'
+            'api/executions.write'
         ]
     }
 )
@@ -1733,7 +2441,7 @@ const response = await fetch('https://api.example.com/api/oauth-clients', {
     scopes: [
       'api/suite.read',
       'api/suite.write',
-      'api/execution.write'
+      'api/executions.write'
     ]
   })
 });
@@ -1774,7 +2482,7 @@ List OAuth clients with metadata. Admins see every client; other callers see onl
       "allowed_oauth_scopes": [
         "api/suite.read",
         "api/suite.write",
-        "api/execution.write"
+        "api/executions.write"
       ],
       "refresh_token_validity": 30,
       "access_token_validity": 60,
@@ -1998,6 +2706,38 @@ console.log(`Rotated at: ${data.rotated_at}`);
 
 ---
 
+## User Management Endpoints
+
+### Delete User
+
+**Endpoint**: `DELETE /users/{userId}`
+
+**Path Parameters**:
+- `userId` (string, required) - Cognito username of the user (the `userId` returned by `GET /users`; a GUID on
+  email-username pools)
+
+**Required Scopes**: `api/admin`
+
+Served by the application router (`handlers/delete_user.py`). In order:
+
+1. Last-admin guard: deleting the final member of the global `admins` group returns `409`; if the check itself
+   fails, `500` and nothing is deleted.
+2. Every team membership record (`TEAM#{team_id}` / `MEMBER#{user_sub}`) of the user is deleted.
+3. The Cognito user is deleted (an already-missing user is not an error).
+4. A `user_delete` audit entry is written with the actor, the target `user_sub` and `removed_teams`.
+
+**Response**: `204 No Content` (empty body).
+
+| Status | When |
+|--------|------|
+| 204 | Deleted |
+| 400 | Missing `userId` |
+| 403 | Caller lacks `api/admin` |
+| 409 | Last studio admin |
+| 500 | Last-admin check or Cognito delete failed |
+
+---
+
 ## Error Handling
 
 ### Standard Error Response Format
@@ -2008,8 +2748,8 @@ All error responses follow this consistent format:
 {
   "error": "Error type or category",
   "message": "Detailed error description",
-  "required_scopes": ["api/execution.write"],
-  "token_scopes": ["api/execution.read"]
+  "required_scopes": ["api/executions.write"],
+  "token_scopes": ["api/executions.read"]
 }
 ```
 
@@ -2062,8 +2802,8 @@ All error responses follow this consistent format:
 ```json
 {
   "error": "Forbidden",
-  "message": "Missing required scopes: api/suite.write, api/execution.write",
-  "required_scopes": ["api/suite.write", "api/execution.write"],
+  "message": "Missing required scopes: api/suite.write, api/executions.write",
+  "required_scopes": ["api/suite.write", "api/executions.write"],
   "token_scopes": ["api/suite.read"]
 }
 ```
@@ -2267,7 +3007,7 @@ TOKEN_RESPONSE=$(curl -s -X POST \
   -d 'grant_type=client_credentials' \
   -d "client_id=${CLIENT_ID}" \
   -d "client_secret=${CLIENT_SECRET}" \
-  -d 'scope=api/suite.read api/suite.write api/execution.read api/execution.write')
+  -d 'scope=api/suite.read api/suite.write api/executions.read api/executions.write')
 
 TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
 
@@ -2429,7 +3169,7 @@ class NovaActCICDClient:
                 'grant_type': 'client_credentials',
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
-                'scope': 'api/suite.read api/suite.write api/execution.read api/execution.write'
+                'scope': 'api/suite.read api/suite.write api/executions.read api/executions.write'
             }
         )
         
@@ -2663,7 +3403,7 @@ The API uses semantic versioning (MAJOR.MINOR.PATCH):
 ### Network Security
 
 1. **IP Whitelisting**: Consider restricting API access to known IP ranges
-2. **VPC Endpoints**: Use VPC endpoints for internal AWS service communication
+2. **Egress**: the worker VMs reach AWS services over the public internet (`NO_INGRESS` connector, no VPC); the API is TLS-only behind API Gateway
 3. **WAF Rules**: Implement AWS WAF rules for additional protection
 4. **DDoS Protection**: Use AWS Shield for DDoS protection
 
@@ -2690,10 +3430,21 @@ If you discover a security vulnerability, please email security@example.com inst
 
 ## Changelog
 
+### Application-level variables, secrets and datasets
+**Added**:
+- `GET`/`POST /applications/{id}/variables`, `GET`/`POST`/`DELETE /applications/{id}/secrets`, `GET`/`POST /applications/{id}/datasets`, `GET`/`PUT`/`DELETE /applications/{id}/datasets/{datasetId}` (all via the application router; `api/applications.read` + view, `api/applications.write` + edit)
+- `dataset_id` on repeat steps (XOR with inline rows; kept by export/import/clone; rejected on template steps)
+- `source` on the rows of `GET /usecase/{id}/variables` and `GET /usecase/{id}/secrets`
+
+**Changed**:
+- `GET /usecase/{id}/variables` returns the effective (application + use case) list; `GET /usecase/{id}/secrets/{key}/value` falls back to the application secret
+- `POST /import`, `POST /usecase/{id}/clone`: `400` with `datasetIds` for unknown dataset references; `POST /usecase/{id}/execute`, `POST /test-suites/{id}/execute`: `400 dataset not found` before any write
+- `POST /applications/{id}/usecases`: `409` when a moved use case references datasets; `DELETE /applications/{id}` also deletes the application's secrets
+
 ### Team-bound authorization (security fixes C-1, H-1, H-2, H-3)
 **Breaking**:
 - Every team-owned resource route checks the caller's role in the owning team; orphan resources are Admin-only
-- `POST /oauth-clients` and `POST /applications` require `teamId`; `POST /import`, `POST /wizard/start` and `POST /templates/{id}/apply` require `application_id`; wizard `step` / `restart` / `command` require `usecaseId` in the body
+- `POST /oauth-clients` and `POST /applications` require `teamId`; `POST /import`, `POST /wizard/start` and `POST /templates/{id}/apply` require `application_id`; wizard `step` / `command` require `usecaseId` in the body (`POST /wizard/{sessionId}/restart` was removed — the unified wizard has no restart)
 - OAuth clients without a team get 403 on team-owned resources; `api/admin` and `api/teams.manage` are never granted to or honored for clients
 - `POST /usecase/{id}/execute` and `GET /usecase/{id}/secrets/{key}/value` require `api/usecases.execute`; trajectory download URLs require `api/executions.read`
 - Application create/update/delete: Team Lead of the owning team or Admin
@@ -2743,8 +3494,8 @@ If you discover a security vulnerability, please email security@example.com inst
 | Scope | Resource | Permission | Description |
 |-------|----------|------------|-------------|
 | `api/admin` | All | Full | Full access to all resources |
-| `api/execution.write` | Executions | Write | Create and update executions |
-| `api/execution.read` | Executions | Read | Read execution data |
+| `api/executions.write` | Executions | Write | Create and update executions |
+| `api/executions.read` | Executions | Read | Read execution data |
 | `api/usecases.write` | Usecases | Write | Create and update usecases |
 | `api/usecases.read` | Usecases | Read | Read usecase data |
 | `api/suite.write` | Test Suites | Write | Manage test suites |
@@ -2778,12 +3529,14 @@ If you discover a security vulnerability, please email security@example.com inst
 
 ### Valid Trigger Types
 
-| Trigger Type | Description | ECS Task | Use Case |
-|--------------|-------------|----------|----------|
-| `OnDemand` | Queue for worker | No | Default execution |
-| `Scheduled` | Direct ECS task | Yes | EventBridge scheduled |
-| `OnDemandHeadless` | Direct ECS task | Yes | UI-triggered execution |
+| Trigger Type | Description | MicroVM started | Use Case |
+|--------------|-------------|-----------------|----------|
+| `OnDemandHeadless` | One Lambda MicroVM per execution | Yes | Default; UI-triggered execution |
+| `Scheduled` | One Lambda MicroVM per execution | Yes | EventBridge scheduled |
 | `ci_runner` | Record only | No | CI/CD integration |
+
+These are the use-case trigger types (`POST /usecase/{id}/execute`). The suite endpoint accepts `OnDemand`,
+`scheduled` and `ci_runner`.
 
 ---
 

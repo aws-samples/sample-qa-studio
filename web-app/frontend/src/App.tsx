@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Amplify } from 'aws-amplify';
 import { Authenticator } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
@@ -11,27 +11,19 @@ import SideNavigation from "@cloudscape-design/components/side-navigation";
 import TopNavigation from "@cloudscape-design/components/top-navigation";
 import Spinner from "@cloudscape-design/components/spinner";
 import Box from "@cloudscape-design/components/box";
-import ErrorBoundary from './components/ErrorBoundary';
 import { PermissionsProvider, usePermissions } from './auth';
+import { SplitPanelProvider, useSplitPanelLayoutProps } from './components/common/splitPanel';
 import { api } from './utils/api';
+import { legacyCreateRoutes } from './components/unified-wizard/legacyRedirects';
+import ExecutionRedirect from './components/ExecutionRedirect';
+import { preloadRoutes } from './routePreloads';
+import { applicationNavGroup } from './components/applications/applicationNav';
 
 // Configuration loaded from lib/config.ts at build time via Vite
 
 // Lazy load components for code splitting
 const HomeScreen = React.lazy(() => import('./components/HomeScreen'));
-const CreateUsecaseWizard = React.lazy(() => import('./components/CreateUsecaseWizard'));
-const CreateUsecase = React.lazy(() => import('./components/CreateUsecase'));
-const ImportUsecase = React.lazy(() => import('./components/ImportUsecase'));
-const CloneUsecase = React.lazy(() => import('./components/CloneUsecase'));
-const CreateFromTemplate = React.lazy(() => import('./components/CreateFromTemplate'));
-const TemplateUsecase = React.lazy(() => import('./components/TemplateUsecase'));
-const UserJourneyWizard = React.lazy(() => import('./components/UserJourneyWizard'));
-const WizardSetup = React.lazy(() => import('./components/wizard/WizardSetup'));
-const InteractiveWizard = React.lazy(() => import('./components/wizard/InteractiveWizard'));
 const UsecaseDetail = React.lazy(() => import('./components/UsecaseDetailRefactored'));
-const ExecutionDetail = React.lazy(() => import('./components/ExecutionDetailRefactored'));
-const Users = React.lazy(() => import('./components/Users'));
-const CreateUser = React.lazy(() => import('./components/CreateUser'));
 const OAuthClients = React.lazy(() => import('./components/OAuthClients'));
 const CreateOAuthClient = React.lazy(() => import('./components/CreateOAuthClient'));
 const TemplateLibrary = React.lazy(() => import('./components/templates/TemplateLibrary'));
@@ -45,12 +37,14 @@ const ConfigureSchedule = React.lazy(() => import('./components/ConfigureSchedul
 const SuiteExecutionDetail = React.lazy(() => import('./components/SuiteExecutionDetail'));
 const UnifiedWizard = React.lazy(() => import('./components/unified-wizard/UnifiedWizard'));
 const About = React.lazy(() => import('./components/About'));
-const DashboardOverview = React.lazy(() => import('./components/dashboard/DashboardOverview'));
-const ApplicationSettings = React.lazy(() => import('./components/ApplicationSettings'));
+const ApplicationsPage = React.lazy(() => import('./components/applications/ApplicationsPage'));
 const ApplicationDetailView = React.lazy(() => import('./components/dashboard/ApplicationDetailView'));
 const AddUsecasesToApplication = React.lazy(() => import('./components/AddUsecasesToApplication'));
 const AddTestSuitesToApplication = React.lazy(() => import('./components/AddTestSuitesToApplication'));
 const EditApplication = React.lazy(() => import('./components/EditApplication'));
+const ApplicationVariablesPage = React.lazy(() => import('./components/applications/ApplicationVariablesPage'));
+const ApplicationSecretsPage = React.lazy(() => import('./components/applications/ApplicationSecretsPage'));
+const ApplicationDatasetsPage = React.lazy(() => import('./components/applications/ApplicationDatasetsPage'));
 
 // Admin/Permissions pages
 const TeamsListPage = React.lazy(() => import('./components/admin/TeamsListPage'));
@@ -60,12 +54,66 @@ const MyTeamPage = React.lazy(() => import('./components/admin/MyTeamPage'));
 const UnassignedLanding = React.lazy(() => import('./components/admin/UnassignedLanding'));
 
 Amplify.configure(amplifyconfig);
+
+/**
+ * Memoised on purpose: `AppContent` re-renders whenever a page registers a split panel
+ * (`useSplitPanelLayoutProps`). If that re-render reached the pages, a page handing in a
+ * fresh `<SplitPanel>` element on every render would re-register in a loop. With no
+ * props, this component only re-renders on router changes.
+ */
+const RoutedContent = React.memo(function RoutedContent() {
+  return (
+    <Suspense fallback={
+      <Box textAlign="center" padding="xxl">
+        <Spinner size="large" />
+      </Box>
+    }>
+      <Routes>
+        <Route path="/" element={<Navigate to="/applications" replace />} />
+        <Route path="/applications" element={<ApplicationsPage />} />
+        <Route path="/applications/:id" element={<ApplicationDetailView />} />
+        <Route path="/applications/:id/add-usecases" element={<AddUsecasesToApplication />} />
+        <Route path="/applications/:id/add-test-suites" element={<AddTestSuitesToApplication />} />
+        <Route path="/applications/:id/edit" element={<EditApplication />} />
+        <Route path="/applications/:id/variables" element={<ApplicationVariablesPage />} />
+        <Route path="/applications/:id/secrets" element={<ApplicationSecretsPage />} />
+        <Route path="/applications/:id/datasets" element={<ApplicationDatasetsPage />} />
+        <Route path="/usecases" element={<HomeScreen />} />
+        <Route path="/create/new" element={<UnifiedWizard />} />
+        {/* Old creation URLs redirect into the unified wizard (W2). */}
+        {legacyCreateRoutes()}
+        <Route path="/templates" element={<TemplateLibrary />} />
+        <Route path="/templates/:id" element={<TemplateDetail />} />
+        <Route path="/admin/teams" element={<TeamsListPage />} />
+        <Route path="/admin/teams/:id" element={<TeamDetailPage />} />
+        <Route path="/admin/users" element={<UsersListPage />} />
+        <Route path="/my-team" element={<MyTeamPage />} />
+        <Route path="/unassigned" element={<UnassignedLanding />} />
+        <Route path="/oauth-clients" element={<OAuthClients />} />
+        <Route path="/oauth-clients/create" element={<CreateOAuthClient />} />
+        <Route path="/test-suites" element={<TestSuites />} />
+        <Route path="/test-suites/create" element={<CreateTestSuite />} />
+        <Route path="/test-suites/:id" element={<TestSuiteDetail />} />
+        <Route path="/test-suites/:id/edit" element={<UpdateTestSuite />} />
+        <Route path="/test-suites/:id/add-usecases" element={<AddUsecasesToSuite />} />
+        <Route path="/test-suites/:id/schedule" element={<ConfigureSchedule />} />
+        <Route path="/test-suites/:suiteId/executions/:executionId" element={<SuiteExecutionDetail />} />
+        <Route path="/usecase/:id" element={<UsecaseDetail />} />
+        {/* The standalone execution page is gone; its URL opens the panel on the use case page. */}
+        <Route path="/usecase/:usecaseId/execution/:executionId" element={<ExecutionRedirect />} />
+        <Route path="/about" element={<About />} />
+      </Routes>
+    </Suspense>
+  );
+});
+
 function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeHref, setActiveHref] = useState(location.pathname);
   const { hasScope, isAdmin, isTeamLead, teams } = usePermissions();
   const [myTeamName, setMyTeamName] = useState('');
+  const splitPanelProps = useSplitPanelLayoutProps();
 
   useEffect(() => {
     if (isTeamLead && !isAdmin && teams.length > 0) {
@@ -75,11 +123,11 @@ function AppContent() {
     }
   }, [isTeamLead, isAdmin, teams]);
 
-  // Build navigation items based on user permissions
+  // Build navigation items based on user permissions and the current route
   const navigationItems = React.useMemo(() => {
     const items: any[] = [
-      { type: "link", text: "Dashboard", href: "/" },
-      { type: "link", text: "Applications", href: "/applications" },
+      // Lists Variables / Secrets / Datasets while an application route is open.
+      applicationNavGroup(location.pathname),
       ...(isAdmin ? [
         { type: "link", text: "Use cases", href: "/usecases" },
         { type: "link", text: "Test Suites", href: "/test-suites" },
@@ -113,67 +161,14 @@ function AppContent() {
     items.push({ type: "link", text: "About", href: "/about" });
 
     return items;
-  }, [hasScope, isAdmin, isTeamLead, myTeamName]);
+  }, [hasScope, isAdmin, isTeamLead, myTeamName, location.pathname]);
 
-  // Preload components when the app becomes idle
+  // Preload route chunks when the app becomes idle (one list: routePreloads.ts)
   React.useEffect(() => {
-    // Simple idle preloading
     if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(() => {
-        import('./components/dashboard/DashboardOverview');
-        import('./components/dashboard/ApplicationDetailView');
-        import('./components/ApplicationSettings');
-        import('./components/CreateUsecaseWizard');
-        import('./components/CreateUsecase');
-        import('./components/CreateFromTemplate');
-        import('./components/CloneUsecase');
-        import('./components/TemplateUsecase');
-        import('./components/UserJourneyWizard');
-        import('./components/wizard/WizardSetup');
-        import('./components/wizard/InteractiveWizard');
-        import('./components/unified-wizard/UnifiedWizard');
-        import('./components/UsecaseDetailRefactored');
-        import('./components/ExecutionDetailRefactored');
-        import('./components/Users');
-        import('./components/OAuthClients');
-        import('./components/CreateOAuthClient');
-        import('./components/templates/TemplateLibrary');
-        import('./components/templates/TemplateDetail');
-        import('./components/TestSuites');
-        import('./components/CreateTestSuite');
-        import('./components/UpdateTestSuite');
-        import('./components/TestSuiteDetail');
-        import('./components/AddUsecasesToSuite');
-        import('./components/ConfigureSchedule');
-      });
+      (window as any).requestIdleCallback(preloadRoutes);
     } else {
-      setTimeout(() => {
-        import('./components/dashboard/DashboardOverview');
-        import('./components/dashboard/ApplicationDetailView');
-        import('./components/ApplicationSettings');
-        import('./components/CreateUsecaseWizard');
-        import('./components/CreateUsecase');
-        import('./components/CreateFromTemplate');
-        import('./components/CloneUsecase');
-        import('./components/TemplateUsecase');
-        import('./components/UserJourneyWizard');
-        import('./components/wizard/WizardSetup');
-        import('./components/wizard/InteractiveWizard');
-        import('./components/unified-wizard/UnifiedWizard');
-        import('./components/UsecaseDetailRefactored');
-        import('./components/ExecutionDetailRefactored');
-        import('./components/Users');
-        import('./components/OAuthClients');
-        import('./components/CreateOAuthClient');
-        import('./components/templates/TemplateLibrary');
-        import('./components/templates/TemplateDetail');
-        import('./components/TestSuites');
-        import('./components/CreateTestSuite');
-        import('./components/UpdateTestSuite');
-        import('./components/TestSuiteDetail');
-        import('./components/AddUsecasesToSuite');
-        import('./components/ConfigureSchedule');
-      }, 2000);
+      setTimeout(preloadRoutes, 2000);
     }
   }, []);
 
@@ -200,62 +195,8 @@ function AppContent() {
         </div>
       }
       toolsHide
-      content={
-        <Suspense fallback={
-          <Box textAlign="center" padding="xxl">
-            <Spinner size="large" />
-          </Box>
-        }>
-          <Routes>
-            <Route path="/" element={<DashboardOverview />} />
-            <Route path="/applications" element={<ApplicationSettings />} />
-            <Route path="/applications/:id" element={<ApplicationDetailView />} />
-            <Route path="/applications/:id/add-usecases" element={<AddUsecasesToApplication />} />
-            <Route path="/applications/:id/add-test-suites" element={<AddTestSuitesToApplication />} />
-            <Route path="/applications/:id/edit" element={<EditApplication />} />
-            <Route path="/usecases" element={<HomeScreen />} />
-            <Route path="/create/new" element={<UnifiedWizard />} />
-            <Route path="/create" element={<CreateUsecaseWizard />} />
-            <Route path="/create/blank" element={<CreateUsecase />} />
-            <Route path="/create/import" element={<ImportUsecase />} />
-            <Route path="/create/template" element={<CreateFromTemplate />} />
-            <Route path="/create/clone" element={<CloneUsecase />} />
-            <Route path="/create/journey" element={
-              <ErrorBoundary>
-                <UserJourneyWizard />
-              </ErrorBoundary>
-            } />
-            <Route path="/create/wizard/setup" element={<WizardSetup />} />
-            <Route path="/wizard/:sessionId" element={
-              <ErrorBoundary>
-                <InteractiveWizard />
-              </ErrorBoundary>
-            } />
-            <Route path="/templates" element={<TemplateLibrary />} />
-            <Route path="/templates/:id" element={<TemplateDetail />} />
-            <Route path="/template-usecase" element={<TemplateUsecase />} />
-            <Route path="/admin/teams" element={<TeamsListPage />} />
-            <Route path="/admin/teams/:id" element={<TeamDetailPage />} />
-            <Route path="/admin/users" element={<UsersListPage />} />
-            <Route path="/my-team" element={<MyTeamPage />} />
-            <Route path="/unassigned" element={<UnassignedLanding />} />
-            <Route path="/users" element={<Users />} />
-            <Route path="/users/create" element={<CreateUser />} />
-            <Route path="/oauth-clients" element={<OAuthClients />} />
-            <Route path="/oauth-clients/create" element={<CreateOAuthClient />} />
-            <Route path="/test-suites" element={<TestSuites />} />
-            <Route path="/test-suites/create" element={<CreateTestSuite />} />
-            <Route path="/test-suites/:id" element={<TestSuiteDetail />} />
-            <Route path="/test-suites/:id/edit" element={<UpdateTestSuite />} />
-            <Route path="/test-suites/:id/add-usecases" element={<AddUsecasesToSuite />} />
-            <Route path="/test-suites/:id/schedule" element={<ConfigureSchedule />} />
-            <Route path="/test-suites/:suiteId/executions/:executionId" element={<SuiteExecutionDetail />} />
-            <Route path="/usecase/:id" element={<UsecaseDetail />} />
-            <Route path="/usecase/:usecaseId/execution/:executionId" element={<ExecutionDetail />} />
-            <Route path="/about" element={<About />} />
-          </Routes>
-        </Suspense>
-      }
+      content={<RoutedContent />}
+      {...splitPanelProps}
     />
   );
 }
@@ -283,7 +224,9 @@ function App() {
                 }
               ]}
             />
-            <AppContent />
+            <SplitPanelProvider>
+              <AppContent />
+            </SplitPanelProvider>
           </PermissionsProvider>
         </Router>
       )}

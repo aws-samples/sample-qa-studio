@@ -1,3 +1,10 @@
+"""LEGACY — unrouted since codebase-health W4.
+
+``POST /wizard/{sessionId}/restart`` had one client, the removed
+InteractiveWizard page; the unified wizard has no restart. worker-stack keeps
+this Lambda for one release only so its exported ARN survives; it has no queue
+or event-bus grants any more. Delete together with that Lambda in B9.
+"""
 import lambda_init  # noqa: F401 — must be first import (adds dependencies/ to sys.path)
 
 import json

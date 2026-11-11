@@ -6,6 +6,9 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from resource_auth import require_resource_access, app_from_body, new_usecase_owner_fields
 from utils import create_response, get_table_name, get_current_timestamp, extract_user_identity, validate_path_id
+from secret_steps import secret_keys_of_steps
+from step_copy import copy_step_fields
+from template_store import get_template_metadata
 
 # Configure logging
 logger = logging.getLogger()
@@ -61,14 +64,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         table = dynamodb.Table(get_table_name())
         
         # Get template metadata
-        template_response = table.get_item(
-            Key={
-                'pk': 'TEMPLATES',
-                'sk': f'TEMPLATE#{template_id}'
-            }
-        )
-        
-        if 'Item' not in template_response:
+        if get_template_metadata(table, template_id) is None:
             return create_response(404, {
                 'success': False,
                 'message': 'Template not found'
@@ -125,22 +121,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'sk': f'STEP#{new_step_id}',
                 'sort': step.get('sort', 0),
                 'id': new_step_id,
-                'instruction': step.get('instruction', ''),
-                'step_type': step.get('step_type', ''),
-                'created_at': now
+                'created_at': now,
+                **copy_step_fields(step),
             }
-            
-            # Copy optional fields
-            for field in ['secret_key', 'capture_variable', 'validation_type', 
-                         'validation_operator', 'validation_value', 'assertion_variable',
-                         'value_type',
-                         'network_url_pattern', 'network_method', 'network_request_body',
-                         'network_body_match_type', 'network_mock_response',
-                         'network_mock_passthrough', 'network_timeout',
-                         'network_response_body', 'network_response_body_match_type',
-                         'network_response_status']:
-                if field in step:
-                    new_step[field] = step[field]
             
             try:
                 table.put_item(Item=new_step)
@@ -150,6 +133,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 logger.error(f"Error saving step {step.get('sort')}: {str(e)}")
         
         logger.info(f"Successfully copied {success_count} out of {len(steps)} steps")
+
+        # Secret steps need values before the first run; the caller collects
+        # them and stores them via POST /usecase/{id}/secrets.
+        missing_secrets = secret_keys_of_steps(steps)
         
         # Copy variables from template
         try:
@@ -175,11 +162,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         logger.info(f"Successfully created usecase {new_usecase_id} from template {template_id}")
         
-        return create_response(200, {
+        response_data = {
             'success': True,
             'usecaseId': new_usecase_id,
             'message': 'Use case created from template successfully'
-        })
+        }
+        if missing_secrets:
+            response_data['missingSecrets'] = missing_secrets
+        return create_response(200, response_data)
         
     except Exception as e:
         logger.error(f"Error applying template: {str(e)}", exc_info=True)

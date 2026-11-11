@@ -13,8 +13,6 @@ usecase steps with results attached.
 
 from __future__ import annotations
 
-import asyncio
-import json
 from typing import Any, Dict, List
 
 from textual import work
@@ -26,6 +24,7 @@ from textual.widgets import DataTable, Footer, Static
 
 from qa_studio_cli.tui.app_header import TAB_USECASES, AppHeader
 from qa_studio_cli.tui.border_pulse import LoadPulseMixin
+from qa_studio_cli.tui.screens._base_detail import ProgressiveLoadMixin, format_field_value, step_field_lines
 from qa_studio_cli.tui.step_render import (
     format_duration,
     render_validation_block,
@@ -37,7 +36,7 @@ from qa_studio_cli.tui.step_render import (
 _STEP_DETAIL_PLACEHOLDER = "Select a step (arrow keys) to see its full details."
 
 
-class ExecutionDetailScreen(LoadPulseMixin, Screen):
+class ExecutionDetailScreen(ProgressiveLoadMixin, LoadPulseMixin, Screen):
     """Single-execution detail view."""
 
     BINDINGS = [
@@ -123,103 +122,27 @@ class ExecutionDetailScreen(LoadPulseMixin, Screen):
 
     _SECTION_NAMES = ("metadata", "steps")
 
+    STATUS_SELECTOR = "#execution-status"
+
+    def section_error_selector(self, name: str) -> str:
+        # Metadata errors go where the user looks for status; steps errors
+        # must not replace the (still useful) step detail pane.
+        return "#execution-metadata" if name == "metadata" else self.STATUS_SELECTOR
+
     @work(exclusive=True)
     async def _load_detail(self) -> None:
         """Fan out the metadata + steps fetches; render each on completion."""
         api = self.app.tui_api
+        usecase_id, execution_id = self._usecase_id, self._execution_id
+        await self._load_sections([
+            ("metadata", lambda: api.get_execution_metadata(usecase_id, execution_id), self._render_metadata_and_error),
+            ("steps", lambda: api.get_execution_steps(usecase_id, execution_id), self._render_steps),
+        ])
 
-        self._loaded_sections: Dict[str, Any] = {}
-        self._sections_done = 0
-
-        status = self.query_one("#execution-status", Static)
-        total = len(self._SECTION_NAMES)
-        status.update(f"Loading… 0/{total}")
-
-        self._start_load_pulse()
-
-        try:
-            await asyncio.gather(
-                self._fetch_metadata_section(api),
-                self._fetch_steps_section(api),
-            )
-        finally:
-            self._stop_load_pulse()
-
-        # Clear the status only when every section arrived cleanly;
-        # otherwise leave whatever ``_render_section_error`` wrote.
-        if set(self._loaded_sections) == set(self._SECTION_NAMES):
-            status.update("")
-
-    async def _fetch_metadata_section(self, api: Any) -> None:
-        """Metadata renders both the header block and the error banner
-        from a single execution record — they share a payload, so we
-        render them together as soon as the metadata call returns."""
-        try:
-            execution = await asyncio.to_thread(
-                api.get_execution_metadata,
-                self._usecase_id,
-                self._execution_id,
-            )
-        except Exception as exc:  # noqa: BLE001
-            self._render_section_error("metadata", str(exc))
-            self._advance_load_progress()
-            return
-
-        try:
-            self._render_metadata(execution)
-            self._render_error(execution)
-        except Exception as exc:  # noqa: BLE001 — render bug shouldn't kill screen
-            self._render_section_error("metadata", f"render failed: {exc}")
-            self._advance_load_progress()
-            return
-
-        self._loaded_sections["metadata"] = execution
-        self._advance_load_progress()
-
-    async def _fetch_steps_section(self, api: Any) -> None:
-        try:
-            steps = await asyncio.to_thread(
-                api.get_execution_steps,
-                self._usecase_id,
-                self._execution_id,
-            )
-        except Exception as exc:  # noqa: BLE001
-            self._render_section_error("steps", str(exc))
-            self._advance_load_progress()
-            return
-
-        try:
-            self._render_steps(steps)
-        except Exception as exc:  # noqa: BLE001
-            self._render_section_error("steps", f"render failed: {exc}")
-            self._advance_load_progress()
-            return
-
-        self._loaded_sections["steps"] = steps
-        self._advance_load_progress()
-
-    def _advance_load_progress(self) -> None:
-        self._sections_done += 1
-        total = len(self._SECTION_NAMES)
-        if self._sections_done >= total:
-            return
-        self.query_one("#execution-status", Static).update(
-            f"Loading… {self._sections_done}/{total}"
-        )
-
-    def _render_section_error(self, name: str, message: str) -> None:
-        """Surface a per-section failure without blocking the others.
-
-        Metadata errors write into the big metadata block because
-        that's where the user is looking for status; steps errors
-        write into the top-level status widget instead of replacing
-        the (still useful) step detail pane.
-        """
-        text = f"[b red]Failed to load {name}:[/] {message}"
-        if name == "metadata":
-            self.query_one("#execution-metadata", Static).update(text)
-        else:
-            self.query_one("#execution-status", Static).update(text)
+    def _render_metadata_and_error(self, execution: Dict[str, Any]) -> None:
+        """Header block and error banner share one execution record."""
+        self._render_metadata(execution)
+        self._render_error(execution)
 
     # ------------------------------------------------------------------
     # Rendering
@@ -304,16 +227,7 @@ class ExecutionDetailScreen(LoadPulseMixin, Screen):
         are pretty-printed as JSON.
         """
 
-        def _is_empty(value: Any) -> bool:
-            if value is None:
-                return True
-            if isinstance(value, str):
-                return value.strip() == ""
-            if isinstance(value, (list, dict)):
-                return len(value) == 0
-            return False
-
-        def _format_value(value: Any, *, key: str = "") -> str:
+        def _format_value(key: str, value: Any) -> str:
             if key == "status":
                 return status_cell(str(value))
             if key in {"duration", "duration_seconds"}:
@@ -321,13 +235,7 @@ class ExecutionDetailScreen(LoadPulseMixin, Screen):
                     return format_duration(float(value))
                 except (TypeError, ValueError):
                     return str(value)
-            if isinstance(value, (dict, list)):
-                try:
-                    formatted = json.dumps(value, indent=2, ensure_ascii=False)
-                except (TypeError, ValueError):
-                    formatted = repr(value)
-                return "\n" + formatted
-            return str(value)
+            return format_field_value(value)
 
         lines: List[str] = []
 
@@ -359,22 +267,7 @@ class ExecutionDetailScreen(LoadPulseMixin, Screen):
             "expected_value",
             "error_message",
         ]
-        seen: set[str] = set()
-
-        for key in priority:
-            if key in step and not _is_empty(step[key]):
-                lines.append(
-                    f"[cyan]{key}[/]: {_format_value(step[key], key=key)}"
-                )
-                seen.add(key)
-
-        for key in sorted(step):
-            if key in seen:
-                continue
-            value = step[key]
-            if _is_empty(value):
-                continue
-            lines.append(f"[cyan]{key}[/]: {_format_value(value, key=key)}")
+        lines.extend(step_field_lines(step, priority=priority, format_value=_format_value))
 
         if not lines:
             lines.append("[dim]Step has no populated fields.[/]")

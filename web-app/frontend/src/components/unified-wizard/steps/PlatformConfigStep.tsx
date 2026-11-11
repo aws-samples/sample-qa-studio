@@ -16,6 +16,7 @@ export default function PlatformConfigStep({ state, dispatch, validationErrors }
 
   const isWeb = state.testPlatform === 'web';
   const isMobile = state.testPlatform === 'mobile';
+  const isElectron = state.testPlatform === 'electron';
   const isAndroid = state.mobilePlatform === 'ANDROID';
   const isIOS = state.mobilePlatform === 'IOS';
 
@@ -53,6 +54,30 @@ export default function PlatformConfigStep({ state, dispatch, validationErrors }
   return (
     <Container>
       <SpaceBetween direction="vertical" size="l">
+        {/* --- Electron: CI-runner notice + optional bundle id --- */}
+        {isElectron && (
+          <>
+            <Alert type="info" header="Runs through the CI runner only">
+              Electron use cases launch the desktop app on the runner's machine. Execute them with{' '}
+              <code>qa-studio run --usecase-id &lt;id&gt; --app-path &lt;App.app&gt;</code>; the
+              app location is passed at run time, not stored here.
+            </Alert>
+            <FormField
+              label="Bundle ID"
+              description="Optional. The app's CFBundleIdentifier (e.g. com.example.desktop). The runner refuses to start a packaged .app whose identifier differs, so a suite cannot run against the wrong application."
+              errorText={validationErrors.bundleId}
+            >
+              <Input
+                value={state.blankConfig.bundleId}
+                onChange={({ detail }) =>
+                  dispatch({ type: 'UPDATE_BLANK_CONFIG', payload: { bundleId: detail.value } })
+                }
+                placeholder="com.example.desktop"
+              />
+            </FormField>
+          </>
+        )}
+
         {/* --- Mobile: Platform Selection & Device Farm Alert --- */}
         {isMobile && (
           <>

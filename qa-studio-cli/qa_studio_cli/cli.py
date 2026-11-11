@@ -14,6 +14,7 @@ from qa_studio_cli.auth.token_manager import save_token, load_token, delete_toke
 from qa_studio_cli.auth.oauth import start_oauth_flow
 from qa_studio_cli.commands.tests import tests
 from qa_studio_cli.commands.suites import suites
+from qa_studio_cli.commands.templates import templates
 from qa_studio_cli.commands.run import run
 from qa_studio_cli.commands.tui import tui
 from qa_studio_cli.commands.teams import teams
@@ -150,6 +151,7 @@ def logout() -> None:
 
 cli.add_command(tests)
 cli.add_command(suites)
+cli.add_command(templates)
 cli.add_command(run)
 cli.add_command(tui)
 cli.add_command(teams)

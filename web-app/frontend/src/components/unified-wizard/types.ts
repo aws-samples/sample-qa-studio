@@ -1,4 +1,5 @@
 import React from 'react';
+import type { RecordingData } from '../../utils/api';
 
 // --- Union Types ---
 
@@ -6,7 +7,7 @@ export type CreationPath = 'create-new' | 'clone' | 'import' | null;
 
 export type CreationMethod = 'blank' | 'interactive-wizard' | 'template' | 'user-journey' | null;
 
-export type TestPlatform = 'web' | 'mobile';
+export type TestPlatform = 'web' | 'mobile' | 'electron';
 
 // --- Nested Config Interfaces ---
 
@@ -72,6 +73,8 @@ export interface UserJourneyConfig {
   appPackage: string;
   appActivity: string;
   bundleId: string;
+  /** Optional browser recording (web) sent with the description to the generator. */
+  recordingData: RecordingData | null;
 }
 
 export interface UsecaseDetail {

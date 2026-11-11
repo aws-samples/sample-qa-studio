@@ -135,8 +135,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             logger.warning(f"Test suite {suite_id} not found")
             return create_response(404, {'error': 'Test suite not found'})
         
-        suite = response['Item']
-        
         # Update timestamp
         now = get_current_timestamp()
         

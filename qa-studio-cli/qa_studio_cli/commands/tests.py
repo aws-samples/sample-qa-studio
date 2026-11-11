@@ -170,7 +170,7 @@ def delete_test(ctx, id, yes):
 @click.argument("id")
 @click.option(
     "--trigger-type",
-    type=click.Choice(["OnDemandHeadless", "OnDemand", "ci_runner"], case_sensitive=True),
+    type=click.Choice(["OnDemandHeadless", "ci_runner"], case_sensitive=True),
     default="OnDemandHeadless",
     help="Execution trigger type (default: OnDemandHeadless)",
 )
@@ -238,7 +238,8 @@ def import_tests(
 ):
     """Import test cases from a JSON file or folder."""
     from qa_studio_cli.importers.scanner import scan_all
-    from qa_studio_cli.importers.executor import execute_imports, set_secret_value
+    from qa_studio_cli.importers.executor import execute_imports
+    from qa_studio_cli.importers.template_resolver import resolve_templates
 
     client = ctx.obj["client"]
     is_json = output_format == "json"
@@ -259,6 +260,11 @@ def import_tests(
         else:
             click.echo("No JSON files found.", err=True)
         raise SystemExit(1)
+
+    # Template placeholders: every referenced template must exist (one fetch
+    # per distinct id; no call for files without placeholders).  The server
+    # expands them — the CLI only learns their names and secret keys.
+    resolve_templates(client, results)
 
     valid = [r for r in results if r.is_valid]
     invalid = [r for r in results if not r.is_valid]
@@ -285,10 +291,10 @@ def import_tests(
         raise SystemExit(1)
 
     # Build the set of unique secret keys referenced across all valid files
+    # (the file's own ``secrets`` plus the secrets of referenced templates)
     unique_secret_keys: set[str] = set()
     for scan_result in valid:
-        for s in scan_result.payload.secrets:
-            unique_secret_keys.add(s.key)
+        unique_secret_keys.update(scan_result.secret_keys())
 
     # Hard error: --secret references a key that no imported test declares
     unknown_keys = sorted(set(cli_secrets) - unique_secret_keys)
@@ -342,9 +348,9 @@ def import_tests(
         # Build description map for unsupplied keys (first-seen description wins)
         unsupplied_descriptions: dict[str, str] = {}
         for scan_result in valid:
-            for s in scan_result.payload.secrets:
-                if s.key in unsupplied_keys and s.key not in unsupplied_descriptions:
-                    unsupplied_descriptions[s.key] = s.description
+            for key in scan_result.secret_keys():
+                if key in unsupplied_keys and not unsupplied_descriptions.get(key):
+                    unsupplied_descriptions[key] = scan_result.secret_description(key)
 
         click.echo("\nSecrets (shared across all imported tests):")
         for key in unsupplied_keys:
@@ -364,9 +370,9 @@ def import_tests(
     if prompted_values:
         for scan_result in valid:
             file_secrets = {
-                s.key: prompted_values[s.key]
-                for s in scan_result.payload.secrets
-                if s.key in prompted_values
+                key: prompted_values[key]
+                for key in scan_result.secret_keys()
+                if key in prompted_values
             }
             if file_secrets:
                 secret_values[scan_result.file_name] = file_secrets
@@ -396,8 +402,10 @@ def import_tests(
                     f"{', '.join(all_missing)}"
                 )
 
-    # Exit code
-    has_failures = any(not r.success for r in import_results)
+    # Exit code: 0 only if every scanned file was imported.  Invalid files
+    # were skipped above, so they count as failures too (README: "0 — every
+    # file imported successfully").
+    has_failures = bool(invalid) or any(not r.success for r in import_results)
     raise SystemExit(1 if has_failures else 0)
 
 
@@ -420,9 +428,12 @@ def _print_validation_table(results):
 
     for r in results:
         if r.is_valid:
+            templates = ""
+            if r.templates:
+                templates = "  (templates: " + ", ".join(t["name"] or t["id"] for t in r.templates) + ")"
             click.echo(
                 f"{r.file_name:<{fw}}  {r.usecase_name:<{nw}}  "
-                f"{r.step_count:>5}  {r.secrets_count:>7}  ✓ Valid"
+                f"{r.step_count:>5}  {r.secrets_count:>7}  ✓ Valid{templates}"
             )
         else:
             errs = "; ".join(r.errors[:2])
@@ -430,6 +441,13 @@ def _print_validation_table(results):
                 f"{r.file_name:<{fw}}  {'—':<{nw}}  {'—':>5}  "
                 f"{'—':>7}  ✗ Invalid: {errs}"
             )
+
+    secret_keys: list[str] = []
+    for r in results:
+        if r.is_valid:
+            secret_keys.extend(k for k in r.secret_keys() if k not in secret_keys)
+    if secret_keys:
+        click.echo(f"\nRequired secrets: {', '.join(secret_keys)}")
 
 
 def _print_import_table(results):
@@ -469,6 +487,8 @@ def _build_validation_json(results):
                     "usecaseName": r.usecase_name,
                     "stepCount": r.step_count,
                     "secretsCount": r.secrets_count,
+                    "secretKeys": r.secret_keys(),
+                    "templates": r.templates,
                     "valid": r.is_valid,
                     "errors": r.errors,
                 }
@@ -497,6 +517,92 @@ def _build_import_json(import_results):
         ],
     }
 
+
+
+@tests.command("insert-template")
+@require_auth
+@click.argument("usecase_id")
+@click.option("--template-id", "template_id", required=True, metavar="UUID", help="Template to insert")
+@click.option(
+    "--position", type=click.IntRange(min=1), default=None,
+    help="The template's first step becomes step N (default: append)",
+)
+@click.option(
+    "--secret", "secret_args", multiple=True, metavar="KEY=VALUE",
+    help="Set a template secret value after the insert (repeatable). Unknown keys are rejected.",
+)
+@click.option(
+    "--format", "output_format",
+    type=click.Choice(["human", "json"], case_sensitive=False),
+    default="human", help="Output format (default: human)",
+)
+@click.pass_context
+def insert_template(ctx, usecase_id, template_id, position, secret_args, output_format):
+    """Insert a template's steps into an existing test at a position."""
+    from qa_studio_cli.api.templates import TemplateAPI
+    from qa_studio_cli.commands.templates import secret_keys_of_steps
+    from qa_studio_cli.importers.executor import set_secret_value
+    from qa_studio_cli.models.api import InsertTemplateResponse, TemplateStepModel
+
+    client = ctx.obj["client"]
+    api = TemplateAPI(client)
+    is_json = output_format == "json"
+    cli_secrets = _parse_cli_secrets(secret_args)
+
+    def fail(message: str, exit_code: int) -> None:
+        if is_json:
+            click.echo(json.dumps({"error": message}))
+        else:
+            click.echo(f"Error: {message}", err=True)
+        raise SystemExit(exit_code)
+
+    try:
+        steps = [TemplateStepModel.model_validate(s) for s in api.list_steps(template_id)]
+    except ApiError as e:
+        fail(str(e), 1)
+
+    template_secret_keys = secret_keys_of_steps(steps)
+    unknown_keys = sorted(set(cli_secrets) - set(template_secret_keys))
+    if unknown_keys:
+        available = ", ".join(template_secret_keys) or "(none)"
+        fail(
+            f"--secret references key(s) not used by template {template_id}: {', '.join(unknown_keys)}. "
+            f"Template secret key(s): {available}.",
+            2,
+        )
+
+    try:
+        response = InsertTemplateResponse.model_validate(api.insert_into_usecase(usecase_id, template_id, position))
+    except ApiError as e:
+        fail(str(e), 1)
+
+    secrets_set: list[str] = []
+    secrets_failed: list[str] = []
+    for key in template_secret_keys:
+        if key not in cli_secrets:
+            continue
+        (secrets_set if set_secret_value(client, usecase_id, key, cli_secrets[key]) else secrets_failed).append(key)
+    missing_secrets = [k for k in template_secret_keys if k not in secrets_set]
+
+    if is_json:
+        click.echo(json.dumps({
+            "usecaseId": usecase_id,
+            "templateId": template_id,
+            "position": position,
+            "stepsCreated": response.steps_created,
+            "secretsSet": secrets_set,
+            "missingSecrets": missing_secrets,
+            **({"secretsFailed": secrets_failed} if secrets_failed else {}),
+        }, indent=2))
+    else:
+        where = "end" if position is None else str(position)
+        click.echo(f"✓ Inserted {response.steps_created} step(s) from template {template_id} at position {where}")
+        if secrets_failed:
+            click.echo(f"✗ Failed to set secrets: {', '.join(secrets_failed)}", err=True)
+        if missing_secrets:
+            click.echo(f"⚠ Missing secrets (set in UI or pass --secret): {', '.join(missing_secrets)}")
+
+    raise SystemExit(1 if secrets_failed else 0)
 
 
 def _parse_cli_secrets(secret_args: tuple[str, ...]) -> dict[str, str]:

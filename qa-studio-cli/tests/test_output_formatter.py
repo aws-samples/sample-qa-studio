@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+import click
+
 from qa_studio_cli.runner.output import SummaryFormatter
 
 
@@ -120,3 +122,51 @@ class TestFormatDuration:
 
     def test_zero(self):
         assert SummaryFormatter._format_duration(0) == "0s"
+
+
+class TestFormatMultiSummary:
+    """Tests for SummaryFormatter.format_multi_summary (multi-usecase runs)."""
+
+    @staticmethod
+    def _summary(*statuses):
+        from qa_studio_cli.models.execution import MultiRunEntry, MultiRunSummary
+
+        entries = [
+            MultiRunEntry(usecase_id=f"u-{i}", usecase_name=f"Case {i}", status=s)
+            for i, s in enumerate(statuses)
+        ]
+        return MultiRunSummary.from_results(entries)
+
+    def test_all_passed(self):
+        output = click.unstyle(
+            SummaryFormatter.format_multi_summary(self._summary("success", "success"))
+        )
+        assert output == (
+            "QA Studio - Run Summary\n"
+            "\n"
+            "Passed: 2/2\n"
+            "\n"
+            "\u2713 Case 0\n"
+            "\u2713 Case 1"
+        )
+
+    def test_mixed_with_skipped_keeps_input_order(self):
+        output = click.unstyle(SummaryFormatter.format_multi_summary(
+            self._summary("success", "failed", "skipped")
+        ))
+        lines = output.splitlines()
+        assert "Passed: 1/3" in lines
+        assert lines[-3:] == ["\u2713 Case 0", "\u2717 Case 1", "\u25cb Case 2 (skipped)"]
+
+    def test_marks_are_coloured(self):
+        output = SummaryFormatter.format_multi_summary(
+            self._summary("success", "failed", "skipped")
+        )
+        assert click.style("\u2713", fg="green") + " Case 0" in output
+        assert click.style("\u2717", fg="red") + " Case 1" in output
+        assert click.style("\u25cb", fg="yellow") + " Case 2" in output
+
+    def test_empty(self):
+        output = SummaryFormatter.format_multi_summary(self._summary())
+        assert "Passed: 0/0" in output
+        assert output.endswith("Passed: 0/0")

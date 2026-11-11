@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import Table from '@cloudscape-design/components/table';
 import Header from '@cloudscape-design/components/header';
 import SpaceBetween from '@cloudscape-design/components/space-between';
@@ -23,15 +23,11 @@ const LEVEL_COLORS: Record<string, 'blue' | 'green' | 'red'> = {
 };
 
 const SharedAccessTab: React.FC<SharedAccessTabProps> = ({ teamId }) => {
-  const { grants, loading, fetchGrants, grantAccess, revokeAccess } = useSharedAccess(teamId);
+  const { grants, loading, grantAccess, revokeAccess } = useSharedAccess(teamId);
   const { teams } = useTeams();
   const { applications } = useApplications();
   const { isAdmin, isTeamLead } = usePermissions();
   const [showGrantModal, setShowGrantModal] = useState(false);
-
-  useEffect(() => {
-    fetchGrants();
-  }, [fetchGrants]);
 
   const canManageSharing = isAdmin || isTeamLead;
 

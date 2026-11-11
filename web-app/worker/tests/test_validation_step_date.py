@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from models import ExecutionStep
-from transform.date_compare import NAIVE_MIXED_WARNING
+from qa_studio_cli.runner.transform.date_compare import NAIVE_MIXED_WARNING
 from validation_step import execute_validation_step
 
 

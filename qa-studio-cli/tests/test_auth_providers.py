@@ -225,6 +225,20 @@ class TestTokenResolver:
             resolver = TokenResolver()
             assert resolver.get_token() == "user-token"
 
+    def test_stored_user_token_is_re_resolved_on_every_call(self):
+        """A long run must see the refreshed token, not the one from the first call."""
+        from qa_studio_cli.auth.resolver import TokenResolver
+
+        env_clear = {"OAUTH_CLIENT_ID": "", "OAUTH_CLIENT_SECRET": "", "OAUTH_TOKEN_ENDPOINT": ""}
+        tokens = iter(["first-token", "refreshed-token", "refreshed-token"])
+        with patch.dict(os.environ, env_clear, clear=False), \
+             patch("qa_studio_cli.auth.token_manager.get_valid_token", side_effect=lambda: next(tokens)) as get:
+            resolver = TokenResolver()
+            assert resolver.get_token() == "first-token"
+            assert resolver.get_token() == "refreshed-token"
+            assert resolver.get_token() == "refreshed-token"
+            assert get.call_count == 3
+
     def test_raises_when_all_sources_exhausted(self):
         from qa_studio_cli.auth.resolver import TokenResolver
 

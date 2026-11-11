@@ -82,6 +82,30 @@ class TestListStepsCacheFields:
         assert body['steps'][0]['cache_last_updated'] is None
     
     @patch('list_steps.boto3.resource')
+    def test_trajectory_fields_pass_through(self, mock_boto3_resource):
+        """The "Cached" badge reads the native-replay fields; list_steps must
+        return them untouched (it returns full STEP items)."""
+        mock_table = MagicMock()
+        mock_boto3_resource.return_value.Table.return_value = mock_table
+        mock_table.query.return_value = {'Items': [{
+            'pk': 'USECASE#123', 'sk': 'STEP#step1', 'id': 'step1', 'sort': 0,
+            'instruction': 'Click login', 'step_type': 'navigation',
+            'trajectory_s3_key': 'trajectories/123/step1.json',
+            'trajectory_last_updated': '2026-03-03T10:00:00Z',
+        }]}
+        event = {
+            'pathParameters': {'id': '123'},
+            'requestContext': make_event('viewer_a', scopes='api/usecases.read')['requestContext']
+        }
+
+        response = handler(event, None)
+
+        assert response['statusCode'] == 200
+        step = json.loads(response['body'])['steps'][0]
+        assert step['trajectory_s3_key'] == 'trajectories/123/step1.json'
+        assert step['trajectory_last_updated'] == '2026-03-03T10:00:00Z'
+
+    @patch('list_steps.boto3.resource')
     def test_list_steps_mixed_cache_fields(self, mock_boto3_resource):
         """Test that some steps with cache and some without work correctly"""
         

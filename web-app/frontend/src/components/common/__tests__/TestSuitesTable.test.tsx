@@ -44,7 +44,8 @@ describe('TestSuitesTable', () => {
   it('filters items by search text', async () => {
     const items = [
       createSuite({ id: 'suite-1', name: 'Smoke Tests' }),
-      createSuite({ id: 'suite-2', name: 'E2E Checkout' }),
+      // The default description mentions "smoke"; give the non-match its own.
+      createSuite({ id: 'suite-2', name: 'E2E Checkout', description: 'Checkout journey' }),
     ];
 
     render(<TestSuitesTable items={items} showFilter={true} />);

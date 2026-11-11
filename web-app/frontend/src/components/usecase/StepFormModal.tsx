@@ -18,9 +18,13 @@ import Spinner from "@cloudscape-design/components/spinner";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Alert from "@cloudscape-design/components/alert";
-import { api } from '../../utils/api';
+import RadioGroup from "@cloudscape-design/components/radio-group";
+import { api, datasetsApi, type ApplicationDatasetSummary } from '../../utils/api';
+import { secretStepOption, type SecretListEntry } from '../SecretsManager';
 import DateFormatSelect from './DateFormatSelect';
 import DateValidationEditor from './DateValidationEditor';
+import RepeatDatasetEditor from './RepeatDatasetEditor';
+import { emptyRepeatDataset, isRepeatDatasetValid, type RepeatDataset } from './repeatDatasetArgs';
 import {
   buildDateOpArgs,
   loadDateOpFields,
@@ -43,6 +47,35 @@ interface StepFormModalProps {
   usecaseId: string;
   title: string;
   existingSteps?: any[]; // For runtime variable suggestions
+  /** Create the step inside this repeat step (its `id`). Hides the Repeat type. */
+  parentStepId?: string;
+  /** Offer the Repeat step type (default true). Templates pass false. */
+  allowRepeat?: boolean;
+  /**
+   * Owning application of the use case. With `allowRepeat`, enables the
+   * *Application dataset* source for repeat steps. Absent for templates and
+   * use cases without an application.
+   */
+  applicationId?: string;
+  /** The application's datasets (loaded once by the page); offered as repeat sources. */
+  datasets?: ApplicationDatasetSummary[];
+}
+
+/** Where a repeat step takes its rows from — exactly one side is saved. */
+type RepeatSource = 'inline' | 'application';
+
+const REPEAT_SOURCE_ITEMS = [
+  { value: 'inline', label: 'Inline', description: 'Columns and rows stored on this step' },
+  { value: 'application', label: 'Application dataset', description: 'Reuse a dataset of the owning application' },
+];
+
+/** Select option for an application dataset: name, `columns × rows`. */
+function datasetOption(dataset: ApplicationDatasetSummary) {
+  return {
+    label: dataset.name,
+    value: dataset.dataset_id,
+    description: `${dataset.column_count} ${dataset.column_count === 1 ? 'column' : 'columns'} × ${dataset.row_count} ${dataset.row_count === 1 ? 'row' : 'rows'}`,
+  };
 }
 
 const STEP_TYPE_OPTIONS = [
@@ -54,7 +87,8 @@ const STEP_TYPE_OPTIONS = [
   { label: 'Retrieve Value', value: 'retrieve_value' },
   { label: 'Assertion', value: 'assertion' },
   { label: 'Download', value: 'download' },
-  { label: 'Network Assertion', value: 'network_assertion' }
+  { label: 'Network Assertion', value: 'network_assertion' },
+  { label: 'Repeat', value: 'repeat', description: 'Run the steps inside once per dataset row' }
 ];
 
 const BROWSER_ACTION_OPTIONS = [
@@ -174,7 +208,11 @@ export default function StepFormModal({
   step,
   usecaseId,
   title,
-  existingSteps = []
+  existingSteps = [],
+  parentStepId,
+  allowRepeat = true,
+  applicationId,
+  datasets = []
 }: StepFormModalProps) {
   const [stepType, setStepType] = useState('navigation');
   const [stepTypeInputValue, setStepTypeInputValue] = useState(
@@ -185,7 +223,7 @@ export default function StepFormModal({
   const [validationType, setValidationType] = useState('bool');
   const [validationOperator, setValidationOperator] = useState('exact');
   const [validationValue, setValidationValue] = useState('');
-  const [availableSecrets, setAvailableSecrets] = useState<any[]>([]);
+  const [availableSecrets, setAvailableSecrets] = useState<SecretListEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [captureVariable, setCaptureVariable] = useState('');
   const [valueType, setValueType] = useState('string');
@@ -238,10 +276,42 @@ export default function StepFormModal({
   const [networkResponseStatus, setNetworkResponseStatus] = useState<string>('');
   const [networkResponseBody, setNetworkResponseBody] = useState('');
   const [networkResponseBodyMatchType, setNetworkResponseBodyMatchType] = useState('subset');
+  // repeat step dataset (columns + rows)
+  const [repeatDataset, setRepeatDataset] = useState<RepeatDataset>(emptyRepeatDataset());
+  // repeat step source: inline rows or an application dataset (`dataset_id`)
+  const [repeatSource, setRepeatSource] = useState<RepeatSource>('inline');
+  const [repeatDatasetId, setRepeatDatasetId] = useState('');
+  // Columns of the parent repeat's application dataset (fetched; the step
+  // record only carries `dataset_id`).
+  const [parentDatasetColumns, setParentDatasetColumns] = useState<string[]>([]);
 
-  // Get available runtime variables from existing retrieve_value steps
+  // A child step belongs to a repeat: either we are creating one inside it
+  // (parentStepId prop) or editing an existing child (step.parent_step_id).
+  const effectiveParentId: string | undefined = parentStepId || step?.parent_step_id || undefined;
+  const parentRepeat = effectiveParentId
+    ? existingSteps.find(s => s.id === effectiveParentId)
+    : undefined;
+  const parentDatasetId: string | undefined = parentRepeat?.dataset_id || undefined;
+  const parentColumns: string[] = parentDatasetId
+    ? parentDatasetColumns
+    : Array.isArray(parentRepeat?.repeat_columns) ? parentRepeat.repeat_columns : [];
+
+  // The source toggle needs an application to offer datasets from; templates
+  // (allowRepeat false) and unassigned use cases keep the inline editor only.
+  const offersApplicationDatasets = allowRepeat && Boolean(applicationId);
+
+  // Repeat is offered for top-level usecase steps only (not inside a repeat,
+  // not in templates). The deprecated 'url' type stays selectable while
+  // editing an existing url step.
+  const stepTypeOptions = [
+    ...STEP_TYPE_OPTIONS.filter(opt => opt.value !== 'repeat' || (allowRepeat && !effectiveParentId)),
+    ...(step?.step_type === 'url' ? [{ label: 'URL (deprecated — use Browser → Navigate)', value: 'url' }] : []),
+  ];
+
+  // Get available runtime variables from existing retrieve_value steps;
+  // inside a repeat the parent's dataset columns are offered as well.
   const getAvailableRuntimeVariables = () => {
-    return existingSteps
+    const captured = existingSteps
       .filter(step => (step.step_type === 'retrieve_value' || step.step_type === 'transform') && step.capture_variable)
       .map(step => ({
         label: step.capture_variable,
@@ -249,6 +319,16 @@ export default function StepFormModal({
         description: `From step ${step.sort}: ${step.instruction || step.transform_operation || ''}`
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
+    if (parentColumns.length === 0) {
+      return captured;
+    }
+    return [
+      ...captured,
+      {
+        label: `From dataset: ${parentRepeat?.instruction || 'repeat'}`,
+        options: parentColumns.map(column => ({ label: column, value: column, description: 'Column' })),
+      },
+    ];
   };
 
   // Initialize form with step data for editing
@@ -316,6 +396,13 @@ export default function StepFormModal({
       );
       setNetworkResponseBody(step.network_response_body || '');
       setNetworkResponseBodyMatchType(step.network_response_body_match_type || 'subset');
+      setRepeatDataset(
+        Array.isArray(step.repeat_columns) && Array.isArray(step.repeat_rows)
+          ? { columns: [...step.repeat_columns], rows: step.repeat_rows.map((r: string[]) => [...r]) }
+          : emptyRepeatDataset()
+      );
+      setRepeatSource(step.dataset_id ? 'application' : 'inline');
+      setRepeatDatasetId(step.dataset_id || '');
       // Initialize boolean input mode based on existing value
       if (step.validation_value && (step.validation_value === 'true' || step.validation_value === 'false')) {
         setBooleanInputMode(step.validation_value);
@@ -369,6 +456,9 @@ export default function StepFormModal({
       setNetworkResponseStatus('');
       setNetworkResponseBody('');
       setNetworkResponseBodyMatchType('subset');
+      setRepeatDataset(emptyRepeatDataset());
+      setRepeatSource('inline');
+      setRepeatDatasetId('');
       setShowCreateSecret(false);
       setNewSecretKey('');
       setNewSecretValue('');
@@ -393,10 +483,31 @@ export default function StepFormModal({
     }
   }, [visible, step?.template_id, step?.template_step_id]);
 
+  // A child of a dataset-backed repeat needs the dataset's columns for the
+  // {{column}} hints; fetch the detail once per parent dataset.
+  useEffect(() => {
+    if (!visible || !parentDatasetId || !applicationId) {
+      setParentDatasetColumns([]);
+      return;
+    }
+    let cancelled = false;
+    datasetsApi.get(applicationId, parentDatasetId)
+      .then(({ dataset }) => {
+        if (!cancelled) setParentDatasetColumns(dataset.columns);
+      })
+      .catch((error) => {
+        console.error(`Failed to load dataset ${parentDatasetId} of application ${applicationId}:`, error);
+        if (!cancelled) setParentDatasetColumns([]);
+      });
+    return () => { cancelled = true; };
+  }, [visible, applicationId, parentDatasetId]);
+
+  // Effective secrets of the use case: own ones plus inherited application
+  // secrets (source "application"); the dropdown labels the latter.
   const loadSecrets = async () => {
     try {
       const response = await api.get(`usecase/${usecaseId}/secrets`);
-      setAvailableSecrets(response.secrets || []);
+      setAvailableSecrets((response.secrets || []) as SecretListEntry[]);
     } catch (error) {
       console.error('Failed to load secrets:', error);
       setAvailableSecrets([]);
@@ -410,7 +521,9 @@ export default function StepFormModal({
       setCreateSecretError('Both key and value are required');
       return;
     }
-    if (availableSecrets.some(s => s.key === key)) {
+    // A use-case secret with an inherited key overrides it (allowed); only an
+    // own key of the same name is a duplicate.
+    if (availableSecrets.some(s => s.key === key && s.source !== 'application')) {
       setCreateSecretError(`Secret "${key}" already exists`);
       return;
     }
@@ -593,6 +706,7 @@ export default function StepFormModal({
     if (stepType === 'assertion' && validationType === 'bool' && !validationValue.trim()) return;
     if ((stepType === 'validation' || stepType === 'assertion') && validationType === 'date'
         && !isDateValidationValid(validationOperator, validationValue)) return;
+    if (stepType === 'repeat' && !isRepeatSourceValid()) return;
 
     setSaving(true);
     try {
@@ -604,12 +718,31 @@ export default function StepFormModal({
         step_type: stepType
       };
 
+      // Children carry the id of the repeat they belong to.
+      if (effectiveParentId) {
+        stepData.parent_step_id = effectiveParentId;
+      }
+
       // Add advanced click types flag for navigation steps
       if (stepType === 'navigation') {
         stepData.enable_advanced_click_types = enableAdvancedClickTypes;
       }
 
-      if (stepType === 'browser') {
+      if (stepType === 'repeat') {
+        // Exactly one source is sent (the server rejects both). The views
+        // merge this payload over the stored step, so the other side is set
+        // to undefined explicitly — JSON.stringify drops it from the request
+        // and the server clears what it previously stored.
+        if (repeatSource === 'application' && offersApplicationDatasets) {
+          stepData.dataset_id = repeatDatasetId;
+          stepData.repeat_columns = undefined;
+          stepData.repeat_rows = undefined;
+        } else {
+          stepData.repeat_columns = repeatDataset.columns.map(c => c.trim());
+          stepData.repeat_rows = repeatDataset.rows.map(row => [...row]);
+          stepData.dataset_id = undefined;
+        }
+      } else if (stepType === 'browser') {
         stepData.browser_action = browserAction;
         const args: any = {};
         if (browserAction === 'reload' && browserHardReload) args.hard = true;
@@ -681,7 +814,18 @@ export default function StepFormModal({
     }
   };
 
+  /** The chosen repeat source is complete: a dataset picked, or a valid inline grid. */
+  const isRepeatSourceValid = () => {
+    if (repeatSource === 'application' && offersApplicationDatasets) {
+      return repeatDatasetId !== '';
+    }
+    return isRepeatDatasetValid(repeatDataset.columns, repeatDataset.rows);
+  };
+
   const isFormValid = () => {
+    if (stepType === 'repeat') {
+      return instruction.trim().length > 0 && isRepeatSourceValid();
+    }
     if (stepType === 'browser') {
       if (browserAction === 'navigate' && !browserNavigateUrl.trim()) return false;
       return true;
@@ -779,6 +923,12 @@ export default function StepFormModal({
       }
     >
       <SpaceBetween direction="vertical" size="l">
+        {effectiveParentId && (
+          <Alert type="info" data-testid="inside-repeat-hint">
+            Inside: {parentRepeat?.instruction || 'repeat step'} — this step runs once per dataset row
+            {parentColumns.length > 0 ? ` and can use ${parentColumns.map(c => `{{${c}}}`).join(', ')}` : ''}.
+          </Alert>
+        )}
         <FormField
           stretch
           label="Step Type"
@@ -790,7 +940,7 @@ export default function StepFormModal({
               setStepTypeInputValue(detail.value);
             }}
             onSelect={({ detail }) => {
-              const match = STEP_TYPE_OPTIONS.find(opt => opt.value === detail.value);
+              const match = stepTypeOptions.find(opt => opt.value === detail.value);
               if (match) {
                 setStepType(match.value);
                 setStepTypeInputValue(match.label);
@@ -803,8 +953,7 @@ export default function StepFormModal({
                 setValueType('string');
               }
             }}
-            options={step?.step_type === 'url' ? [...STEP_TYPE_OPTIONS, { label: 'URL (deprecated — use Browser → Navigate)', value: 'url' }] : STEP_TYPE_OPTIONS}
-            options={STEP_TYPE_OPTIONS}
+            options={stepTypeOptions}
             enteredTextLabel={(value) => `Use: "${value}"`}
             placeholder="Search step types..."
             empty="No matching step type"
@@ -814,14 +963,15 @@ export default function StepFormModal({
         {stepType !== 'assertion' && stepType !== 'browser' && stepType !== 'transform' && (
           <FormField
             stretch
-            label="Instruction"
+            label={stepType === 'repeat' ? 'Label' : 'Instruction'}
             description={
               stepType === 'navigation' ? 'Describe the action to perform on the page' :
                 stepType === 'url' ? 'Enter the URL to navigate to (e.g., "https://example.com/login")' :
                   stepType === 'secret' ? 'Describe the action (e.g., "Type password in login field")' :
                     stepType === 'validation' ? 'Describe what should be validated on the page' :
                       stepType === 'download' ? 'Describe the action that triggers the download. Automatically handles downloads in popups or current page.' :
-                        'Describe what value to retrieve from the page'
+                        stepType === 'repeat' ? 'Name for this loop (e.g., "Login as each user"). Must be unique among the repeat steps of this use case; qa-studio run --dataset-file uses it to target the dataset.' :
+                          'Describe what value to retrieve from the page'
             }
           >
             <Textarea
@@ -833,11 +983,70 @@ export default function StepFormModal({
                     stepType === 'secret' ? 'Describe the action with the secret' :
                       stepType === 'validation' ? 'Describe the validation to perform' :
                         stepType === 'download' ? 'Click the download button' :
+                          stepType === 'repeat' ? 'Login as each user' :
                             'Describe what to retrieve (e.g., "Get the product price")'
               }
-              rows={3}
+              rows={stepType === 'repeat' ? 1 : 3}
             />
           </FormField>
+        )}
+
+        {stepType === 'repeat' && offersApplicationDatasets && (
+          <FormField
+            stretch
+            label="Dataset source"
+            description="Rows typed into this step, or a dataset shared by every use case of the application."
+          >
+            <RadioGroup
+              data-testid="repeat-source"
+              value={repeatSource}
+              onChange={({ detail }) => {
+                const next = detail.value as RepeatSource;
+                if (next === repeatSource) return;
+                // Switching clears the other side so only one source is saved.
+                if (next === 'application') {
+                  setRepeatDataset(emptyRepeatDataset());
+                } else {
+                  setRepeatDatasetId('');
+                }
+                setRepeatSource(next);
+              }}
+              items={REPEAT_SOURCE_ITEMS}
+            />
+          </FormField>
+        )}
+
+        {stepType === 'repeat' && offersApplicationDatasets && repeatSource === 'application' && (
+          <FormField
+            stretch
+            label="Application dataset"
+            description="The steps inside run once per row; its columns are available as {{column}}."
+          >
+            <Select
+              data-testid="repeat-dataset-select"
+              selectedOption={(() => {
+                const selected = datasets.find(d => d.dataset_id === repeatDatasetId);
+                return selected ? datasetOption(selected) : null;
+              })()}
+              onChange={({ detail }) => setRepeatDatasetId(detail.selectedOption?.value || '')}
+              options={datasets.map(datasetOption)}
+              placeholder="Select a dataset"
+              empty={
+                <span>
+                  No datasets yet. Create one on the application's{' '}
+                  <Link href={`/applications/${applicationId}/datasets`} external>Datasets page</Link>.
+                </span>
+              }
+            />
+          </FormField>
+        )}
+
+        {stepType === 'repeat' && !(offersApplicationDatasets && repeatSource === 'application') && (
+          <RepeatDatasetEditor
+            columns={repeatDataset.columns}
+            rows={repeatDataset.rows}
+            onChange={setRepeatDataset}
+          />
         )}
 
         {stepType === 'navigation' && (
@@ -1108,16 +1317,12 @@ export default function StepFormModal({
               }
             >
               <Select
-                selectedOption={availableSecrets.find(secret => secret.key === selectedSecret) ?
-                  { label: availableSecrets.find(secret => secret.key === selectedSecret)?.key || '', value: selectedSecret } :
-                  null
-                }
+                selectedOption={(() => {
+                  const selected = availableSecrets.find(secret => secret.key === selectedSecret);
+                  return selected ? secretStepOption(selected) : null;
+                })()}
                 onChange={({ detail }) => setSelectedSecret(detail.selectedOption?.value || '')}
-                options={availableSecrets.map(secret => ({
-                  label: secret.key,
-                  value: secret.key,
-                  description: secret.description
-                }))}
+                options={availableSecrets.map(secretStepOption)}
                 placeholder="Select a secret"
                 empty="No secrets available. Click + to create one."
               />
@@ -1347,8 +1552,10 @@ export default function StepFormModal({
           <>
             <FormField
               stretch
-              label="Runtime Variable"
-              description="Name of the runtime variable to compare (captured from previous retrieve_value steps)"
+              label={parentColumns.length > 0 ? 'Variable' : 'Runtime Variable'}
+              description={parentColumns.length > 0
+                ? 'Captured runtime variable or a column of the enclosing repeat\'s dataset (runtime captures win on name clashes)'
+                : 'Name of the runtime variable to compare (captured from previous retrieve_value steps)'}
             >
               <Select
                 selectedOption={
@@ -1358,7 +1565,7 @@ export default function StepFormModal({
                 }
                 onChange={({ detail }) => setAssertionVariable(detail.selectedOption?.value || '')}
                 options={getAvailableRuntimeVariables()}
-                placeholder="Select a runtime variable"
+                placeholder={parentColumns.length > 0 ? 'Select a variable or dataset column' : 'Select a runtime variable'}
                 empty="No runtime variables available. Add retrieve_value steps first."
                 filteringType="auto"
                 expandToViewport={true}

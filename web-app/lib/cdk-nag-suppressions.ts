@@ -102,7 +102,7 @@ export function applyCdkNagSuppressions(_app: App, stacks: CdkNagStacks): void {
   NagSuppressions.addStackSuppressions(workerStack, [
     {
       id: 'AwsSolutions-IAM5',
-      reason: 'Worker IAM policies use scoped wildcards: S3 bucket/*, DynamoDB table/index/*, ECR GetAuthorizationToken requires *, Secrets Manager scoped to account/region.',
+      reason: 'Worker IAM policies use scoped wildcards: S3 bucket/*, DynamoDB table/index/*, Secrets Manager scoped to account/region. The MicroVM build/execution roles add the stack-owned MicroVM log group ARN (ends in :* by CloudWatch Logs convention) and the S3 asset object key. The cost collector reads ce:GetCostAndUsage, pricing:GetProducts and nova-act:List* on Resource::* because those APIs have no resource ARNs (resource-level suppression on cost_collector_policy).',
     },
     {
       id: 'AwsSolutions-SQS3',
@@ -119,22 +119,6 @@ export function applyCdkNagSuppressions(_app: App, stacks: CdkNagStacks): void {
     {
       id: 'AwsSolutions-S10',
       reason: 'S3 bucket does not require SSL-only — artefacts are accessed via presigned URLs over HTTPS.',
-    },
-    {
-      id: 'AwsSolutions-ECS4',
-      reason: 'ECS container insights not enabled — this is a batch worker, not a long-running service. Monitoring is done via CloudWatch Logs and DynamoDB status tracking.',
-    },
-    {
-      id: 'AwsSolutions-ECS2',
-      reason: 'Environment variables in ECS task definition contain non-sensitive configuration (table name, bucket name, region). Secrets use Secrets Manager.',
-    },
-    {
-      id: 'AwsSolutions-VPC7',
-      reason: 'VPC flow logs are not enabled — worker VPC is used only for ECS tasks accessing AWS APIs. No inbound traffic.',
-    },
-    {
-      id: 'AwsSolutions-EC23',
-      reason: 'Security group allows outbound traffic to AWS APIs and Nova Act endpoints. No inbound rules.',
     },
     {
       id: 'AwsSolutions-SNS2',

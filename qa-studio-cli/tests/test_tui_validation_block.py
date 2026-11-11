@@ -151,10 +151,6 @@ def _make_api_with_validation_step(status: str = "success") -> MagicMock:
     }
     api.get_execution_metadata.return_value = _execution_metadata
     api.get_execution_steps.return_value = _execution_steps
-    api.get_execution_detail.return_value = {
-        **_execution_metadata,
-        "steps": _execution_steps,
-    }
     return api
 
 

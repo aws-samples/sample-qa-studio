@@ -1,13 +1,16 @@
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import boto3
 from utils import create_response, get_table_name, validate_path_id, get_current_timestamp
 from resource_auth import require_resource_access, app_from_path, authorize_resource, owner_of
+from dataset_usage import find_usecase_dataset_steps
 import permissions_repo
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+USECASE_REFERENCES_DATASETS_ERROR = 'use case references application datasets'
 
 
 @require_resource_access('edit', app_from_path, scopes=['api/applications.write'])
@@ -17,6 +20,9 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
 
     Requires edit on the target app (decorator) and edit on each use case's
     current app, so nobody can pull in or detach another team's use cases.
+    Moving a use case in from another application is refused with ``409``
+    while any of its steps references a dataset (datasets belong to the
+    application being left; variables and secrets move silently).
     """
     app_id = event['pathParameters']['id']  # validated by app_from_path
 
@@ -31,7 +37,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     if not usecase_ids or not isinstance(usecase_ids, list):
         return create_response(400, {'error': 'usecase_ids must be a non-empty list'})
 
-    usecase_err = _authorize_current_apps(event, app_id, usecase_ids)
+    moving_ids, usecase_err = _authorize_current_apps(event, app_id, usecase_ids)
     if usecase_err:
         return usecase_err
 
@@ -41,6 +47,13 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     if action == 'remove':
         return _remove_usecases(table, app_id, usecase_ids)
 
+    blocked = _usecases_referencing_datasets(table, moving_ids)
+    if blocked:
+        logger.info(
+            f"Refused moving {len(blocked)} usecases into application {app_id}: dataset references"
+        )
+        return create_response(409, {'error': USECASE_REFERENCES_DATASETS_ERROR, 'usecases': blocked})
+
     return _add_usecases(
         table, app_id, usecase_ids, body.get('environment', ''),
         permissions_repo.get_app_owner(app_id),
@@ -48,30 +61,49 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _authorize_current_apps(event: Dict[str, Any], app_id: str,
-                            usecase_ids: list) -> Optional[Dict[str, Any]]:
+                            usecase_ids: list) -> Tuple[List[str], Optional[Dict[str, Any]]]:
     """
     Require edit on the app each use case currently belongs to. Use cases
     already in `app_id` are covered by the decorator; orphaned use cases
     (no app) are admin-only.
 
     Returns:
-        None when allowed, otherwise a 400/403/404 response.
+        ``(moving_ids, None)`` when allowed — ``moving_ids`` are the use cases
+        not currently in ``app_id`` — otherwise ``([], response)`` with a
+        400/403/404 response.
     """
+    moving_ids: List[str] = []
     for usecase_id in usecase_ids:
         _, err = validate_path_id(usecase_id if isinstance(usecase_id, str) else None, 'usecase ID')
         if err:
-            return err
+            return [], err
         owner = permissions_repo.get_usecase_owner(usecase_id)
         if owner is None:
-            return create_response(404, {'error': f'Use case {usecase_id} not found'})
+            return [], create_response(404, {'error': f'Use case {usecase_id} not found'})
         current_app_id, current_owner = owner_of(owner)
         if current_app_id == app_id:
             continue
         _, auth_err = authorize_resource(event, current_app_id or '', 'edit',
                                          owner_team_id=current_owner)
         if auth_err:
-            return auth_err
-    return None
+            return [], auth_err
+        moving_ids.append(usecase_id)
+    return moving_ids, None
+
+
+def _usecases_referencing_datasets(table, moving_ids: List[str]) -> List[Dict[str, Any]]:
+    """
+    The 409 body entries for the moved use cases whose steps reference a
+    dataset (``[{usecase_id, name, steps: [{id, instruction}]}]``), sorted by
+    name. Empty when the move is allowed.
+    """
+    blocked = []
+    for usecase_id in moving_ids:
+        reference = find_usecase_dataset_steps(table, usecase_id)
+        if reference:
+            blocked.append(reference)
+    blocked.sort(key=lambda ref: (ref['name'].lower(), ref['usecase_id']))
+    return blocked
 
 
 def _add_usecases(table, app_id: str, usecase_ids: list, environment: str,

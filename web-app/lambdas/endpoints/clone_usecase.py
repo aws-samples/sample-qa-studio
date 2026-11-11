@@ -1,3 +1,4 @@
+import lambda_init  # noqa: F401 — must be first import (dataset_models uses pydantic)
 import logging
 import json
 from typing import Any, Dict
@@ -7,6 +8,8 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 from utils import create_response, get_table_name, get_secret_prefix, get_current_timestamp, extract_user_identity
 from resource_auth import require_resource_access, usecase_from_path, authorize_target_app
+from dataset_models import missing_dataset_ids, missing_datasets_response, referenced_dataset_ids
+from step_copy import copy_step_fields
 
 # Configure logging
 logger = logging.getLogger()
@@ -77,6 +80,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if auth_err:
                 return auth_err
 
+        # Source steps are read before anything is written: a clone into
+        # another application must resolve every dataset reference there
+        # (datasets belong to one application), or nothing is created.
+        steps_response = table.query(
+            KeyConditionExpression=Key('pk').eq(f'USECASE#{source_id}') & Key('sk').begins_with('STEP#')
+        )
+        steps = steps_response.get('Items', [])
+        steps.sort(key=lambda x: x.get('sort', 0))
+        if target_app_id != (source_usecase.get('application_id') or ''):
+            dataset_ids = referenced_dataset_ids(steps)
+            if dataset_ids:
+                missing_datasets = missing_dataset_ids(table, target_app_id, dataset_ids)
+                if missing_datasets:
+                    return missing_datasets_response(missing_datasets)
+
         # Generate new usecase ID
         new_usecase_id = str(uuid4())
         now = get_current_timestamp()
@@ -123,37 +141,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
         table.put_item(Item=created_by_record)
         
-        # Clone steps
-        steps_response = table.query(
-            KeyConditionExpression=Key('pk').eq(f'USECASE#{source_id}') & Key('sk').begins_with('STEP#')
-        )
-        
-        steps = steps_response.get('Items', [])
-        steps.sort(key=lambda x: x.get('sort', 0))
-        
+        # Clone steps (read above, before the first write).
+        # Two passes: allocate every new id first so a child's
+        # parent_step_id can be translated to the cloned repeat's id.
+        new_id_by_old = {step.get('id'): str(uuid4()) for step in steps}
         for step in steps:
-            new_step_id = str(uuid4())
+            new_step_id = new_id_by_old[step.get('id')]
             new_step = {
                 'pk': f'USECASE#{new_usecase_id}',
                 'sk': f'STEP#{new_step_id}',
                 'sort': step.get('sort', 0),
                 'id': new_step_id,
-                'instruction': step.get('instruction', ''),
-                'step_type': step.get('step_type', ''),
-                'created_at': now
+                'created_at': now,
+                **copy_step_fields(step),
             }
-            
-            # Copy optional fields
-            for field in ['secret_key', 'capture_variable', 'validation_type', 
-                         'validation_operator', 'validation_value', 'assertion_variable',
-                         'value_step', 'value_type',
-                         'network_url_pattern', 'network_method', 'network_request_body',
-                         'network_body_match_type', 'network_mock_response',
-                         'network_mock_passthrough', 'network_timeout',
-                         'network_response_body', 'network_response_body_match_type',
-                         'network_response_status']:
-                if field in step:
-                    new_step[field] = step[field]
+            old_parent = step.get('parent_step_id')
+            if old_parent and old_parent in new_id_by_old:
+                new_step['parent_step_id'] = new_id_by_old[old_parent]
             
             table.put_item(Item=new_step)
         

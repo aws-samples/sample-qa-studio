@@ -1,4 +1,4 @@
-"""Tests for ``ExecutionDetailScreen`` + ``TuiApi.get_execution_detail``."""
+"""Tests for ``ExecutionDetailScreen`` and the ``TuiApi`` section fetches it uses."""
 
 import asyncio
 from unittest.mock import MagicMock
@@ -12,73 +12,45 @@ from qa_studio_cli.tui.app import QAStudioTUIApp  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
-# TuiApi.get_execution_detail
+# TuiApi.get_execution_metadata / get_execution_steps (what the screen uses)
 # ---------------------------------------------------------------------------
 
 
-class TestGetExecutionDetail:
-    def test_composes_four_endpoints(self):
+class TestExecutionSectionFetches:
+    def test_metadata_reads_the_execution_record(self):
         client = MagicMock()
-        responses = {
-            "/usecase/u-1/executions/e-1": {
-                "id": "e-1", "status": "success",
-            },
-            "/usecase/u-1/executions/e-1/steps": {
-                "steps": [{"sort": 1, "status": "success"}]
-            },
-            "/usecase/u-1/executions/e-1/variables": {
-                "variables": [{"key": "env", "value": "dev"}]
-            },
-            "/usecase/u-1/executions/e-1/headers": {
-                "headers": {"X-Trace": "abc"}
-            },
-        }
-        client.get.side_effect = lambda path, **_: responses[path]
+        client.get.return_value = {"id": "e-1", "status": "success"}
 
-        api = TuiApi(client)
-        result = api.get_execution_detail("u-1", "e-1")
+        result = TuiApi(client).get_execution_metadata("u-1", "e-1")
 
-        assert result["status"] == "success"
-        assert result["steps"] == [{"sort": 1, "status": "success"}]
-        assert result["variables"] == {"env": "dev"}
-        assert result["headers"] == {"X-Trace": "abc"}
+        client.get.assert_called_once_with("/usecase/u-1/executions/e-1")
+        assert result == {"id": "e-1", "status": "success"}
 
-    def test_sub_resource_failures_fall_back_to_empty(self):
-        """Older executions may not have every endpoint wired — the
-        top-level fetch must still return a usable payload."""
+    def test_steps_are_unwrapped(self):
         client = MagicMock()
+        client.get.return_value = {"steps": [{"sort": 1, "status": "success"}]}
 
-        def _get(path, **_):
-            if path == "/usecase/u-1/executions/e-1":
-                return {"status": "success"}
-            raise RuntimeError("404 not found")
+        result = TuiApi(client).get_execution_steps("u-1", "e-1")
 
-        client.get.side_effect = _get
+        client.get.assert_called_once_with("/usecase/u-1/executions/e-1/steps")
+        assert result == [{"sort": 1, "status": "success"}]
 
-        api = TuiApi(client)
-        result = api.get_execution_detail("u-1", "e-1")
-        assert result["status"] == "success"
-        assert result["steps"] == []
-        assert result["variables"] == {}
-        assert result["headers"] == {}
-
-    def test_execution_variables_dict_form_preserved(self):
-        """When the server returns pre-merged ``execution_variables``
-        as a dict, we use it as-is rather than re-merging."""
+    @pytest.mark.parametrize("response", [{}, {"steps": None}])
+    def test_missing_steps_are_an_empty_list(self, response):
         client = MagicMock()
-        responses = {
-            "/usecase/u-1/executions/e-1": {"status": "success"},
-            "/usecase/u-1/executions/e-1/steps": {"steps": []},
-            "/usecase/u-1/executions/e-1/variables": {
-                "execution_variables": {"env": "prod", "region": "eu-west-1"}
-            },
-            "/usecase/u-1/executions/e-1/headers": {"headers": {}},
-        }
-        client.get.side_effect = lambda path, **_: responses[path]
+        client.get.return_value = response
+        assert TuiApi(client).get_execution_steps("u-1", "e-1") == []
 
+    def test_errors_bubble_for_the_progressive_loader(self):
+        """The screen turns a failed section into an inline message, so
+        the fetches must not swallow errors."""
+        client = MagicMock()
+        client.get.side_effect = RuntimeError("404 not found")
         api = TuiApi(client)
-        result = api.get_execution_detail("u-1", "e-1")
-        assert result["variables"] == {"env": "prod", "region": "eu-west-1"}
+        with pytest.raises(RuntimeError):
+            api.get_execution_metadata("u-1", "e-1")
+        with pytest.raises(RuntimeError):
+            api.get_execution_steps("u-1", "e-1")
 
 
 # ---------------------------------------------------------------------------
@@ -105,12 +77,9 @@ def _make_api_with_execution(
     api.get_secrets.return_value = []
     api.list_executions.return_value = executions_list or []
 
-    # Tests pass a single composite ``execution`` dict (historical
-    # shape). The screen now uses the split endpoints, so we derive
-    # both return values from that one fixture: steps come off the
-    # top-level ``steps`` key, metadata is everything else. The
-    # composite mock stays set because ``TestGetExecutionDetail``
-    # tests the composite method directly.
+    # Tests pass a single ``execution`` dict; the screen uses the split
+    # endpoints, so both return values are derived from it: steps come
+    # off the top-level ``steps`` key, metadata is everything else.
     exec_payload = execution or {
         "id": "e-1",
         "status": "success",
@@ -123,7 +92,6 @@ def _make_api_with_execution(
     metadata = {k: v for k, v in exec_payload.items() if k != "steps"}
     api.get_execution_metadata.return_value = metadata
     api.get_execution_steps.return_value = steps
-    api.get_execution_detail.return_value = exec_payload
     return api
 
 

@@ -1,10 +1,10 @@
 import lambda_init  # noqa: F401 — must be first import
 import logging
 from typing import Any, Dict
-from utils import create_response, extract_user_identity, validate_path_id
+from utils import create_response, extract_user_identity, validate_path_id, no_content_response
 import permissions_repo
 from resource_auth import require_team_role
-from perm_audit import log_permission_change
+from perm_audit import actor_from_identity, log_permission_change
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -47,11 +47,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
 
     # Find the grant by listing shares for this team and matching grant_id
     grants = permissions_repo.list_shared_access(owner_team_id)
-    target_grant = None
-    for g in grants:
-        if g.get('grant_id') == grant_id:
-            target_grant = g
-            break
+    target_grant = next((g for g in grants if g.get('grant_id') == grant_id), None)
 
     if not target_grant:
         return create_response(404, {'error': 'Grant not found'})
@@ -64,7 +60,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # Audit log
-    actor = {'sub': user_identity.get('sub', ''), 'email': user_identity.get('email', '')}
+    actor = actor_from_identity(user_identity)
     log_permission_change(
         actor=actor,
         action='revoke_access',
@@ -77,12 +73,4 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     logger.info(f"Revoked grant {grant_id} from team {owner_team_id}")
-    return {
-        'statusCode': 204,
-        'headers': {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
-        'body': '',
-    }
+    return no_content_response()

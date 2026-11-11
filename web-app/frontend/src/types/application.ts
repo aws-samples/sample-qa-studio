@@ -28,6 +28,8 @@ export interface ApplicationMetrics {
   };
   totals: {
     total_executions: number;
+    /** Sum of the Failures metric; absent from responses before codebase-health B12. */
+    total_failures?: number;
     pass_rate: number;
     avg_duration_ms: number;
   };

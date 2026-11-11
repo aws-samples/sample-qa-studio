@@ -3,14 +3,17 @@
   "description": "Brainstorm partner, ambiguity eliminator, and task decomposer. Refuses to let you jump into implementation without clarity.",
   "prompt": "file://planner-prompt.md",
   "tools": [
-    "fs_read",
-    "fs_write",
-    "grep",
-    "glob",
+    "@creds-agent",
     "code",
-    "web_search",
+    "glob",
+    "grep",
+    "read",
+    "shell",
+    "todo_list",
+    "web",
     "web_fetch",
-    "todo_list"
+    "web_search",
+    "write"
   ],
   "allowedTools": [
     "fs_read",
@@ -18,20 +21,79 @@
     "glob",
     "code",
     "web_search",
-    "web_fetch"
+    "web_fetch",
+    "@creds-agent"
   ],
   "toolsSettings": {
     "write": {
-      "allowedPaths": [".kiro/**"]
+      "allowedPaths": [
+        ".kiro/**"
+      ]
     }
   },
-  "hooks": {
-    "agentSpawn": [
+  "hooks": [
+    {
+      "name": "agentSpawn-0",
+      "trigger": "agentSpawn",
+      "action": {
+        "type": "command",
+        "command": "echo '--- Repo Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md found') && echo '---' && (ls docs/features/ 2>/dev/null || echo 'No existing features') && echo '---' && (git log --oneline -10 2>/dev/null || echo 'No git history')"
+      },
+      "timeout": 5
+    }
+  ],
+  "welcomeMessage": "Planner mode. What are we building? Tell me the problem — I'll ask questions before we plan.",
+  "permissions": {
+    "rules": [
       {
-        "command": "echo '--- Repo Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md found') && echo '---' && (ls docs/features/ 2>/dev/null || echo 'No existing features') && echo '---' && (git log --oneline -10 2>/dev/null || echo 'No git history')",
-        "timeout_ms": 5000
+        "capability": "fs_write",
+        "match": [
+          ".kiro/**"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "web_fetch",
+        "effect": "allow"
+      },
+      {
+        "capability": "web_search",
+        "effect": "allow"
+      },
+      {
+        "capability": "mcp",
+        "match": [
+          "creds-agent/*"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
       }
     ]
   },
-  "welcomeMessage": "Planner mode. What are we building? Tell me the problem — I'll ask questions before we plan."
+  "mcpServers": {
+    "creds-agent": {
+      "command": "aim",
+      "args": [
+        "mcp",
+        "start-server",
+        "local-creds-agent-mcp"
+      ],
+      "env": {
+        "AIM_CREDS_AGENT_URL_KIRO": "${AIM_CREDS_AGENT_URL}",
+        "AIM_CREDS_AGENT_INJECTION": "1e5f3eec-8799-4b30-93d7-bd6b0ebaeb2a"
+      }
+    }
+  },
+  "kiroUpgrade": {
+    "revision": 2,
+    "fingerprint": "sha256:333e722529e6a220614d841b666bd47cf28bddbe4afbb0716b46029d5087b89c",
+    "source": "sha256:13fd2344d131039e1e21fd4486fed0a3e35db054d97a5e000dd247145cc13c90"
+  }
 }

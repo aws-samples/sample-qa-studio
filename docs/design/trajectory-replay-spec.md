@@ -127,7 +127,9 @@ Remove the `CACHE_ACTION_DELAY_MS` env var from container overrides.
 
 IAM: invalidator needs `s3:ListBucket`, `s3:DeleteObject` on the artifacts bucket.
 
-### `web-app/frontend/src/components/StepsTable.tsx`
+### `web-app/frontend/src/components/WorkflowStepsCard.tsx`
+
+(Originally written for the step table view, which has since been removed; the per-step badge now lives on the step cards.)
 
 Remove per-step `cached_steps` / `cache_last_updated` badge logic. Replace with a usecase-level badge rendered by the parent usecase detail page (out of scope for this file, lives wherever the usecase header is rendered).
 

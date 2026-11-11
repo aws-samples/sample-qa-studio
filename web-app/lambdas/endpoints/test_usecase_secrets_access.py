@@ -8,7 +8,7 @@ import create_usecase_secrets
 import delete_usecase_secrets
 import get_usecase_secrets
 import update_usecase_secrets
-from authz_test_support import UC_ID, make_event, owned_resources, share, worker_header
+from authz_test_support import APP_ID, UC_ID, make_event, owned_resources, share, worker_header
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +16,9 @@ def secrets_client(monkeypatch):
     monkeypatch.setenv('SECRET_PREFIX', 'p')
     client = MagicMock()
     client.list_secrets.return_value = {'SecretList': [{'Name': f'p/usecase/{UC_ID}/user'}]}
-    with patch('boto3.client', return_value=client):
+    with patch('boto3.client', return_value=client), \
+            patch('get_usecase_secrets.get_usecase_owner',
+                  return_value={'application_id': APP_ID, 'owner_team_id': 'team-a'}):
         yield client
 
 

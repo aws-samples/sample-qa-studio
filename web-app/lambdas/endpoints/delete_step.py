@@ -3,6 +3,8 @@ from typing import Any, Dict
 import boto3
 from utils import no_content_response, get_table_name, create_response, validate_path_id
 from resource_auth import require_resource_access, usecase_from_path
+from repeat_validation import REPEAT_STEP_TYPE, children_of, load_usecase_steps
+from template_usage import remove_usage_if_unlinked
 
 # Configure logging
 logger = logging.getLogger()
@@ -32,14 +34,27 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Initialize Amazon DynamoDB resource
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
-        
-        # Delete the step
-        table.delete_item(
-            Key={
-                'pk': f'USECASE#{usecase_id}',
-                'sk': f'STEP#{step_id}'
-            }
-        )
+
+        # A repeat step takes its children with it (server-side cascade).
+        deleted_step_ids = [step_id]
+        siblings = load_usecase_steps(table, usecase_id)
+        target = next((s for s in siblings if s.get('id') == step_id), None)
+        if target is not None and target.get('step_type') == REPEAT_STEP_TYPE:
+            deleted_step_ids.extend(child['id'] for child in children_of(siblings, step_id) if child.get('id'))
+
+        # Delete the step (and any children)
+        for deleted_id in deleted_step_ids:
+            table.delete_item(
+                Key={
+                    'pk': f'USECASE#{usecase_id}',
+                    'sk': f'STEP#{deleted_id}'
+                }
+            )
+
+        # Was this the last step linked to its template? Then the template's
+        # USAGE record for this use case is stale.
+        if target is not None and target.get('template_id'):
+            remove_usage_if_unlinked(table, target['template_id'], usecase_id)
         
         return no_content_response()
         

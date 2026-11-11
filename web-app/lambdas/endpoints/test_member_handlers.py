@@ -293,6 +293,18 @@ class TestAddTeamMember:
 # ======================================================================
 
 class TestSetMemberRole:
+    @patch('handlers.set_member_role.log_permission_change')
+    @patch('permissions_repo.set_member_role')
+    def test_audit_records_old_and_new_role(self, mock_set, mock_audit):
+        """B12: the role-change audit entry carries the previous role."""
+        from handlers.set_member_role import handle
+
+        mock_set.return_value = {'team_id': 'team-1', 'user_sub': 'u1', 'role': 'viewer', 'previous_role': 'editor'}
+        response = handle(_admin_event(body={'role': 'viewer'}, path_params={'id': 'team-1', 'userId': 'u1'}))
+
+        assert response['statusCode'] == 200
+        assert mock_audit.call_args.kwargs['details'] == {'old_role': 'editor', 'new_role': 'viewer'}
+
     @patch('perm_audit.log_permission_change')
     @patch('permissions_repo.set_member_role')
     def test_happy_path(self, mock_set_role, mock_audit):

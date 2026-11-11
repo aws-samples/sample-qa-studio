@@ -4,7 +4,12 @@ import click
 
 from qa_studio_cli.api.client import require_auth
 from qa_studio_cli.api.test_suites import TestSuiteAPI
-from qa_studio_cli.models.api import SuiteExecutionResponse, SuiteModel, SuiteUsecaseModel
+from qa_studio_cli.models.api import (
+    AddUsecasesResponse,
+    SuiteExecutionResponse,
+    SuiteModel,
+    SuiteUsecaseModel,
+)
 from qa_studio_cli.models.errors import ApiError
 
 
@@ -108,13 +113,17 @@ def add_tests(ctx, suite_id, usecase_ids):
     """Add tests to a suite."""
     client = ctx.obj["client"]
     try:
+        # Backend contract (add_usecases_to_suite.py): request body uses
+        # snake_case `usecase_ids`; response carries `added` / `total_usecases`.
         data = client.post(
             f"/test-suites/{suite_id}/usecases",
-            json_body={"usecaseIds": list(usecase_ids)},
+            json_body={"usecase_ids": list(usecase_ids)},
         )
-        added = data.get("added", 0)
-        total = data.get("totalUsecases", 0)
-        click.echo(f"✓ Added {added} test(s). Total usecases in suite: {total}")
+        result = AddUsecasesResponse.model_validate(data)
+        click.echo(
+            f"✓ Added {result.added} test(s). "
+            f"Total usecases in suite: {result.total_usecases}"
+        )
 
     except ApiError as e:
         click.echo(str(e), err=True)

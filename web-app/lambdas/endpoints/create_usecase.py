@@ -6,6 +6,7 @@ from uuid import uuid4
 import boto3
 from utils import create_response, get_table_name, get_current_timestamp, extract_user_identity
 from resource_auth import require_resource_access, app_from_body
+from platforms import validate_test_platform
 
 # Configure logging
 logger = logging.getLogger()
@@ -61,6 +62,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         bundle_id = body.get('bundle_id', '')
         device_farm_project_arn = body.get('device_farm_project_arn', '')
         device_arn = body.get('device_arn', '')
+
+        platform_error = validate_test_platform(test_platform)
+        if platform_error:
+            return platform_error
         
         # Mobile-specific validation
         if test_platform == 'mobile':

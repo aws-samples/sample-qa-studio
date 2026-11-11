@@ -30,10 +30,10 @@ export const DATE_OPERATIONS: ReadonlySet<DateOperation> = new Set([
 ]);
 
 export const DURATION_UNITS = ["seconds", "minutes", "hours", "days", "weeks"] as const;
-export type DurationUnit = (typeof DURATION_UNITS)[number];
+type DurationUnit = (typeof DURATION_UNITS)[number];
 
 export const EPOCH_UNITS = ["seconds", "millis"] as const;
-export type EpochUnit = (typeof EPOCH_UNITS)[number];
+type EpochUnit = (typeof EPOCH_UNITS)[number];
 
 export interface DateOpFields {
   /** Primary value input (used as `value`/`iso_value`/`a` depending on op). */

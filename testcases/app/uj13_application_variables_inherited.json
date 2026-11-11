@@ -1,0 +1,470 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-10-30T12:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-13 Application Variables Inherited",
+    "description": "Open the application's Variables page from the Actions dropdown, add a variable, see it inherited read-only (Application badge) on a new use case of the application, see the override hint when the use case defines the same key, then edit and delete the application variable and delete the use case",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "application",
+      "variables",
+      "usecase",
+      "delete"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "navigation",
+      "instruction": "Click the 'Applications' menu item in the left navigation"
+    },
+    {
+      "sort": 5,
+      "step_type": "navigation",
+      "instruction": "Open the application 'QA Studio' (click its card if several applications are listed)"
+    },
+    {
+      "sort": 6,
+      "step_type": "validation",
+      "instruction": "Is the application 'QA Studio' detail page shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 7,
+      "step_type": "navigation",
+      "instruction": "Open the 'Actions' dropdown in the application page header"
+    },
+    {
+      "sort": 8,
+      "step_type": "validation",
+      "instruction": "Does the dropdown show a 'Configuration' group?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 9,
+      "step_type": "validation",
+      "instruction": "Is 'Variables' listed under 'Configuration' in the dropdown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 10,
+      "step_type": "navigation",
+      "instruction": "Select 'Variables' under 'Configuration' in the dropdown"
+    },
+    {
+      "sort": 11,
+      "step_type": "validation",
+      "instruction": "Is the page heading 'Variables' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 12,
+      "step_type": "validation",
+      "instruction": "Is the breadcrumb 'Applications > QA Studio > Variables' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 13,
+      "step_type": "validation",
+      "instruction": "Is 'Datasets' listed under 'Applications' in the left navigation?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 14,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add new variable' button"
+    },
+    {
+      "sort": 15,
+      "step_type": "navigation",
+      "instruction": "Type '{{var_key}}' in the Key field of the new row"
+    },
+    {
+      "sort": 16,
+      "step_type": "navigation",
+      "instruction": "Type 'from-application' in the Value field of the new row"
+    },
+    {
+      "sort": 17,
+      "step_type": "navigation",
+      "instruction": "Click the 'Save Changes' button"
+    },
+    {
+      "sort": 18,
+      "step_type": "validation",
+      "instruction": "Is the message 'Variables saved' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 19,
+      "step_type": "validation",
+      "instruction": "Is a row with key '{{var_key}}' and value 'from-application' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 20,
+      "step_type": "navigation",
+      "instruction": "Click the 'Use cases' menu item in the left navigation"
+    },
+    {
+      "sort": 21,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Use case' button"
+    },
+    {
+      "sort": 22,
+      "step_type": "navigation",
+      "instruction": "Select the 'Create New' option"
+    },
+    {
+      "sort": 23,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 24,
+      "step_type": "navigation",
+      "instruction": "Select the 'Web' platform option"
+    },
+    {
+      "sort": 25,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 26,
+      "step_type": "navigation",
+      "instruction": "Type '{{usecase_name}}' in the Name field"
+    },
+    {
+      "sort": 27,
+      "step_type": "navigation",
+      "instruction": "Type 'https://example.com' in the Starting URL field"
+    },
+    {
+      "sort": 28,
+      "step_type": "navigation",
+      "instruction": "Select 'eu-central-1' in the Execution Region dropdown"
+    },
+    {
+      "sort": 29,
+      "step_type": "navigation",
+      "instruction": "Select 'nova-act-v1.0' in the Model dropdown"
+    },
+    {
+      "sort": 30,
+      "step_type": "navigation",
+      "instruction": "Select 'QA Studio' in the Application dropdown"
+    },
+    {
+      "sort": 31,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 32,
+      "step_type": "navigation",
+      "instruction": "Select the 'Create Blank' option"
+    },
+    {
+      "sort": 33,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 34,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 35,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button"
+    },
+    {
+      "sort": 36,
+      "step_type": "navigation",
+      "instruction": "Click the 'Variables' tab"
+    },
+    {
+      "sort": 37,
+      "step_type": "validation",
+      "instruction": "Is a section 'Inherited from application' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 38,
+      "step_type": "validation",
+      "instruction": "Is '{{var_key}}' listed in the 'Inherited from application' table with an 'Application' badge?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 39,
+      "step_type": "validation",
+      "instruction": "Does the inherited row '{{var_key}}' show the value 'from-application'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 40,
+      "step_type": "validation",
+      "instruction": "Does the inherited row '{{var_key}}' have a 'Remove' button?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 41,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add new variable' button"
+    },
+    {
+      "sort": 42,
+      "step_type": "navigation",
+      "instruction": "Type '{{var_key}}' in the Key field of the new row"
+    },
+    {
+      "sort": 43,
+      "step_type": "validation",
+      "instruction": "Is the hint 'Overrides application value' shown under the Key field of the new row?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 44,
+      "step_type": "navigation",
+      "instruction": "Type 'from-usecase' in the Value field of the new row"
+    },
+    {
+      "sort": 45,
+      "step_type": "navigation",
+      "instruction": "Click the 'Save Changes' button"
+    },
+    {
+      "sort": 46,
+      "step_type": "validation",
+      "instruction": "Is the message 'Variables saved' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 47,
+      "step_type": "validation",
+      "instruction": "Is '{{var_key}}' still listed in the 'Inherited from application' table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 48,
+      "step_type": "validation",
+      "instruction": "Is '{{var_key}}' with value 'from-usecase' listed as a use case variable below the inherited table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 49,
+      "step_type": "navigation",
+      "instruction": "Click the 'Applications' menu item in the left navigation"
+    },
+    {
+      "sort": 50,
+      "step_type": "navigation",
+      "instruction": "Open the application 'QA Studio' (click its card if several applications are listed)"
+    },
+    {
+      "sort": 51,
+      "step_type": "validation",
+      "instruction": "Is the application 'QA Studio' detail page shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 52,
+      "step_type": "navigation",
+      "instruction": "Open the 'Actions' dropdown in the application page header"
+    },
+    {
+      "sort": 53,
+      "step_type": "navigation",
+      "instruction": "Select 'Variables' under 'Configuration' in the dropdown"
+    },
+    {
+      "sort": 54,
+      "step_type": "validation",
+      "instruction": "Is the page heading 'Variables' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 55,
+      "step_type": "validation",
+      "instruction": "Is the breadcrumb 'Applications > QA Studio > Variables' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 56,
+      "step_type": "navigation",
+      "instruction": "Clear the Value field of the row '{{var_key}}' and type 'edited-value'"
+    },
+    {
+      "sort": 57,
+      "step_type": "navigation",
+      "instruction": "Click the 'Save Changes' button"
+    },
+    {
+      "sort": 58,
+      "step_type": "validation",
+      "instruction": "Is the message 'Variables saved' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 59,
+      "step_type": "validation",
+      "instruction": "Is a row with key '{{var_key}}' and value 'edited-value' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 60,
+      "step_type": "navigation",
+      "instruction": "Click the 'Remove' button in the row '{{var_key}}'"
+    },
+    {
+      "sort": 61,
+      "step_type": "navigation",
+      "instruction": "Click the 'Save Changes' button"
+    },
+    {
+      "sort": 62,
+      "step_type": "validation",
+      "instruction": "Is the message 'Variables saved' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 63,
+      "step_type": "validation",
+      "instruction": "Is a row with key '{{var_key}}' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 64,
+      "step_type": "navigation",
+      "instruction": "Click the 'Use cases' menu item in the left navigation"
+    },
+    {
+      "sort": 65,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] AppVars {{UniqueID}}' in the search bar"
+    },
+    {
+      "sort": 66,
+      "step_type": "navigation",
+      "instruction": "Click the checkbox in front of use case '{{usecase_name}}'"
+    },
+    {
+      "sort": 67,
+      "step_type": "navigation",
+      "instruction": "Open the actions dropdown above the table"
+    },
+    {
+      "sort": 68,
+      "step_type": "navigation",
+      "instruction": "Select 'Delete Selected (1)' from the dropdown"
+    },
+    {
+      "sort": 69,
+      "step_type": "navigation",
+      "instruction": "Type 'permanently delete' in the confirmation field of the dialog"
+    },
+    {
+      "sort": 70,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the dialog"
+    },
+    {
+      "sort": 71,
+      "step_type": "validation",
+      "instruction": "Is use case '{{usecase_name}}' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    }
+  ],
+  "variables": [
+    {
+      "Key": "usecase_name",
+      "Value": "[QA Test] AppVars {{UniqueID}}"
+    },
+    {
+      "Key": "var_key",
+      "Value": "qa_app_var_{{UniqueID}}"
+    }
+  ],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Username for login"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Password for login"
+    }
+  ]
+}

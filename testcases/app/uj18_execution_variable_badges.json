@@ -1,0 +1,549 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-11-08T10:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-18 Execution Variable Badges",
+    "description": "A run's Execution Steps table shows every {{name}} in instructions and validation values as a VAR badge: a defined variable shows its value, {{UniqueID}} the placeholder UNIQUE_ID, an undefined token UNDEFINED_VALUE, a retrieve_value capture its value once captured; the first column header is '#', there is no Validation column and a grey validation box (Type / Operator, Expected, Actual) sits under the instruction and the retrieve_value step shows a capture box (Variable / Type, Value); the snapshot is listed under Defined Variables; then the use case is deleted",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "execution",
+      "usecase",
+      "variables",
+      "split-panel",
+      "delete"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "navigation",
+      "instruction": "Click the 'Use cases' menu item in the left navigation"
+    },
+    {
+      "sort": 5,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Use case' button"
+    },
+    {
+      "sort": 6,
+      "step_type": "navigation",
+      "instruction": "Select the 'Create New' option"
+    },
+    {
+      "sort": 7,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 8,
+      "step_type": "navigation",
+      "instruction": "Select the 'Web' platform option"
+    },
+    {
+      "sort": 9,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 10,
+      "step_type": "navigation",
+      "instruction": "Type '{{usecase_name}}' in the Name field"
+    },
+    {
+      "sort": 11,
+      "step_type": "navigation",
+      "instruction": "Type 'https://example.com' in the Starting URL field"
+    },
+    {
+      "sort": 12,
+      "step_type": "navigation",
+      "instruction": "Select 'eu-central-1' in the Execution Region dropdown"
+    },
+    {
+      "sort": 13,
+      "step_type": "navigation",
+      "instruction": "Select 'nova-act-v1.0' in the Model dropdown"
+    },
+    {
+      "sort": 14,
+      "step_type": "navigation",
+      "instruction": "Select 'QA Studio' in the Application dropdown"
+    },
+    {
+      "sort": 15,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 16,
+      "step_type": "navigation",
+      "instruction": "Select the 'Create Blank' option"
+    },
+    {
+      "sort": 17,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 18,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button"
+    },
+    {
+      "sort": 19,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button"
+    },
+    {
+      "sort": 20,
+      "step_type": "navigation",
+      "instruction": "Click the 'Variables' tab"
+    },
+    {
+      "sort": 21,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add new variable' button"
+    },
+    {
+      "sort": 22,
+      "step_type": "navigation",
+      "instruction": "Type 'search_term' in the Key field of the new row"
+    },
+    {
+      "sort": 23,
+      "step_type": "navigation",
+      "instruction": "Type 'qa-badge-term' in the Value field of the new row"
+    },
+    {
+      "sort": 24,
+      "step_type": "navigation",
+      "instruction": "Click the 'Save Changes' button"
+    },
+    {
+      "sort": 25,
+      "step_type": "validation",
+      "instruction": "Is the message 'Variables saved' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 26,
+      "step_type": "navigation",
+      "instruction": "Click the 'Workflow Steps' tab"
+    },
+    {
+      "sort": 27,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add Step' button"
+    },
+    {
+      "sort": 28,
+      "step_type": "navigation",
+      "instruction": "Type 'Retrieve Value' in the 'Search step types...' field"
+    },
+    {
+      "sort": 29,
+      "step_type": "navigation",
+      "instruction": "Select the 'Retrieve Value' option"
+    },
+    {
+      "sort": 30,
+      "step_type": "navigation",
+      "instruction": "Type 'Return the text of the main heading of the page' in the Instruction field"
+    },
+    {
+      "sort": 31,
+      "step_type": "navigation",
+      "instruction": "Type 'page_heading' in the 'Variable Name' field"
+    },
+    {
+      "sort": 32,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Step' button"
+    },
+    {
+      "sort": 33,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add Step' button"
+    },
+    {
+      "sort": 34,
+      "step_type": "navigation",
+      "instruction": "Type 'Validation' in the 'Search step types...' field"
+    },
+    {
+      "sort": 35,
+      "step_type": "navigation",
+      "instruction": "Select the 'Validation' option"
+    },
+    {
+      "sort": 36,
+      "step_type": "navigation",
+      "instruction": "Type 'Return the main heading text' in the Instruction field"
+    },
+    {
+      "sort": 37,
+      "step_type": "navigation",
+      "instruction": "Select 'String Comparison' in the 'Validation Type' dropdown"
+    },
+    {
+      "sort": 38,
+      "step_type": "navigation",
+      "instruction": "Select 'Contains' in the 'Comparison Operator' dropdown"
+    },
+    {
+      "sort": 39,
+      "step_type": "navigation",
+      "instruction": "Type '{{page_heading}}' in the 'Expected Value' field"
+    },
+    {
+      "sort": 40,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Step' button"
+    },
+    {
+      "sort": 41,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add Step' button"
+    },
+    {
+      "sort": 42,
+      "step_type": "navigation",
+      "instruction": "Type 'Scroll down to the end of the page (search term {{search_term}})' in the Instruction field"
+    },
+    {
+      "sort": 43,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Step' button"
+    },
+    {
+      "sort": 44,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add Step' button"
+    },
+    {
+      "sort": 45,
+      "step_type": "navigation",
+      "instruction": "In the Instruction field, type 'Scroll up to the top of the page as user_' directly followed by two opening curly braces, the word UniqueID and two closing curly braces, without spaces"
+    },
+    {
+      "sort": 46,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Step' button"
+    },
+    {
+      "sort": 47,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add Step' button"
+    },
+    {
+      "sort": 48,
+      "step_type": "navigation",
+      "instruction": "Type 'Scroll down to the end of the page (search term {{missing_token}})' in the Instruction field"
+    },
+    {
+      "sort": 49,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Step' button"
+    },
+    {
+      "sort": 50,
+      "step_type": "validation",
+      "instruction": "Does the Workflow Steps list show a step 'Scroll up to the top of the page as user_' followed by the word UniqueID enclosed in two curly braces on each side? Scroll down if needed to see all step cards",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 51,
+      "step_type": "retrieve_value",
+      "instruction": "Return the number of steps in the Workflow Steps list; scroll down if needed to see all step cards",
+      "capture_variable": "authored_step_count",
+      "value_type": "number"
+    },
+    {
+      "sort": 52,
+      "step_type": "assertion",
+      "instruction": "The use case has the five authored steps",
+      "assertion_variable": "authored_step_count",
+      "validation_type": "number",
+      "validation_operator": "equals",
+      "validation_value": "5"
+    },
+    {
+      "sort": 53,
+      "step_type": "navigation",
+      "instruction": "Click the 'Trigger Execution' button"
+    },
+    {
+      "sort": 54,
+      "step_type": "navigation",
+      "instruction": "Click the 'Execution History' tab"
+    },
+    {
+      "sort": 55,
+      "step_type": "navigation",
+      "instruction": "Click the 'Refresh' button above the 'Execution History' table"
+    },
+    {
+      "sort": 56,
+      "step_type": "navigation",
+      "instruction": "Click the radio button of the most recent execution, the first row in the 'Execution History' table; a panel opens at the bottom of the page"
+    },
+    {
+      "sort": 57,
+      "step_type": "validation",
+      "instruction": "Is there a panel at the bottom of the page whose header starts with 'Execution'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 58,
+      "step_type": "navigation",
+      "instruction": "Scroll down inside the panel at the bottom of the page to the section with the heading 'Variables'"
+    },
+    {
+      "sort": 59,
+      "step_type": "validation",
+      "instruction": "Is 'search_term' listed under 'Defined Variables' in the 'Variables' section of the panel?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 60,
+      "step_type": "navigation",
+      "instruction": "Scroll down inside the panel at the bottom of the page to the table with the heading 'Execution Steps'"
+    },
+    {
+      "sort": 61,
+      "step_type": "retrieve_value",
+      "instruction": "Return the number of rows in the 'Execution Steps' table",
+      "capture_variable": "execution_step_count",
+      "value_type": "number"
+    },
+    {
+      "sort": 62,
+      "step_type": "assertion",
+      "instruction": "The run lists the five steps",
+      "assertion_variable": "execution_step_count",
+      "validation_type": "number",
+      "validation_operator": "equals",
+      "validation_value": "5"
+    },
+    {
+      "sort": 63,
+      "step_type": "validation",
+      "instruction": "Return the header text of the first column of the 'Execution Steps' table",
+      "validation_type": "string",
+      "validation_operator": "exact",
+      "validation_value": "#"
+    },
+    {
+      "sort": 64,
+      "step_type": "validation",
+      "instruction": "Does the 'Execution Steps' table have a column with the header 'Validation'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 65,
+      "step_type": "validation",
+      "instruction": "Does row 2 of the 'Execution Steps' table show a small 'Show details' arrow button at the right end of its first line?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 66,
+      "step_type": "validation",
+      "instruction": "Does row 3 of the 'Execution Steps' table show a grey box with the label 'Expected'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 67,
+      "step_type": "validation",
+      "instruction": "Return the full text of the instruction in row 3 of the 'Execution Steps' table, including the text inside its badge",
+      "validation_type": "string",
+      "validation_operator": "contains",
+      "validation_value": "qa-badge-term"
+    },
+    {
+      "sort": 68,
+      "step_type": "validation",
+      "instruction": "Does the instruction in row 3 of the 'Execution Steps' table contain curly braces?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 69,
+      "step_type": "validation",
+      "instruction": "Return the full text of the instruction in row 4 of the 'Execution Steps' table, including the text inside its badge",
+      "validation_type": "string",
+      "validation_operator": "contains",
+      "validation_value": "UNIQUE_ID"
+    },
+    {
+      "sort": 70,
+      "step_type": "validation",
+      "instruction": "Does the instruction in row 4 of the 'Execution Steps' table contain curly braces?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 71,
+      "step_type": "validation",
+      "instruction": "Return the full text of the instruction in row 5 of the 'Execution Steps' table, including the text inside its badge",
+      "validation_type": "string",
+      "validation_operator": "contains",
+      "validation_value": "UNDEFINED_VALUE"
+    },
+    {
+      "sort": 72,
+      "step_type": "validation",
+      "instruction": "Does the instruction in row 5 of the 'Execution Steps' table contain curly braces?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 73,
+      "step_type": "navigation",
+      "instruction": "Wait until the Status in the 'Execution Information' section of the panel at the bottom of the page shows 'success' or 'failed'; the panel refreshes by itself every 10 seconds, so wait 15 seconds between checks and do not click anything"
+    },
+    {
+      "sort": 74,
+      "step_type": "navigation",
+      "instruction": "Scroll down inside the panel at the bottom of the page to the table with the heading 'Execution Steps'"
+    },
+    {
+      "sort": 75,
+      "step_type": "navigation",
+      "instruction": "Click the small 'Show details' arrow button at the right end of the first line of row 2 of the 'Execution Steps' table"
+    },
+    {
+      "sort": 76,
+      "step_type": "validation",
+      "instruction": "Return the small text at the top of the grey validation box below the instruction 'Return the main heading text' in row 2 of the 'Execution Steps' table",
+      "validation_type": "string",
+      "validation_operator": "contains",
+      "validation_value": "contains"
+    },
+    {
+      "sort": 77,
+      "step_type": "validation",
+      "instruction": "Return the full text of the 'Expected' line in the grey validation box in row 2 of the 'Execution Steps' table, including the text inside its badge",
+      "validation_type": "string",
+      "validation_operator": "contains",
+      "validation_value": "Example Domain"
+    },
+    {
+      "sort": 78,
+      "step_type": "navigation",
+      "instruction": "Click the small 'Show details' arrow button at the right end of the first line of row 1 of the 'Execution Steps' table"
+    },
+    {
+      "sort": 79,
+      "step_type": "validation",
+      "instruction": "Return the small text at the top of the grey box below the instruction 'Return the text of the main heading of the page' in row 1 of the 'Execution Steps' table",
+      "validation_type": "string",
+      "validation_operator": "contains",
+      "validation_value": "page_heading"
+    },
+    {
+      "sort": 80,
+      "step_type": "validation",
+      "instruction": "Return the text of the 'Value' line in the grey box in row 1 of the 'Execution Steps' table",
+      "validation_type": "string",
+      "validation_operator": "contains",
+      "validation_value": "Example Domain"
+    },
+    {
+      "sort": 81,
+      "step_type": "navigation",
+      "instruction": "Click the 'Use cases' menu item in the left navigation"
+    },
+    {
+      "sort": 82,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] VarBadges {{UniqueID}}' in the search bar"
+    },
+    {
+      "sort": 83,
+      "step_type": "navigation",
+      "instruction": "Click the checkbox in front of use case '{{usecase_name}}'"
+    },
+    {
+      "sort": 84,
+      "step_type": "navigation",
+      "instruction": "Open the actions dropdown above the table"
+    },
+    {
+      "sort": 85,
+      "step_type": "navigation",
+      "instruction": "Select 'Delete Selected (1)' from the dropdown"
+    },
+    {
+      "sort": 86,
+      "step_type": "navigation",
+      "instruction": "Type 'permanently delete' in the confirmation field of the dialog"
+    },
+    {
+      "sort": 87,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the dialog"
+    },
+    {
+      "sort": 88,
+      "step_type": "validation",
+      "instruction": "Is use case '{{usecase_name}}' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    }
+  ],
+  "variables": [
+    {
+      "Key": "usecase_name",
+      "Value": "[QA Test] VarBadges {{UniqueID}}"
+    }
+  ],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Username for login"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Password for login"
+    }
+  ]
+}

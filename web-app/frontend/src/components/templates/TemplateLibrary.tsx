@@ -165,6 +165,7 @@ export default function TemplateLibrary() {
             ? selectedItems[0].name 
             : `${selectedItems.length} templates`
         }
+        templates={selectedItems.map((t) => ({ id: t.id, name: t.name }))}
         onDismiss={() => setShowDeleteModal(false)}
         onConfirm={handleDeleteConfirm}
         deleting={deleting}

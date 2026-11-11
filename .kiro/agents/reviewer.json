@@ -3,11 +3,12 @@
   "description": "Adversarial code reviewer. Runs tests, matches implementation against design, flags problems, suggests fixes.",
   "prompt": "file://reviewer-prompt.md",
   "tools": [
-    "fs_read",
-    "execute_bash",
-    "grep",
-    "glob",
+    "@creds-agent",
     "code",
+    "glob",
+    "grep",
+    "read",
+    "shell",
     "todo_list"
   ],
   "allowedTools": [
@@ -15,15 +16,61 @@
     "execute_bash",
     "grep",
     "glob",
-    "code"
+    "code",
+    "@creds-agent"
   ],
-  "hooks": {
-    "agentSpawn": [
+  "hooks": [
+    {
+      "name": "agentSpawn-0",
+      "trigger": "agentSpawn",
+      "action": {
+        "type": "command",
+        "command": "echo '--- Review Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md') && echo '---' && (git diff --stat HEAD~1 2>/dev/null || echo 'No recent diff') && echo '---' && (ls docs/*/design.md 2>/dev/null || echo 'No design docs found')"
+      },
+      "timeout": 5
+    }
+  ],
+  "welcomeMessage": "Reviewer mode. Point me at a feature (docs/<feature>/) and I'll review the implementation against the design.",
+  "permissions": {
+    "rules": [
       {
-        "command": "echo '--- Review Context ---' && (cat AGENTS.md 2>/dev/null || echo 'No AGENTS.md') && echo '---' && (git diff --stat HEAD~1 2>/dev/null || echo 'No recent diff') && echo '---' && (ls docs/*/design.md 2>/dev/null || echo 'No design docs found')",
-        "timeout_ms": 5000
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "shell",
+        "effect": "allow"
+      },
+      {
+        "capability": "mcp",
+        "match": [
+          "creds-agent/*"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
       }
     ]
   },
-  "welcomeMessage": "Reviewer mode. Point me at a feature (docs/<feature>/) and I'll review the implementation against the design."
+  "mcpServers": {
+    "creds-agent": {
+      "command": "aim",
+      "args": [
+        "mcp",
+        "start-server",
+        "local-creds-agent-mcp"
+      ],
+      "env": {
+        "AIM_CREDS_AGENT_URL_KIRO": "${AIM_CREDS_AGENT_URL}",
+        "AIM_CREDS_AGENT_INJECTION": "acf93b61-f301-4513-bef7-f223f3a79a90"
+      }
+    }
+  },
+  "kiroUpgrade": {
+    "revision": 2,
+    "fingerprint": "sha256:0443eb50c929af08ad19157db89f6a6a146ee9c3897ce154094a2ad520025e21",
+    "source": "sha256:5be479dc682d84b73bc5ef7257ca4402277b87ee1c2794894c0133458270f6be"
+  }
 }

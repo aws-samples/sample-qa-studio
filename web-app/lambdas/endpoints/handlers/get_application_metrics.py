@@ -113,6 +113,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
             },
             'totals': {
                 'total_executions': total_exec,
+                'total_failures': total_failures,
                 'pass_rate': pass_rate,
                 'avg_duration_ms': avg_duration,
             },

@@ -7,16 +7,26 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from authz_test_support import (
-    UC_ID, EXEC_ID, TEAM_B, make_event, owned_resources, share, worker_header, execution_record,
+    APP_ID, UC_ID, EXEC_ID, TEAM_B, make_event, owned_resources, share, worker_header, execution_record,
 )
 from get_usecase_secret_value import handler
 
 SCOPES = 'api/usecases.read api/usecases.execute api/executions.read api/executions.write'
+USECASE_NAME = f'test-prefix/usecase/{UC_ID}/my_password'
+APP_NAME = f'test-prefix/application/{APP_ID}/my_password'
 
 
 @pytest.fixture(autouse=True)
 def _prefix(monkeypatch):
     monkeypatch.setenv('SECRET_PREFIX', 'test-prefix')
+
+
+@pytest.fixture(autouse=True)
+def usecase_owner():
+    """The handler's own owner lookup (resource_auth's is patched by owned_resources)."""
+    with patch('get_usecase_secret_value.get_usecase_owner',
+               return_value={'application_id': APP_ID, 'owner_team_id': 'team-a'}) as owner:
+        yield owner
 
 
 @pytest.fixture
@@ -27,6 +37,19 @@ def secrets_client():
     with patch('get_usecase_secret_value.boto3') as mock_boto3:
         mock_boto3.client.return_value = client
         yield client
+
+
+def _not_found_for(client, *names):
+    """get_secret_value raises ResourceNotFound for `names`, answers the fixture value otherwise."""
+    def lookup(SecretId):
+        if SecretId in names:
+            raise client.exceptions.ResourceNotFoundException(SecretId)
+        return {'SecretString': 's3cret_v@lue'}
+    client.get_secret_value.side_effect = lookup
+
+
+def _access_log(caplog):
+    return [r.getMessage() for r in caplog.records if 'secret_value_access' in r.getMessage()]
 
 
 def _event(caller='executor_a', secret_key='my_password', scopes=SCOPES, usecase_id=UC_ID, **kwargs):
@@ -44,8 +67,7 @@ class TestSecretValueSuccess:
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
         assert body == {'key': 'my_password', 'value': 's3cret_v@lue'}
-        secrets_client.get_secret_value.assert_called_once_with(
-            SecretId=f'test-prefix/usecase/{UC_ID}/my_password')
+        secrets_client.get_secret_value.assert_called_once_with(SecretId=USECASE_NAME)
 
     def test_secret_not_found_returns_404(self, secrets_client):
         secrets_client.get_secret_value.side_effect = secrets_client.exceptions.ResourceNotFoundException('x')
@@ -68,11 +90,78 @@ class TestSecretValueSuccess:
     def test_access_is_logged_without_value(self, secrets_client, caplog):
         with caplog.at_level(logging.INFO):
             _call(_event())
-        access = [r.getMessage() for r in caplog.records if 'secret_value_access' in r.getMessage()]
+        access = _access_log(caplog)
         assert len(access) == 1
         assert f'usecase={UC_ID}' in access[0] and 'key=my_password' in access[0]
         assert 'sub=caller-sub' in access[0]
+        assert 'source=usecase' in access[0]
         assert all('s3cret_v@lue' not in r.getMessage() for r in caplog.records)
+
+
+class TestApplicationFallback:
+    """The use-case secret shadows the application secret; the application one is the fallback."""
+
+    def test_usecase_secret_wins_without_touching_application(self, secrets_client):
+        response = _call(_event())
+        assert response['statusCode'] == 200
+        secrets_client.get_secret_value.assert_called_once_with(SecretId=USECASE_NAME)
+
+    def test_falls_back_to_application_secret(self, secrets_client, caplog):
+        _not_found_for(secrets_client, USECASE_NAME)
+        with caplog.at_level(logging.INFO):
+            response = _call(_event())
+        assert response['statusCode'] == 200
+        assert json.loads(response['body']) == {'key': 'my_password', 'value': 's3cret_v@lue'}
+        assert [c.kwargs['SecretId'] for c in secrets_client.get_secret_value.call_args_list] == [
+            USECASE_NAME, APP_NAME]
+        access = _access_log(caplog)
+        assert len(access) == 1 and 'source=application' in access[0]
+
+    def test_both_missing_404(self, secrets_client, caplog):
+        _not_found_for(secrets_client, USECASE_NAME, APP_NAME)
+        with caplog.at_level(logging.INFO):
+            response = _call(_event())
+        assert response['statusCode'] == 404
+        assert 'not found' in json.loads(response['body'])['error']
+        assert secrets_client.get_secret_value.call_count == 2
+        access = _access_log(caplog)
+        assert len(access) == 1 and 'source=none' in access[0]
+
+    def test_application_secret_without_value_404(self, secrets_client):
+        def lookup(SecretId):
+            if SecretId == USECASE_NAME:
+                raise secrets_client.exceptions.ResourceNotFoundException(SecretId)
+            return {'SecretString': None}
+        secrets_client.get_secret_value.side_effect = lookup
+        response = _call(_event())
+        assert response['statusCode'] == 404
+        assert 'no value' in json.loads(response['body'])['error']
+
+    def test_legacy_usecase_without_application_never_tries_application(self, secrets_client, usecase_owner):
+        usecase_owner.return_value = {'application_id': None, 'owner_team_id': None}
+        _not_found_for(secrets_client, USECASE_NAME)
+        response = _call(_event('admin'), usecase_app='')
+        assert response['statusCode'] == 404
+        secrets_client.get_secret_value.assert_called_once_with(SecretId=USECASE_NAME)
+
+    def test_unknown_owner_record_never_tries_application(self, secrets_client, usecase_owner):
+        usecase_owner.return_value = None
+        _not_found_for(secrets_client, USECASE_NAME)
+        assert _call(_event())['statusCode'] == 404
+        secrets_client.get_secret_value.assert_called_once_with(SecretId=USECASE_NAME)
+
+    def test_application_lookup_error_500(self, secrets_client):
+        def lookup(SecretId):
+            if SecretId == USECASE_NAME:
+                raise secrets_client.exceptions.ResourceNotFoundException(SecretId)
+            raise RuntimeError('boom')
+        secrets_client.get_secret_value.side_effect = lookup
+        assert _call(_event())['statusCode'] == 500
+
+    def test_fallback_does_not_bypass_authorization(self, secrets_client):
+        # The application lookup happens after the use-case access check, never instead of it.
+        assert _call(_event('viewer_a'))['statusCode'] == 403
+        secrets_client.get_secret_value.assert_not_called()
 
 
 class TestSecretValueAccess:

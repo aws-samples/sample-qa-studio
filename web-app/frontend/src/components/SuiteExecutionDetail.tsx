@@ -325,7 +325,7 @@ export default function SuiteExecutionDetail() {
                 cell: (item) => (
                   item.usecase_execution_id ? (
                     <Link
-                      href={`/usecase/${item.usecase_id}/execution/${item.usecase_execution_id}`}
+                      href={`/usecase/${item.usecase_id}?tab=history&execution=${item.usecase_execution_id}`}
                     >
                       View Details
                     </Link>

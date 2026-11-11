@@ -8,6 +8,7 @@ Validates that SKILL.md and reference files meet quality standards:
 - SKILL.md stays under 500 lines
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -191,6 +192,7 @@ class TestReferenceTOC:
         "browser",
         "transform",
         "network_assertion",
+        "repeat",
     ]
 
     def test_step_types_directory_has_one_file_per_step_type(self):
@@ -211,7 +213,7 @@ class TestReferenceTOC:
 
     @pytest.mark.parametrize("step_type", [
         "navigation", "browser", "secret", "validation", "retrieve_value",
-        "assertion", "download", "transform", "network_assertion",
+        "assertion", "download", "transform", "network_assertion", "repeat",
     ])
     def test_step_type_file_has_required_sections(self, step_type):
         """Each (non-deprecated) step type file follows the standard template."""
@@ -276,3 +278,122 @@ class TestLineLimit:
             f"SKILL.md is {line_count} lines (max {self.MAX_LINES}). "
             "Move detail to reference files."
         )
+
+
+# ---------------------------------------------------------------------------
+# Templates (reuse steps across tests)
+# ---------------------------------------------------------------------------
+
+
+class TestTemplatesInSkill:
+    """The skill must steer agents to reuse templates before hand-authoring repeated steps."""
+
+    TEMPLATES_REF = REFERENCE_DIR / "templates.md"
+
+    def test_templates_reference_exists_and_is_linked(self):
+        assert self.TEMPLATES_REF.is_file(), "reference/templates.md missing"
+        assert "reference/templates.md" in _read_content(SKILL_FILE)
+
+    def test_description_mentions_templates(self):
+        assert "template" in _parse_frontmatter(SKILL_FILE).lower()
+
+    def test_decision_tree_has_reuse_branch(self):
+        content = _read_content(SKILL_FILE)
+        assert "Reuse steps across tests (templates)" in content
+        assert "qa-studio templates list" in content
+        assert "tests insert-template" in content
+
+    def test_key_concepts_has_template(self):
+        content = _read_content(SKILL_FILE)
+        assert re.search(r"^### Template\s*$", content, re.MULTILINE), "Key Concepts lacks a 'Template' entry"
+
+    def test_reimport_wording_is_accurate(self):
+        """``tests import`` always creates a new use case — it never overwrites by name."""
+        assert "overwriting the previous version" not in _read_content(SKILL_FILE)
+
+    def test_templates_reference_covers_required_topics(self):
+        content = _read_content(self.TEMPLATES_REF)
+        for fragment in (
+            "templateVersion", '"step_type": "template"', "template_id", "qa-studio templates create",
+            "qa-studio templates get", "qa-studio tests insert-template", "--position", "--secret",
+            "environment", "secret_key", "nest", "one action or one check",
+        ):
+            assert fragment.lower() in content.lower(), f"templates.md lacks '{fragment}'"
+
+    def test_building_tests_documents_placeholder_step(self):
+        content = _read_content(REFERENCE_DIR / "building-tests.md")
+        assert '"step_type": "template"' in content
+        assert "reference/templates.md" in content or "./templates.md" in content
+
+    def test_evals_cover_reuse_and_create(self):
+        evals = json.loads((SKILL_DIR / "evals" / "evals.json").read_text())["evals"]
+        prompts = " ".join(e["prompt"].lower() + " " + e["expected_output"].lower() for e in evals)
+        assert "templates list" in prompts, "no eval exercises reusing an existing template"
+        assert "templates create" in prompts, "no eval exercises creating a template then referencing it"
+
+    def test_every_documented_template_command_exists(self):
+        """Each ``qa-studio templates <cmd>`` / ``tests insert-template --flag`` in the skill is real."""
+        from qa_studio_cli.cli import cli
+
+        content = _read_content(self.TEMPLATES_REF) + _read_content(SKILL_FILE)
+        template_cmds = set(re.findall(r"qa-studio templates ([a-z-]+)", content))
+        assert template_cmds <= set(cli.commands["templates"].commands), template_cmds - set(cli.commands["templates"].commands)
+
+        insert_cmd = cli.commands["tests"].commands["insert-template"]
+        real_flags = {opt for p in insert_cmd.params for opt in getattr(p, "opts", [])}
+        for block in re.findall(r"qa-studio tests insert-template([^\n`]*)", content):
+            for flag in re.findall(r"(--[a-z-]+)", block):
+                assert flag in real_flags, f"insert-template has no flag {flag}"
+
+
+
+# ---------------------------------------------------------------------------
+# Quiet run output (cli-quiet-run-output)
+# ---------------------------------------------------------------------------
+
+
+class TestExecutionOutputGuidance:
+    """The skill must describe the real ``qa-studio run`` output contract."""
+
+    EXECUTING = REFERENCE_DIR / "executing-tests.md"
+    TROUBLESHOOTING = REFERENCE_DIR / "troubleshooting.md"
+
+    def test_quotes_real_progress_line_formats(self):
+        from qa_studio_cli.runner import progress
+
+        content = _read_content(self.EXECUTING)
+        # The constants rendered as the docs show them (time placeholder spelled out).
+        assert progress.TEST_STARTED_FORMAT.replace("{time}", "HH:MM:SS") in content
+        assert "Step {n}: {instruction}" in content
+        assert "[{test name}]" in content or "[<test name>]" in content
+
+    def test_stale_output_examples_are_gone(self):
+        content = _read_content(self.EXECUTING)
+        assert "Step 1/4" not in content
+        assert "duration_ms" not in content
+        assert '"execution_id"' not in content and '"usecase_id"' not in content
+
+    def test_json_example_uses_real_camel_case_schema(self):
+        content = _read_content(self.EXECUTING)
+        for field in ("usecaseId", "usecaseName", "executionId", "stepId", "stepType", '"artifacts"'):
+            assert field in content, f"executing-tests.md lacks JSON field {field}"
+
+    def test_states_stream_split_and_verbose_scope(self):
+        content = _read_content(self.EXECUTING).lower()
+        assert "stderr" in content and "stdout" in content
+        assert "2>/dev/null" in content
+        for phrase in ("think/act", "api calls", "--verbose"):
+            assert phrase in content, f"executing-tests.md lacks '{phrase}'"
+
+    def test_troubleshooting_notes_console_needs_verbose(self):
+        content = _read_content(self.TROUBLESHOOTING)
+        assert "--verbose" in content
+        assert "console only shows" in content.lower()
+
+    def test_eval_covers_missing_reasoning_question(self):
+        evals = json.loads((SKILL_DIR / "evals" / "evals.json").read_text())["evals"]
+        matching = [e for e in evals if "--verbose" in e["expected_output"] and "Step" in e["prompt"]]
+        assert matching, "no eval exercises 'where is the Nova Act reasoning / API calls?'"
+        expected = matching[0]["expected_output"]
+        assert "--debug" in expected or "--log-level" in expected, "eval must forbid non-existent flags"
+        assert "artifacts.logs" in expected or "logs" in expected

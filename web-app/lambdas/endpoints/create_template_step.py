@@ -4,6 +4,9 @@ from typing import Any, Dict
 from uuid import uuid4
 import boto3
 from utils import create_response, get_table_name, get_current_timestamp, require_scopes, validate_path_id
+from repeat_validation import template_step_error
+from step_copy import COPYABLE_STEP_FIELDS
+from template_store import bump_template_version
 
 # Configure logging
 logger = logging.getLogger()
@@ -38,6 +41,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             body = json.loads(event.get('body', '{}'))
         except json.JSONDecodeError:
             return create_response(400, {'error': 'Invalid JSON in request body'})
+
+        repeat_error = template_step_error(body)
+        if repeat_error:
+            return create_response(400, {'error': repeat_error})
         
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
@@ -58,33 +65,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'created_at': now
         }
         
-        # Add optional fields
-        optional_fields = [
-            'secret_key',
-            'capture_variable',
-            'validation_type',
-            'validation_operator',
-            'validation_value',
-            'assertion_variable',
-            'value_type',
-            'network_url_pattern',
-            'network_method',
-            'network_request_body',
-            'network_body_match_type',
-            'network_mock_response',
-            'network_mock_passthrough',
-            'network_timeout',
-            'network_response_body',
-            'network_response_body_match_type',
-            'network_response_status',
-        ]
-        
-        for field in optional_fields:
+        # Add optional fields (every authored field; ``if in body`` keeps
+        # today's "client decides" rule, including explicit empty values)
+        for field in COPYABLE_STEP_FIELDS:
             if field in body:
                 step[field] = body[field]
         
         # Save step
         table.put_item(Item=step)
+        bump_template_version(table, template_id)
         
         logger.info(f"Created template step {step_id} for template {template_id}")
         

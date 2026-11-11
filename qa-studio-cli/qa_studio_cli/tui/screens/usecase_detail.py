@@ -18,10 +18,8 @@ shown so the navigation feels complete.
 
 from __future__ import annotations
 
-import asyncio
-import json
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from textual import work
 from textual.app import ComposeResult
@@ -33,8 +31,8 @@ from textual.widgets import DataTable, Footer, Static, TabbedContent, TabPane
 from qa_studio_cli.tui.api import ExecutionListItem
 from qa_studio_cli.tui.app_header import TAB_USECASES, AppHeader
 from qa_studio_cli.tui.border_pulse import LoadPulseMixin
+from qa_studio_cli.tui.screens._base_detail import ProgressiveLoadMixin, step_field_lines
 from qa_studio_cli.tui.step_render import (
-    STATUS_COLOURS,
     STEP_TYPE_COLOURS,
     format_duration,
     render_validation_block,
@@ -66,7 +64,7 @@ class _DetailBundle:
     executions: List["ExecutionListItem"]
 
 
-class UsecaseDetailScreen(LoadPulseMixin, Screen):
+class UsecaseDetailScreen(ProgressiveLoadMixin, LoadPulseMixin, Screen):
     """Single-usecase detail view."""
 
     BINDINGS = [
@@ -332,130 +330,31 @@ class UsecaseDetailScreen(LoadPulseMixin, Screen):
         "executions",
     )
 
+    STATUS_SELECTOR = "#detail-status"
+
+    def section_error_selector(self, name: str) -> str:
+        # Metadata errors replace the big metadata block; the rest go to
+        # the status line so the user is not hunting for the message.
+        return "#detail-metadata" if name == "usecase" else self.STATUS_SELECTOR
+
     @work(exclusive=True)
     async def _load_detail(self) -> None:
-        """Fan out all sub-resource fetches; render each on completion.
-
-        Async worker, not a thread worker: the HTTP calls themselves
-        are pushed to the thread pool via ``asyncio.to_thread`` so
-        the Textual event loop stays free to paint partial results
-        while the slower calls are still in flight.
-        """
+        """Fan out all sub-resource fetches; render each on completion."""
         usecase_id = self._usecase_id
         api = self.app.tui_api
-
-        # Reset progressive-load state. A refresh shouldn't let the
-        # previous run's bundle leak through if the new run partially
-        # fails.
+        # A refresh must not let the previous run's bundle leak through.
         self._bundle = None
-        self._loaded_sections: Dict[str, Any] = {}
-
-        status = self.query_one("#detail-status", Static)
-        total = len(self._SECTION_NAMES)
-        self._sections_done = 0
-        status.update(f"Loading… 0/{total}")
-
-        # Each entry binds a section name → (fetch callable, render
-        # callable). The render callables all take the fetched value
-        # as their single argument.
-        sections: List[tuple[str, Callable[[str], Any], Callable[[Any], None]]] = [
-            ("usecase", api.get_usecase, self._render_metadata),
-            ("steps", api.get_steps, self._render_steps),
-            ("variables", api.get_variables, self._render_variables),
-            ("headers", api.get_headers, self._render_headers),
-            ("secrets", api.get_secrets, self._render_secrets),
-            ("executions", api.list_executions, self._render_executions),
-        ]
-
-        # Kick the header/content divider into a pulsing animation
-        # while the load is in flight. The ``finally`` block below
-        # guarantees we stop (and reset to the idle colour) even on
-        # cancellation or unexpected exceptions.
-        self._start_load_pulse()
-
-        try:
-            await asyncio.gather(
-                *(
-                    self._fetch_and_render(name, fetch, render, usecase_id)
-                    for name, fetch, render in sections
-                )
-            )
-        finally:
-            self._stop_load_pulse()
-
-        # All six finished (success or failure). Assemble the bundle
-        # only if every section succeeded so the Run action's
-        # pre-check stays strict.
-        if set(self._loaded_sections) == set(self._SECTION_NAMES):
+        complete = await self._load_sections([
+            ("usecase", lambda: api.get_usecase(usecase_id), self._render_metadata),
+            ("steps", lambda: api.get_steps(usecase_id), self._render_steps),
+            ("variables", lambda: api.get_variables(usecase_id), self._render_variables),
+            ("headers", lambda: api.get_headers(usecase_id), self._render_headers),
+            ("secrets", lambda: api.get_secrets(usecase_id), self._render_secrets),
+            ("executions", lambda: api.list_executions(usecase_id), self._render_executions),
+        ])
+        # The Run action needs the whole use case: bundle only on full success.
+        if complete:
             self._bundle = _DetailBundle(**self._loaded_sections)
-            # Clear the status line once fully loaded — the metadata
-            # header carries all the context the user needs from here.
-            status.update("")
-
-    async def _fetch_and_render(
-        self,
-        name: str,
-        fetch: Callable[[str], Any],
-        render: Callable[[Any], None],
-        usecase_id: str,
-    ) -> None:
-        """Run a single section's fetch + render pipeline.
-
-        Exceptions are contained to the failing section — the
-        per-section error message replaces the section's content
-        rather than poisoning the whole screen. This is why the
-        caller does not use ``return_exceptions=True`` on the
-        gather: each coroutine already absorbs its own failure.
-        """
-        try:
-            data = await asyncio.to_thread(fetch, usecase_id)
-        except Exception as exc:  # noqa: BLE001
-            self._render_section_error(name, str(exc))
-            self._advance_load_progress(errored=True)
-            return
-
-        try:
-            render(data)
-        except Exception as exc:  # noqa: BLE001 — render bug shouldn't kill the screen
-            self._render_section_error(name, f"render failed: {exc}")
-            self._advance_load_progress(errored=True)
-            return
-
-        self._loaded_sections[name] = data
-        self._advance_load_progress()
-
-    def _advance_load_progress(self, *, errored: bool = False) -> None:
-        """Bump the ``Loading… N/M`` counter.
-
-        Called from the async worker on the event-loop thread — no
-        thread hopping required. The counter gives the user a visible
-        signal that work is still happening when the slowest call
-        hasn't returned yet.
-        """
-        self._sections_done += 1
-        total = len(self._SECTION_NAMES)
-        if self._sections_done >= total:
-            # Final status text is decided by the caller (success →
-            # cleared; any failure → keep the counter visible so the
-            # user can see that something went wrong). ``_load_detail``
-            # clears the status when the bundle assembles cleanly.
-            return
-        self.query_one("#detail-status", Static).update(
-            f"Loading… {self._sections_done}/{total}"
-        )
-
-    def _render_section_error(self, name: str, message: str) -> None:
-        """Surface a per-section failure without blocking the others.
-
-        For the metadata section we write into the big metadata
-        block; for everything else we fall back to the top-level
-        status widget so the user isn't hunting for the message.
-        """
-        text = f"[b red]Failed to load {name}:[/] {message}"
-        if name == "usecase":
-            self.query_one("#detail-metadata", Static).update(text)
-        else:
-            self.query_one("#detail-status", Static).update(text)
 
     # ------------------------------------------------------------------
     # Rendering
@@ -554,25 +453,6 @@ class UsecaseDetailScreen(LoadPulseMixin, Screen):
         present; every other field follows alphabetically.
         """
 
-        def _is_empty(value: Any) -> bool:
-            if value is None:
-                return True
-            if isinstance(value, str):
-                return value.strip() == ""
-            if isinstance(value, (list, dict)):
-                return len(value) == 0
-            # ``False`` and ``0`` are meaningful — never treated as empty.
-            return False
-
-        def _format_value(value: Any) -> str:
-            if isinstance(value, (dict, list)):
-                try:
-                    formatted = json.dumps(value, indent=2, ensure_ascii=False)
-                except (TypeError, ValueError):
-                    formatted = repr(value)
-                return "\n" + formatted
-            return str(value)
-
         lines: List[str] = []
 
         # Prominent validation block at the top — mirrors the web
@@ -587,21 +467,7 @@ class UsecaseDetailScreen(LoadPulseMixin, Screen):
             lines.append(validation_block)
             lines.append("")
 
-        priority = ["step_type", "instruction"]
-        seen: set[str] = set()
-
-        for key in priority:
-            if key in step and not _is_empty(step[key]):
-                lines.append(f"[cyan]{key}[/]: {_format_value(step[key])}")
-                seen.add(key)
-
-        for key in sorted(step):
-            if key in seen:
-                continue
-            value = step[key]
-            if _is_empty(value):
-                continue
-            lines.append(f"[cyan]{key}[/]: {_format_value(value)}")
+        lines.extend(step_field_lines(step, priority=["step_type", "instruction"]))
 
         if not lines:
             lines.append("[dim]Step has no populated fields.[/]")

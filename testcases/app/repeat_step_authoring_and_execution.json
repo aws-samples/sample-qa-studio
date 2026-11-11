@@ -1,0 +1,377 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-05-06T12:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] Repeat Step Authoring and Execution",
+    "description": "Login, create a blank use case, add a Repeat step with two columns and two rows via the dataset grid, add two steps inside it, trigger an execution and verify the execution detail lists four steps tagged Row 1/2 / Row 2/2, then delete the use case.",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "repeat",
+      "usecase",
+      "steps",
+      "execution",
+      "test",
+      "delete"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "instruction": "focus username field",
+      "step_type": "secret",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "instruction": "focus password field",
+      "step_type": "secret",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "instruction": "Click the 'Sign in' button",
+      "step_type": "navigation"
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Use case' button",
+      "sort": 4
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Create New' option",
+      "sort": 5
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 6
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Web' platform option",
+      "sort": 7
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 8
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] Repeat {{UniqueID}}' in the Name field",
+      "sort": 9
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type 'Repeat step e2e' in the Description field",
+      "sort": 10
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type 'https://example.com' in the Starting URL field",
+      "sort": 11
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'eu-central-1' in the Execution Region dropdown",
+      "sort": 12
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'nova-act-v1.0' in the Model dropdown",
+      "sort": 13
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'QA Studio' in the Application dropdown",
+      "sort": 14
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 15
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Create Blank' option",
+      "sort": 16
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 17
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 18
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button",
+      "sort": 19
+    },
+    {
+      "sort": 20,
+      "instruction": "Click the 'Workflow Steps' tab",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 21,
+      "instruction": "Click the 'Add Step' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 22,
+      "instruction": "Type 'Repeat' in the 'Search step types...' field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 23,
+      "instruction": "Is 'Repeat' listed as a selectable step type option?",
+      "step_type": "validation",
+      "validation_type": "bool",
+      "validation_operator": "equals",
+      "validation_value": "true"
+    },
+    {
+      "sort": 24,
+      "instruction": "Select the 'Repeat' option",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 25,
+      "instruction": "Type 'Login as each user' in the Label field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 26,
+      "instruction": "Clear the 'Column 1 name' field and type 'email'",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 27,
+      "instruction": "Click the 'Column' button to add a column",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 28,
+      "instruction": "Clear the 'Column 2 name' field and type 'role'",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 29,
+      "instruction": "Type 'alice@example.com' in the 'Row 1, email' field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 30,
+      "instruction": "Type 'admin' in the 'Row 1, role' field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 31,
+      "instruction": "Click the 'Row' button to add a row",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 32,
+      "instruction": "Type 'bob@example.com' in the 'Row 2, email' field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 33,
+      "instruction": "Type 'viewer' in the 'Row 2, role' field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 34,
+      "instruction": "Click the 'Create Step' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 35,
+      "instruction": "Does the Workflow Steps list show a step with the 'Repeat' badge?",
+      "step_type": "validation",
+      "validation_type": "bool",
+      "validation_operator": "equals",
+      "validation_value": "true"
+    },
+    {
+      "sort": 36,
+      "instruction": "Does the Repeat step show the dataset summary '2 rows · email, role'?",
+      "step_type": "validation",
+      "validation_type": "bool",
+      "validation_operator": "equals",
+      "validation_value": "true"
+    },
+    {
+      "sort": 37,
+      "instruction": "Does the Repeat step show 'No steps inside yet'?",
+      "step_type": "validation",
+      "validation_type": "bool",
+      "validation_operator": "equals",
+      "validation_value": "true"
+    },
+    {
+      "sort": 38,
+      "instruction": "Click the 'Add step inside' link on the Repeat step card",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 39,
+      "instruction": "Does the dialog show the hint 'Inside: Login as each user'?",
+      "step_type": "validation",
+      "validation_type": "bool",
+      "validation_operator": "equals",
+      "validation_value": "true"
+    },
+    {
+      "sort": 40,
+      "instruction": "Type 'Type {{email}} into the email field' in the Instruction field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 41,
+      "instruction": "Click the 'Create Step' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 42,
+      "instruction": "Click the 'Add step inside' link on the Repeat step card",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 43,
+      "instruction": "Type 'Check that the role {{role}} is shown' in the Instruction field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 44,
+      "instruction": "Click the 'Create Step' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 45,
+      "instruction": "Return the number of step cards indented under the Repeat step that are marked with '↳'",
+      "step_type": "retrieve_value",
+      "capture_variable": "child_step_count",
+      "value_type": "number"
+    },
+    {
+      "sort": 46,
+      "instruction": "Two steps are indented under the Repeat step",
+      "step_type": "assertion",
+      "assertion_variable": "child_step_count",
+      "validation_type": "number",
+      "validation_operator": "equals",
+      "validation_value": "2"
+    },
+    {
+      "sort": 47,
+      "instruction": "Click the 'Trigger Execution' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 48,
+      "instruction": "Click the 'Execution History' tab",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 49,
+      "instruction": "Click the radio button of the most recent execution, the first row in the 'Execution History' table; a panel opens at the bottom of the page",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 50,
+      "instruction": "Scroll down inside the panel at the bottom of the page to the table with the heading 'Execution Steps'",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 51,
+      "instruction": "Return the number of rows in the 'Execution Steps' table that show a step number in the '#' column",
+      "step_type": "retrieve_value",
+      "capture_variable": "execution_step_count",
+      "value_type": "number"
+    },
+    {
+      "sort": 52,
+      "instruction": "The repeat was unrolled into 2 rows x 2 steps",
+      "step_type": "assertion",
+      "assertion_variable": "execution_step_count",
+      "validation_type": "number",
+      "validation_operator": "equals",
+      "validation_value": "4"
+    },
+    {
+      "sort": 53,
+      "instruction": "Does the 'Execution Steps' table show the badge 'Row 1/2'?",
+      "step_type": "validation",
+      "validation_type": "bool",
+      "validation_operator": "equals",
+      "validation_value": "true"
+    },
+    {
+      "sort": 54,
+      "instruction": "Does the 'Execution Steps' table show the badge 'Row 2/2'?",
+      "step_type": "validation",
+      "validation_type": "bool",
+      "validation_operator": "equals",
+      "validation_value": "true"
+    },
+    {
+      "sort": 55,
+      "instruction": "Does the 'Execution Steps' table show the row header 'Login as each user — row 1 of 2'?",
+      "step_type": "validation",
+      "validation_type": "bool",
+      "validation_operator": "equals",
+      "validation_value": "true"
+    },
+    {
+      "sort": 56,
+      "instruction": "Click the 'Use cases' menu item",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 57,
+      "instruction": "Type '[QA Test] Repeat' in the search bar",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 58,
+      "instruction": "Click checkbox in front of usecase '[QA Test] Repeat {{UniqueID}}'",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 59,
+      "instruction": "Open the dropdown menu",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 60,
+      "instruction": "Select 'Delete Selected' from dropdown",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 61,
+      "instruction": "Confirm deletion",
+      "step_type": "navigation"
+    }
+  ],
+  "variables": [],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Username for login"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Password for login"
+    }
+  ]
+}

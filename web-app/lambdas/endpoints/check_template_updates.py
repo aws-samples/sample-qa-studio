@@ -5,13 +5,14 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from utils import create_response, get_table_name
 from resource_auth import require_resource_access, usecase_from_path
+from template_store import get_template_metadata
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-@require_resource_access('view', usecase_from_path, scopes=['api/templates.read'])
+@require_resource_access('view', usecase_from_path, scopes=['api/usecases.read', 'api/templates.read'])
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler to check for template updates for usecase steps.
@@ -30,7 +31,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Initialize Amazon DynamoDB client
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table(get_table_name())
-        
+
         # Get all steps for this usecase
         steps_response = table.query(
             KeyConditionExpression=Key('pk').eq(f'USECASE#{usecase_id}') & Key('sk').begins_with('STEP#')
@@ -47,18 +48,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             # Get the template metadata to check current version
             try:
-                template_response = table.get_item(
-                    Key={
-                        'pk': f'TEMPLATE#{template_id}',
-                        'sk': 'METADATA'
-                    }
-                )
-                
-                if 'Item' not in template_response:
+                template = get_template_metadata(table, template_id)
+                if template is None:
                     logger.warning(f"Template {template_id} not found")
                     continue
                 
-                template = template_response['Item']
                 current_version = step.get('template_version', 0)
                 latest_version = template.get('version', 0)
                 

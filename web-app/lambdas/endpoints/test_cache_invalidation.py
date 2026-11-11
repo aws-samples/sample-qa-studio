@@ -1,15 +1,15 @@
 """Tests for Option C cache invalidation on failed executions.
 
-Three layers:
+Two layers:
 
 1. ``cache_invalidation`` module — unit tests for the three public
    helpers with mocked boto3 clients.
 2. ``update_execution_status`` integration — the PATCH endpoint must
    call ``cleanup_cache_artifacts`` when ``status == 'failed'`` and
    skip it for every other status.
-3. ``handle_task_state_change`` integration — the EventBridge handler
-   must call ``cleanup_cache_artifacts`` after marking an execution
-   failed, and skip it when the task stopped normally.
+
+The cache wipe itself lives in ``execution_transitions`` (shared with the
+reconciler); its own tests are in ``test_execution_transitions.py``.
 
 All tests use ``MagicMock`` + ``monkeypatch``; no real AWS calls.
 """
@@ -269,17 +269,21 @@ def patched_status_lambda(monkeypatch):
     mock_eb = MagicMock()
     monkeypatch.setattr(update_execution_status, "eventbridge", mock_eb)
 
+    # The cache wipe moved into the shared terminal transition
+    # (execution_transitions.finalize_terminal_transition); the handler
+    # passes its clients through, so the spy must sit on that module.
+    import execution_transitions
     cleanup_spy = MagicMock()
     monkeypatch.setattr(
-        update_execution_status, "cleanup_cache_artifacts", cleanup_spy,
+        execution_transitions, "cleanup_cache_artifacts", cleanup_spy,
     )
 
-    # The Lambda calls ``boto3.resource('dynamodb').Table(...)`` only
+    # The shared module calls ``boto3.resource('dynamodb').Table(...)`` only
     # to build the argument for the cleanup helper. Stub so that call
     # doesn't try to reach AWS.
     fake_resource = MagicMock()
     monkeypatch.setattr(
-        update_execution_status.boto3, "resource",
+        execution_transitions.boto3, "resource",
         lambda *_a, **_kw: fake_resource,
     )
 
@@ -323,107 +327,6 @@ class TestUpdateExecutionStatusInvalidation:
         # Primary action (status update) succeeded; cleanup failure
         # must not degrade the caller's response.
         assert response["statusCode"] == 200
-        cleanup_spy.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# 3. handle_task_state_change integration
-# ---------------------------------------------------------------------------
-
-
-def _ecs_event(*, task_arn="arn:aws:ecs:us-east-1:123:task/c/t-1",
-               stop_code="EssentialContainerExited",
-               stopped_reason="Container exited with code 1",
-               exit_code=1,
-               last_status="STOPPED"):
-    return {
-        "detail-type": "ECS Task State Change",
-        "detail": {
-            "lastStatus": last_status,
-            "taskArn": task_arn,
-            "stopCode": stop_code,
-            "stoppedReason": stopped_reason,
-            "containers": [{"name": "container", "exitCode": exit_code}],
-        },
-    }
-
-
-@pytest.fixture
-def patched_task_lambda(monkeypatch):
-    """Wire handle_task_state_change with mocked DDB + cleanup spy."""
-    import importlib
-    import handle_task_state_change
-    importlib.reload(handle_task_state_change)
-
-    # Scan returns our execution so ``find_execution_by_task_arn`` resolves.
-    mock_client = MagicMock()
-    mock_client.scan.return_value = {
-        "Items": [{
-            "pk": {"S": "USECASE_EXECUTION#uc-1"},
-            "sk": {"S": "EXECUTION#exec-1"},
-            "status": {"S": "running"},
-        }],
-    }
-    # The tracking helper calls get_item to re-load the execution;
-    # return the same shape so it proceeds without suite tracking.
-    mock_client.get_item.return_value = {
-        "Item": {
-            "pk": {"S": "USECASE_EXECUTION#uc-1"},
-            "sk": {"S": "EXECUTION#exec-1"},
-            "status": {"S": "running"},
-        },
-    }
-    monkeypatch.setattr(handle_task_state_change.boto3, "client",
-                        lambda *_a, **_kw: mock_client)
-
-    cleanup_spy = MagicMock()
-    monkeypatch.setattr(
-        handle_task_state_change, "cleanup_cache_artifacts", cleanup_spy,
-    )
-
-    fake_resource = MagicMock()
-    monkeypatch.setattr(handle_task_state_change.boto3, "resource",
-                        lambda *_a, **_kw: fake_resource)
-
-    return handle_task_state_change, cleanup_spy, mock_client
-
-
-class TestHandleTaskStateChangeInvalidation:
-    def test_task_failure_triggers_cleanup(self, patched_task_lambda):
-        module, cleanup_spy, _ = patched_task_lambda
-
-        module.handler(_ecs_event(), None)
-
-        cleanup_spy.assert_called_once()
-        _table_arg, uc_arg, bucket_arg = cleanup_spy.call_args.args
-        assert uc_arg == "uc-1"
-        assert bucket_arg == "test-bucket"
-
-    def test_user_requested_stop_does_not_trigger_cleanup(
-        self, patched_task_lambda,
-    ):
-        """Graceful stop is not a failure; cache must stay intact."""
-        module, cleanup_spy, _ = patched_task_lambda
-
-        module.handler(
-            _ecs_event(
-                stop_code="UserInitiated",
-                stopped_reason="User requested stop",
-                exit_code=0,
-            ),
-            None,
-        )
-
-        cleanup_spy.assert_not_called()
-
-    def test_cleanup_exception_does_not_crash_handler(
-        self, patched_task_lambda,
-    ):
-        module, cleanup_spy, _ = patched_task_lambda
-        cleanup_spy.side_effect = Exception("boom")
-
-        # Must not raise (EventBridge would retry if we did).
-        module.handler(_ecs_event(), None)
         cleanup_spy.assert_called_once()
 
 

@@ -7,12 +7,16 @@ import FileUpload from "@cloudscape-design/components/file-upload";
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
+import Select from "@cloudscape-design/components/select";
 import type { StepProps } from '../types';
 import { parseImportFile } from '../validation';
 import ApplicationSelect from '../../common/ApplicationSelect';
+import { regionOptions } from '../../../utils/browser_regions';
 
 export default function UploadFileStep({ state, dispatch, validationErrors }: StepProps) {
   const { importConfig } = state;
+  const regions = regionOptions();
+  const selectedRegion = regions.find((o) => o.value === state.basicInfo.executionRegion) ?? null;
 
   // Parse file content when file changes
   useEffect(() => {
@@ -94,6 +98,19 @@ export default function UploadFileStep({ state, dispatch, validationErrors }: St
             errorText={validationErrors.applicationId}
             description="The imported use case is created in this application"
           />
+          <FormField
+            label="Execution region (optional)"
+            description="AWS region where the browser runs. Leave empty to keep the region stored in the file."
+          >
+            <Select
+              selectedOption={selectedRegion}
+              onChange={({ detail }) =>
+                dispatch({ type: 'UPDATE_BASIC_INFO', payload: { executionRegion: detail.selectedOption?.value ?? '' } })
+              }
+              options={regions}
+              placeholder="Keep the file's region"
+            />
+          </FormField>
           <FormField
             label="Select export file"
             description="Choose a JSON file exported from another use case"

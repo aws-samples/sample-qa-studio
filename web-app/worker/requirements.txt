@@ -1,4 +1,4 @@
-boto3
+boto3>=1.43.35  # first botocore with the lambda-microvms client (supervisor self-terminate)
 nova-act~=3.3
 # Transitive floor (via nova-act): Pillow 12.x security advisories
 pillow>=13.0.0

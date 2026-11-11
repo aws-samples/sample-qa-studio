@@ -258,6 +258,62 @@ class TestDeleteUser:
         mock_last.assert_called_once_with('user-to-delete', 'pool-123')
         mock_remove.assert_called_once_with('user-to-delete', 'team-1')
 
+    @patch('cognito_sync.is_last_studio_admin', return_value=False)
+    @patch('handlers.delete_user.log_permission_change')
+    @patch('boto3.client')
+    @patch('permissions_repo.remove_membership')
+    @patch('permissions_repo.list_user_teams')
+    def test_removes_every_membership_and_writes_audit(
+            self, mock_list_teams, mock_remove, mock_boto_client, mock_audit, mock_last):
+        """The UI sends the Cognito Username (sub) as userId; every team
+        membership goes and one audit entry lists them."""
+        from handlers.delete_user import handle
+
+        mock_list_teams.return_value = [
+            {'team_id': 'team-1', 'role': 'editor'},
+            {'team_id': 'team-2', 'role': 'viewer'},
+        ]
+        os.environ['USER_POOL_ID'] = 'pool-123'
+        response = handle(_admin_event(path_params={'userId': 'sub-1'}))
+
+        assert response['statusCode'] == 204
+        assert response['body'] == ''
+        assert [c.args for c in mock_remove.call_args_list] == [('sub-1', 'team-1'), ('sub-1', 'team-2')]
+        mock_boto_client.return_value.admin_delete_user.assert_called_once_with(
+            UserPoolId='pool-123', Username='sub-1')
+        mock_audit.assert_called_once()
+        audit = mock_audit.call_args.kwargs
+        assert audit['action'] == 'user_delete'
+        assert audit['target'] == {'user_sub': 'sub-1'}
+        assert audit['details'] == {'removed_teams': ['team-1', 'team-2']}
+        assert audit['actor'] == {'sub': 'admin-sub', 'email': 'admin@example.com'}
+
+    @patch('cognito_sync.is_last_studio_admin', return_value=False)
+    @patch('handlers.delete_user.log_permission_change')
+    @patch('boto3.client')
+    @patch('permissions_repo.remove_membership')
+    @patch('permissions_repo.list_user_teams', return_value=[])
+    def test_cognito_failure_returns_500_without_audit(
+            self, mock_list_teams, mock_remove, mock_boto_client, mock_audit, mock_last):
+        from handlers.delete_user import handle
+
+        cognito = mock_boto_client.return_value
+        cognito.exceptions.UserNotFoundException = type('UserNotFoundException', (Exception,), {})
+        cognito.admin_delete_user.side_effect = RuntimeError('boom')
+        os.environ['USER_POOL_ID'] = 'pool-123'
+        response = handle(_admin_event(path_params={'userId': 'sub-1'}))
+
+        assert response['statusCode'] == 500
+        mock_audit.assert_not_called()
+
+    def test_missing_user_id_is_400(self):
+        from handlers.delete_user import handle
+
+        os.environ['USER_POOL_ID'] = 'pool-123'
+        response = handle(_admin_event(path_params={}))
+
+        assert response['statusCode'] == 400
+
     @patch('boto3.client')
     @patch('permissions_repo.list_user_teams')
     @patch('cognito_sync.is_last_studio_admin', return_value=True)

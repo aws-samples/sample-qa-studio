@@ -115,6 +115,8 @@ The deployment will:
 
 Access the web interface using the CloudFront URL from the deployment output.
 
+**Testing non-public websites (optional)**: to test dev/staging sites that are only reachable inside a VPC, set `"vpcId": "vpc-…"` in `configuration.json` before `npm run deploy` (optionally `vpcSubnetIds` and `workerSecurityGroupId`). The AgentCore browsers then run in that VPC; the stack never changes the VPC. Prerequisites and limits: [Configuration → AgentCore browsers in a VPC](docs/configuration.md#agentcore-browsers-in-a-vpc).
+
 **Detailed Guide**: See [Web App README →](web-app/README.md) for complete setup instructions, configuration options, and development workflows.
 
 ### CLI Tool Installation

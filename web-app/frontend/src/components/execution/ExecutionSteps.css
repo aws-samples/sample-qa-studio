@@ -1,0 +1,59 @@
+/* Detail boxes under a step's instruction: validation and capture (see ExecutionSteps.tsx `DetailBox`). */
+
+/*
+ * A translucent neutral instead of a theme colour, so the box reads grey on
+ * light and dark mode and on striped (shaded) table rows alike. Text colours
+ * come from Cloudscape `Box` props, not from this file.
+ */
+.step-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background-color: rgba(127, 127, 127, 0.14);
+  /* Table cells do not wrap; long values (JSON, URLs) wrap inside the box. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.step-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 16px;
+}
+
+.step-detail__pair {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* Fixed label column so the values of Expected / Actual / Value line up. */
+.step-detail__row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+}
+
+/* First line of a step: step type and Row i/n badge on the left, Trace / Act ID on the right. */
+.step-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Pushed to the right edge; wraps under the badges in a very narrow panel. */
+.step-heading__actions {
+  margin-left: auto;
+}
+
+/*
+ * Steps the runner has not reached yet (pending / no status). Opacity instead
+ * of a text colour so badges, boxes and links fade together in light and dark
+ * mode; the controls stay clickable.
+ */
+.step-cell--not-run {
+  opacity: 0.5;
+}

@@ -51,23 +51,6 @@ class TemplateParser:
         
         return parsed
     
-    def parse_steps(self, steps: List) -> List:
-        """Parse all step instructions and validation values with template variables"""
-        parsed_steps = []
-        
-        for step in steps:
-            # Create a copy of the step with parsed instruction
-            parsed_step = step
-            parsed_step.instruction = self.parse_instruction(step.instruction)
-            
-            # Parse validation value if it's a validation step
-            if step.step_type == "validation" and hasattr(step, 'validation_value') and step.validation_value:
-                parsed_step.validation_value = self.parse_instruction(step.validation_value)
-            
-            parsed_steps.append(parsed_step)
-        
-        return parsed_steps
-    
     def parse_single_step(self, step) -> object:
         """Parse a single step with current variable context"""
         # Create a copy of the step with parsed instruction

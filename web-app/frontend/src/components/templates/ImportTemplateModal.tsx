@@ -5,6 +5,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Button from "@cloudscape-design/components/button";
 import FormField from "@cloudscape-design/components/form-field";
 import Select from "@cloudscape-design/components/select";
+import Input from "@cloudscape-design/components/input";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Badge from "@cloudscape-design/components/badge";
@@ -41,14 +42,18 @@ export default function ImportTemplateModal({ visible, usecaseId, onDismiss, onS
   const [templateSteps, setTemplateSteps] = useState<TemplateStep[]>([]);
   const [templateVariables, setTemplateVariables] = useState<Array<{key: string, value: string}>>([]);
   const [requiredSecrets, setRequiredSecrets] = useState<string[]>([]);
+  const [existingSecrets, setExistingSecrets] = useState<string[]>([]);
+  const [secretValues, setSecretValues] = useState<Record<string, string>>({});
   const [insertPosition, setInsertPosition] = useState<any>({ label: 'At the end', value: '-1' });
   const [loading, setLoading] = useState(false);
   const [loadingSteps, setLoadingSteps] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
       fetchTemplates();
+      fetchExistingSecrets();
     }
   }, [visible]);
 
@@ -60,6 +65,7 @@ export default function ImportTemplateModal({ visible, usecaseId, onDismiss, onS
       setTemplateVariables([]);
       setRequiredSecrets([]);
     }
+    setSecretValues({});
   }, [selectedTemplate]);
 
   const fetchTemplates = async () => {
@@ -71,6 +77,17 @@ export default function ImportTemplateModal({ visible, usecaseId, onDismiss, onS
       console.error('Failed to fetch templates:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Secrets the use case already has are not asked for again.
+  const fetchExistingSecrets = async () => {
+    try {
+      const data = await api.get(`usecase/${usecaseId}/secrets`);
+      setExistingSecrets((data.secrets || []).map((s: { key: string }) => s.key));
+    } catch (error) {
+      console.error('Failed to fetch use case secrets:', error);
+      setExistingSecrets([]);
     }
   };
 
@@ -109,24 +126,38 @@ export default function ImportTemplateModal({ visible, usecaseId, onDismiss, onS
     if (!selectedTemplate) return;
 
     setImporting(true);
+    setImportError(null);
     try {
       await api.post(`usecase/${usecaseId}/import-template`, {
         template_id: selectedTemplate.value,
         insert_position: parseInt(insertPosition.value)
       });
 
+      // Same principle as the JSON import: values entered here are stored
+      // through the secrets endpoint; empty fields are left for the Secrets tab.
+      const secretsToSave = Object.entries(secretValues)
+        .filter(([, value]) => value.trim())
+        .map(([key, value]) => ({ key, value: value.trim() }));
+      if (secretsToSave.length > 0) {
+        await api.post(`usecase/${usecaseId}/secrets`, { secrets: secretsToSave });
+      }
+
       setSelectedTemplate(null);
       setTemplateSteps([]);
+      setSecretValues({});
       setInsertPosition({ label: 'At the end', value: '-1' });
       onSuccess();
     } catch (error) {
       console.error('Failed to import template:', error);
+      setImportError('Failed to import template. Check the steps and the Secrets tab before retrying.');
     } finally {
       setImporting(false);
     }
   };
 
   const selectedTemplateData = templates.find(t => t.id === selectedTemplate?.value);
+  const missingSecrets = requiredSecrets.filter(key => !existingSecrets.includes(key));
+  const configuredSecrets = requiredSecrets.filter(key => existingSecrets.includes(key));
 
   return (
     <Modal
@@ -196,15 +227,43 @@ export default function ImportTemplateModal({ visible, usecaseId, onDismiss, onS
 
         {selectedTemplate && (
           <>
-            {requiredSecrets.length > 0 && (
-              <Alert type="warning" header="Required Secrets">
-                This template requires the following secrets to be configured in your use case:
-                <ul style={{ marginTop: '8px', marginBottom: '0' }}>
-                  {requiredSecrets.map(secret => (
-                    <li key={secret}><strong>{secret}</strong></li>
-                  ))}
-                </ul>
+            {importError && (
+              <Alert type="error" dismissible onDismiss={() => setImportError(null)}>
+                {importError}
               </Alert>
+            )}
+
+            {requiredSecrets.length > 0 && (
+              <Container
+                header={
+                  <Header
+                    variant="h3"
+                    description="Secrets are stored in AWS Secrets Manager when the template is imported. Fields left empty can be set later in the Secrets tab; until then runs fail at that step."
+                  >
+                    Secrets ({requiredSecrets.length})
+                  </Header>
+                }
+              >
+                <SpaceBetween direction="vertical" size="s">
+                  {missingSecrets.map(key => (
+                    <FormField key={key} label={key} description="Enter the secret value">
+                      <Input
+                        type="password"
+                        value={secretValues[key] || ''}
+                        placeholder="Enter secret value"
+                        onChange={({ detail }) =>
+                          setSecretValues(prev => ({ ...prev, [key]: detail.value }))
+                        }
+                      />
+                    </FormField>
+                  ))}
+                  {configuredSecrets.length > 0 && (
+                    <Box color="text-body-secondary">
+                      Already configured on this use case: {configuredSecrets.join(', ')}
+                    </Box>
+                  )}
+                </SpaceBetween>
+              </Container>
             )}
 
             {templateVariables.length > 0 && (

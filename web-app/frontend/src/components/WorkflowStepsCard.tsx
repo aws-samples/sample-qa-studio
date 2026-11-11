@@ -9,7 +9,6 @@ import {
   DragEndEvent,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
@@ -19,13 +18,24 @@ import { CSS } from '@dnd-kit/utilities';
 import Container from "@cloudscape-design/components/container";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Button from "@cloudscape-design/components/button";
-import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Icon from "@cloudscape-design/components/icon";
+import Badge from "@cloudscape-design/components/badge";
 import Modal from "@cloudscape-design/components/modal";
 import StepFormModal from './usecase/StepFormModal';
+import {
+  blockEndPosition,
+  childrenOf,
+  groupStepsByParent,
+  orderStepsByTree,
+  reorderStepTree,
+  type StepBlock,
+} from './usecase/stepTree';
 import './WorkflowStepsCard.css';
-import './StepsTable.css';
+import StepTypeBadge from './common/StepTypeBadge';
+import { hasExpectation, stepDetailLines } from './usecase/stepDetails';
+import type { ApplicationDatasetSummary } from '../utils/api';
+import { formatTimeAgo } from '../utils/time';
 
 interface UsecaseStep {
   pk: string;
@@ -43,6 +53,10 @@ interface UsecaseStep {
   template_id?: string;
   template_step_id?: string;
   template_version?: number;
+  // Native trajectory replay (CLI runner): set when a navigation step has a
+  // recorded trajectory it will replay instead of calling the model.
+  trajectory_s3_key?: string | null;
+  trajectory_last_updated?: string | null;
   browser_action?: string;
   browser_args?: string;
   transform_operation?: string;
@@ -57,6 +71,11 @@ interface UsecaseStep {
   network_response_body?: string | null;
   network_response_body_match_type?: string | null;
   network_response_status?: number | null;
+  id?: string;
+  parent_step_id?: string | null;
+  repeat_columns?: string[];
+  repeat_rows?: string[][];
+  dataset_id?: string | null;
 }
 
 interface WorkflowStepsCardProps {
@@ -67,6 +86,21 @@ interface WorkflowStepsCardProps {
   onAddStep: (stepData: any, position?: number) => Promise<void>;
   onUpdateFromTemplate?: (stepId: string) => Promise<void>;
   usecaseId: string;
+  /** Owning application; enables the application-dataset source in the step modal. */
+  applicationId?: string;
+  /** The application's datasets: names dataset_id repeats and feeds the step modal. */
+  datasets?: ApplicationDatasetSummary[];
+}
+
+/**
+ * "Cached" = the step replays a recorded trajectory instead of calling the
+ * model. Only navigation steps record trajectories (the CLI's
+ * StepExecutor._execute_navigation is the sole TrajectoryManager.save_trajectory
+ * caller); a step without step_type is a navigation step.
+ */
+function hasReplayableTrajectory(step: UsecaseStep): boolean {
+  const isNavigation = !step.step_type || step.step_type === 'navigation';
+  return isNavigation && Boolean(step.trajectory_s3_key);
 }
 
 interface SortableStepCardProps {
@@ -77,7 +111,12 @@ interface SortableStepCardProps {
   onDelete: (step: UsecaseStep) => void;
   onAddAbove: () => void;
   onAddBelow: () => void;
+  onAddInside?: () => void;
   isDeleting: boolean;
+  isChild?: boolean;
+  orphan?: boolean;
+  childCount?: number;
+  datasets: ApplicationDatasetSummary[];
 }
 
 function SortableStepCard({
@@ -88,7 +127,12 @@ function SortableStepCard({
   onDelete,
   onAddAbove,
   onAddBelow,
+  onAddInside,
   isDeleting,
+  isChild = false,
+  orphan = false,
+  childCount = 0,
+  datasets,
 }: SortableStepCardProps) {
   const {
     attributes,
@@ -139,7 +183,15 @@ function SortableStepCard({
     }
     
     if (!step.instruction || step.instruction.trim() === '') {
-      issues.push('Instruction is empty');
+      issues.push(step.step_type === 'repeat' ? 'Label is empty' : 'Instruction is empty');
+    }
+
+    if (step.step_type === 'repeat' && !step.dataset_id && (!step.repeat_columns?.length || !step.repeat_rows?.length)) {
+      issues.push('Dataset is empty');
+    }
+
+    if (orphan) {
+      issues.push('Parent repeat step not found');
     }
     
     return issues;
@@ -148,146 +200,25 @@ function SortableStepCard({
   const validationIssues = validateStep();
   const hasIssues = validationIssues.length > 0;
 
-  const getStepTypeBadge = (stepType?: string) => {
-    switch (stepType) {
-      case 'secret':
-        return <Badge color="red">Secret</Badge>;
-      case 'validation':
-        return <Badge color="green">Validation</Badge>;
-      case 'assertion':
-        return <Badge color="green">Assertion</Badge>;
-      case 'retrieve_value':
-        return <Badge color="blue">Value</Badge>;
-      case 'url':
-        return <Badge color="severity-medium">Goto (deprecated)</Badge>;
-      case 'browser':
-        return <Badge color="severity-medium">Browser</Badge>;
-      case 'transform':
-        return <Badge color="blue">Transform</Badge>;
-      case 'download':
-        return <Badge className="badge-purple">Download</Badge>;
-      case 'network_assertion':
-        return <Badge color="blue">Network</Badge>;
-      case 'navigation':
-      default:
-        return <Badge>Navigation</Badge>;
-    }
-  };
+  // The card shows the instruction separately; an assertion's variable leads its details.
+  const details = [
+    ...(step.step_type === 'assertion' && hasExpectation(step) ? [`Variable: ${step.assertion_variable}`] : []),
+    ...stepDetailLines(step, datasets),
+  ];
+  const isCached = hasReplayableTrajectory(step);
+  // Age of the recorded trajectory the step will replay
+  if (isCached && step.trajectory_last_updated) {
+    details.push(`Cached ${formatTimeAgo(step.trajectory_last_updated)}`);
+  }
 
-  const renderStepDetails = () => {
-    const details = [];
-
-    if (step.step_type === 'secret' && step.secret_key) {
-      details.push(`Secret: ${step.secret_key}`);
-    } else if (step.step_type === 'validation') {
-      if (step.validation_type === 'bool') {
-        const expectedValue = step.validation_value === 'true' ? 'True' : 'False';
-        details.push(`Validation: Boolean expects ${expectedValue}`);
-      } else if (step.validation_type === 'string') {
-        const getStringOperatorText = (op?: string) => {
-          switch (op) {
-            case 'exact': return 'exactly matches';
-            case 'exact_case_insensitive': return 'exactly matches (case insensitive)';
-            case 'not_equal': return 'does not equal';
-            case 'contains': return 'contains';
-            case 'contains_case_insensitive': return 'contains (case insensitive)';
-            default: return 'exactly matches';
-          }
-        };
-        const operator = getStringOperatorText(step.validation_operator);
-        details.push(`Validation: Text ${operator} "${step.validation_value}"`);
-      } else if (step.validation_type === 'number') {
-        const getOperatorText = (op?: string) => {
-          switch (op) {
-            case 'equals': return 'equals';
-            case 'less_then': return 'is less than';
-            case 'greater_then': return 'is greater than';
-            case 'greater_or_equal_then': return 'is greater than or equal to';
-            case 'less_or_equal_then': return 'is less than or equal to';
-            default: return 'equals';
-          }
-        };
-        const operatorText = getOperatorText(step.validation_operator);
-        details.push(`Validation: Number ${operatorText} ${step.validation_value}`);
-      }
-    } else if (step.step_type === 'assertion') {
-      if (step.validation_type === 'bool') {
-        const expectedValue = step.validation_value === 'true' ? 'True' : 'False';
-        details.push(`Variable: ${(step as any).assertion_variable}`);
-        details.push(`Assertion: Boolean expects ${expectedValue}`);
-      } else if (step.validation_type === 'string') {
-        const getStringOperatorText = (op?: string) => {
-          switch (op) {
-            case 'exact': return 'exactly matches';
-            case 'exact_case_insensitive': return 'exactly matches (case insensitive)';
-            case 'not_equal': return 'does not equal';
-            case 'contains': return 'contains';
-            case 'contains_case_insensitive': return 'contains (case insensitive)';
-            default: return 'exactly matches';
-          }
-        };
-        const operator = getStringOperatorText(step.validation_operator);
-        details.push(`Variable: ${(step as any).assertion_variable}`);
-        details.push(`Assertion: Text ${operator} "${step.validation_value}"`);
-      } else if (step.validation_type === 'number') {
-        const getOperatorText = (op?: string) => {
-          switch (op) {
-            case 'equals': return 'equals';
-            case 'less_then': return 'is less than';
-            case 'greater_then': return 'is greater than';
-            case 'greater_or_equal_then': return 'is greater than or equal to';
-            case 'less_or_equal_then': return 'is less than or equal to';
-            default: return 'equals';
-          }
-        };
-        const operatorText = getOperatorText(step.validation_operator);
-        details.push(`Variable: ${(step as any).assertion_variable}`);
-        details.push(`Assertion: Number ${operatorText} ${step.validation_value}`);
-      }
-    } else if (step.step_type === 'retrieve_value' && step.capture_variable) {
-      details.push(`Captures variable: ${step.capture_variable}`);
-    } else if (step.step_type === 'browser' && step.browser_action) {
-      details.push(`Action: ${step.browser_action}`);
-      if (step.browser_args) {
-        try {
-          const args = JSON.parse(step.browser_args);
-          if (args.hard) details.push('Hard reload');
-          if (args.url) details.push(`URL: ${args.url}`);
-        } catch {}
-      }
-    } else if (step.step_type === 'transform' && step.transform_operation) {
-      details.push(`Operation: ${step.transform_operation}`);
-      if (step.capture_variable) details.push(`→ {{ ${step.capture_variable} }}`);
-    } else if (step.step_type === 'network_assertion' && step.network_url_pattern) {
-      const parts = [`Network: ${step.network_method || 'any'} ${step.network_url_pattern}`];
-      if (step.network_request_body) {
-        parts.push(`req body (${step.network_body_match_type || 'exact'})`);
-      }
-      if (step.network_mock_response) {
-        parts.push(step.network_mock_passthrough ? 'passthrough mock' : 'static mock');
-      }
-      if (step.network_response_status != null) {
-        parts.push(`resp ${step.network_response_status}`);
-      }
-      if (step.network_response_body) {
-        parts.push(`resp body (${step.network_response_body_match_type || 'subset'})`);
-      }
-      details.push(parts.join(' · '));
-    }
-
-    return details;
-  };
-
-  const details = renderStepDetails();
-
-  const cardClassName = isDragging 
-    ? 'workflow-step-card-dragging' 
-    : isDeleting 
-    ? 'workflow-step-card workflow-step-card-deleting'
-    : 'workflow-step-card';
+  const cardClassName = [
+    isDragging ? 'workflow-step-card-dragging' : 'workflow-step-card',
+    !isDragging && isDeleting ? 'workflow-step-card-deleting' : '',
+    isChild ? 'workflow-step-card-child' : '',
+  ].filter(Boolean).join(' ');
 
   return (
-    <div ref={setNodeRef} style={style} className={cardClassName}>
+    <div ref={setNodeRef} style={style} className={cardClassName} data-testid={isChild ? 'child-step-card' : 'step-card'}>
       <Container>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
           {/* Drag Handle */}
@@ -310,11 +241,20 @@ function SortableStepCard({
             {step.sort}
           </div>
 
+          {isChild && (
+            <div className="step-child-marker" aria-hidden="true">↳</div>
+          )}
+
           {/* Step Content */}
           <div className="step-content">
             <SpaceBetween direction="vertical" size="xs">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {getStepTypeBadge(step.step_type)}
+                <StepTypeBadge stepType={step.step_type} />
+                {isCached && (
+                  <Badge color="green">
+                    <Icon name="check" /> Cached
+                  </Badge>
+                )}
                 {hasIssues && (
                   <div title={validationIssues.join(', ')} style={{ display: 'flex', alignItems: 'center' }}>
                     <Box color="text-status-warning">
@@ -381,6 +321,15 @@ function SortableStepCard({
               >
                 Add step below
               </Button>
+              {step.step_type === 'repeat' && onAddInside && (
+                <Button
+                  iconName="add-plus"
+                  onClick={onAddInside}
+                  variant='inline-link'
+                >
+                  Add step inside
+                </Button>
+              )}
             </div>
             <div className="step-actions-divider" />
             <div className="step-actions-group">
@@ -415,11 +364,14 @@ export default function WorkflowStepsCard({
   onAddStep,
   onUpdateFromTemplate,
   usecaseId,
+  applicationId,
+  datasets = [],
 }: WorkflowStepsCardProps) {
   const [editingStep, setEditingStep] = useState<UsecaseStep | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addPosition, setAddPosition] = useState<number | undefined>(undefined);
+  const [addParentId, setAddParentId] = useState<string | undefined>(undefined);
   const [isReordering, setIsReordering] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingStep, setDeletingStep] = useState<UsecaseStep | null>(null);
@@ -436,16 +388,10 @@ export default function WorkflowStepsCard({
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      // Sort steps first to match the visual order
-      const sortedSteps = [...steps].sort((a, b) => a.sort - b.sort);
-      
-      const oldIndex = sortedSteps.findIndex((step) => step.sk === active.id);
-      const newIndex = sortedSteps.findIndex((step) => step.sk === over.id);
-
-      const reorderedSteps = arrayMove(sortedSteps, oldIndex, newIndex).map((step, index) => ({
-        ...step,
-        sort: index + 1,
-      }));
+      // Block-aware: a repeat moves with its children, a child stays in
+      // its block. A rejected move returns null and the card snaps back.
+      const reorderedSteps = reorderStepTree(steps, String(active.id), String(over.id));
+      if (!reorderedSteps) return;
 
       setIsReordering(true);
       try {
@@ -475,14 +421,25 @@ export default function WorkflowStepsCard({
   };
 
   const handleAddAbove = (step: UsecaseStep) => {
-    // Add above means insert at the current step's sort position
+    // Add above means insert at the current step's sort position. A child
+    // stays inside its repeat.
     setAddPosition(step.sort);
+    setAddParentId(step.parent_step_id || undefined);
     setShowAddModal(true);
   };
 
   const handleAddBelow = (step: UsecaseStep) => {
-    // Add below means insert at the next sort position
-    setAddPosition(step.sort + 1);
+    // Add below means insert at the next sort position; below a repeat
+    // means after its whole block (as a top-level step).
+    setAddPosition(step.step_type === 'repeat' ? blockEndPosition(steps, step.sk) : step.sort + 1);
+    setAddParentId(step.parent_step_id || undefined);
+    setShowAddModal(true);
+  };
+
+  const handleAddInside = (repeat: UsecaseStep) => {
+    // New children go to the end of the block.
+    setAddPosition(blockEndPosition(steps, repeat.sk));
+    setAddParentId(repeat.id || repeat.sk.replace('STEP#', ''));
     setShowAddModal(true);
   };
 
@@ -490,7 +447,10 @@ export default function WorkflowStepsCard({
     await onAddStep(stepData, addPosition);
     setShowAddModal(false);
     setAddPosition(undefined);
+    setAddParentId(undefined);
   };
+
+  const deletingChildren = deletingStep?.step_type === 'repeat' ? childrenOf(steps, deletingStep.sk) : [];
 
   const handleDeleteClick = (step: UsecaseStep) => {
     setDeletingStep(step);
@@ -532,11 +492,14 @@ export default function WorkflowStepsCard({
           onDismiss={() => {
             setShowAddModal(false);
             setAddPosition(undefined);
+            setAddParentId(undefined);
           }}
           onSubmit={handleAddStep}
           usecaseId={usecaseId}
           title="Add Step"
           existingSteps={steps}
+          applicationId={applicationId}
+          datasets={datasets}
         />
         <Container>
           <Box textAlign="center" padding="xxl">
@@ -573,6 +536,8 @@ export default function WorkflowStepsCard({
         usecaseId={usecaseId}
         title="Edit Step"
         existingSteps={steps}
+        applicationId={applicationId}
+        datasets={datasets}
       />
 
       <StepFormModal
@@ -580,11 +545,17 @@ export default function WorkflowStepsCard({
         onDismiss={() => {
           setShowAddModal(false);
           setAddPosition(undefined);
+          setAddParentId(undefined);
         }}
         onSubmit={handleAddStep}
         usecaseId={usecaseId}
-        title={addPosition !== undefined ? `Add Step at Position ${addPosition}` : 'Add Step'}
+        title={addParentId
+          ? 'Add Step Inside Repeat'
+          : addPosition !== undefined ? `Add Step at Position ${addPosition}` : 'Add Step'}
         existingSteps={steps}
+        parentStepId={addParentId}
+        applicationId={applicationId}
+        datasets={datasets}
       />
 
       <Modal
@@ -614,6 +585,13 @@ export default function WorkflowStepsCard({
         {deletingStep && (
           <Box variant="span">
             Are you sure you want to delete <strong>Step {deletingStep.sort}</strong>?
+            {deletingStep.step_type === 'repeat' && (
+              <>
+                {' '}This repeat step contains <strong>{deletingChildren.length}</strong>{' '}
+                {deletingChildren.length === 1 ? 'step' : 'steps'}; deleting it removes
+                {deletingChildren.length === 1 ? ' it' : ' them'} too.
+              </>
+            )}
           </Box>
         )}
       </Modal>
@@ -624,23 +602,58 @@ export default function WorkflowStepsCard({
         onDragEnd={handleDragEnd}
       >
         <SortableContext
-          items={steps.map((step) => step.sk)}
+          items={orderStepsByTree(steps).map((step) => step.sk)}
           strategy={verticalListSortingStrategy}
         >
           <SpaceBetween direction="vertical" size="s">
-            {[...steps].sort((a, b) => a.sort - b.sort).map((step, index) => (
-              <SortableStepCard
-                key={step.sk}
-                step={step}
-                index={index}
-                totalSteps={steps.length}
-                onEdit={handleEditStep}
-                onDelete={handleDeleteClick}
-                onAddAbove={() => handleAddAbove(step)}
-                onAddBelow={() => handleAddBelow(step)}
-                isDeleting={isDeleting && deletingStep?.sk === step.sk}
-              />
-            ))}
+            {groupStepsByParent(steps).map((block: StepBlock<UsecaseStep>, index) => {
+              const isRepeat = block.head.step_type === 'repeat';
+              return (
+                <div key={block.head.sk} className={isRepeat ? 'workflow-step-block' : undefined}>
+                  <SortableStepCard
+                    step={block.head}
+                    index={index}
+                    totalSteps={steps.length}
+                    onEdit={handleEditStep}
+                    onDelete={handleDeleteClick}
+                    onAddAbove={() => handleAddAbove(block.head)}
+                    onAddBelow={() => handleAddBelow(block.head)}
+                    onAddInside={isRepeat ? () => handleAddInside(block.head) : undefined}
+                    isDeleting={isDeleting && deletingStep?.sk === block.head.sk}
+                    orphan={block.orphan}
+                    childCount={block.children.length}
+                    datasets={datasets}
+                  />
+                  {isRepeat && (
+                    <div className="workflow-step-children" data-testid="repeat-children">
+                      {block.children.length === 0 ? (
+                        <Box color="text-body-secondary" fontSize="body-s" padding={{ vertical: 'xs' }}>
+                          No steps inside yet — use "Add step inside" to add the first one.
+                        </Box>
+                      ) : (
+                        <SpaceBetween direction="vertical" size="xs">
+                          {block.children.map((child) => (
+                            <SortableStepCard
+                              key={child.sk}
+                              step={child}
+                              index={index}
+                              totalSteps={steps.length}
+                              onEdit={handleEditStep}
+                              onDelete={handleDeleteClick}
+                              onAddAbove={() => handleAddAbove(child)}
+                              onAddBelow={() => handleAddBelow(child)}
+                              isDeleting={isDeleting && deletingStep?.sk === child.sk}
+                              isChild
+                              datasets={datasets}
+                            />
+                          ))}
+                        </SpaceBetween>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </SpaceBetween>
         </SortableContext>
       </DndContext>

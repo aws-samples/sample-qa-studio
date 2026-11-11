@@ -19,10 +19,17 @@ the same surface):
 
 - ``BEDROCK_EXECUTION_ROLE`` — IAM role the browser assumes at runtime
   (required by Bedrock AgentCore).  Must be pre-created.
-- ``AGENT_CORE_VPC`` — ``"true"`` to put the browser in a VPC.  When set,
-  ``AC_VPC_ID``, ``AC_SUBNET_ID``, ``AC_SECURITY_GROUP_ID`` must also be
-  set.  Defaults to PUBLIC network mode.
+- ``AGENT_CORE_VPC`` — ``"true"`` to put the browser's network interfaces
+  in a VPC.  When set, ``AC_VPC_ID``, ``AC_SUBNET_IDS`` (comma-separated
+  subnet IDs) and ``AC_SECURITY_GROUP_ID`` must also be set.  Anything else
+  means PUBLIC network mode.  The worker stack sets all four on the MicroVM
+  image only when ``vpcId`` is configured; a local ``--browser agentcore``
+  run honours the same variables.
 - ``S3_BUCKET`` — artifact bucket the session recordings land in.
+
+The wizard (``web-app/worker/browser.py``) builds its request with
+:func:`build_browser_config` too, so both browser code paths share one
+network-mode implementation.
 
 The context dict passed to :meth:`provision` carries per-execution inputs:
 ``usecase_id``, ``execution_id``, ``region``, ``unique_id`` (5-char rand
@@ -36,8 +43,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime
-from typing import Any, ClassVar, Dict, Optional, Tuple
+from typing import Any, ClassVar, Dict, List, Optional, Tuple
 
 from qa_studio_cli.runner.browser.handle import BrowserHandle
 
@@ -67,7 +73,7 @@ class AgentCoreBrowserProvisioner:
     def __init__(self, artefact_bucket: Optional[str] = None) -> None:
         """``artefact_bucket`` overrides the ``S3_BUCKET`` env var.
 
-        Production deploys set ``S3_BUCKET`` in the ECS task definition;
+        Production deploys set ``S3_BUCKET`` on the worker MicroVM image;
         developers running locally pass it explicitly when they need
         AgentCore.  If neither is available the provisioner raises on
         :meth:`provision` — not construction — so unit tests can still
@@ -105,13 +111,10 @@ class AgentCoreBrowserProvisioner:
                 "Install with: pip install 'qa-studio[agentcore]'",
             ) from exc
 
-        # Control plane + data plane clients come from different boto3
-        # shapes. The control plane creates/deletes browsers; the data
-        # plane (BrowserClient) starts sessions.
-        cp_client = _create_control_plane_client(region)
-
+        # Build the request first: a VPC misconfiguration (missing AC_*
+        # env) must fail before any AWS client exists.
         recording_prefix = f"{usecase_id}/{execution_id}/recording/"
-        browser_config = _build_browser_config(
+        browser_config = build_browser_config(
             unique_id=unique_id or execution_id,
             execution_id=execution_id,
             artefact_bucket=self._artefact_bucket,
@@ -119,10 +122,19 @@ class AgentCoreBrowserProvisioner:
             browser_policy_s3_path=browser_policy_s3_path,
         )
 
+        # Control plane + data plane clients come from different boto3
+        # shapes. The control plane creates/deletes browsers; the data
+        # plane (BrowserClient) starts sessions.
+        cp_client = _create_control_plane_client(region)
+
+        network = browser_config["networkConfiguration"]
+        vpc_config = network.get("vpcConfig") or {}
         logger.info(
-            "Creating AgentCore browser: name=%s network=%s",
+            "Creating AgentCore browser: name=%s network=%s subnets=%s security_groups=%s",
             browser_config["name"],
-            browser_config["networkConfiguration"]["networkMode"],
+            network["networkMode"],
+            ",".join(vpc_config.get("subnets", [])) or "-",
+            ",".join(vpc_config.get("securityGroups", [])) or "-",
         )
         creation_start = time.time()
         response = cp_client.create_browser(**browser_config)
@@ -183,7 +195,7 @@ def _create_control_plane_client(region: str):
     )
 
 
-def _build_browser_config(
+def build_browser_config(
     *,
     unique_id: str,
     execution_id: str,
@@ -193,10 +205,9 @@ def _build_browser_config(
 ) -> Dict[str, Any]:
     """Produce the create_browser request body.
 
-    VPC vs PUBLIC network mode is driven by the ``AGENT_CORE_VPC`` env
-    var.  When VPC is requested, ``AC_VPC_ID`` / ``AC_SUBNET_ID`` /
-    ``AC_SECURITY_GROUP_ID`` are all required — missing any of them
-    raises.  Mirrors ``web-app/worker/utils.py::validate_vpc_configuration``.
+    VPC vs PUBLIC network mode comes from :func:`resolve_network_config`
+    (``AGENT_CORE_VPC`` / ``AC_*`` env vars).  Shared by the batch
+    provisioner and the wizard (``web-app/worker/browser.py``).
     """
     execution_role = os.getenv("BEDROCK_EXECUTION_ROLE")
     if not execution_role:
@@ -205,7 +216,7 @@ def _build_browser_config(
             "AgentCore browser.",
         )
 
-    network_mode, vpc_config = _resolve_network_config()
+    network_mode, vpc_config = resolve_network_config()
 
     config: Dict[str, Any] = {
         "name": f"nova_act_qa_studio_{unique_id}",
@@ -241,21 +252,30 @@ def _build_browser_config(
     return config
 
 
-def _resolve_network_config() -> Tuple[str, Optional[Dict[str, Any]]]:
+def parse_subnet_ids(raw: Optional[str]) -> List[str]:
+    """Split ``AC_SUBNET_IDS`` on commas; whitespace stripped, empties dropped."""
+    if not raw:
+        return []
+    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def resolve_network_config() -> Tuple[str, Optional[Dict[str, Any]]]:
     """Return ``(networkMode, vpcConfig)`` based on env vars.
 
-    Raises when VPC mode is enabled but required inputs are missing.
+    ``AGENT_CORE_VPC=true`` selects VPC mode; every subnet in
+    ``AC_SUBNET_IDS`` is passed (order kept).  Raises — before any AWS
+    call — when VPC mode is enabled but an input is missing.
     """
-    if os.getenv("AGENT_CORE_VPC", "false").lower() != "true":
+    if os.getenv("AGENT_CORE_VPC", "false").strip().lower() != "true":
         return "PUBLIC", None
-    vpc_id = os.getenv("AC_VPC_ID")
-    subnet_id = os.getenv("AC_SUBNET_ID")
-    security_group_id = os.getenv("AC_SECURITY_GROUP_ID")
+    vpc_id = (os.getenv("AC_VPC_ID") or "").strip()
+    subnet_ids = parse_subnet_ids(os.getenv("AC_SUBNET_IDS"))
+    security_group_id = (os.getenv("AC_SECURITY_GROUP_ID") or "").strip()
     missing = [
         name
         for name, value in (
             ("AC_VPC_ID", vpc_id),
-            ("AC_SUBNET_ID", subnet_id),
+            ("AC_SUBNET_IDS", subnet_ids),
             ("AC_SECURITY_GROUP_ID", security_group_id),
         )
         if not value
@@ -267,7 +287,7 @@ def _resolve_network_config() -> Tuple[str, Optional[Dict[str, Any]]]:
         )
     vpc_config = {
         "securityGroups": [security_group_id],
-        "subnets": [subnet_id],
+        "subnets": subnet_ids,
     }
     return "VPC", vpc_config
 

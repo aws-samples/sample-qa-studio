@@ -41,27 +41,3 @@ export function LazyWrapper({
   );
 }
 
-// Higher-order component for creating lazy-loaded components
-export function withLazyLoading<T extends object>(
-  importFunction: () => Promise<{ default: React.ComponentType<T> }>,
-  fallbackTitle?: string,
-  fallbackText?: string
-) {
-  const LazyComponent = React.lazy(importFunction);
-
-  return function LazyLoadedComponent(props: T) {
-    return (
-      <LazyWrapper 
-        containerTitle={fallbackTitle}
-        loadingText={fallbackText}
-      >
-        <LazyComponent {...props} />
-      </LazyWrapper>
-    );
-  };
-}
-
-// Preload function for components
-export function preloadComponent(importFunction: () => Promise<any>) {
-  return importFunction();
-}

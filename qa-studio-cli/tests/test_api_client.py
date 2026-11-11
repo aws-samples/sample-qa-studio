@@ -1,5 +1,6 @@
 """Tests for ApiClient and require_auth decorator."""
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import click
@@ -9,7 +10,10 @@ from click.testing import CliRunner
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from qa_studio_cli.api.client import ApiClient, require_auth, RETRYABLE_STATUS_CODES
+from qa_studio_cli.api.client import (
+    ApiClient, require_auth,
+    RETRY_ATTEMPTS, RETRY_JITTER_MAX_S, RETRY_WAIT_MAX_S, RETRY_WAIT_MIN_S,
+)
 from qa_studio_cli.models.errors import ApiError, AuthError, ConfigError
 
 
@@ -30,6 +34,18 @@ def _mock_response(status_code: int = 200, json_data: dict | None = None, text: 
 def _make_client(token: str = "tok", base_url: str = "https://api.example.com") -> ApiClient:
     """Create an ApiClient with a static token provider."""
     return ApiClient(base_url=base_url, token_provider=lambda: token)
+
+
+@pytest.fixture(autouse=True)
+def recorded_sleeps(monkeypatch):
+    """Never sleep in these tests: the retry schedule waits up to ~1 min per call.
+
+    The waits tenacity would have slept are recorded so tests can assert on
+    the schedule (see ``TestRetryBehavior``).
+    """
+    sleeps: list[float] = []
+    monkeypatch.setattr(ApiClient._request_with_retry.retry, "sleep", sleeps.append)
+    return sleeps
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +249,20 @@ class TestApiClientPatch:
                 json={"status": "running"},
             )
             assert result == {"updated": True}
+
+
+class TestApiClientPut:
+    def test_sends_put_with_json_body(self):
+        client = _make_client("my-token")
+        with patch.object(client._session, "request", return_value=_mock_response(200, {"version": 4})) as mock_req:
+            result = client.put("/templates/t1", json_body={"templateVersion": "1.0"})
+            mock_req.assert_called_once_with(
+                "PUT",
+                "https://api.example.com/templates/t1",
+                headers={"Authorization": "Bearer my-token", "Content-Type": "application/json"},
+                json={"templateVersion": "1.0"},
+            )
+            assert result == {"version": 4}
 
 
 class TestApiClientDelete:
@@ -481,7 +511,19 @@ class TestBuildApiClient:
 # ---------------------------------------------------------------------------
 
 class TestRetryBehavior:
-    """Verify retry logic for transient errors."""
+    """Verify retry logic for transient errors.
+
+    The retry schedule has to outlast an API throttling burst: a suite fan-out
+    starts ~20 MicroVMs within seconds and every runner's first call is
+    ``GET /usecase/{id}`` against a Lambda with a small reserved concurrency,
+    so API Gateway answers 500/429 for several seconds.  The module-level
+    ``recorded_sleeps`` fixture patches the waits out and records them so the
+    schedule can be asserted without sleeping.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _sleeps(self, recorded_sleeps):
+        self.sleeps = recorded_sleeps
 
     def test_429_triggers_retry_then_succeeds(self):
         client = _make_client()
@@ -560,7 +602,50 @@ class TestRetryBehavior:
             with pytest.raises(ApiError) as exc_info:
                 client.get("/test")
             assert exc_info.value.status_code == 500
-            assert client._session.request.call_count == 3
+            assert client._session.request.call_count == RETRY_ATTEMPTS
+        assert len(self.sleeps) == RETRY_ATTEMPTS - 1
+
+    def test_schedule_outlasts_a_throttling_burst(self):
+        """Total wait before giving up must cover a fan-out burst (tens of seconds),
+        not the ~3 s the old 3-attempt schedule allowed."""
+        assert RETRY_ATTEMPTS >= 6
+        client = _make_client()
+        error = _mock_response(500, {"message": "Internal server error"}, text="error")
+        with patch.object(client._session, "request", return_value=error):
+            with pytest.raises(ApiError):
+                client.get("/test")
+        assert sum(self.sleeps) >= 30
+
+    def test_waits_grow_exponentially_with_jitter_and_are_capped(self):
+        client = _make_client()
+        error = _mock_response(429, {"message": "Too many requests"}, text="throttled")
+        with patch.object(client._session, "request", return_value=error):
+            with pytest.raises(ApiError):
+                client.get("/test")
+        base = [RETRY_WAIT_MIN_S * 2 ** n for n in range(len(self.sleeps))]
+        for actual, expected in zip(self.sleeps, base):
+            capped = min(expected, RETRY_WAIT_MAX_S)
+            assert capped <= actual <= capped + RETRY_JITTER_MAX_S, (self.sleeps, base)
+        assert self.sleeps[-1] <= RETRY_WAIT_MAX_S + RETRY_JITTER_MAX_S
+
+    def test_recovers_late_in_the_schedule(self):
+        client = _make_client()
+        error = _mock_response(500, {"message": "Internal server error"}, text="error")
+        success = _mock_response(200, {"ok": True})
+        with patch.object(client._session, "request", side_effect=[error] * (RETRY_ATTEMPTS - 1) + [success]):
+            assert client.get("/test") == {"ok": True}
+            assert client._session.request.call_count == RETRY_ATTEMPTS
+
+    def test_each_retry_is_logged_with_attempt_and_wait(self, caplog):
+        client = _make_client()
+        error = _mock_response(500, {"message": "Internal server error"}, text="error")
+        success = _mock_response(200, {"ok": True})
+        with caplog.at_level(logging.WARNING, logger="qa_studio_cli.api.client"), \
+                patch.object(client._session, "request", side_effect=[error, error, success]):
+            client.get("/test")
+        retry_lines = [r.getMessage() for r in caplog.records if "retry" in r.getMessage().lower() and "/" in r.getMessage()]
+        assert any(f"1/{RETRY_ATTEMPTS}" in line for line in retry_lines), caplog.text
+        assert any(f"2/{RETRY_ATTEMPTS}" in line for line in retry_lines), caplog.text
 
 
 # ---------------------------------------------------------------------------

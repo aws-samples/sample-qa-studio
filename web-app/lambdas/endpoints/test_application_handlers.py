@@ -622,6 +622,8 @@ class TestGetApplicationMetrics(_AppResolves):
         self.assertEqual(body["totals"]["total_executions"], 25)
         self.assertEqual(body["totals"]["pass_rate"], 80.0)
         self.assertEqual(len(body["series"]["executions"]), 2)
+        # The Failures metric total is returned (it used to be computed and dropped).
+        self.assertEqual(body["totals"]["total_failures"], 5)
 
     @patch("handlers.get_application_metrics.boto3")
     @patch("handlers.get_application_metrics.get_table_name", return_value="test-table")
@@ -1272,3 +1274,145 @@ class TestListTeamApplicationsAuthz(unittest.TestCase):
 
     def test_admin_allowed(self):
         self.assertEqual(self._call([], is_admin=True)[0]["statusCode"], 200)
+
+
+# =============================================================================
+# GET / POST /applications/{id}/variables (APPLICATION#{id} / VARIABLES)
+# =============================================================================
+
+from authz_test_support import APP_ID, make_event, owned_resources  # noqa: E402
+from fake_table import FakeTable  # noqa: E402
+
+_APP_VARIABLES_KEY = {"pk": f"APPLICATION#{APP_ID}", "sk": "VARIABLES"}
+_TWO_VARS = [{"key": "base_api", "value": "https://api.example.com"}, {"key": "tenant", "value": "qa"}]
+
+
+class _AppVariablesCase(unittest.TestCase):
+    """APP_ID is owned by TEAM_A (authz_test_support fixture); the table starts empty."""
+
+    def setUp(self):
+        self.table = FakeTable()
+        ctx = owned_resources()
+        ctx.__enter__()
+        self.addCleanup(ctx.__exit__, None, None, None)
+
+    def _get(self, caller="viewer_a", app_id=APP_ID, scopes=None):
+        from handlers import get_application_variables
+        kwargs = {"scopes": scopes} if scopes is not None else {}
+        with patch.object(get_application_variables, "boto3") as boto_mock:
+            boto_mock.resource.return_value.Table.return_value = self.table
+            return get_application_variables.handle(make_event(caller, path={"id": app_id}, **kwargs))
+
+    def _post(self, body, caller="editor_a", app_id=APP_ID, scopes=None):
+        from handlers import put_application_variables
+        kwargs = {"scopes": scopes} if scopes is not None else {}
+        with patch.object(put_application_variables, "boto3") as boto_mock:
+            boto_mock.resource.return_value.Table.return_value = self.table
+            return put_application_variables.handle(make_event(caller, path={"id": app_id}, body=body, **kwargs))
+
+
+class TestGetApplicationVariables(_AppVariablesCase):
+    def test_empty_list_when_record_absent(self):
+        response = self._get()
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(json.loads(response["body"]), {"variables": []})
+
+    def test_returns_stored_rows_as_key_value(self):
+        self.table.put_item(Item={**_APP_VARIABLES_KEY, "variables": _TWO_VARS,
+                                  "updated_at": "t", "updated_by": "someone"})
+        response = self._get()
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(json.loads(response["body"]), {"variables": _TWO_VARS})
+
+    def test_viewer_of_owning_team_can_read(self):
+        self.assertEqual(self._get(caller="viewer_a")["statusCode"], 200)
+
+    def test_foreign_team_gets_403(self):
+        self.assertEqual(self._get(caller="viewer_b")["statusCode"], 403)
+
+    def test_unknown_application_gets_404(self):
+        self.assertEqual(self._get(app_id="nonexistent-app")["statusCode"], 404)
+
+    def test_requires_applications_read_scope(self):
+        response = self._get(caller="editor_a", scopes="api/applications.write")
+        self.assertEqual(response["statusCode"], 403)
+        self.assertIn("Missing required scopes", json.loads(response["body"])["message"])
+
+
+class TestPutApplicationVariables(_AppVariablesCase):
+    @patch("handlers.put_application_variables.get_current_timestamp", return_value="2026-06-01T10:00:00Z")
+    def test_round_trip_writes_record_and_returns_list(self, _ts):
+        response = self._post({"variables": _TWO_VARS})
+        self.assertEqual(response["statusCode"], 200, response["body"])
+        self.assertEqual(json.loads(response["body"]), {"variables": _TWO_VARS})
+
+        record = self.table.get(**_APP_VARIABLES_KEY)
+        self.assertEqual(record["variables"], _TWO_VARS)
+        self.assertEqual(record["updated_at"], "2026-06-01T10:00:00Z")
+        self.assertEqual(record["updated_by"], "caller-sub")
+
+        self.assertEqual(json.loads(self._get()["body"]), {"variables": _TWO_VARS})
+
+    def test_post_replaces_the_whole_list(self):
+        self._post({"variables": _TWO_VARS})
+        response = self._post({"variables": [{"key": "only", "value": "1"}]})
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(self.table.get(**_APP_VARIABLES_KEY)["variables"], [{"key": "only", "value": "1"}])
+
+    def test_empty_list_is_allowed(self):
+        self._post({"variables": _TWO_VARS})
+        response = self._post({"variables": []})
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(json.loads(self._get()["body"]), {"variables": []})
+
+    def test_duplicate_key_gets_400(self):
+        response = self._post({"variables": [{"key": "a", "value": "1"}, {"key": "a", "value": "2"}]})
+        self.assertEqual(response["statusCode"], 400)
+        self.assertIn("duplicate", json.loads(response["body"])["error"].lower())
+        self.assertIsNone(self.table.get(**_APP_VARIABLES_KEY))
+
+    def test_invalid_key_pattern_gets_400(self):
+        for bad_key in ("1abc", "a-b", "a b", "", "ä"):
+            with self.subTest(key=bad_key):
+                response = self._post({"variables": [{"key": bad_key, "value": "x"}]})
+                self.assertEqual(response["statusCode"], 400, bad_key)
+        self.assertIsNone(self.table.get(**_APP_VARIABLES_KEY))
+
+    def test_more_than_100_entries_gets_400(self):
+        too_many = [{"key": f"k{i}", "value": str(i)} for i in range(101)]
+        self.assertEqual(self._post({"variables": too_many})["statusCode"], 400)
+        exactly = too_many[:100]
+        self.assertEqual(self._post({"variables": exactly})["statusCode"], 200)
+
+    def test_non_string_value_gets_400(self):
+        self.assertEqual(self._post({"variables": [{"key": "a", "value": 1}]})["statusCode"], 400)
+
+    def test_missing_variables_field_gets_400(self):
+        self.assertEqual(self._post({})["statusCode"], 400)
+
+    def test_invalid_json_gets_400(self):
+        response = self._post("not-json")
+        self.assertEqual(response["statusCode"], 400)
+        self.assertEqual(json.loads(response["body"])["error"], "Invalid JSON in request body")
+
+    def test_viewer_gets_403(self):
+        self.assertEqual(self._post({"variables": _TWO_VARS}, caller="viewer_a")["statusCode"], 403)
+        self.assertIsNone(self.table.get(**_APP_VARIABLES_KEY))
+
+    def test_executor_gets_403(self):
+        self.assertEqual(self._post({"variables": _TWO_VARS}, caller="executor_a")["statusCode"], 403)
+
+    def test_foreign_team_editor_gets_403(self):
+        self.assertEqual(self._post({"variables": _TWO_VARS}, caller="editor_b")["statusCode"], 403)
+        self.assertIsNone(self.table.get(**_APP_VARIABLES_KEY))
+
+    def test_admin_can_write(self):
+        self.assertEqual(self._post({"variables": _TWO_VARS}, caller="admin")["statusCode"], 200)
+
+    def test_unknown_application_gets_404(self):
+        self.assertEqual(self._post({"variables": _TWO_VARS}, app_id="nonexistent-app")["statusCode"], 404)
+
+    def test_requires_applications_write_scope(self):
+        response = self._post({"variables": _TWO_VARS}, scopes="api/applications.read")
+        self.assertEqual(response["statusCode"], 403)
+        self.assertIn("Missing required scopes", json.loads(response["body"])["message"])

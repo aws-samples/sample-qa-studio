@@ -1,0 +1,187 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-10-29T08:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-1 Delete User Removes Team Membership",
+    "description": "Admin creates a team and a user in it, deletes the user, and the user is gone from Users and from the team's members",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "users",
+      "teams",
+      "admin",
+      "delete"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "browser",
+      "instruction": "Open /admin/teams",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/admin/teams\"}"
+    },
+    {
+      "sort": 5,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Team' button"
+    },
+    {
+      "sort": 6,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] Team {{UniqueID}}' in the Team name field"
+    },
+    {
+      "sort": 7,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button in the dialog"
+    },
+    {
+      "sort": 8,
+      "step_type": "validation",
+      "instruction": "Is a team named '[QA Test] Team {{UniqueID}}' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 9,
+      "step_type": "navigation",
+      "instruction": "Click the 'Users' item in the left navigation"
+    },
+    {
+      "sort": 10,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create User' button"
+    },
+    {
+      "sort": 11,
+      "step_type": "navigation",
+      "instruction": "Type 'qa-test-{{UniqueID}}@example.com' in the Email field"
+    },
+    {
+      "sort": 12,
+      "step_type": "navigation",
+      "instruction": "Select 'Editor' in the Role dropdown"
+    },
+    {
+      "sort": 13,
+      "step_type": "navigation",
+      "instruction": "Select '[QA Test] Team {{UniqueID}}' in the Team dropdown"
+    },
+    {
+      "sort": 14,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create User' button in the dialog"
+    },
+    {
+      "sort": 15,
+      "step_type": "validation",
+      "instruction": "Is a user with email 'qa-test-{{UniqueID}}@example.com' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 16,
+      "step_type": "navigation",
+      "instruction": "Click the 'Teams' item in the left navigation"
+    },
+    {
+      "sort": 17,
+      "step_type": "navigation",
+      "instruction": "Click the team name '[QA Test] Team {{UniqueID}}'"
+    },
+    {
+      "sort": 18,
+      "step_type": "validation",
+      "instruction": "Is 'qa-test-{{UniqueID}}@example.com' listed in the Members table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 19,
+      "step_type": "navigation",
+      "instruction": "Click the 'Users' item in the left navigation"
+    },
+    {
+      "sort": 20,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the row of user 'qa-test-{{UniqueID}}@example.com'"
+    },
+    {
+      "sort": 21,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the confirmation dialog"
+    },
+    {
+      "sort": 22,
+      "step_type": "validation",
+      "instruction": "Is a user with email 'qa-test-{{UniqueID}}@example.com' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 23,
+      "step_type": "navigation",
+      "instruction": "Click the 'Teams' item in the left navigation"
+    },
+    {
+      "sort": 24,
+      "step_type": "navigation",
+      "instruction": "Click the team name '[QA Test] Team {{UniqueID}}'"
+    },
+    {
+      "sort": 25,
+      "step_type": "validation",
+      "instruction": "Is 'qa-test-{{UniqueID}}@example.com' listed in the Members table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    },
+    {
+      "sort": 26,
+      "step_type": "navigation",
+      "instruction": "Click the 'Teams' item in the left navigation"
+    },
+    {
+      "sort": 27,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the row of team '[QA Test] Team {{UniqueID}}'"
+    },
+    {
+      "sort": 28,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the confirmation dialog"
+    },
+    {
+      "sort": 29,
+      "step_type": "validation",
+      "instruction": "Is a team named '[QA Test] Team {{UniqueID}}' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    }
+  ],
+  "variables": []
+}

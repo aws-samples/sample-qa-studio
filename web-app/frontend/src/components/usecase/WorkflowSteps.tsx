@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
-import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import Toggle from "@cloudscape-design/components/toggle";
-import StepsTable from '../StepsTable';
 import WorkflowStepsCard from '../WorkflowStepsCard';
 import StepFormModal from './StepFormModal';
 import ImportTemplateModal from '../templates/ImportTemplateModal';
-import { api } from '../../utils/api';
-import { useMultipleAsyncData } from '../common/useAsyncData';
+import { api, datasetsApi, type ApplicationDatasetSummary } from '../../utils/api';
+import { useApiData, useMultipleAsyncData } from '../common/useAsyncData';
 import { ContainerLoading } from '../common/LoadingStates';
 
 interface UsecaseStep {
@@ -30,14 +27,38 @@ interface WorkflowStepsProps {
   usecaseId: string;
 }
 
+/** The owning application's datasets, offered as repeat-step sources. */
+interface ApplicationDatasets {
+  applicationId?: string;
+  datasets: ApplicationDatasetSummary[];
+}
+
+const NO_APPLICATION_DATASETS: ApplicationDatasets = { datasets: [] };
+
 export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [useCardLayout, setUseCardLayout] = useState(true);
 
   const { data, loading, refetch } = useMultipleAsyncData({
     steps: () => api.get(`usecase/${usecaseId}/steps`)
   }, [usecaseId]);
+
+  // Loaded once per use case (not on every step refetch): the use case
+  // definition names the application, whose dataset list names dataset_id
+  // repeats in the views and fills the modal's Application dataset select.
+  const { data: applicationDatasets } = useApiData<ApplicationDatasets>(async () => {
+    const usecase = await api.get(`usecase/${usecaseId}`);
+    const applicationId: string | undefined = usecase?.application_id || undefined;
+    if (!applicationId) return NO_APPLICATION_DATASETS;
+    try {
+      const { datasets } = await datasetsApi.list(applicationId);
+      return { applicationId, datasets };
+    } catch (error) {
+      console.error(`Failed to load datasets of application ${applicationId}:`, error);
+      return { applicationId, datasets: [] };
+    }
+  }, [usecaseId]);
+  const { applicationId, datasets } = applicationDatasets ?? NO_APPLICATION_DATASETS;
 
   const steps = data.steps?.steps || [];
 
@@ -170,6 +191,8 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
         usecaseId={usecaseId}
         title="Create New Step"
         existingSteps={steps}
+        applicationId={applicationId}
+        datasets={datasets}
       />
 
       <ImportTemplateModal
@@ -187,12 +210,6 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
           variant="h1"
           actions={
             <SpaceBetween direction="horizontal" size="xs">
-              <Toggle
-                checked={useCardLayout}
-                onChange={({ detail }) => setUseCardLayout(detail.checked)}
-              >
-                Card Layout
-              </Toggle>
               <Button onClick={() => setShowImportModal(true)} iconName="download">
                 Import Template
               </Button>
@@ -203,25 +220,17 @@ export default function WorkflowSteps({ usecaseId }: WorkflowStepsProps) {
           }
         />
       
-        {useCardLayout ? (
-          <WorkflowStepsCard
-            steps={steps}
-            onReorder={handleReorderSteps}
-            onUpdateStep={handleUpdateStep}
-            onDeleteStep={handleDeleteStep}
-            onAddStep={handleCreateStep}
-            onUpdateFromTemplate={handleUpdateFromTemplate}
-            usecaseId={usecaseId}
-          />
-        ) : (
-          <StepsTable
-            steps={steps}
-            onStepsReordered={refreshSteps}
-            onUpdateStep={handleUpdateStep}
-            onDeleteStep={handleDeleteStep}
-            usecaseId={usecaseId}
-          />
-        )}
+        <WorkflowStepsCard
+          steps={steps}
+          onReorder={handleReorderSteps}
+          onUpdateStep={handleUpdateStep}
+          onDeleteStep={handleDeleteStep}
+          onAddStep={handleCreateStep}
+          onUpdateFromTemplate={handleUpdateFromTemplate}
+          usecaseId={usecaseId}
+          applicationId={applicationId}
+          datasets={datasets}
+        />
       </SpaceBetween>
     </>
   );

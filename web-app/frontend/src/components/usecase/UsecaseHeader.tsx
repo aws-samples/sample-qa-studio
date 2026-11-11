@@ -9,6 +9,7 @@ import { useApiData } from '../common/useAsyncData';
 import { HeaderLoading } from '../common/LoadingStates';
 import Breadcrumb from '../common/Breadcrumb';
 import SubscriptionButton from './SubscriptionButton';
+import { ELECTRON_CI_RUNNER_ONLY_MESSAGE, PlatformBadge, supportsCloudExecution } from '../common/platform';
 
 interface UsecaseHeaderProps {
   usecaseId: string;
@@ -56,6 +57,12 @@ export default function UsecaseHeader({ usecaseId, onDeleteUsecase }: UsecaseHea
     return <HeaderLoading variant="h1" text="Loading usecase..." />;
   }
 
+  // Electron usecases are launched on the CI runner's host; the cloud
+  // worker cannot run them, so every cloud trigger is disabled with the
+  // same explanation the API returns.
+  const cloudExecution = supportsCloudExecution(usecase?.test_platform);
+  const cloudDisabledReason = cloudExecution ? undefined : ELECTRON_CI_RUNNER_ONLY_MESSAGE;
+
   return (
     <SpaceBetween direction="vertical" size="s">
       <Breadcrumb
@@ -77,7 +84,7 @@ export default function UsecaseHeader({ usecaseId, onDeleteUsecase }: UsecaseHea
                 if (detail.id === 'export') {
                   handleExportUsecase();
                 } else if (detail.id === 'clone') {
-                  navigate(`/create/clone?sourceId=${usecaseId}`);
+                  navigate(`/create/new?path=clone&sourceId=${encodeURIComponent(usecaseId)}`);
                 } else if (detail.id === 'delete') {
                   onDeleteUsecase?.();
                 } else {
@@ -85,15 +92,6 @@ export default function UsecaseHeader({ usecaseId, onDeleteUsecase }: UsecaseHea
                 }
               }}
               items={[
-                {
-                  items: [
-                    {
-                      id: "OnDemand",
-                      text: "OnDemand (Local)"
-                    },
-                  ]
-                },
-                
                 {
                   text: "Admin",
                   items: [
@@ -114,13 +112,18 @@ export default function UsecaseHeader({ usecaseId, onDeleteUsecase }: UsecaseHea
               ]}
               mainAction={{
                 text: executing ? 'Starting Execution...' : 'Trigger Execution ',
-                onClick: () => handleExecute('OnDemandHeadless')
+                onClick: () => handleExecute('OnDemandHeadless'),
+                disabled: !cloudExecution,
+                disabledReason: cloudDisabledReason,
               }}
             />
           </SpaceBetween>
         }
       >
-        {usecase?.name || 'Unknown Usecase'}
+        <SpaceBetween direction="horizontal" size="s" alignItems="center">
+          <span>{usecase?.name || 'Unknown Usecase'}</span>
+          <PlatformBadge platform={usecase?.test_platform} />
+        </SpaceBetween>
       </Header>
     </SpaceBetween>
   );

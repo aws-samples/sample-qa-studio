@@ -1,0 +1,215 @@
+{
+  "_comment": "Shared parity fixture for expand_repeat_steps. Consumed by web-app/lambdas/endpoints/test_repeat_expansion.py and qa-studio-cli/tests/test_repeat_expansion_parity.py. Each case has steps (plain dicts), optional overrides, and either expected (exact output) or error (substring of the raised message).",
+  "cases": [
+    {
+      "name": "no repeat passes through and renumbers sort",
+      "steps": [
+        {"id": "b", "sort": 5, "step_type": "validation", "instruction": "B"},
+        {"id": "a", "sort": 2, "step_type": "navigation", "instruction": "A", "cached_steps": "[]"}
+      ],
+      "expected": [
+        {"id": "a", "sort": 1, "step_type": "navigation", "instruction": "A", "cached_steps": "[]"},
+        {"id": "b", "sort": 2, "step_type": "validation", "instruction": "B"}
+      ]
+    },
+    {
+      "name": "single repeat two rows two children row-major",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Login as each user",
+         "repeat_columns": ["email", "role"], "repeat_rows": [["a@x.test", "admin"], ["b@x.test", "viewer"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "Type {{email}}", "parent_step_id": "r1",
+         "trajectory_s3_key": "k", "trajectory_last_updated": "t", "cached_steps": "[]", "cache_last_updated": "u"},
+        {"id": "c2", "sort": 3, "step_type": "validation", "instruction": "See {{role}}", "parent_step_id": "r1"},
+        {"id": "p1", "sort": 4, "step_type": "navigation", "instruction": "After"}
+      ],
+      "expected": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "Type {{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Login as each user", "repeat_row_index": 1, "repeat_row_total": 2,
+         "row_variables": {"email": "a@x.test", "role": "admin", "RepeatIndex": "1", "RepeatTotal": "2"}},
+        {"id": "c2", "sort": 2, "step_type": "validation", "instruction": "See {{role}}",
+         "repeat_step_id": "r1", "repeat_label": "Login as each user", "repeat_row_index": 1, "repeat_row_total": 2,
+         "row_variables": {"email": "a@x.test", "role": "admin", "RepeatIndex": "1", "RepeatTotal": "2"}},
+        {"id": "c1", "sort": 3, "step_type": "navigation", "instruction": "Type {{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Login as each user", "repeat_row_index": 2, "repeat_row_total": 2,
+         "row_variables": {"email": "b@x.test", "role": "viewer", "RepeatIndex": "2", "RepeatTotal": "2"}},
+        {"id": "c2", "sort": 4, "step_type": "validation", "instruction": "See {{role}}",
+         "repeat_step_id": "r1", "repeat_label": "Login as each user", "repeat_row_index": 2, "repeat_row_total": 2,
+         "row_variables": {"email": "b@x.test", "role": "viewer", "RepeatIndex": "2", "RepeatTotal": "2"}},
+        {"id": "p1", "sort": 5, "step_type": "navigation", "instruction": "After"}
+      ]
+    },
+    {
+      "name": "children ordered by sort even when stored out of order",
+      "steps": [
+        {"id": "c2", "sort": 3, "step_type": "validation", "instruction": "second", "parent_step_id": "r1"},
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "L", "repeat_columns": ["x"], "repeat_rows": [["1"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "first", "parent_step_id": "r1"}
+      ],
+      "expected": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "first",
+         "repeat_step_id": "r1", "repeat_label": "L", "repeat_row_index": 1, "repeat_row_total": 1,
+         "row_variables": {"x": "1", "RepeatIndex": "1", "RepeatTotal": "1"}},
+        {"id": "c2", "sort": 2, "step_type": "validation", "instruction": "second",
+         "repeat_step_id": "r1", "repeat_label": "L", "repeat_row_index": 1, "repeat_row_total": 1,
+         "row_variables": {"x": "1", "RepeatIndex": "1", "RepeatTotal": "1"}}
+      ]
+    },
+    {
+      "name": "two repeats at the same level expand independently",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "First", "repeat_columns": ["a"], "repeat_rows": [["1"], ["2"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{a}}", "parent_step_id": "r1"},
+        {"id": "m", "sort": 3, "step_type": "navigation", "instruction": "middle"},
+        {"id": "r2", "sort": 4, "step_type": "repeat", "instruction": "Second", "repeat_columns": ["b"], "repeat_rows": [["9"]]},
+        {"id": "c2", "sort": 5, "step_type": "navigation", "instruction": "{{b}}", "parent_step_id": "r2"}
+      ],
+      "expected": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "{{a}}",
+         "repeat_step_id": "r1", "repeat_label": "First", "repeat_row_index": 1, "repeat_row_total": 2,
+         "row_variables": {"a": "1", "RepeatIndex": "1", "RepeatTotal": "2"}},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{a}}",
+         "repeat_step_id": "r1", "repeat_label": "First", "repeat_row_index": 2, "repeat_row_total": 2,
+         "row_variables": {"a": "2", "RepeatIndex": "2", "RepeatTotal": "2"}},
+        {"id": "m", "sort": 3, "step_type": "navigation", "instruction": "middle"},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "{{b}}",
+         "repeat_step_id": "r2", "repeat_label": "Second", "repeat_row_index": 1, "repeat_row_total": 1,
+         "row_variables": {"b": "9", "RepeatIndex": "1", "RepeatTotal": "1"}}
+      ]
+    },
+    {
+      "name": "override by label replaces stored rows",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "repeat_columns": ["email", "role"], "repeat_rows": [["stored", "x"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{email}}", "parent_step_id": "r1"}
+      ],
+      "overrides": {"Users": {"columns": ["email", "role"], "rows": [["o1", "r1"], ["o2", "r2"]]}},
+      "expected": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "{{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Users", "repeat_row_index": 1, "repeat_row_total": 2,
+         "row_variables": {"email": "o1", "role": "r1", "RepeatIndex": "1", "RepeatTotal": "2"}},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Users", "repeat_row_index": 2, "repeat_row_total": 2,
+         "row_variables": {"email": "o2", "role": "r2", "RepeatIndex": "2", "RepeatTotal": "2"}}
+      ]
+    },
+    {
+      "name": "override columns in a different order are remapped to stored order",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "repeat_columns": ["email", "role"], "repeat_rows": [["stored", "x"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{email}}", "parent_step_id": "r1"}
+      ],
+      "overrides": {"Users": {"columns": ["role", "email"], "rows": [["admin", "a@x.test"]]}},
+      "expected": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "{{email}}",
+         "repeat_step_id": "r1", "repeat_label": "Users", "repeat_row_index": 1, "repeat_row_total": 1,
+         "row_variables": {"email": "a@x.test", "role": "admin", "RepeatIndex": "1", "RepeatTotal": "1"}}
+      ]
+    },
+    {
+      "name": "override only touches the labelled repeat",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "First", "repeat_columns": ["a"], "repeat_rows": [["1"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "{{a}}", "parent_step_id": "r1"},
+        {"id": "r2", "sort": 3, "step_type": "repeat", "instruction": "Second", "repeat_columns": ["b"], "repeat_rows": [["9"]]},
+        {"id": "c2", "sort": 4, "step_type": "navigation", "instruction": "{{b}}", "parent_step_id": "r2"}
+      ],
+      "overrides": {"Second": {"columns": ["b"], "rows": [["7"], ["8"]]}},
+      "expected": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "{{a}}",
+         "repeat_step_id": "r1", "repeat_label": "First", "repeat_row_index": 1, "repeat_row_total": 1,
+         "row_variables": {"a": "1", "RepeatIndex": "1", "RepeatTotal": "1"}},
+        {"id": "c2", "sort": 2, "step_type": "navigation", "instruction": "{{b}}",
+         "repeat_step_id": "r2", "repeat_label": "Second", "repeat_row_index": 1, "repeat_row_total": 2,
+         "row_variables": {"b": "7", "RepeatIndex": "1", "RepeatTotal": "2"}},
+        {"id": "c2", "sort": 3, "step_type": "navigation", "instruction": "{{b}}",
+         "repeat_step_id": "r2", "repeat_label": "Second", "repeat_row_index": 2, "repeat_row_total": 2,
+         "row_variables": {"b": "8", "RepeatIndex": "2", "RepeatTotal": "2"}}
+      ]
+    },
+    {
+      "name": "repeat with zero rows is rejected",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Empty", "repeat_columns": ["a"], "repeat_rows": []},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "r1"}
+      ],
+      "error": "repeat \"Empty\" has no rows"
+    },
+    {
+      "name": "repeat with zero children is rejected",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Lonely", "repeat_columns": ["a"], "repeat_rows": [["1"]]}
+      ],
+      "error": "repeat \"Lonely\" has no steps inside"
+    },
+    {
+      "name": "child with missing parent is rejected",
+      "steps": [
+        {"id": "c1", "sort": 1, "step_type": "navigation", "instruction": "x", "parent_step_id": "ghost"}
+      ],
+      "error": "parent_step_id \"ghost\" does not exist"
+    },
+    {
+      "name": "child whose parent is not a repeat is rejected",
+      "steps": [
+        {"id": "n1", "sort": 1, "step_type": "navigation", "instruction": "plain"},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "n1"}
+      ],
+      "error": "parent_step_id \"n1\" is not a repeat step"
+    },
+    {
+      "name": "nested repeat is rejected",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Outer", "repeat_columns": ["a"], "repeat_rows": [["1"]]},
+        {"id": "r2", "sort": 2, "step_type": "repeat", "instruction": "Inner", "repeat_columns": ["b"], "repeat_rows": [["2"]], "parent_step_id": "r1"},
+        {"id": "c1", "sort": 3, "step_type": "navigation", "instruction": "x", "parent_step_id": "r2"}
+      ],
+      "error": "one level of nesting"
+    },
+    {
+      "name": "override for unknown label is rejected",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "repeat_columns": ["a"], "repeat_rows": [["1"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "r1"}
+      ],
+      "overrides": {"Nope": {"columns": ["a"], "rows": [["1"]]}},
+      "error": "no repeat step with label \"Nope\""
+    },
+    {
+      "name": "override with different columns is rejected",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "repeat_columns": ["email", "role"], "repeat_rows": [["a", "b"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "r1"}
+      ],
+      "overrides": {"Users": {"columns": ["email", "team"], "rows": [["a", "b"]]}},
+      "error": "columns [email, team] do not match the repeat's columns [email, role]"
+    },
+    {
+      "name": "override exceeding the row cap is rejected",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "repeat_columns": ["a"], "repeat_rows": [["1"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "r1"}
+      ],
+      "overrides": {"Users": {"columns": ["a"], "rows": [["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"], ["1"]]}},
+      "error": "at most 100 rows"
+    },
+    {
+      "name": "override with ragged rows is rejected",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Users", "repeat_columns": ["a", "b"], "repeat_rows": [["1", "2"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "r1"}
+      ],
+      "overrides": {"Users": {"columns": ["a", "b"], "rows": [["1"]]}},
+      "error": "row 1 has 1 cells but 2 cells are expected"
+    },
+    {
+      "name": "stored dataset exceeding the column cap is rejected",
+      "steps": [
+        {"id": "r1", "sort": 1, "step_type": "repeat", "instruction": "Wide",
+         "repeat_columns": ["c0","c1","c2","c3","c4","c5","c6","c7","c8","c9","c10","c11","c12","c13","c14","c15","c16","c17","c18","c19","c20"],
+         "repeat_rows": [["x","x","x","x","x","x","x","x","x","x","x","x","x","x","x","x","x","x","x","x","x"]]},
+        {"id": "c1", "sort": 2, "step_type": "navigation", "instruction": "x", "parent_step_id": "r1"}
+      ],
+      "error": "at most 20 columns"
+    }
+  ]
+}

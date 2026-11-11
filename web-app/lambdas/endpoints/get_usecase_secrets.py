@@ -1,32 +1,53 @@
 import logging
 from typing import Any, Dict, List
-from datetime import datetime
 import boto3
 from utils import get_secret_prefix, create_response, request_log_summary
 from resource_auth import require_resource_access, usecase_from_path
+from permissions_repo import get_usecase_owner
+from secret_names import application_secret_prefix, list_secrets_by_tag, usecase_secret_prefix
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+def _effective_secrets(secrets_client, prefix: str, usecase_id: str, application_id: str) -> List[Dict[str, str]]:
+    """
+    Use-case secrets followed by the owning application's secrets whose key is
+    not shadowed by a use-case key. Every row carries ``source``.
+    """
+    rows = [
+        {**secret, 'source': 'usecase'}
+        for secret in list_secrets_by_tag(
+            secrets_client, 'usecase_id', usecase_id, usecase_secret_prefix(prefix, usecase_id))
+    ]
+    if not application_id:
+        return rows
+    shadowed = {row['key'] for row in rows}
+    rows.extend(
+        {**secret, 'source': 'application'}
+        for secret in list_secrets_by_tag(
+            secrets_client, 'application_id', application_id, application_secret_prefix(prefix, application_id))
+        if secret['key'] not in shadowed
+    )
+    return rows
+
+
 @require_resource_access('view', usecase_from_path, scopes=['api/usecases.read'], allow_worker=True)
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    Lambda handler to get use case secrets from AWS Secrets Manager.
-    
-    Args:
-        event: API Gateway proxy request event
-        context: Lambda context
-        
-    Returns:
-        API Gateway proxy response with list of secrets
+    GET /usecase/{id}/secrets — the use case's effective secret keys.
+
+    Lists the use case's own secrets plus the inherited application secrets
+    (``source: "usecase" | "application"``); a use-case key shadows the
+    application key of the same name. Values are never returned.
     """
     try:
         logger.info(f"Received request: {request_log_summary(event)}")
         
         # Get use case ID from path parameters
         usecase_id = event['pathParameters']['id']  # validated by usecase_from_path
+        application_id = (get_usecase_owner(usecase_id) or {}).get('application_id') or ''
         
         # Get secret prefix from environment
         prefix = get_secret_prefix()
@@ -34,50 +55,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Initialize Secrets Manager client
         secrets_client = boto3.client('secretsmanager')
         
-        # List secrets with the usecase tag
         try:
-            response = secrets_client.list_secrets(
-                Filters=[
-                    {
-                        'Key': 'tag-key',
-                        'Values': ['usecase_id']
-                    },
-                    {
-                        'Key': 'tag-value',
-                        'Values': [usecase_id]
-                    }
-                ]
-            )
+            secrets = _effective_secrets(secrets_client, prefix, usecase_id, application_id)
         except Exception as e:
             logger.error(f"Error listing secrets: {str(e)}", exc_info=True)
             return create_response(500, {'error': 'Failed to list secrets'})
-        
-        # Filter and format secrets
-        secrets = []
-        secret_prefix = f"{prefix}/usecase/{usecase_id}/"
-        
-        for secret in response.get('SecretList', []):
-            secret_name = secret.get('Name', '')
-            
-            if secret_name.startswith(secret_prefix):
-                # Extract the key name from the secret name
-                key_name = secret_name[len(secret_prefix):]
-                
-                # Format created date
-                created_at = ''
-                if 'CreatedDate' in secret:
-                    created_date = secret['CreatedDate']
-                    if isinstance(created_date, datetime):
-                        created_at = created_date.strftime('%Y-%m-%dT%H:%M:%SZ')
-                
-                secret_info = {
-                    'key': key_name,
-                    'secret_name': secret_name,
-                    'description': secret.get('Description', ''),
-                    'created_at': created_at
-                }
-                
-                secrets.append(secret_info)
         
         return create_response(200, {'secrets': secrets})
         

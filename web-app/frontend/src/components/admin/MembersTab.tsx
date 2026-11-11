@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import Table from '@cloudscape-design/components/table';
 import Header from '@cloudscape-design/components/header';
 import SpaceBetween from '@cloudscape-design/components/space-between';
@@ -32,14 +32,10 @@ export function assignableTeamRoles(isAdmin: boolean, isTeamLead: boolean): Role
 }
 
 const MembersTab: React.FC<MembersTabProps> = ({ teamId }) => {
-  const { members, loading, fetchMembers, addMember, removeMember, changeRole } =
+  const { members, loading, addMember, removeMember, changeRole } =
     useTeamMembers(teamId);
   const { isAdmin, isTeamLead } = usePermissions();
   const [showAddModal, setShowAddModal] = useState(false);
-
-  useEffect(() => {
-    fetchMembers();
-  }, [fetchMembers]);
 
   // Determine which roles the actor can assign
   const getAllowedRoles = (): Role[] => assignableTeamRoles(isAdmin, isTeamLead);

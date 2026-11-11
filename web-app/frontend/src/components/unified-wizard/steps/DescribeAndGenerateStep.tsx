@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -11,17 +11,99 @@ import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import LoadingBar from "@cloudscape-design/chat-components/loading-bar";
 import type { StepProps } from '../types';
-import { wizardApi } from '../../../utils/api';
+import { api, wizardApi, RecordingData } from '../../../utils/api';
 import { regionOptions, findRegionOptions } from '../../../utils/browser_regions';
 import UsecasePreview from '../../UserJourneyWizard/UsecasePreview';
+import BrowserSessionPanel from '../../UserJourneyWizard/BrowserSessionPanel';
+import RecordingSummary from '../../UserJourneyWizard/RecordingSummary';
+
+interface BrowserSession {
+  sessionId: string | null;
+  usecaseId: string | null;
+  status: 'idle' | 'starting' | 'active' | 'error';
+  error: string | null;
+}
+
+const IDLE_SESSION: BrowserSession = { sessionId: null, usecaseId: null, status: 'idle', error: null };
+
+async function terminateBrowserSession(sessionId: string, usecaseId: string) {
+  try {
+    await api.post(`wizard/${sessionId}/terminate/${usecaseId}`, {});
+  } catch (err) {
+    console.error('Failed to terminate browser session:', err);
+  }
+}
 
 export default function DescribeAndGenerateStep({ state, dispatch, validationErrors }: StepProps) {
   const { userJourneyConfig, testPlatform, mobilePlatform, basicInfo } = state;
   const [error, setError] = useState<string | null>(null);
+  const [browserSession, setBrowserSession] = useState<BrowserSession>(IDLE_SESSION);
+
+  // The recording session is a live cloud browser: end it when the step
+  // unmounts (wizard navigation) or the tab closes, so it never leaks.
+  const sessionRef = useRef<{ sessionId: string; usecaseId: string } | null>(null);
+  useEffect(() => {
+    sessionRef.current = browserSession.sessionId && browserSession.usecaseId
+      ? { sessionId: browserSession.sessionId, usecaseId: browserSession.usecaseId }
+      : null;
+  }, [browserSession.sessionId, browserSession.usecaseId]);
+  useEffect(() => {
+    const end = () => {
+      if (sessionRef.current) {
+        terminateBrowserSession(sessionRef.current.sessionId, sessionRef.current.usecaseId);
+        sessionRef.current = null;
+      }
+    };
+    window.addEventListener('beforeunload', end);
+    return () => {
+      window.removeEventListener('beforeunload', end);
+      end();
+    };
+  }, []);
 
   const isMobile = testPlatform === 'mobile';
+  const isElectron = testPlatform === 'electron';
+  const isWeb = !isMobile && !isElectron;
   const isAndroid = mobilePlatform === 'ANDROID';
   const isIOS = mobilePlatform === 'IOS';
+
+  const endBrowserSession = useCallback(async () => {
+    const current = sessionRef.current;
+    sessionRef.current = null;
+    setBrowserSession(IDLE_SESSION);
+    if (current) {
+      await terminateBrowserSession(current.sessionId, current.usecaseId);
+    }
+  }, []);
+
+  const handleStartBrowserSession = async () => {
+    setBrowserSession({ ...IDLE_SESSION, status: 'starting' });
+    try {
+      const response = await api.post('wizard/start', {
+        application_id: basicInfo.applicationId,
+        name: basicInfo.name.trim() || 'User Journey Recording',
+        description: 'Browser recording session for user journey',
+        starting_url: basicInfo.startingUrl.trim(),
+        tags: [],
+        executing_region: basicInfo.executionRegion,
+      });
+      if (!response?.sessionId || !response?.usecaseId) {
+        throw new Error('Invalid response from server: missing sessionId or usecaseId');
+      }
+      setBrowserSession({ sessionId: response.sessionId, usecaseId: response.usecaseId, status: 'active', error: null });
+    } catch (err: any) {
+      console.error('Failed to start browser session:', err);
+      setBrowserSession({
+        ...IDLE_SESSION,
+        status: 'error',
+        error: err.message || 'Failed to start browser session. Please try again.',
+      });
+    }
+  };
+
+  const handleRecordingComplete = useCallback((recordingData: RecordingData) => {
+    dispatch({ type: 'UPDATE_USER_JOURNEY_CONFIG', payload: { recordingData } });
+  }, [dispatch]);
 
   const handleFieldChange = (field: string, value: string) => {
     dispatch({
@@ -38,13 +120,20 @@ export default function DescribeAndGenerateStep({ state, dispatch, validationErr
       payload: { isGenerating: true },
     });
 
+    // The recording is complete once it is in state; free the live browser.
+    await endBrowserSession();
+
     try {
       const request: any = {
         title: basicInfo.name.trim() || 'User Journey Use Case',
-        starting_url: isMobile ? 'mobile://app' : basicInfo.startingUrl.trim(),
+        // The generator needs a URL-shaped hint; app platforms have no real URL.
+        starting_url: isMobile ? 'mobile://app' : isElectron ? 'electron://app' : basicInfo.startingUrl.trim(),
         userJourney: userJourneyConfig.userJourneyText.trim(),
-        region: basicInfo.executionRegion,
+        executing_region: basicInfo.executionRegion,
       };
+      if (isWeb && userJourneyConfig.recordingData) {
+        request.recording_data = userJourneyConfig.recordingData;
+      }
 
       const response = await wizardApi.generateUsecase(request);
 
@@ -59,6 +148,13 @@ export default function DescribeAndGenerateStep({ state, dispatch, validationErr
             platform: mobilePlatform || '',
             ...(isAndroid ? { app_package: userJourneyConfig.appPackage, app_activity: userJourneyConfig.appActivity } : {}),
             ...(isIOS ? { bundle_id: userJourneyConfig.bundleId } : {}),
+            starting_url: '',
+          };
+        } else if (isElectron) {
+          usecaseData.usecase = {
+            ...usecaseData.usecase,
+            test_platform: 'electron',
+            ...(userJourneyConfig.bundleId.trim() ? { bundle_id: userJourneyConfig.bundleId.trim() } : {}),
             starting_url: '',
           };
         }
@@ -184,6 +280,21 @@ export default function DescribeAndGenerateStep({ state, dispatch, validationErr
           </SpaceBetween>
         )}
 
+        {isElectron && (
+          <FormField
+            label="Bundle ID"
+            description="Optional. The desktop app's CFBundleIdentifier, verified by the runner against the launched .app."
+            errorText={validationErrors.bundleId}
+          >
+            <Input
+              value={userJourneyConfig.bundleId}
+              onChange={({ detail }) => handleFieldChange('bundleId', detail.value)}
+              placeholder="com.example.desktop"
+              disabled={userJourneyConfig.isGenerating}
+            />
+          </FormField>
+        )}
+
         {isMobile && isIOS && (
           <FormField
             label="Bundle ID"
@@ -201,7 +312,7 @@ export default function DescribeAndGenerateStep({ state, dispatch, validationErr
 
         {/* User Journey description */}
         <FormField
-          label="User Journey"
+          label={`User Journey${userJourneyConfig.recordingData ? ' (optional — recording provided)' : ''}`}
           description="Describe the complete user journey step by step. Be specific about UI elements, actions, and expected outcomes."
           errorText={validationErrors.userJourneyText}
         >
@@ -214,6 +325,49 @@ export default function DescribeAndGenerateStep({ state, dispatch, validationErr
           />
         </FormField>
 
+        {/* Optional browser recording (web): extra context for the generator */}
+        {isWeb && browserSession.status === 'error' && browserSession.error && (
+          <Alert
+            type="error"
+            dismissible
+            onDismiss={() => setBrowserSession(IDLE_SESSION)}
+            action={<Button onClick={handleStartBrowserSession}>Retry</Button>}
+          >
+            {browserSession.error}
+          </Alert>
+        )}
+        {isWeb && browserSession.status === 'active' && browserSession.sessionId && browserSession.usecaseId ? (
+          <BrowserSessionPanel
+            sessionId={browserSession.sessionId}
+            usecaseId={browserSession.usecaseId}
+            onSessionEnd={endBrowserSession}
+            onRecordingComplete={handleRecordingComplete}
+          />
+        ) : isWeb && (
+          <Container
+            header={
+              <Header
+                variant="h3"
+                description="Optionally record your interactions in a live browser to help the AI generate more accurate test steps."
+              >
+                Enhance with browser recording
+              </Header>
+            }
+          >
+            <Button
+              onClick={handleStartBrowserSession}
+              loading={browserSession.status === 'starting'}
+              disabled={userJourneyConfig.isGenerating || !basicInfo.startingUrl.trim() || browserSession.status === 'starting'}
+              iconName="external"
+            >
+              Start Browser Session
+            </Button>
+          </Container>
+        )}
+        {userJourneyConfig.recordingData && (
+          <RecordingSummary recordingData={userJourneyConfig.recordingData} />
+        )}
+
         {/* Generate button */}
         <Button
           variant="primary"
@@ -221,8 +375,8 @@ export default function DescribeAndGenerateStep({ state, dispatch, validationErr
           loading={userJourneyConfig.isGenerating}
           disabled={
             userJourneyConfig.isGenerating ||
-            !userJourneyConfig.userJourneyText.trim() ||
-            (!isMobile && !basicInfo.startingUrl.trim())
+            (!userJourneyConfig.userJourneyText.trim() && !userJourneyConfig.recordingData) ||
+            (isWeb && !basicInfo.startingUrl.trim())
           }
         >
           Generate

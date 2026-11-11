@@ -14,8 +14,8 @@ vi.mock('../../utils/api', () => ({
     },
 }));
 
-// Mock DeleteUsecaseModal
-vi.mock('../DeleteUsecaseModal', () => ({
+// Mock DeleteConfirmModal
+vi.mock('../common/DeleteConfirmModal', () => ({
     default: function MockDeleteModal() {
         return null;
     },

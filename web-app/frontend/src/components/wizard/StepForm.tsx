@@ -6,6 +6,7 @@ import Autosuggest from "@cloudscape-design/components/autosuggest";
 import Textarea from "@cloudscape-design/components/textarea";
 import Input from "@cloudscape-design/components/input";
 import { api } from '../../utils/api';
+import { secretStepOption, type SecretListEntry } from '../SecretsManager';
 
 interface StepFormProps {
   usecaseId: string;
@@ -104,7 +105,7 @@ export default function StepForm({
   onAssertionVariableChange,
   onBooleanInputModeChange
 }: StepFormProps) {
-  const [availableSecrets, setAvailableSecrets] = useState<any[]>([]);
+  const [availableSecrets, setAvailableSecrets] = useState<SecretListEntry[]>([]);
   const [stepTypeInputValue, setStepTypeInputValue] = useState(
     STEP_TYPE_OPTIONS.find(opt => opt.value === stepType)?.label || ''
   );
@@ -123,10 +124,12 @@ export default function StepForm({
     }
   }, [stepType, usecaseId]);
 
+  // Effective secrets of the use case: own ones plus inherited application
+  // secrets (source "application"); the dropdown labels the latter.
   const loadSecrets = async () => {
     try {
       const response = await api.get(`usecase/${usecaseId}/secrets`);
-      setAvailableSecrets(response.secrets || []);
+      setAvailableSecrets((response.secrets || []) as SecretListEntry[]);
     } catch (error) {
       console.error('Failed to load secrets:', error);
       setAvailableSecrets([]);
@@ -191,16 +194,12 @@ export default function StepForm({
           description="Choose which secret to use for this step"
         >
           <Select
-            selectedOption={availableSecrets.find(secret => secret.key === selectedSecret) ?
-              { label: availableSecrets.find(secret => secret.key === selectedSecret)?.key || '', value: selectedSecret } :
-              null
-            }
+            selectedOption={(() => {
+              const selected = availableSecrets.find(secret => secret.key === selectedSecret);
+              return selected ? secretStepOption(selected) : null;
+            })()}
             onChange={({ detail }) => onSelectedSecretChange(detail.selectedOption?.value || '')}
-            options={availableSecrets.map(secret => ({
-              label: secret.key,
-              value: secret.key,
-              description: secret.description
-            }))}
+            options={availableSecrets.map(secretStepOption)}
             placeholder="Select a secret"
             empty="No secrets available. Create secrets first."
             disabled={disabled}

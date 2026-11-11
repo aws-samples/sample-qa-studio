@@ -74,30 +74,6 @@ class ArtifactCapture:
             logger.warning("Failed to capture screenshot for step %d: %s", step_number, e)
             return None
 
-    def capture_step_trace(
-        self,
-        step_id: str,
-        step_number: int,
-        trace_data: Optional[str] = None,
-    ) -> Optional[Path]:
-        """Capture trace data for step."""
-        try:
-            trace_path = self.temp_dir / f"step_{step_number}_trace.json"
-            if trace_data:
-                trace_path.write_text(trace_data)
-            else:
-                return None
-
-            if step_id not in self.step_artifacts:
-                self.step_artifacts[step_id] = {}
-            self.step_artifacts[step_id]["trace"] = trace_path
-
-            logger.debug("Captured trace for step %d", step_number)
-            return trace_path
-        except Exception as e:
-            logger.warning("Failed to capture trace for step %d: %s", step_number, e)
-            return None
-
     def get_execution_artifacts(self) -> Dict[str, Path]:
         """Get paths to execution-level artifacts."""
         artifacts = {}

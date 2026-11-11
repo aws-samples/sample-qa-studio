@@ -32,7 +32,6 @@ interface NovaActQAStudioApiStackCreateProps extends NovaActQAStudioBaseStackCre
   // Lambdas from other stacks (auth, worker)
   addUserLambda: Function
   listUsersLambda: Function
-  removeUserLambda: Function
   getUserLambda: Function
   updateUserGroupsLambda: Function
   createScheduleLambda: Function
@@ -48,7 +47,6 @@ interface NovaActQAStudioApiStackCreateProps extends NovaActQAStudioBaseStackCre
   addWizardStepLambda: Function
   acceptWizardStepLambda: Function
   rejectWizardStepLambda: Function
-  restartWizardLambda: Function
   terminateWizardLambda: Function
   sendRecordingCommandLambda: Function
   getRecordingDataLambda: Function
@@ -244,6 +242,12 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const templateUpdates = this.addResource(usecaseId, 'template-updates')
     this.addMethod(templateUpdates, HttpMethod.GET, l.checkTemplateUpdatesLambda)
 
+    // /usecase/{id}/costs - Cost summary + 30-day ledger (application router; the
+    // api stack is near the 500-resource ceiling: this route costs 4 — Resource,
+    // Method, 2 Lambda::Permission. See .kiro/docs/cost-allocation/design.md → API).
+    const usecaseCosts = this.addResource(usecaseId, 'costs')
+    this.addMethod(usecaseCosts, HttpMethod.GET, l.applicationRouterLambda)
+
     // /usecase/{id}/executions - List executions
     const executions = this.addResource(usecaseId, 'executions')
     this.addMethod(executions, HttpMethod.GET, l.listExecutionsLambda)
@@ -384,9 +388,6 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const wizardRejectStepUsecase = this.addResource(wizardRejectStep, '{usecaseId}')
     this.addMethod(wizardRejectStepUsecase, HttpMethod.POST, props.rejectWizardStepLambda)
 
-    const wizardRestart = this.addResource(wizardSession, 'restart')
-    this.addMethod(wizardRestart, HttpMethod.POST, props.restartWizardLambda)
-
     const wizardTerminate = this.addResource(wizardSession, 'terminate')
     const wizardTerminateUsecase = this.addResource(wizardTerminate, '{usecaseId}')
     this.addMethod(wizardTerminateUsecase, HttpMethod.POST, props.terminateWizardLambda)
@@ -399,15 +400,18 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const wizardRecording = this.addResource(wizardSession, 'recording')
     this.addMethod(wizardRecording, HttpMethod.GET, props.getRecordingDataLambda)
 
-    // /users - User management (router for GET/POST, legacy Lambdas for per-user ops)
+    // /users - User management (router for GET/POST/PATCH/DELETE, legacy Lambdas for GET and groups)
     const users = this.addResource(this.api.root, 'users')
     this.addMethod(users, HttpMethod.GET, l.applicationRouterLambda)
     this.addMethod(users, HttpMethod.POST, l.applicationRouterLambda)
 
-    // /users/{username} - Per-user operations (legacy + new PATCH for role updates)
+    // /users/{username} - Per-user operations. PATCH and DELETE go through the
+    // router (handlers.update_user / handlers.delete_user; the router matches
+    // the path as /users/{userId}). DELETE also removes every team membership
+    // and writes an audit entry.
     const user = this.addResource(users, '{username}')
     this.addMethod(user, HttpMethod.GET, props.getUserLambda)
-    this.addMethod(user, HttpMethod.DELETE, props.removeUserLambda)
+    this.addMethod(user, HttpMethod.DELETE, l.applicationRouterLambda)
     this.addMethod(user, HttpMethod.PATCH, l.applicationRouterLambda)
 
     const userGroups = this.addResource(user, 'groups')
@@ -434,10 +438,15 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     this.addMethod(templates, HttpMethod.GET, l.listTemplatesLambda)
     this.addMethod(templates, HttpMethod.POST, l.createTemplateLambda)
 
-    // /templates/{id} - Get, update, delete template
+    // /templates/import - Create a template from a template file (CLI `templates create`)
+    const importTemplateDefinition = this.addResource(templates, 'import')
+    this.addMethod(importTemplateDefinition, HttpMethod.POST, l.importTemplateDefinitionLambda)
+
+    // /templates/{id} - Get, update (metadata), replace (whole definition), delete template
     const template = this.addResource(templates, '{id}')
     this.addMethod(template, HttpMethod.GET, l.getTemplateLambda)
     this.addMethod(template, HttpMethod.PATCH, l.updateTemplateLambda)
+    this.addMethod(template, HttpMethod.PUT, l.replaceTemplateDefinitionLambda)
     this.addMethod(template, HttpMethod.DELETE, l.deleteTemplateLambda)
 
     // /templates/{id}/steps - Template steps
@@ -458,6 +467,10 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     const templateVariables = this.addResource(template, 'variables')
     this.addMethod(templateVariables, HttpMethod.GET, l.getTemplateVariablesLambda)
     this.addMethod(templateVariables, HttpMethod.POST, l.createTemplateVariablesLambda)
+
+    // /templates/{id}/usages - Use cases with steps linked to the template
+    const templateUsages = this.addResource(template, 'usages')
+    this.addMethod(templateUsages, HttpMethod.GET, l.getTemplateUsagesLambda)
 
     // /templates/{id}/apply - Apply template to create usecase
     const applyTemplate = this.addResource(template, 'apply')
@@ -537,12 +550,17 @@ export class NovaActQAStudioApiStack extends NovaActQAStudioBaseStack {
     this.addMethod(applications, HttpMethod.POST, l.applicationRouterLambda)
 
     // /applications/{proxy+} - All nested application paths handled by router
+    // (incl. GET /applications/{id}/costs — no explicit resource, see ROUTE_MAP)
     addRouterProxy(applications, 'applications')
 
     // /dashboard/overview - Dashboard overview
     const dashboard = this.addResource(this.api.root, 'dashboard')
     const dashboardOverview = this.addResource(dashboard, 'overview')
     this.addMethod(dashboardOverview, HttpMethod.GET, l.applicationRouterLambda)
+
+    // /dashboard/costs - Per-application cost summaries (+ overall for admins)
+    const dashboardCosts = this.addResource(dashboard, 'costs')
+    this.addMethod(dashboardCosts, HttpMethod.GET, l.applicationRouterLambda)
 
     // Associate a UsagePlan with the API stage
     new UsagePlan(this, 'ApiUsagePlan', {

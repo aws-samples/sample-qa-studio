@@ -25,6 +25,34 @@ class ScanResult:
     usecase_name: str = ""
     step_count: int = 0
     secrets_count: int = 0
+    #: Filled by ``template_resolver.resolve_templates``: ``[{id, name}]`` of
+    #: the templates referenced by placeholder steps, and the secret keys
+    #: those templates bring along (not part of ``payload.secrets``).
+    templates: list[dict] = field(default_factory=list)
+    template_secret_keys: list[str] = field(default_factory=list)
+
+    def secret_keys(self) -> list[str]:
+        """Distinct secret keys this file needs: its own ``secrets`` first, then template secrets."""
+        keys: list[str] = []
+        if self.payload is not None:
+            for secret in self.payload.secrets:
+                if secret.key not in keys:
+                    keys.append(secret.key)
+        for key in self.template_secret_keys:
+            if key not in keys:
+                keys.append(key)
+        return keys
+
+    def secret_description(self, key: str) -> str:
+        """Description for prompting: the file's own, else the template that needs it."""
+        if self.payload is not None:
+            for secret in self.payload.secrets:
+                if secret.key == key and secret.description:
+                    return secret.description
+        if key in self.template_secret_keys:
+            names = ", ".join(t["name"] for t in self.templates)
+            return f"template: {names}" if names else "template secret"
+        return ""
 
 
 def discover_files(path: Path) -> list[Path]:
@@ -79,16 +107,25 @@ def validate_file(file_path: Path) -> ScanResult:
             secrets_count=len(payload.secrets),
         )
     except ValidationError as e:
-        errors = []
-        for err in e.errors():
-            loc = ".".join(str(part) for part in err["loc"])
-            errors.append(f"{loc}: {err['msg']}")
         return ScanResult(
             file_path=file_path,
             file_name=file_name,
             is_valid=False,
-            errors=errors,
+            errors=format_validation_errors(e),
         )
+
+
+def format_validation_errors(error: ValidationError) -> list[str]:
+    """``["<dotted.location>: <message>", ...]`` — one line per pydantic error.
+
+    Shared by ``tests import`` (via ``validate_file``) and ``templates create``
+    so both render schema problems the same way.
+    """
+    errors = []
+    for err in error.errors():
+        loc = ".".join(str(part) for part in err["loc"])
+        errors.append(f"{loc}: {err['msg']}")
+    return errors
 
 
 def scan_all(path: Path) -> list[ScanResult]:

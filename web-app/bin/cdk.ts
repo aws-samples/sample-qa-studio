@@ -15,7 +15,10 @@ import { applyCdkNagSuppressions } from '../lib/cdk-nag-suppressions';
 
 // Load and validate configuration with sane defaults
 const config = loadConfig();
-const { adminEmail, baseName, apiEndpoint, apiDeploymentStage, bedrockModelId, lambdaConcurrency, networkAssertionBodyMaxBytes } = config;
+const {
+  adminEmail, baseName, apiEndpoint, apiDeploymentStage, bedrockModelId, lambdaConcurrency, networkAssertionBodyMaxBytes,
+  maxExecutionDurationMinutes, maxWizardSessionMinutes,
+} = config;
 
 // Read version from package.json
 const packageJsonPath = path.join(__dirname, '..', 'package.json');
@@ -24,7 +27,9 @@ const version = packageJson.version;
 
 const app = new App();
 
-// Get stack environment (explicit env needed when using existing VPC)
+// Explicit account/region on every stack when vpcId is set (Vpc.fromLookup
+// needs it; one env keeps cross-stack references valid). Otherwise undefined:
+// environment-agnostic synthesis.
 const stackEnv = getStackEnv(config);
 
 if (!adminEmail) {
@@ -33,10 +38,10 @@ if (!adminEmail) {
 
 const storageStack = new NovaActQAStudioStorageStack(app, 'storage', {
   stackName: `${baseName}-storage`,
+  env: stackEnv,
   baseName,
   lambdaConcurrency,
   networkAssertionBodyMaxBytes,
-  env: stackEnv,
 })
 
 const oauthCallbackUrls = [
@@ -45,21 +50,21 @@ const oauthCallbackUrls = [
 
 const authStack = new NovaActQAStudioAuthStack(app, 'auth', {
   stackName: `${baseName}-auth`,
+  env: stackEnv,
   baseName,
   adminEmail,
   lambdaConcurrency,
   networkAssertionBodyMaxBytes,
   ...(oauthCallbackUrls.length > 0 && { callbackUrls: oauthCallbackUrls }),
-  env: stackEnv,
 })
 
 // Worker stack - includes worker infrastructure and notifications
 const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   stackName: `${baseName}-worker`,
+  env: stackEnv,
   baseName,
   lambdaConcurrency,
   networkAssertionBodyMaxBytes,
-  env: stackEnv,
   table: storageStack.table,
   tableReadPolicy: storageStack.tableReadPolicy,
   tableWritePolicy: storageStack.tableWritePolicy,
@@ -67,11 +72,14 @@ const workerStack = new NovaActQAStudioWorkerStack(app, 'worker', {
   workerCredentialsSecret: authStack.workerCredentialsSecret,
   apiDeploymentStage,
   version,
+  maxExecutionDurationMinutes,
+  maxWizardSessionMinutes,
 })
 
 // Lambda stack - contains all Lambda function definitions
 const lambdaStack = new NovaActQAStudioLambdaStack(app, 'lambdas', {
   stackName: `${baseName}-lambdas`,
+  env: stackEnv,
   baseName,
   lambdaConcurrency,
   networkAssertionBodyMaxBytes,
@@ -85,16 +93,16 @@ const lambdaStack = new NovaActQAStudioLambdaStack(app, 'lambdas', {
   bedrockModelId,
   notificationTopicArn: workerStack.notificationTopicArn,
   executeUsecaseLambda: workerStack.executeUsecaseLambda,
-  ecsClusterArn: workerStack.cluster.clusterArn,
   recordingQueueUrl: workerStack.recordingQueueUrl,
   recordingQueueArn: workerStack.recordingQueueArn,
   wizardEventBusName: workerStack.wizardEventBus.eventBusName,
-  env: stackEnv,
+  microvmImageArn: workerStack.microvmImageArn,
 })
 
 // API stack - includes API Gateway, Authorizer, and all routes
 const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   stackName: `${baseName}-api`,
+  env: stackEnv,
   baseName,
   lambdaConcurrency,
   networkAssertionBodyMaxBytes,
@@ -104,7 +112,6 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   apiDeploymentStage,
   lambdaStack: lambdaStack,
   addUserLambda: lambdaStack.addUserLambda,
-  removeUserLambda: lambdaStack.removeUserLambda,
   listUsersLambda: lambdaStack.listUsersLambda,
   getUserLambda: lambdaStack.getUserLambda,
   updateUserGroupsLambda: lambdaStack.updateUserGroupsLambda,
@@ -121,22 +128,20 @@ const apiStack = new NovaActQAStudioApiStack(app, 'api', {
   addWizardStepLambda: workerStack.addWizardStepLambda,
   acceptWizardStepLambda: lambdaStack.acceptWizardStepLambda,
   rejectWizardStepLambda: lambdaStack.rejectWizardStepLambda,
-  restartWizardLambda: workerStack.restartWizardLambda,
   terminateWizardLambda: workerStack.terminateWizardLambda,
   sendRecordingCommandLambda: lambdaStack.sendRecordingCommandLambda,
   getRecordingDataLambda: lambdaStack.getRecordingDataLambda,
-  env: stackEnv,
 })
 
 // Frontend stack must be created after API is set up
 const frontendStack = new NovaActQAStudioFrontendStack(app, 'frontend', {
   stackName: `${baseName}-frontend`,
+  env: stackEnv,
   apiEndpoint: apiEndpoint,
   baseName,
   lambdaConcurrency,
   networkAssertionBodyMaxBytes,
   apiId: apiStack.api.restApiId,
-  env: stackEnv,
 })
 
 // Apply cfn_nag suppressions for CDK-managed resources across all stacks

@@ -52,6 +52,15 @@ def validate_step(step: dict) -> tuple[bool, list[str]]:
     step-type validation.
     """
     step_type = step.get("step_type", "")
+    if step_type == "repeat":
+        return validate_repeat_step(step)
+    errors = list(_validate_typed_step(step, step_type)[1])
+    errors.extend(repeat_only_field_errors(step))
+    return len(errors) == 0, errors
+
+
+def _validate_typed_step(step: dict, step_type: str) -> tuple[bool, list[str]]:
+    """The per-type validator of a non-repeat step (pass-through for types without one)."""
     if step_type == "browser":
         return validate_browser_step(step)
     if step_type == "transform":
@@ -392,6 +401,151 @@ def _reject_external_refs(node, context: str, path: str = "") -> None:
     elif isinstance(node, list):
         for i, item in enumerate(node):
             _reject_external_refs(item, context, f"{path}[{i}]")
+
+
+# ---------------------------------------------------------------------------
+# Step-level validation — repeat
+# ---------------------------------------------------------------------------
+#
+# Mirrors ``web-app/lambdas/endpoints/repeat_validation.py`` (R-PARITY).  The
+# server caps are constants there as well (not env-configured), so the CLI
+# hardcodes the same 100 rows / 20 columns / 200 KB.  Error strings are
+# compared verbatim in ``tests/test_repeat_validation_cli.py``; change both
+# sides together.  Sibling-dependent rules (label uniqueness, parent lookup)
+# need the usecase's other steps and stay server-side.
+
+MAX_REPEAT_COLUMNS = 20
+MAX_REPEAT_ROWS = 100
+MAX_REPEAT_DATASET_BYTES = 200 * 1024
+RESERVED_REPEAT_COLUMN_NAMES = frozenset({
+    "UniqueID", "Time", "ExecutionID", "CreatedAt", "RepeatIndex", "RepeatTotal",
+})
+_REPEAT_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+#: Dataset-source rule — verbatim copies of ``repeat_validation.REPEAT_*_ERROR``.
+REPEAT_NO_SOURCE_ERROR = "repeat step must have either dataset_id or repeat_columns/repeat_rows"
+REPEAT_BOTH_SOURCES_ERROR = "repeat step cannot have both dataset_id and inline rows"
+
+
+def _validate_repeat_columns(columns) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(columns, list) or not all(isinstance(c, str) for c in columns):
+        return ["repeat_columns must be a list of strings"]
+    if len(columns) < 1:
+        errors.append("repeat_columns must contain at least 1 column")
+    if len(columns) > MAX_REPEAT_COLUMNS:
+        errors.append(f"repeat_columns must contain at most {MAX_REPEAT_COLUMNS} columns")
+    for column in columns:
+        if not _REPEAT_IDENTIFIER_RE.match(column):
+            errors.append(
+                f'repeat column "{column}" is not a valid identifier '
+                f"(letters, digits and underscores, not starting with a digit)"
+            )
+        elif column in RESERVED_REPEAT_COLUMN_NAMES:
+            errors.append(f'repeat column "{column}" is a reserved name')
+    if len(set(columns)) != len(columns):
+        errors.append("repeat_columns must be unique")
+    return errors
+
+
+def _validate_repeat_rows(rows, column_count: int) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(rows, list):
+        return ["repeat_rows must be a list of rows"]
+    if len(rows) < 1:
+        errors.append("repeat_rows must contain at least 1 row")
+    if len(rows) > MAX_REPEAT_ROWS:
+        errors.append(f"repeat_rows must contain at most {MAX_REPEAT_ROWS} rows")
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, list):
+            errors.append(f"repeat_rows row {index} must be a list of cells")
+            continue
+        if len(row) != column_count:
+            errors.append(
+                f"repeat_rows row {index} has {len(row)} cells but {column_count} cells are expected"
+            )
+        if not all(isinstance(cell, str) for cell in row):
+            errors.append(f"repeat_rows row {index} must contain only string cells")
+    return errors
+
+
+def _validate_repeat_dataset_size(columns, rows) -> list[str]:
+    try:
+        size = len(json.dumps(columns)) + len(json.dumps(rows))
+    except (TypeError, ValueError):
+        return ["repeat dataset is not JSON serializable"]
+    if size > MAX_REPEAT_DATASET_BYTES:
+        return [
+            f"repeat dataset is too large ({size} bytes; the limit is "
+            f"{MAX_REPEAT_DATASET_BYTES} bytes / 200 KB)"
+        ]
+    return []
+
+
+def validate_repeat_dataset(columns, rows) -> list[str]:
+    """Validate a ``{columns, rows}`` pair (stored dataset or ``--dataset-file``)."""
+    errors = _validate_repeat_columns(columns)
+    if isinstance(columns, list):
+        errors.extend(_validate_repeat_rows(rows, len(columns)))
+    elif rows is not None and not isinstance(rows, list):
+        errors.append("repeat_rows must be a list of rows")
+    if not errors:
+        errors.extend(_validate_repeat_dataset_size(columns, rows))
+    return errors
+
+
+def validate_repeat_step(step: dict) -> tuple[bool, list[str]]:
+    """Validate a ``repeat`` step: no nesting, then exactly one dataset source.
+
+    Mirrors ``repeat_validation.validate_repeat_fields`` for a repeat without
+    siblings (same checks, same order, same strings).
+    """
+    errors: list[str] = []
+    if step.get("parent_step_id"):
+        errors.append("a repeat step may not have a parent_step_id (nested repeats are not supported)")
+    errors.extend(validate_repeat_source(step))
+    return len(errors) == 0, errors
+
+
+def has_dataset_reference(step: dict) -> bool:
+    """True when ``step`` names an application dataset (non-empty ``dataset_id``)."""
+    dataset_id = step.get("dataset_id")
+    return dataset_id is not None and dataset_id != ""
+
+
+def validate_repeat_source(step: dict) -> list[str]:
+    """``dataset_id`` (an application dataset) XOR inline ``repeat_columns`` / ``repeat_rows``.
+
+    Whether the referenced dataset exists is checked by the server (and by the
+    local-only runner when it resolves the reference), not here.
+    """
+    errors: list[str] = []
+    columns = step.get("repeat_columns")
+    rows = step.get("repeat_rows")
+    has_inline = columns is not None or rows is not None
+    if has_dataset_reference(step):
+        if not isinstance(step.get("dataset_id"), str):
+            errors.append("dataset_id must be a string")
+        if has_inline:
+            errors.append(REPEAT_BOTH_SOURCES_ERROR)
+        return errors
+    if not has_inline:
+        return [REPEAT_NO_SOURCE_ERROR]
+    if columns is None:
+        errors.append("repeat_columns is required for repeat steps")
+    if rows is None:
+        errors.append("repeat_rows is required for repeat steps")
+    if columns is not None and rows is not None:
+        errors.extend(validate_repeat_dataset(columns, rows))
+    return errors
+
+
+def repeat_only_field_errors(step: dict) -> list[str]:
+    """Errors for repeat-only fields on a non-repeat step (``dataset_id`` counts only when non-empty)."""
+    present = [f for f in ("repeat_columns", "repeat_rows") if step.get(f) is not None]
+    if has_dataset_reference(step):
+        present.append("dataset_id")
+    return [f"{field} is only allowed on repeat steps" for field in present]
 
 
 def validate_journey_description(journey: str) -> tuple[bool, list[str]]:

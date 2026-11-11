@@ -4,6 +4,7 @@ from typing import Any, Dict
 import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
+from template_usage import remove_usage
 from utils import create_response, no_content_response, get_table_name
 from resource_auth import require_resource_access, usecase_from_path
 
@@ -57,14 +58,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         steps_response = table.query(
             KeyConditionExpression=Key('pk').eq(f'USECASE#{usecase_id}') & Key('sk').begins_with('STEP#')
         )
-        
-        for item in steps_response.get('Items', []):
+        steps = steps_response.get('Items', [])
+
+        for item in steps:
             table.delete_item(
                 Key={
                     'pk': item['pk'],
                     'sk': item['sk']
                 }
             )
+
+        # Template usage records point at this use case; drop one per linked template.
+        for template_id in sorted({s['template_id'] for s in steps if s.get('template_id')}):
+            remove_usage(table, template_id, usecase_id)
         
         # Query and delete all executions
         executions_response = table.query(

@@ -9,7 +9,6 @@ import base64
 import ipaddress
 import json
 import logging
-import math
 import os
 import re
 import ssl
@@ -90,15 +89,6 @@ def _strip_step_sk(sk: Optional[str]) -> Optional[str]:
     return sk
 
 
-def _safe_eval_math(expression: str, variables: dict | None = None) -> float | int:
-    """Safe AST-based arithmetic evaluator.
-
-    Thin wrapper over ``qa_studio_cli.runner.transform.math_evaluator.safe_eval_math``
-    for backward compatibility with existing tests that import from this module.
-    """
-    from qa_studio_cli.runner.transform.math_evaluator import safe_eval_math
-    return safe_eval_math(expression, variables)
-
 CLICK_PROMPT = """
 The `agentClick` statement supports a `clickType` argument to specify the type of click to perform.
 
@@ -151,7 +141,7 @@ class StepExecutor:
             case "url":
                 return self._execute_url(step)
             case "assertion":
-                return self._execute_assertion(step, runtime_variables)
+                return self._execute_assertion(step, runtime_variables, variables)
             case "secret":
                 return self._execute_secret(step)
             case "download":
@@ -192,10 +182,15 @@ class StepExecutor:
 
         step_id = step.get("step_id") or _strip_step_sk(step.get("sk")) or ""
         trajectory_s3_key = step.get("trajectory_s3_key")
+        # Expanded repeat steps share ``step_id`` across rows and differ
+        # after {{column}} substitution, so a recording from one row would
+        # be replayed against another: no replay, no save inside a repeat.
+        inside_repeat = step.get("repeat_row_index") is not None
         cache_active = (
             self.enable_cache
             and self.trajectory_manager is not None
             and bool(trajectory_s3_key)
+            and not inside_repeat
         )
         replay_attempted = False
 
@@ -227,6 +222,7 @@ class StepExecutor:
                 self.trajectory_manager is not None
                 and self.trajectory_manager.is_recording_enabled
                 and step_id
+                and not inside_repeat
                 and (replay_attempted or not trajectory_s3_key)
             ):
                 try:
@@ -357,17 +353,27 @@ class StepExecutor:
         except Exception as e:
             return StepResult(success=False, logs=str(e))
 
-    def _execute_assertion(self, step: dict, runtime_variables: dict) -> StepResult:
+    def _execute_assertion(
+        self, step: dict, runtime_variables: dict, variables: Optional[dict] = None,
+    ) -> StepResult:
+        """Compare a variable against ``validation_value``.
+
+        ``assertion_variable`` resolves against the merged set
+        ``{**variables, **runtime_variables}`` — runtime captures win, so a
+        captured value shadows a same-named usecase variable or dataset
+        column.  ``VARIABLE_NOT_FOUND`` only when the name is in neither.
+        """
         var_name = step.get("assertion_variable", "")
         validation_type = step.get("validation_type", "string")
         operator = step.get("validation_operator", "exact")
         expected_raw = step.get("validation_value", "")
-        if var_name not in runtime_variables:
+        resolvable = {**(variables or {}), **runtime_variables}
+        if var_name not in resolvable:
             return StepResult(
-                success=False, logs=f"Runtime variable '{var_name}' not found",
+                success=False, logs=f"Variable '{var_name}' not found",
                 actual_value="VARIABLE_NOT_FOUND",
             )
-        actual_value = runtime_variables[var_name]
+        actual_value = resolvable[var_name]
         if validation_type == "date":
             success, logs = self._compare_dates(str(actual_value), expected_raw, operator)
             return StepResult(success=success, logs=logs, actual_value=str(actual_value))

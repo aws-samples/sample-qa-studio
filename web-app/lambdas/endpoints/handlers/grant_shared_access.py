@@ -5,7 +5,7 @@ from typing import Any, Dict
 from utils import create_response, extract_user_identity, validate_path_id
 import permissions_repo
 from resource_auth import require_team_role
-from perm_audit import log_permission_change
+from perm_audit import actor_from_identity, log_permission_change
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -93,7 +93,7 @@ def handle(event: Dict[str, Any]) -> Dict[str, Any]:
         return create_response(400, {'error': str(e)})
 
     # Audit log
-    actor = {'sub': user_identity.get('sub', ''), 'email': user_identity.get('email', '')}
+    actor = actor_from_identity(user_identity)
     log_permission_change(
         actor=actor,
         action='grant_access',

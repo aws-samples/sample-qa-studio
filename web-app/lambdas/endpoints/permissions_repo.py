@@ -32,6 +32,44 @@ def _get_table():
     return dynamodb.Table(get_table_name())
 
 
+def _query_all(key_condition, index_name: Optional[str] = None) -> list:
+    """Every item of a ``Query`` (follows ``LastEvaluatedKey``; never a Scan)."""
+    table = _get_table()
+    kwargs = {'KeyConditionExpression': key_condition}
+    if index_name:
+        kwargs['IndexName'] = index_name
+    items: list = []
+    while True:
+        response = table.query(**kwargs)
+        items.extend(response.get('Items', []))
+        last_key = response.get('LastEvaluatedKey')
+        # A real LastEvaluatedKey is a non-empty dict (test doubles may hand
+        # back other truthy objects; never loop on those).
+        if not isinstance(last_key, dict) or not last_key:
+            return items
+        kwargs['ExclusiveStartKey'] = last_key
+
+
+def _query_prefix(pk: str, sk_prefix: str) -> list:
+    """All items under ``pk`` whose sort key starts with ``sk_prefix``."""
+    return _query_all(Key('pk').eq(pk) & Key('sk').begins_with(sk_prefix))
+
+
+def to_dynamo(item: dict) -> dict:
+    """Low-level attribute map for transact_write_items (str, bool, int, list of str)."""
+    result = {}
+    for k, v in item.items():
+        if isinstance(v, str):
+            result[k] = {'S': v}
+        elif isinstance(v, bool):
+            result[k] = {'BOOL': v}
+        elif isinstance(v, int):
+            result[k] = {'N': str(v)}
+        elif isinstance(v, list):
+            result[k] = {'L': [{'S': i} for i in v]}
+    return result
+
+
 def create_team(name: str, created_by: str) -> dict:
     """
     Create a new team.
@@ -45,8 +83,6 @@ def create_team(name: str, created_by: str) -> dict:
     """
     team_id = generate_uuid7()
     now = get_current_timestamp()
-
-    table = _get_table()
 
     team_record = {
         'pk': f'TEAM#{team_id}',
@@ -66,19 +102,6 @@ def create_team(name: str, created_by: str) -> dict:
 
     # Use a transaction to write both records atomically
     client = boto3.client('dynamodb')
-
-    def to_dynamo(item: dict) -> dict:
-        result = {}
-        for k, v in item.items():
-            if isinstance(v, str):
-                result[k] = {'S': v}
-            elif isinstance(v, bool):
-                result[k] = {'BOOL': v}
-            elif isinstance(v, int):
-                result[k] = {'N': str(v)}
-            elif isinstance(v, list):
-                result[k] = {'L': [{'S': i} for i in v]}
-        return result
 
     client.transact_write_items(
         TransactItems=[
@@ -113,11 +136,7 @@ def list_teams() -> list:
     Returns:
         List of team summary dicts (id, name).
     """
-    table = _get_table()
-    response = table.query(
-        KeyConditionExpression=Key('pk').eq('TEAMS') & Key('sk').begins_with('TEAM#')
-    )
-    return response.get('Items', [])
+    return _query_prefix('TEAMS', 'TEAM#')
 
 
 def update_team(team_id: str, fields: dict) -> Optional[dict]:
@@ -192,11 +211,8 @@ def delete_team(team_id: str) -> dict:
     client = boto3.client('dynamodb')
     table_name = get_table_name()
 
-    # 1. Query all memberships for this team
-    members_response = table.query(
-        KeyConditionExpression=Key('pk').eq(f'TEAM#{team_id}') & Key('sk').begins_with('MEMBER#')
-    )
-    memberships = members_response.get('Items', [])
+    # 1. All memberships for this team
+    memberships = list_team_members(team_id)
 
     # 2. Find all apps owned by this team.
     #    Primary: GSI2 query. Fallback: scan by owner_team_id to catch apps
@@ -300,7 +316,7 @@ def team_name_exists(name: str) -> bool:
     """
     Check if a team with the given name already exists.
 
-    Scans the TEAMS index records for a matching name.
+    Reads the TEAMS index records (a Query) for a matching name.
 
     Args:
         name: Team name to check.
@@ -308,17 +324,8 @@ def team_name_exists(name: str) -> bool:
     Returns:
         True if a team with this name exists.
     """
-    table = _get_table()
-
-    response = table.query(
-        KeyConditionExpression=Key('pk').eq('TEAMS') & Key('sk').begins_with('TEAM#')
-    )
-
-    for item in response.get('Items', []):
-        if item.get('name', '').lower() == name.lower():
-            return True
-
-    return False
+    wanted = name.lower()
+    return any(item.get('name', '').lower() == wanted for item in list_teams())
 
 
 def add_membership(team_id: str, user_sub: str, role: str) -> dict:
@@ -364,21 +371,13 @@ def list_user_teams(user_sub: str) -> list:
     Returns:
         List of membership dicts.
     """
-    table = _get_table()
-
-    response = table.query(
-        IndexName=USER_TEAMS_INDEX,
-        KeyConditionExpression=Key('gsi1pk').eq(f'USER#{user_sub}')
-    )
-
-    memberships = response.get('Items', [])
+    memberships = _query_all(Key('gsi1pk').eq(f'USER#{user_sub}'), index_name=USER_TEAMS_INDEX)
     # Strip DynamoDB internal keys
     for m in memberships:
         m.pop('pk', None)
         m.pop('sk', None)
         m.pop('gsi1pk', None)
         m.pop('gsi1sk', None)
-
     return memberships
 
 
@@ -413,7 +412,8 @@ def set_member_role(user_sub: str, team_id: str, new_role: str) -> dict:
         new_role: New team role (e.g. 'team_lead', 'editor', 'viewer').
 
     Returns:
-        Updated membership dict.
+        Updated membership dict, plus ``previous_role`` (the role before the
+        call; not stored) so callers can audit the change.
 
     Raises:
         KeyError: If membership not found.
@@ -432,7 +432,7 @@ def set_member_role(user_sub: str, team_id: str, new_role: str) -> dict:
 
     # 2. No-op if same role
     if old_role == new_role:
-        return current
+        return {**current, 'previous_role': old_role}
 
     # 3. Update the membership role
     table.update_item(
@@ -442,9 +442,8 @@ def set_member_role(user_sub: str, team_id: str, new_role: str) -> dict:
         ExpressionAttributeValues={':r': new_role},
     )
 
-    current['role'] = new_role
     logger.info(f"Changed role in team {team_id}: {old_role} -> {new_role}")
-    return current
+    return {**current, 'role': new_role, 'previous_role': old_role}
 
 
 def list_team_members(team_id: str) -> list:
@@ -457,11 +456,7 @@ def list_team_members(team_id: str) -> list:
     Returns:
         List of membership dicts.
     """
-    table = _get_table()
-    response = table.query(
-        KeyConditionExpression=Key('pk').eq(f'TEAM#{team_id}') & Key('sk').begins_with('MEMBER#')
-    )
-    return response.get('Items', [])
+    return _query_prefix(f'TEAM#{team_id}', 'MEMBER#')
 
 
 # ---------------------------------------------------------------------------
@@ -678,12 +673,7 @@ def list_team_apps(team_id: str) -> list:
     Returns:
         List of application items.
     """
-    table = _get_table()
-    response = table.query(
-        IndexName=TEAM_APPS_INDEX,
-        KeyConditionExpression=Key('gsi2pk').eq(f'OWNERTEAM#{team_id}')
-    )
-    return response.get('Items', [])
+    return _query_all(Key('gsi2pk').eq(f'OWNERTEAM#{team_id}'), index_name=TEAM_APPS_INDEX)
 
 
 # ---------------------------------------------------------------------------
@@ -770,11 +760,7 @@ def list_shared_access(team_id: str) -> list:
     Returns:
         List of grant dicts.
     """
-    table = _get_table()
-    response = table.query(
-        KeyConditionExpression=Key('pk').eq(f'TEAM#{team_id}') & Key('sk').begins_with('SHARE#')
-    )
-    return response.get('Items', [])
+    return _query_prefix(f'TEAM#{team_id}', 'SHARE#')
 
 
 def list_apps_shared_with_team(team_id: str) -> list:
@@ -789,12 +775,7 @@ def list_apps_shared_with_team(team_id: str) -> list:
     Returns:
         List of grant dicts.
     """
-    table = _get_table()
-    response = table.query(
-        IndexName=TEAM_APPS_INDEX,
-        KeyConditionExpression=Key('gsi2pk').eq(f'SHAREDWITH#{team_id}')
-    )
-    return response.get('Items', [])
+    return _query_all(Key('gsi2pk').eq(f'SHAREDWITH#{team_id}'), index_name=TEAM_APPS_INDEX)
 
 
 # ---------------------------------------------------------------------------

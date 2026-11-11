@@ -47,7 +47,7 @@ export const VALIDATION_DATE_DURATION_UNITS = [
   "weeks",
 ] as const;
 
-export type ValidationDateDurationUnit = (typeof VALIDATION_DATE_DURATION_UNITS)[number];
+type ValidationDateDurationUnit = (typeof VALIDATION_DATE_DURATION_UNITS)[number];
 
 
 export interface EqualsWithinFields {

@@ -9,13 +9,21 @@ import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
 import Table from "@cloudscape-design/components/table";
 import TextFilter from "@cloudscape-design/components/text-filter";
 import { api } from '../utils/api';
-import { batchedPromiseAll } from '../utils/batchedPromiseAll';
 import { useBatchExecute } from '../hooks/useBatchExecute';
+import {
+  useBatchDelete,
+  deleteInProgressFlash,
+  deleteResultFlashes,
+  USECASE_DELETE_NOUN,
+  USECASE_DELETE_CONSEQUENCES,
+} from '../hooks/useBatchDelete';
 import Badge from "@cloudscape-design/components/badge";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
-import DeleteUsecaseModal from './DeleteUsecaseModal';
+import DeleteConfirmModal from './common/DeleteConfirmModal';
 import Flashbar from "@cloudscape-design/components/flashbar";
-// import { usePreloadOnHover } from './common/ComponentPreloader';
+import { PlatformBadge } from './common/platform';
+import { formatTimeAgo } from '../utils/time';
+import { executionStatusType } from '../utils/executionStatus';
 
 
 interface Usecase {
@@ -30,35 +38,7 @@ interface Usecase {
   test_platform?: string;
 }
 
-// Helper function to format time ago
-function formatTimeAgo(timestamp: string): string {
-  const now = new Date();
-  const past = new Date(timestamp);
-  const diffMs = now.getTime() - past.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return past.toLocaleDateString();
-}
-
-// Helper function to get status type for StatusIndicator (same as ExecutionHistory)
-function getStatusType(status: string) {
-  switch (status) {
-    case 'success': return 'success';
-    case 'error':
-    case 'failed': return 'error';
-    case 'running':
-    case 'executing': return 'in-progress';
-    case 'pending': return 'pending';
-    case 'stopped': return 'stopped';
-    default: return 'pending';
-  }
-}
 
 export default function HomeScreen() {
   const navigate = useNavigate();
@@ -68,7 +48,7 @@ export default function HomeScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
   const { executeBatch, executing: batchExecuting } = useBatchExecute();
-  const [batchDeleting, setBatchDeleting] = useState(false);
+  const { deleteBatch, deleting: batchDeleting } = useBatchDelete();
   const [flashbarItems, setFlashbarItems] = useState<any[]>([]);
   const [sortingColumn, setSortingColumn] = useState<any>({ sortingField: 'name' });
   const [sortingDescending, setSortingDescending] = useState(false);
@@ -165,64 +145,12 @@ export default function HomeScreen() {
 
   const handleBatchDelete = async () => {
     setShowDeleteModal(false);
-    setBatchDeleting(true);
-    setFlashbarItems([{
-      type: 'info',
-      content: `Deleting ${selectedItems.length} use case(s)...`,
-      loading: true
-    }]);
+    setFlashbarItems([deleteInProgressFlash(selectedItems.length)]);
 
-    // Delete selected use cases in batches matching Lambda concurrency limit
-    const results = await batchedPromiseAll(selectedItems, async (usecase) => {
-      try {
-        await api.delete(`usecase/${usecase.id}`);
-        return {
-          usecaseId: usecase.id,
-          usecaseName: usecase.name,
-          success: true
-        } as BatchExecutionResult;
-      } catch (error) {
-        return {
-          usecaseId: usecase.id,
-          usecaseName: usecase.name,
-          success: false,
-          error: (error as Error).message
-        } as BatchExecutionResult;
-      }
-    });
+    const results = await deleteBatch(selectedItems);
 
-    const successCount = results.filter(r => r.success).length;
-    const failureCount = results.filter(r => !r.success).length;
-
-    // Show results
-    const resultItems = [];
-
-    if (successCount > 0) {
-      resultItems.push({
-        type: 'success' as const,
-        content: `Successfully deleted ${successCount} use case(s)`,
-        dismissible: true,
-        onDismiss: () => setFlashbarItems([])
-      });
-    }
-
-    if (failureCount > 0) {
-      const failedUsecases = results
-        .filter(r => !r.success)
-        .map(r => r.usecaseName)
-        .join(', ');
-
-      resultItems.push({
-        type: 'error' as const,
-        content: `Failed to delete ${failureCount} use case(s): ${failedUsecases}`,
-        dismissible: true,
-        onDismiss: () => setFlashbarItems([])
-      });
-    }
-
-    setFlashbarItems(resultItems);
+    setFlashbarItems(deleteResultFlashes(results, () => setFlashbarItems([])));
     setSelectedItems([]);
-    setBatchDeleting(false);
 
     // Refresh the list
     try {
@@ -323,7 +251,7 @@ export default function HomeScreen() {
               ]}
               mainAction={{
                 text: 'Create Use Case',
-                onClick: () => navigate('/create')
+                onClick: () => navigate('/create/new')
               }}
             />
           </SpaceBetween>
@@ -355,12 +283,7 @@ export default function HomeScreen() {
             id: 'test_platform',
             header: 'Platform',
             width: 100,
-            cell: item => {
-              const platform = item.test_platform || 'web';
-              return platform === 'mobile'
-                ? <Badge color="blue">Mobile</Badge>
-                : <Badge color="grey">Web</Badge>;
-            }
+            cell: item => <PlatformBadge platform={item.test_platform} />
           },
           {
             id: 'last_execution_status',
@@ -373,7 +296,7 @@ export default function HomeScreen() {
               }
 
               return (
-                <StatusIndicator type={getStatusType(item.last_execution_status)}>
+                <StatusIndicator type={executionStatusType(item.last_execution_status)}>
                   {item.last_execution_status}
                 </StatusIndicator>
               );
@@ -447,12 +370,14 @@ export default function HomeScreen() {
         resizableColumns
       />
 
-      <DeleteUsecaseModal
+      <DeleteConfirmModal
         visible={showDeleteModal}
-        usecaseCount={selectedItems.length}
+        count={selectedItems.length}
+        noun={USECASE_DELETE_NOUN}
+        consequences={USECASE_DELETE_CONSEQUENCES}
         onDismiss={() => setShowDeleteModal(false)}
         onConfirm={handleBatchDelete}
-        deleting={batchDeleting}
+        loading={batchDeleting}
       />
     </SpaceBetween>
   );

@@ -451,6 +451,7 @@ export default function TemplateDetail() {
         usecaseId={id || ''}
         title={editingStep ? 'Edit Template Step' : 'Add Template Step'}
         existingSteps={steps}
+        allowRepeat={false}
       />
 
       {/* Add Variable Modal */}
@@ -498,6 +499,7 @@ export default function TemplateDetail() {
       <DeleteTemplateModal
         visible={showDeleteModal}
         templateName={template?.name || ''}
+        templates={template ? [{ id: template.id, name: template.name }] : []}
         onDismiss={() => setShowDeleteModal(false)}
         onConfirm={handleDelete}
         deleting={deleting}

@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
-import Modal from '@cloudscape-design/components/modal';
-import Box from '@cloudscape-design/components/box';
-import SpaceBetween from '@cloudscape-design/components/space-between';
-import Button from '@cloudscape-design/components/button';
 import FormField from '@cloudscape-design/components/form-field';
 import Input from '@cloudscape-design/components/input';
 import Select, { SelectProps } from '@cloudscape-design/components/select';
 import { Role } from '../../types/permissions';
+import FormModal from '../common/FormModal';
 
 interface AddMemberModalProps {
   visible: boolean;
@@ -32,8 +29,6 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({
 }) => {
   const [userId, setUserId] = useState('');
   const [selectedRole, setSelectedRole] = useState<SelectProps.Option | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const roleOptions: SelectProps.Option[] = allowedRoles.map((r) => ({
     label: ROLE_LABELS[r],
@@ -42,78 +37,50 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({
 
   const handleSubmit = async () => {
     if (!userId.trim()) {
-      setError('User email or ID is required');
-      return;
+      throw new Error('User email or ID is required');
     }
     if (!selectedRole) {
-      setError('Role is required');
-      return;
+      throw new Error('Role is required');
     }
-    try {
-      setSubmitting(true);
-      setError(null);
-      await onSubmit(userId.trim(), selectedRole.value as Role);
-      setUserId('');
-      setSelectedRole(null);
-      onDismiss();
-    } catch (err: any) {
-      setError(err.message || 'Failed to add member');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDismiss = () => {
-    setUserId('');
-    setSelectedRole(null);
-    setError(null);
-    onDismiss();
+    await onSubmit(userId.trim(), selectedRole.value as Role);
   };
 
   return (
-    <Modal
+    <FormModal
       visible={visible}
-      onDismiss={handleDismiss}
-      closeAriaLabel="Close"
       header="Add Team Member"
-      footer={
-        <Box float="right">
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button variant="link" onClick={handleDismiss} data-testid="add-member-cancel">
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              loading={submitting}
-              data-testid="add-member-submit"
-            >
-              Add Member
-            </Button>
-          </SpaceBetween>
-        </Box>
-      }
+      submitLabel="Add Member"
+      onSubmit={handleSubmit}
+      onDismiss={onDismiss}
+      onReset={() => {
+        setUserId('');
+        setSelectedRole(null);
+      }}
+      errorFallback="Failed to add member"
+      testIdPrefix="add-member"
     >
-      <SpaceBetween direction="vertical" size="m">
-        <FormField label="User email or ID" errorText={error}>
-          <Input
-            value={userId}
-            onChange={({ detail }) => setUserId(detail.value)}
-            placeholder="user@example.com or cognito-sub"
-            data-testid="add-member-user-input"
-          />
-        </FormField>
-        <FormField label="Role">
-          <Select
-            selectedOption={selectedRole}
-            onChange={({ detail }) => setSelectedRole(detail.selectedOption)}
-            options={roleOptions}
-            placeholder="Select role"
-            data-testid="add-member-role-select"
-          />
-        </FormField>
-      </SpaceBetween>
-    </Modal>
+      {(error) => (
+        <>
+          <FormField label="User email or ID" errorText={error}>
+            <Input
+              value={userId}
+              onChange={({ detail }) => setUserId(detail.value)}
+              placeholder="user@example.com or cognito-sub"
+              data-testid="add-member-user-input"
+            />
+          </FormField>
+          <FormField label="Role">
+            <Select
+              selectedOption={selectedRole}
+              onChange={({ detail }) => setSelectedRole(detail.selectedOption)}
+              options={roleOptions}
+              placeholder="Select role"
+              data-testid="add-member-role-select"
+            />
+          </FormField>
+        </>
+      )}
+    </FormModal>
   );
 };
 

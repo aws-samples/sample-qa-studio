@@ -24,16 +24,18 @@ Serverless architecture on AWS:
 - **API Layer**: Amazon API Gateway with AWS Lambda functions
 - **Authentication**: Amazon Cognito with AWS Amplify SDK for secure user management
 - **Data Storage**: Amazon DynamoDB with single-table design
-- **Runtime**: Amazon ECS with AWS Fargate running Nova Act SDK
+- **Runtime**: AWS Lambda MicroVMs — one VM per test execution or wizard session, cloned from a single image that runs the `qa-studio` CLI and the Nova Act SDK
 - **Test Execution**: Amazon Nova Act performs browser automation and test validation
 - **Browser**: Amazon Bedrock AgentCore Browser Tool for a fully managed remote browser
-- **Queue System**: Amazon SQS for reliable execution orchestration
+- **Queues**: Amazon SQS for notifications, mobile recording downloads and wizard commands
 - **Scheduling**: Amazon EventBridge Scheduler for automated executions
 - **Artifact Storage**: Amazon S3 for videos, screenshots, and logs
 
 <p align="center">
   <img src="docs/architecture.png" alt="Architecture diagram" width="640">
 </p>
+
+> The PNG predates the Lambda MicroVM runner and still shows an ECS cluster in the execution box; the current diagrams are the mermaid sources in [Architecture →](docs/architecture.md).
 
 ## Repository Structure
 
@@ -56,7 +58,8 @@ Serverless architecture on AWS:
 - AWS CLI configured with appropriate permissions: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
 - Node.js 18+ and npm: https://nodejs.org/en/download
 - Python 3.11+: https://www.python.org/downloads/
-- Docker, OrbStack, or Podman
+
+No container tool is needed: the worker image is built by AWS Lambda from an uploaded zip.
 
 ### Setup
 
@@ -84,7 +87,7 @@ Update the admin email (required for receiving your login credentials):
 }
 ```
 
-> `adminEmail` is the only required configuration option. See [Configuration →](docs/configuration.md) for the full property reference, VPC setup, and advanced options.
+> `adminEmail` is the only required configuration option. See [Configuration →](docs/configuration.md) for the full property reference and advanced options.
 
 > The default Bedrock model for AI test generation is `us.amazon.nova-2-lite-v1:0`. You can change this by setting `bedrockModelId` in your configuration. Any Bedrock model that supports the Converse API with tool use can be used. See [Configuration → Bedrock Model Selection](docs/configuration.md#bedrock-model-selection) for details.
 
@@ -125,40 +128,19 @@ Once both quotas are granted, update the CDK code to use the higher timeouts. Th
 - `lib/lambda-stack.ts` — Lambda function timeout for `generate_usecase`
 - `lib/frontend-stack.ts` — CloudFront origin `readTimeout`
 
-#### 4. Ensure Docker is running:
+#### 4. Deploy to AWS:
 
-The deployment builds container images, so Docker (or Podman) must be running before you deploy.
-
-```bash
-docker info
-```
-
-If Docker is not running, start it:
-
-```bash
-# macOS (Docker Desktop)
-open -a Docker
-
-# macOS (OrbStack)
-open -a OrbStack
-
-# Linux
-sudo systemctl start docker
-```
-
-#### 5. Deploy to AWS:
-
-> ⚠️ The deployment must be executed from an ARM64 environment (e.g., an ARM-based EC2 instance, Apple Silicon Mac, or Graviton-based Cloud9). Deploying from an x86/amd64 environment will cause build failures.
+> Nothing is compiled locally any more: Lambda dependencies are installed with pip's `--platform` flags for ARM64 and the worker image is built by AWS Lambda. ARM64 hosts (Apple Silicon, Graviton) are the tested deployment path; x86 hosts should work but have not been verified.
 
 ```bash
 npm run deploy
 ```
 
-This builds all Lambda functions, deploys all infrastructure stacks, builds and deploys the React frontend, and sends a temporary password to your admin email.
+This builds all Lambda functions, deploys all infrastructure stacks, builds and deploys the React frontend, and sends a temporary password to your admin email. The first worker deploy (and every later one that changes `web-app/worker/` or `qa-studio-cli/`) waits 3–5 minutes for the MicroVM image build.
 
 > Take note of the `frontend.CloudFrontDistributionDomain` CloudFormation output. This is the URL for the web application.
 
-#### 6. Access the application:
+#### 5. Access the application:
    - Check your email for a temporary password from no-reply@verificationemail.com
    - Open the CloudFront distribution URL from the deployment output
    - Sign in with your admin email and temporary password
@@ -182,7 +164,7 @@ For a full walkthrough of all features, see the [User Guide →](docs/user-guide
 
 - [User Guide →](docs/user-guide.md): Complete walkthrough of the QA Studio web interface
 - [Prompting Best Practices →](docs/prompting-best-practices.md): Writing reliable, repeatable test steps
-- [Configuration →](docs/configuration.md): Full property reference, VPC setup, and advanced options
+- [Configuration →](docs/configuration.md): Full property reference and advanced options
 - [Development →](docs/development.md): Commands reference, individual stack deployment, and monitoring
 - [Distribution →](docs/distribution.md): Release packaging and deploying from archives
 - [Frontend →](frontend/README.md): React web application setup and development

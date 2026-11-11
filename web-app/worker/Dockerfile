@@ -1,11 +1,11 @@
-# Worker image for QA Studio.
+# Worker image for QA Studio: the Lambda MicroVM image.
 #
-# Docker build context is the repo root (see web-app/lib/worker-stack.ts:
-# DockerImageAsset.directory = ".."), so all COPY paths are relative to
-# the repo root.  The entrypoint script translates the ECS-provided env
-# vars into `qa-studio run` flags for batch mode; wizard mode still
-# invokes wizard_worker.py directly until the wizard migration
-# (follow-up spec).
+# Lambda builds it from a zip of the .dockerignore-filtered repo root (see
+# web-app/lib/worker-image-asset.ts), with this file copied to the zip root,
+# so all COPY paths are relative to the repo root.  The image ENTRYPOINT is
+# supervisor.py: a stdlib HTTP server that answers the MicroVM lifecycle
+# hooks on :8080 and spawns `qa-studio run` (batch) or wizard_worker.py
+# (wizard) from the /run payload (.kiro/docs/microvm-runner/design.md).
 
 # ── Build stage ────────────────────────────────────────────────────
 FROM public.ecr.aws/docker/library/python:3.13.12-slim AS builder
@@ -13,7 +13,7 @@ FROM public.ecr.aws/docker/library/python:3.13.12-slim AS builder
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 # The browser runs remotely via Bedrock AgentCore — no local Playwright
-# runtime needed in the container (saves ~300MB).
+# runtime needed in the image (saves ~300MB).
 ENV NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true
 
 RUN apt-get update && \
@@ -24,8 +24,7 @@ WORKDIR /build
 
 # Install the worker's own runtime deps (nova-act, boto3, etc) plus
 # the qa-studio CLI with the [runner,agentcore] extras.  The CLI's
-# source lives one level up in the Docker build context, copied in
-# below.
+# source lives one level up in the build context, copied in below.
 #
 # IMPORTANT: The venv is created at /app/.venv — the same path it will
 # occupy in the runtime stage.  Console-script shebangs (e.g.
@@ -46,8 +45,8 @@ FROM public.ecr.aws/docker/library/python:3.13.12-slim
 
 ENV PYTHONUNBUFFERED=1
 ENV NOVA_ACT_SKIP_PLAYWRIGHT_INSTALL=true
-# The worker's legacy code expects its module directory on sys.path;
-# the entrypoint `cd`s into it before invoking Python.
+# The worker's legacy wizard code expects its module directory on sys.path;
+# the supervisor runs its children from WORKER_APP_DIR (/app).
 ENV PYTHONPATH=/app
 ENV LOGS_DIRECTORY=/app/logs
 
@@ -56,10 +55,9 @@ RUN rm /bin/sh && ln -s /bin/bash /bin/sh && \
     mkdir -p /app/logs && \
     chown -R worker:worker /app
 
-# No `aws` CLI or curl in this image.  SSM reads from the entrypoint
-# go through boto3 (bundled with the venv); any other AWS calls run
-# via the Python runtime.  Keeps the image small and the dependency
-# surface honest.
+# No `aws` CLI or curl in this image.  SSM / Secrets Manager reads happen
+# in supervisor.py through boto3 (bundled with the venv).  Keeps the
+# image small and the dependency surface honest.
 
 WORKDIR /app
 USER worker
@@ -70,13 +68,8 @@ USER worker
 COPY --from=builder --chown=worker:worker /app/.venv /app/.venv
 COPY --chown=worker:worker web-app/worker /app
 
-# Ensure the entrypoint is executable (COPY preserves mode, but on
-# systems where the file is checked out without +x this is a safety
-# net).
-RUN chmod +x /app/entrypoint.sh
-
 # Activate the venv for any user shells and make the qa-studio CLI
-# resolvable on PATH at container start.
+# resolvable on PATH for the supervisor's children.
 ENV PATH="/app/.venv/bin:${PATH}"
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["python", "/app/supervisor.py"]

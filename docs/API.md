@@ -23,15 +23,23 @@ Authorization: Bearer <jwt_token>
 
 Scopes follow the pattern `api/{resource}.{permission}`:
 
-- `api/admin` - Full access to all resources
-- `api/execution.write` - Create and update executions
-- `api/execution.read` - Read execution data
-- `api/usecases.write` - Create and update usecases
-- `api/usecases.read` - Read usecase data
-- `api/suite.write` - Manage test suites
-- `api/suite.read` - Read test suite data
+- `api/admin` - Full access to all resources (users in the `admins` group only; never granted to OAuth clients)
+- `api/teams.manage` - Manage teams and membership (never granted to OAuth clients)
+- `api/usecases.execute` - Trigger use case executions and read secret values
+- `api/executions.write` - Modify execution records (status, steps, artifacts)
+- `api/executions.read` - Read execution data, recordings, trajectories
+- `api/usecases.write` - Create, update, delete use cases
+- `api/usecases.read` - Read use case data
+- `api/suite.write` - Create, update, delete and execute test suites
+- `api/suite.read` - Read test suites and suite executions
+- `api/templates.write` - Create, edit, delete templates and template steps
+- `api/templates.read` - Read templates
+- `api/applications.write` - Create, update, delete applications; write application variables, secrets and datasets
+- `api/applications.read` - Read applications and their variables, secret keys and datasets
 - `api/oauth-clients.write` - Create, delete, and rotate OAuth clients
 - `api/oauth-clients.read` - List OAuth clients
+
+Scopes are the first gate only. Every use case, execution and suite route also checks the caller's team role on the resource's application — see [api-reference.md → Team ownership and access control](api-reference.md#team-ownership-and-access-control).
 
 ## Base URL
 
@@ -53,37 +61,38 @@ Create and start a usecase execution.
 - `id` (string, required) - Usecase ID
 
 **Query Parameters**:
-- `trigger-type` (string, optional) - Execution trigger type
-  - `OnDemand` (default) - Queue execution for worker processing
-  - `Scheduled` - Direct ECS task execution (used by EventBridge)
-  - `OnDemandHeadless` - Direct ECS task execution (used by UI)
-  - `ci_runner` - Create execution record only, no ECS task (for CI/CD)
+- `trigger-type` (string, optional, default `OnDemandHeadless`) - Execution trigger type:
+
+  | Value | Behaviour |
+  |-------|-----------|
+  | `OnDemandHeadless` (default) | Starts a cloud worker — one Lambda MicroVM per execution (UI, API callers without the parameter) |
+  | `Scheduled` | Starts a cloud worker — one Lambda MicroVM per execution (EventBridge) |
+  | `ci_runner` | Execution record only, no cloud worker (CI/CD). The **only** trigger allowed for `test_platform: "electron"` use cases |
+
+  Any other value, including the removed use-case-level `OnDemand`, returns `400` before any record is written.
 - `suite-execution-id` (string, optional) - Suite execution ID if part of a suite
 - `suite-id` (string, optional) - Suite ID if part of a suite
 
-**Required Scopes**: `api/execution.write` or `api/admin`
+**Required Scopes**: `api/usecases.execute` or `api/admin`, plus `execute` access on the use case's application
 
-**Request Body**: None
+**Request Body** (optional JSON):
 
-**Response (OnDemand)**:
-```json
-{
-  "status": "usecase queued",
-  "usecaseId": "usecase-123"
-}
-```
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `repeat_datasets` | object | absent | `{"<repeat label>": {"columns": [...], "rows": [[...]]}}` — replaces the stored rows of the labelled `repeat` step for this execution. Unknown label, column mismatch or caps exceeded (100 rows, 20 columns, 200 KB) → `400` before any record is written. Not accepted by the suite execute endpoint. See [api-reference.md → Repeat Step Fields](./api-reference.md#repeat-step-fields). |
 
 **Response (Scheduled/OnDemandHeadless)**:
 ```json
 {
-  "status": "task started",
+  "status": "microvm started",
   "usecaseId": "usecase-123",
   "executionId": "execution-456",
-  "taskArn": "arn:aws:ecs:us-east-1:123456789:task/cluster/task-id",
-  "taskId": "task-id",
+  "microvmId": "mvm-0123456789abcdef0",
   "cloudWatchLogsUrl": "https://console.aws.amazon.com/cloudwatch/..."
 }
 ```
+
+`cloudWatchLogsUrl` points at the worker's log stream (`/qa-studio/<baseName>/microvm`, stream = execution id). A launch failure (after the `RunMicrovm` throttling retries) returns `500 {"error": "Failed to start MicroVM: …"}` and marks the execution `failed` with the same message.
 
 **Response (ci_runner)**:
 ```json
@@ -122,7 +131,7 @@ Update the status of an individual execution step. Used by CI/CD runners to repo
 - `executionId` (string, required) - Execution ID
 - `stepId` (string, required) - Step ID
 
-**Required Scopes**: `api/execution.write` or `api/admin`
+**Required Scopes**: `api/executions.write` or `api/admin`
 
 **Request Body**:
 ```json
@@ -153,7 +162,7 @@ Update the status of an individual execution step. Used by CI/CD runners to repo
 **Error Responses**:
 - `400` - Invalid status value or missing required fields
 - `401` - Unauthorized
-- `403` - Forbidden (requires `api/execution.write` scope)
+- `403` - Forbidden (requires `api/executions.write` scope)
 - `404` - Execution or step not found
 - `500` - Internal server error
 
@@ -182,7 +191,7 @@ Generate a presigned S3 URL for uploading execution-level artifacts (recording, 
 - `id` (string, required) - Usecase ID
 - `executionId` (string, required) - Execution ID
 
-**Required Scopes**: `api/execution.write` or `api/admin`
+**Required Scopes**: `api/executions.write` or `api/admin`
 
 **Request Body**:
 ```json
@@ -220,7 +229,7 @@ Generate a presigned S3 URL for uploading execution-level artifacts (recording, 
 **Error Responses**:
 - `400` - Invalid artifact type, missing fields, or invalid content type
 - `401` - Unauthorized
-- `403` - Forbidden (requires `api/execution.write` scope)
+- `403` - Forbidden (requires `api/executions.write` scope)
 - `404` - Execution not found
 - `500` - Internal server error
 
@@ -258,7 +267,7 @@ Generate a presigned S3 URL for uploading step-level artifacts (screenshots, tra
 - `executionId` (string, required) - Execution ID
 - `stepId` (string, required) - Step ID
 
-**Required Scopes**: `api/execution.write` or `api/admin`
+**Required Scopes**: `api/executions.write` or `api/admin`
 
 **Request Body**:
 ```json
@@ -287,7 +296,7 @@ Generate a presigned S3 URL for uploading step-level artifacts (screenshots, tra
 **Error Responses**:
 - `400` - Missing fields or invalid content type
 - `401` - Unauthorized
-- `403` - Forbidden (requires `api/execution.write` scope)
+- `403` - Forbidden (requires `api/executions.write` scope)
 - `404` - Execution or step not found
 - `500` - Internal server error
 
@@ -332,7 +341,7 @@ Create a new OAuth client with specified scopes for CI/CD authentication.
   "scopes": [
     "api/suite.read",
     "api/suite.write",
-    "api/execution.write"
+    "api/executions.write"
   ]
 }
 ```
@@ -341,7 +350,7 @@ Create a new OAuth client with specified scopes for CI/CD authentication.
 - `name` (string, required) - Client name for identification
 - `scopes` (array, required) - List of OAuth scopes to grant
   - User can only grant scopes they possess (unless admin)
-  - Valid scopes: `api/suite.read`, `api/suite.write`, `api/execution.read`, `api/execution.write`, `api/oauth-clients.read`, `api/oauth-clients.write`, `api/admin`
+  - Grantable scopes: every `api/*` scope except `api/admin` and `api/teams.manage`, which OAuth clients can never hold
 
 **Response (201 Created)**:
 ```json
@@ -352,7 +361,7 @@ Create a new OAuth client with specified scopes for CI/CD authentication.
   "scopes": [
     "api/suite.read",
     "api/suite.write",
-    "api/execution.write"
+    "api/executions.write"
   ],
   "created_date": "2026-02-16T12:00:00Z",
   "created_by": "user@example.com",
@@ -389,7 +398,7 @@ curl -X POST \
     "scopes": [
       "api/suite.read",
       "api/suite.write",
-      "api/execution.write"
+      "api/executions.write"
     ]
   }'
 ```
@@ -409,7 +418,7 @@ response = requests.post(
         'scopes': [
             'api/suite.read',
             'api/suite.write',
-            'api/execution.write'
+            'api/executions.write'
         ]
     }
 )
@@ -450,7 +459,7 @@ List all OAuth clients in the user pool with metadata.
       "allowed_oauth_scopes": [
         "api/suite.read",
         "api/suite.write",
-        "api/execution.write"
+        "api/executions.write"
       ],
       "refresh_token_validity": 30,
       "access_token_validity": 60,
@@ -506,13 +515,7 @@ Delete an OAuth client, immediately revoking its credentials.
 
 **Required Scopes**: `api/oauth-clients.write` or `api/admin`
 
-**Response (200 OK)**:
-```json
-{
-  "message": "OAuth client deleted successfully",
-  "client_id": "7abc123def456"
-}
-```
+**Response (204 No Content)**: empty body
 
 **Error Responses**:
 - `400` - Missing client ID
@@ -537,7 +540,7 @@ response = requests.delete(
     headers={'Authorization': f'Bearer {jwt_token}'}
 )
 
-if response.status_code == 200:
+if response.status_code == 204:
     print("OAuth client deleted successfully")
 ```
 
@@ -653,8 +656,9 @@ curl -X POST \
     "scopes": [
       "api/suite.read",
       "api/suite.write",
-      "api/execution.read",
-      "api/execution.write"
+      "api/executions.read",
+      "api/executions.write",
+      "api/usecases.execute"
     ]
   }'
 ```
@@ -686,7 +690,7 @@ TOKEN_RESPONSE=$(curl -X POST \
   -d 'grant_type=client_credentials' \
   -d "client_id=${CLIENT_ID}" \
   -d "client_secret=${CLIENT_SECRET}" \
-  -d 'scope=api/suite.read api/suite.write api/execution.read api/execution.write')
+  -d 'scope=api/suite.read api/suite.write api/executions.read api/executions.write api/usecases.execute')
 
 # Extract access token
 ACCESS_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
@@ -710,7 +714,7 @@ response = requests.post(
         'grant_type': 'client_credentials',
         'client_id': client_id,
         'client_secret': client_secret,
-        'scope': 'api/suite.read api/suite.write api/execution.read api/execution.write'
+        'scope': 'api/suite.read api/suite.write api/executions.read api/executions.write api/usecases.execute'
     }
 )
 
@@ -783,13 +787,20 @@ Different operations require different scopes:
 
 | Operation | Required Scopes |
 |-----------|----------------|
-| Execute test suite | `api/suite.write`, `api/execution.write` |
+| Execute test suite | `api/suite.write`, `api/executions.write` |
 | Read test suite | `api/suite.read` |
-| Create execution | `api/execution.write` |
-| Update step status | `api/execution.write` |
-| Upload artifacts | `api/execution.write` |
-| Read execution data | `api/execution.read` |
+| Create execution (`POST /usecase/{id}/execute`) | `api/usecases.execute` |
+| Update step status | `api/executions.write` |
+| Upload artifacts | `api/executions.write` |
+| Read execution data | `api/executions.read` |
 | Manage OAuth clients | `api/oauth-clients.write`, `api/oauth-clients.read` |
+| Create usecase from template / insert template into usecase | `api/templates.read`, `api/usecases.write` |
+| Import usecase JSON (`POST /import`) | `api/usecases.write` (+ `api/templates.read` when it contains template placeholder steps) |
+| Create a template from a file (`POST /templates/import`) | `api/templates.write` |
+| Replace a template definition (`PUT /templates/{id}`) | `api/templates.write` |
+| Delete a template (`DELETE /templates/{id}`, unlinks use-case steps) | `api/templates.write` |
+| List the tests using a template (`GET /templates/{id}/usages`) | `api/templates.read` |
+| Check template updates | `api/templates.read`, `api/usecases.read` |
 
 **Best Practice**: Grant only the minimum scopes required for your CI/CD pipeline.
 
@@ -815,7 +826,7 @@ TOKEN_RESPONSE=$(curl -s -X POST \
   -d 'grant_type=client_credentials' \
   -d "client_id=${CLIENT_ID}" \
   -d "client_secret=${CLIENT_SECRET}" \
-  -d 'scope=api/suite.read api/suite.write api/execution.read api/execution.write')
+  -d 'scope=api/suite.read api/suite.write api/executions.read api/executions.write api/usecases.execute')
 
 TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.access_token')
 
@@ -930,14 +941,14 @@ fi
 
 ### Execute Test Suite
 
-Create a suite execution record and execution records for all usecases in a test suite with overrides applied. This endpoint is designed for CI/CD runners and does not spawn ECS tasks.
+Create a suite execution record and execution records for all usecases in a test suite with overrides applied. This endpoint is designed for CI/CD runners and does not start cloud workers.
 
 **Endpoint**: `POST /test-suites/{id}/execute`
 
 **Path Parameters**:
 - `id` (string, required) - Test suite UUID
 
-**Required Scopes**: `api/suite.write`, `api/execution.write`
+**Required Scopes**: `api/suite.write`, `api/executions.write`
 
 **Request Body**:
 ```json
@@ -956,7 +967,7 @@ Create a suite execution record and execution records for all usecases in a test
 **Request Body Schema**:
 - `trigger_type` (string, required) - Must be "ci_runner"
 - `base_url` (string, optional) - Base URL override for all usecases. Replaces domain/origin while preserving path and query parameters
-- `variables` (object, optional) - Variable overrides (key-value pairs). Precedence: CLI > usecase > secrets
+- `variables` (object, optional) - Variable overrides (key-value pairs). Precedence: CLI > usecase. Secret values are never merged into execution variables; the runner reads them per step
 - `region` (string, optional) - AWS region override for all executions
 - `model_id` (string, optional) - Bedrock model ID override for all executions
 
@@ -1000,8 +1011,8 @@ Create a suite execution record and execution records for all usecases in a test
 ```json
 {
   "error": "Forbidden",
-  "message": "Missing required scopes: api/suite.write, api/execution.write",
-  "required_scopes": ["api/suite.write", "api/execution.write"],
+  "message": "Missing required scopes: api/suite.write, api/executions.write",
+  "required_scopes": ["api/suite.write", "api/executions.write"],
   "token_scopes": ["api/suite.read"]
 }
 ```
@@ -1071,12 +1082,54 @@ print(f"Created {len(execution_ids)} executions")
 ```
 
 **Notes**:
-- No ECS tasks are spawned when using `trigger_type=ci_runner`
+- No cloud workers (MicroVMs) are started when using `trigger_type=ci_runner`
 - All execution records are created with `status=pending`
 - Base URL override replaces only the scheme and domain, preserving path and query parameters
-- Variable merge precedence: CLI overrides > usecase variables > secrets
+- Variable merge precedence: CLI overrides > usecase variables (secrets are resolved by the runner, never stored on the execution)
 - All template variables ({{variable}}) must be resolved or the request will fail with 400
 - Maximum recommended suite size: 10 usecases (to avoid API Gateway timeout)
+
+---
+
+## Application Configuration Endpoints
+
+Variables, secrets and repeat datasets defined on an application are inherited by every use case of that application. Precedence (lowest → highest): application → use case → CLI run override (`--var`, `--dataset-file`). Variables and secrets merge per key; a repeat step references an application dataset (`dataset_id`) **or** carries inline rows, never both. All routes are served by the application router (`/applications/{proxy+}`). Full field rules, examples and the changed use-case endpoints are in [api-reference.md → Application Configuration Endpoints](api-reference.md#application-configuration-endpoints).
+
+| Method | Endpoint | Scope (+ team access on the application) | Body | Response |
+|--------|----------|------------------------------------------|------|----------|
+| GET | `/applications/{id}/variables` | `api/applications.read` (view) | — | `200 {"variables": [{"key", "value"}]}` |
+| POST | `/applications/{id}/variables` | `api/applications.write` (edit, Editor+) | `{"variables": [{"key", "value"}]}` — replaces the list; key `^[A-Za-z_][A-Za-z0-9_]*$`, ≤ 100 | `200 {"variables": [...]}` |
+| GET | `/applications/{id}/secrets` | `api/applications.read` (view) | — | `200 {"secrets": [{"key", "secret_name", "description", "created_at"}]}` (keys only) |
+| POST | `/applications/{id}/secrets` | `api/applications.write` (edit) | `{"secrets": [{"key", "value"}]}` — create-or-update; key `^[A-Za-z0-9_.-]{1,128}$`, value non-empty | `201 {"created": [...], "updated": [...]}` |
+| DELETE | `/applications/{id}/secrets` | `api/applications.write` (edit) | `{"secret_key": "<key>"}` | `204`; `404` unknown key |
+| GET | `/applications/{id}/datasets` | `api/applications.read` (view) | — | `200 {"datasets": [{"dataset_id", "name", "description", "column_count", "row_count", "updated_at"}]}` |
+| POST | `/applications/{id}/datasets` | `api/applications.write` (edit) | `{"name", "description"?, "columns", "rows"}` | `201 {"dataset": {...}}`; `400 {"error", "errors": [...]}`; `409` name already used |
+| GET | `/applications/{id}/datasets/{datasetId}` | `api/applications.read` (view) | — | `200 {"dataset": {"dataset_id", "name", "description", "columns", "rows", "created_at", "updated_at", "created_by"}}` |
+| PUT | `/applications/{id}/datasets/{datasetId}` | `api/applications.write` (edit) | same as POST (full replace) | `200 {"dataset": {...}}`; `409` name conflict |
+| DELETE | `/applications/{id}/datasets/{datasetId}` | `api/applications.write` (edit) | — | `204`; `409 {"error", "usecases": [{"usecase_id", "name"}]}` while repeat steps reference it |
+
+Changed use-case endpoints:
+
+| Endpoint | Change |
+|----------|--------|
+| `GET /usecase/{id}/variables`, `GET /usecase/{id}/secrets` | Return the effective list; rows carry `"source": "application" \| "usecase"` |
+| `GET /usecase/{id}/secrets/{key}/value` | Falls back to the application secret of the same key |
+| `POST /usecase/{id}/execute`, `POST /test-suites/{id}/execute` | `400 {"error": "dataset not found", "dataset_id"}` (suite: plus `details.usecase_id`) when a repeat step references a missing dataset; nothing is written |
+| `POST /import`, `POST /usecase/{id}/clone` | `400 {"success": false, "error": "dataset not found in this application", "datasetIds": [...]}` |
+| `POST /applications/{id}/usecases` | `409 {"error": "use case references application datasets", "usecases": [{"usecase_id", "name", "steps": [{"id", "instruction"}]}]}` |
+| `DELETE /applications/{id}` | Also deletes the application's secrets |
+
+---
+
+## Cost Endpoints
+
+Read-only views of the cost allocation the daily collector writes (summary item per dimension in DynamoDB, 30-day series from the S3 ledger). Nothing is computed on request; until the collector has run, `summary` is `null` and `days` is `[]`. Served by the application router; no new scope — reads reuse `api/applications.read` / `api/usecases.read` plus **view** on the resource. Field tables and examples: [api-reference.md → Cost Endpoints](api-reference.md#cost-endpoints).
+
+| Method | Endpoint | Scope / access | Response |
+|--------|----------|----------------|----------|
+| GET | `/applications/{id}/costs` | `api/applications.read` (view) | `200 {"summary": <CostSummary>\|null, "days": [<LedgerRow>…], "usecases": [{"usecase_id", "name", "summary"}]}` — use cases sorted by `window_30d` desc |
+| GET | `/usecase/{id}/costs` | `api/usecases.read` (view) | `200 {"summary": <CostSummary>\|null, "days": [<LedgerRow>…]}` — `days` from the ledger under the use case's **current** application |
+| GET | `/dashboard/costs` | `api/applications.read`; visible applications only | `200 {"overall": <CostSummary>\|null, "applications": [{"application_id", "summary"}]}` — `overall` for studio admins only |
 
 ---
 
@@ -1090,8 +1143,8 @@ All error responses follow this format:
 {
   "error": "Error message",
   "message": "Detailed error description",
-  "required_scopes": ["api/execution.write"],
-  "token_scopes": ["api/execution.read"]
+  "required_scopes": ["api/executions.write"],
+  "token_scopes": ["api/executions.read"]
 }
 ```
 
@@ -1104,6 +1157,7 @@ All error responses follow this format:
 - `401` - Unauthorized (missing or invalid token)
 - `403` - Forbidden (insufficient permissions)
 - `404` - Not Found
+- `409` - Conflict (dataset name already used, dataset still referenced, use case references datasets of another application, last admin)
 - `500` - Internal Server Error
 
 ---
@@ -1119,6 +1173,15 @@ Exceeded limits return `429 Too Many Requests`.
 ---
 
 ## Changelog
+
+### Application-level variables, secrets and datasets
+
+**New Features**:
+- `GET`/`POST /applications/{id}/variables`, `GET`/`POST`/`DELETE /applications/{id}/secrets`, `GET`/`POST /applications/{id}/datasets`, `GET`/`PUT`/`DELETE /applications/{id}/datasets/{datasetId}`
+- Repeat steps accept `dataset_id` (an application dataset) instead of inline `repeat_columns` / `repeat_rows`
+- `GET /usecase/{id}/variables` and `GET /usecase/{id}/secrets` return the effective list with `source`; `GET /usecase/{id}/secrets/{key}/value` falls back to the application secret
+
+**Breaking Changes**: None (use cases without an application resolve exactly as before)
 
 ### Version 1.2.0 (WP1d)
 

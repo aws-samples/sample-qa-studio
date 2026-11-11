@@ -269,37 +269,6 @@ def allow_m2m_token(event: dict) -> tuple[dict, dict | None]:
     return user_identity, None
 
 
-def require_user_token(event: dict) -> tuple[dict, dict | None]:
-    """
-    Validate that the request is from a user token, not an M2M token.
-    This is the DEFAULT validation - use this for all endpoints unless
-    you explicitly want to allow M2M tokens (use allow_m2m_token instead).
-    
-    M2M tokens are only allowed for execution-related endpoints.
-    
-    Args:
-        event: API Gateway proxy request event
-        
-    Returns:
-        Tuple of (user_identity, error_response)
-        If error_response is not None, return it immediately
-    """
-    user_identity = extract_user_identity(event)
-    
-    if user_identity['identity_type'] in ('client', 'worker'):
-        logging.warning(f"M2M token attempted to access user-only endpoint: {user_identity['client_id']}")
-        return user_identity, create_response(403, {
-            'error': 'Forbidden',
-            'message': 'M2M tokens can only access execution endpoints. Use a user token to access this endpoint.'
-        })
-    
-    if user_identity['identity_type'] == 'unknown':
-        return user_identity, create_response(401, {'error': 'Unauthorized'})
-    
-    logging.info(f"User authenticated (type: {user_identity['identity_type']})")
-    return user_identity, None
-
-
 def require_scopes(event: dict, required_scopes: list[str]) -> tuple[dict, dict | None]:
     """
     Validate that the request token contains required scopes.

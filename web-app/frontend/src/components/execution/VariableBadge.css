@@ -1,0 +1,47 @@
+/* Variable badges in the Execution Steps table (see VariableBadge.tsx). */
+
+/*
+ * Dark blue, distinct from the grey Navigation step badge. Cloudscape has no
+ * such badge colour, so this overrides the default badge like `.badge-purple`
+ * (common/StepTypeBadge.css) does, including the `::before` layer. Dark mode
+ * (the app's default) uses a lighter navy so the badge does not sink into the
+ * dark container background.
+ */
+.variable-badge {
+  --variable-badge-bg: #033160;
+  background-color: var(--variable-badge-bg) !important;
+  border-color: var(--variable-badge-bg) !important;
+  color: #ffffff !important;
+}
+
+.variable-badge::before {
+  background-color: var(--variable-badge-bg) !important;
+}
+
+.awsui-dark-mode .variable-badge {
+  --variable-badge-bg: #1b4f8a;
+}
+
+.variable-badge__label {
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-right: 0.4em;
+}
+
+/* jsdom has no layout: tests assert the class and the `title`, not the width. */
+.variable-badge__value {
+  display: inline-block;
+  max-width: 240px;
+  font-size: 0.9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* Placeholders (UNIQUE_ID, TIMESTAMP, not-yet-captured runtime names) are not literal values. */
+.variable-badge__value--placeholder {
+  font-style: italic;
+}

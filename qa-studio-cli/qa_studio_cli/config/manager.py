@@ -61,21 +61,3 @@ def load_config() -> CLIConfig:
 def config_exists() -> bool:
     """Check if config file exists on disk."""
     return CONFIG_FILE.exists()
-
-
-def get_config_value(key: str) -> str:
-    """Get single config value with env var precedence over file.
-
-    Args:
-        key: Config field name (e.g. 'api_url', 'cognito_domain', 'client_id')
-
-    Returns:
-        The config value as a string.
-    """
-    env_var = ENV_VAR_MAP.get(key)
-    if env_var:
-        env_value = os.environ.get(env_var)
-        if env_value:
-            return env_value
-    config = load_config()
-    return getattr(config, key)

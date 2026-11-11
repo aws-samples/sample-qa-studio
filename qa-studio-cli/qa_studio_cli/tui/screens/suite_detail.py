@@ -19,9 +19,8 @@ aborting the rest of the load.
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from textual import work
 from textual.app import ComposeResult
@@ -32,6 +31,7 @@ from textual.widgets import DataTable, Footer, Static, TabbedContent, TabPane
 
 from qa_studio_cli.tui.app_header import TAB_SUITES, AppHeader
 from qa_studio_cli.tui.border_pulse import LoadPulseMixin
+from qa_studio_cli.tui.screens._base_detail import ProgressiveLoadMixin
 from qa_studio_cli.tui.step_render import format_duration, status_cell
 
 
@@ -42,7 +42,7 @@ class _SuiteBundle:
     executions: List[Dict[str, Any]]
 
 
-class SuiteDetailScreen(LoadPulseMixin, Screen):
+class SuiteDetailScreen(ProgressiveLoadMixin, LoadPulseMixin, Screen):
     """Single-suite detail view."""
 
     BINDINGS = [
@@ -222,133 +222,38 @@ class SuiteDetailScreen(LoadPulseMixin, Screen):
 
     _SECTION_NAMES = ("suite", "usecases", "executions")
 
+    STATUS_SELECTOR = "#suite-status"
+
+    _SECTION_ERROR_SELECTORS = {
+        # The metadata block has no tab; tab sections write to their own
+        # status widget so the error survives later progress updates.
+        "suite": "#suite-metadata",
+        "usecases": "#suite-usecases-status",
+        "executions": "#suite-executions-status",
+    }
+
+    def section_error_selector(self, name: str) -> str:
+        return self._SECTION_ERROR_SELECTORS.get(name, self.STATUS_SELECTOR)
+
     @work(exclusive=True)
     async def _load_detail(self) -> None:
-        """Fan out all sub-resource fetches; render each on completion.
-
-        Async worker, not a thread worker: each HTTP call is pushed
-        to the thread pool via ``asyncio.to_thread`` so the Textual
-        event loop stays free to paint partial results while the
-        slower calls are still in flight.
-        """
+        """Fan out all sub-resource fetches; render each on completion."""
         suite_id = self._suite_id
         api = self.app.tui_api
-
-        # Reset progressive-load state. A refresh shouldn't let the
-        # previous run's bundle leak through if the new run partially
-        # fails.
+        # A refresh must not let the previous run's bundle leak through.
         self._bundle = None
         self._suite = {}
-        self._loaded_sections: Dict[str, Any] = {}
-
-        status = self.query_one("#suite-status", Static)
-        total = len(self._SECTION_NAMES)
-        self._sections_done = 0
-        status.update(f"Loading… 0/{total}")
-
-        sections: List[
-            tuple[str, Callable[[str], Any], Callable[[Any], None]]
-        ] = [
-            ("suite", api.get_suite, self._render_metadata),
-            ("usecases", api.list_suite_usecases, self._render_usecases),
-            (
-                "executions",
-                api.list_suite_executions,
-                self._render_suite_executions,
-            ),
-        ]
-
-        self._start_load_pulse()
-        try:
-            await asyncio.gather(
-                *(
-                    self._fetch_and_render(name, fetch, render, suite_id)
-                    for name, fetch, render in sections
-                )
-            )
-        finally:
-            self._stop_load_pulse()
-
-        # All three finished (success or failure). Assemble the bundle
-        # only if every section succeeded so future all-or-nothing
-        # consumers stay honest.
-        if set(self._loaded_sections) == set(self._SECTION_NAMES):
+        complete = await self._load_sections([
+            ("suite", lambda: api.get_suite(suite_id), self._render_metadata),
+            ("usecases", lambda: api.list_suite_usecases(suite_id), self._render_usecases),
+            ("executions", lambda: api.list_suite_executions(suite_id), self._render_suite_executions),
+        ])
+        if complete:
             self._bundle = _SuiteBundle(
                 suite=self._loaded_sections["suite"],
                 usecases=self._loaded_sections["usecases"],
                 executions=self._loaded_sections["executions"],
             )
-            status.update("")
-
-    async def _fetch_and_render(
-        self,
-        name: str,
-        fetch: Callable[[str], Any],
-        render: Callable[[Any], None],
-        suite_id: str,
-    ) -> None:
-        """Run a single section's fetch + render pipeline.
-
-        Exceptions are contained to the failing section — the
-        per-section error message replaces the section's content
-        rather than poisoning the whole screen. This is why the
-        caller does not use ``return_exceptions=True`` on the
-        gather: each coroutine already absorbs its own failure.
-        """
-        try:
-            data = await asyncio.to_thread(fetch, suite_id)
-        except Exception as exc:  # noqa: BLE001
-            self._render_section_error(name, str(exc))
-            self._advance_load_progress()
-            return
-
-        try:
-            render(data)
-        except Exception as exc:  # noqa: BLE001 — render bug shouldn't kill the screen
-            self._render_section_error(name, f"render failed: {exc}")
-            self._advance_load_progress()
-            return
-
-        self._loaded_sections[name] = data
-        self._advance_load_progress()
-
-    def _advance_load_progress(self) -> None:
-        """Bump the ``Loading… N/M`` counter.
-
-        Called from the async worker on the event-loop thread — no
-        thread hopping required. The counter gives the user a visible
-        signal that work is still happening when the slowest call
-        hasn't returned yet.
-        """
-        self._sections_done += 1
-        total = len(self._SECTION_NAMES)
-        if self._sections_done >= total:
-            # Final status text is decided by the caller (success →
-            # cleared; any failure → keep the counter visible so the
-            # user can see that something went wrong). ``_load_detail``
-            # clears the status when the bundle assembles cleanly.
-            return
-        self.query_one("#suite-status", Static).update(
-            f"Loading… {self._sections_done}/{total}"
-        )
-
-    def _render_section_error(self, name: str, message: str) -> None:
-        """Surface a per-section failure without blocking the others.
-
-        Each tab-backed section writes to its own status widget —
-        keeps the error visible even as ``_advance_load_progress``
-        rewrites the top-level ``#suite-status`` line for the
-        remaining sections. The metadata section has no tab to
-        write to; its errors replace the big metadata block
-        directly.
-        """
-        text = f"[b red]Failed to load {name}:[/] {message}"
-        if name == "suite":
-            self.query_one("#suite-metadata", Static).update(text)
-        elif name == "usecases":
-            self.query_one("#suite-usecases-status", Static).update(text)
-        elif name == "executions":
-            self.query_one("#suite-executions-status", Static).update(text)
 
     # ------------------------------------------------------------------
     # Rendering

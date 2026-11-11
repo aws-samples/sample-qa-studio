@@ -2,10 +2,11 @@ import * as cdk from 'aws-cdk-lib';
 import { Aws } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Function } from 'aws-cdk-lib/aws-lambda';
+import { Trigger } from 'aws-cdk-lib/triggers';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { UserPool } from 'aws-cdk-lib/aws-cognito';
-import { PolicyStatement, Effect, ManagedPolicy } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, Effect, ManagedPolicy, Policy } from 'aws-cdk-lib/aws-iam';
 import { NovaActQAStudioBaseStack, NovaActQAStudioBaseStackCreateProps } from './base-stack';
 
 interface NovaActQAStudioLambdaStackCreateProps extends NovaActQAStudioBaseStackCreateProps {
@@ -19,10 +20,11 @@ interface NovaActQAStudioLambdaStackCreateProps extends NovaActQAStudioBaseStack
   bedrockModelId: string
   notificationTopicArn: string
   executeUsecaseLambda: Function
-  ecsClusterArn: string
   recordingQueueUrl: string
   recordingQueueArn: string
   wizardEventBusName: string
+  /** Worker MicroVM image ARN: the resource GetMicrovm is scoped to (VMs have no ARN of their own). */
+  microvmImageArn: string
 }
 
 /**
@@ -116,8 +118,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly getTemplateVariablesLambda: Function
   public readonly applyTemplateLambda: Function
   public readonly importTemplateLambda: Function
+  public readonly importTemplateDefinitionLambda: Function
   public readonly checkTemplateUpdatesLambda: Function
   public readonly updateStepFromTemplateLambda: Function
+  public readonly getTemplateUsagesLambda: Function
+  public readonly replaceTemplateDefinitionLambda: Function
 
   // Utility Lambdas
   public readonly listModelsLambda: Function
@@ -155,7 +160,6 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
   public readonly executeTestSuiteLambda: Function
   public readonly listSuiteExecutionsLambda: Function
   public readonly getSuiteExecutionLambda: Function
-  public readonly stopSuiteExecutionLambda: Function
   public readonly updateSuiteExecutionStatusLambda: Function
   public readonly updateSuiteScheduleLambda: Function
 
@@ -583,8 +587,28 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       environment: { TABLE_NAME: props.table.tableName }
     })
 
+    // POST /templates/import — whole template (metadata + steps + variables) in one call
+    this.importTemplateDefinitionLambda = this.createPythonLambda({
+      path: 'import_template_definition',
+      timeout: cdk.Duration.seconds(30),
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
     this.checkTemplateUpdatesLambda = this.createPythonLambda({
       path: 'check_template_updates',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    // GET /templates/{id}/usages — use cases with steps linked to the template
+    this.getTemplateUsagesLambda = this.createPythonLambda({
+      path: 'get_template_usages',
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+
+    // PUT /templates/{id} — atomic replace of metadata, steps (by id) and variables
+    this.replaceTemplateDefinitionLambda = this.createPythonLambda({
+      path: 'replace_template_definition',
+      timeout: cdk.Duration.seconds(30),
       environment: { TABLE_NAME: props.table.tableName }
     })
 
@@ -652,12 +676,18 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     // deployment has run v1.3 (api no longer imports them).
     this.exportValue(this.listUsersLambda.functionArn);
     this.exportValue(this.addUserLambda.functionArn);
+
+    // Legacy DELETE /users/{username} Lambda. The route now goes through the
+    // application router (handlers.delete_user), so nothing invokes this one;
+    // it is kept, unrouted, only so its ARN stays exported for api stacks
+    // deployed before the switch (same reason as above). Remove in B9.
     this.removeUserLambda = this.createPythonLambda({
       path: 'delete_user',
       environment: {
         USER_POOL_ID: props.userPool.userPoolId
       }
     });
+    this.exportValue(this.removeUserLambda.functionArn);
 
     // Grant Cognito permissions for user management
     this.listUsersLambda.addToRolePolicy(new PolicyStatement({
@@ -676,17 +706,6 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
         'cognito-idp:AdminUpdateUserAttributes',
         'cognito-idp:AdminGetUser',
         'cognito-idp:AdminAddUserToGroup'
-      ],
-      resources: [props.userPool.userPoolArn]
-    }));
-
-    // AdminListGroupsForUser + ListUsersInGroup back the last-admin guard
-    this.removeUserLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: [
-        'cognito-idp:AdminDeleteUser',
-        'cognito-idp:AdminListGroupsForUser',
-        'cognito-idp:ListUsersInGroup'
       ],
       resources: [props.userPool.userPoolArn]
     }));
@@ -912,14 +931,6 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       }
     });
 
-    this.stopSuiteExecutionLambda = this.createPythonLambda({
-      path: 'stop_suite_execution',
-      environment: {
-        TABLE_NAME: props.table.tableName,
-        ECS_CLUSTER: props.ecsClusterArn
-      }
-    });
-
     this.updateSuiteExecutionStatusLambda = this.createPythonLambda({
       path: 'update_suite_execution_status',
       environment: {
@@ -1009,6 +1020,10 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       environment: {
         TABLE_NAME: props.table.tableName,
         USER_POOL_ID: props.userPool.userPoolId,
+        // Application secrets (`${baseName}/application/<appId>/<key>`) are managed here.
+        SECRET_PREFIX: props.baseName,
+        // Cost routes read the S3 ledgers under `cost_allocation/` (cost_ledger.get_ledger_bucket).
+        BUCKET_NAME: props.artefactsBucket.bucketName,
       }
     })
 
@@ -1017,29 +1032,81 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     const routerCfn = this.applicationRouterLambda.node.defaultChild as cdk.aws_lambda.CfnFunction;
     routerCfn.addPropertyDeletionOverride('ReservedConcurrentExecutions');
 
-    this.applicationRouterLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['cloudwatch:GetMetricData'],
-      resources: ['*']
-    }))
+    // One inline policy for every router statement. cdk.json enables
+    // `@aws-cdk/aws-lambda:createNewPoliciesWithAddToRolePolicy`, so each
+    // addToRolePolicy() would be its own AWS::IAM::Policy resource; the lambdas
+    // stack is at ~400/500 (see .kiro/docs/application-shared-config/design.md,
+    // "Resource ceiling"). New router permissions go into this statement list.
+    //
+    // Application-level secrets are named `${baseName}/application/<appId>/<key>`
+    // (secret_names.application_secret_name) and are managed only by the router
+    // (GET/POST/DELETE /applications/{id}/secrets). The trailing `*` covers the
+    // random suffix Secrets Manager appends to ARNs.
+    // lib/__tests__/ownership-check-iam.test.ts pins the Secrets Manager set.
+    const applicationSecretsArnPattern = `arn:aws:secretsmanager:${Aws.REGION}:${Aws.ACCOUNT_ID}:secret:${props.baseName}/application/*`;
 
-    // Grant Cognito Admin permissions for team provisioning + user management (permissions feature)
-    this.applicationRouterLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: [
-        'cognito-idp:AdminAddUserToGroup',
-        'cognito-idp:AdminRemoveUserFromGroup',
-        'cognito-idp:AdminCreateUser',
-        'cognito-idp:AdminDeleteUser',
-        'cognito-idp:AdminGetUser',
-        'cognito-idp:AdminListGroupsForUser',
-        'cognito-idp:CreateGroup',
-        'cognito-idp:DeleteGroup',
-        'cognito-idp:ListUsers',
-        // Last-admin guard counts members of the global 'admins' group
-        'cognito-idp:ListUsersInGroup',
-      ],
-      resources: [props.userPool.userPoolArn]
+    this.applicationRouterLambda.role?.attachInlinePolicy(new Policy(this, 'application_router_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['cloudwatch:GetMetricData'],
+          resources: ['*']
+        }),
+        // Cognito Admin permissions for team provisioning + user management (permissions feature)
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            'cognito-idp:AdminAddUserToGroup',
+            'cognito-idp:AdminRemoveUserFromGroup',
+            'cognito-idp:AdminCreateUser',
+            'cognito-idp:AdminDeleteUser',
+            'cognito-idp:AdminGetUser',
+            'cognito-idp:AdminListGroupsForUser',
+            'cognito-idp:CreateGroup',
+            'cognito-idp:DeleteGroup',
+            'cognito-idp:ListUsers',
+            // Last-admin guard counts members of the global 'admins' group
+            'cognito-idp:ListUsersInGroup',
+          ],
+          resources: [props.userPool.userPoolArn]
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: [
+            'secretsmanager:CreateSecret',
+            'secretsmanager:TagResource',
+            'secretsmanager:UpdateSecret',
+            'secretsmanager:DeleteSecret',
+            'secretsmanager:DescribeSecret',
+          ],
+          resources: [applicationSecretsArnPattern]
+        }),
+        // ListSecrets does not support resource-level permissions ("*" required).
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['secretsmanager:ListSecrets'],
+          resources: ['*']
+        }),
+        // Cost allocation (.kiro/docs/cost-allocation/design.md): the cost routes return
+        // the last 30 rows of a dimension's ledger. Read-only, and only the ledger
+        // prefix — the router never touches execution artefacts. The collector (worker
+        // stack) is the sole writer. lib/__tests__/ownership-check-iam.test.ts pins this.
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['s3:GetObject'],
+          resources: [`${props.artefactsBucket.bucketArn}/cost_allocation/*`]
+        }),
+        // A dimension without usage has no ledger file yet. Without ListBucket, S3
+        // answers GetObject on a missing key with 403 AccessDenied instead of 404
+        // NoSuchKey, and the cost routes return 500 instead of the empty state.
+        // Same prefix-scoped grant as the cost collector (worker-stack.ts).
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['s3:ListBucket'],
+          resources: [props.artefactsBucket.bucketArn],
+          conditions: { StringLike: { 's3:prefix': 'cost_allocation/*' } },
+        }),
+      ]
     }))
 
     this.applicationRouterLambda.role?.addManagedPolicy(props.tableReadPolicy)
@@ -1093,6 +1160,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.listTemplateStepsLambda,
       this.getTemplateVariablesLambda,
       this.checkTemplateUpdatesLambda,
+      this.getTemplateUsagesLambda,
       this.listTestSuitesLambda,
       this.getTestSuiteLambda,
       this.listSuiteUsecasesLambda,
@@ -1104,7 +1172,11 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.listSuiteArtifactsLambda,
       this.listExecutionArtifactsLambda,
       this.getStepTraceLambda,
-      this.getRecordingDataLambda
+      this.getRecordingDataLambda,
+      // Step create/update query the usecase's sibling steps (repeat label
+      // uniqueness, parent lookup) before writing. delete_step has full access.
+      this.createStepLambda,
+      this.updateStepLambda,
     ]
     readLambdas.forEach(lambda => lambda.role?.addManagedPolicy(props.tableReadPolicy))
 
@@ -1120,6 +1192,7 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.createUsecaseHeadersLambda,
       this.createUsecaseVariablesLambda,
       this.createTemplateLambda,
+      this.importTemplateDefinitionLambda,
       this.updateTemplateLambda,
       this.createTemplateStepLambda,
       this.updateTemplateStepLambda,
@@ -1129,7 +1202,6 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       this.removeUsecaseFromSuiteLambda,
       this.updateSuiteScheduleLambda,
       this.executeTestSuiteLambda,
-      this.stopSuiteExecutionLambda,
       this.updateSuiteExecutionStatusLambda,
       this.sendRecordingCommandLambda,
       // CLI-unified-runner endpoints
@@ -1192,6 +1264,13 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     // Lambdas that need both read and write
     this.importTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.importTemplateLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    // import_usecase is otherwise write-only; it reads TEMPLATE records to
+    // expand `template` placeholder steps in the import JSON.
+    this.importUsecaseLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    // PUT /templates/{id} reads the existing steps to diff by id, then writes
+    // the transaction (metadata, steps, variables).
+    this.replaceTemplateDefinitionLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    this.replaceTemplateDefinitionLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.applyTemplateLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.removeUsecaseFromSuiteLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.updateSuiteScheduleLambda.role?.addManagedPolicy(props.tableReadPolicy)
@@ -1206,6 +1285,28 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     this.updateSuiteExecutionStatusLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.updateExecutionStatusLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.updateExecutionStatusLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    // The terminal transition records the VM's start/termination time on the
+    // execution record (execution_transitions.record_microvm_runtime →
+    // GetMicrovm). Same scoping as the stop Lambda and the reconciler in
+    // worker-stack.ts: the image ARN plus the account's microvm resources
+    // (the spike could not confirm which one GetMicrovm is authorised
+    // against). One Policy construct: cdk.json sets
+    // createNewPoliciesWithAddToRolePolicy, so each addToRolePolicy() would be
+    // its own AWS::IAM::Policy resource.
+    this.updateExecutionStatusLambda.role!.attachInlinePolicy(new Policy(this, 'update_execution_status_microvm_policy', {
+      statements: [
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:GetMicrovm'],
+          resources: [props.microvmImageArn],
+        }),
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ['lambda:GetMicrovm'],
+          resources: [`arn:aws:lambda:${Aws.REGION}:${Aws.ACCOUNT_ID}:microvm/*`],
+        }),
+      ],
+    }))
     this.updateExecutionStepStatusLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.updateExecutionStepStatusLambda.role?.addManagedPolicy(props.tableWritePolicy)
     this.generateExecutionArtifactUrlLambda.role?.addManagedPolicy(props.tableReadPolicy)
@@ -1219,6 +1320,35 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     // update to verify the execution variables record exists.
     this.createRuntimeVariableLambda.role?.addManagedPolicy(props.tableReadPolicy)
     this.createRuntimeVariableLambda.role?.addManagedPolicy(props.tableWritePolicy)
+
+    // ========== Deploy-time backfill of template USAGE records ==========
+    // Runs once during `cdk deploy` (and again only when the handler code
+    // changes) after the template lambdas are live, so no link created by the
+    // new import code is missed. The handler scans the table (the only scan in
+    // the template feature) and hands over to itself when it runs out of time.
+    const backfillPath = 'backfill_template_usages'
+    const backfillTemplateUsagesLambda = this.createPythonLambda({
+      path: backfillPath,
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 256,
+      environment: { TABLE_NAME: props.table.tableName }
+    })
+    backfillTemplateUsagesLambda.role?.addManagedPolicy(props.tableReadPolicy)
+    backfillTemplateUsagesLambda.role?.addManagedPolicy(props.tableWritePolicy)
+    // Self-invoke for continuation. The ARN is built from the known function
+    // name instead of `fn.grantInvoke(fn)`, which would make the role policy
+    // depend on the function (circular).
+    backfillTemplateUsagesLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['lambda:InvokeFunction'],
+      resources: [`arn:aws:lambda:${Aws.REGION}:${Aws.ACCOUNT_ID}:function:${this.cdkName(this.snakeToPascal(backfillPath))}`]
+    }))
+    new Trigger(this, 'backfill_template_usages_trigger', {
+      handler: backfillTemplateUsagesLambda,
+      executeOnHandlerChange: true,
+      executeAfter: [this.importTemplateLambda, this.importUsecaseLambda, this.deleteTemplateLambda],
+      timeout: cdk.Duration.minutes(15),
+    })
 
     // S3 Bucket Permissions
     props.artefactsBucket.grantRead(this.listRecordingBatchesLambda)
@@ -1236,6 +1366,10 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
     props.artefactsBucket.grantRead(this.getStepTraceLambda)
     props.artefactsBucket.grantRead(this.getRecordingDataLambda)
     props.artefactsBucket.grantRead(this.generateUsecaseLambda)
+    // Presigned URLs carry the signer's permissions: without these grants
+    // every trajectory PUT/GET on the URL is a 403 from S3.
+    props.artefactsBucket.grantPut(this.createTrajectoryUploadUrlLambda)
+    props.artefactsBucket.grantRead(this.getTrajectoryDownloadUrlLambda)
 
     // Nova Act Permissions
     const novaActArn = `arn:aws:nova-act:${Aws.REGION}:${Aws.ACCOUNT_ID}:*`;
@@ -1298,16 +1432,19 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: ['*']
     }))
     
+    // GET /usecase/{id}/secrets and .../secrets/{key}/value also read the owning
+    // application's secrets (inherited keys, value fallback) — read-only on the
+    // `application/*` path (applicationSecretsArnPattern, defined with the router).
     this.getUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:DescribeSecret'],
-      resources: [secretsArnPattern]
+      resources: [secretsArnPattern, applicationSecretsArnPattern]
     }))
 
     this.getUsecaseSecretValueLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['secretsmanager:GetSecretValue'],
-      resources: [secretsArnPattern]
+      resources: [secretsArnPattern, applicationSecretsArnPattern]
     }))
 
     this.deleteUsecaseSecretsLambda.addToRolePolicy(new PolicyStatement({
@@ -1376,18 +1513,6 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
       resources: ['*']
     }))
 
-    this.importUsecaseLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
-      resources: [secretsArnPattern]
-    }))
-    
-    this.importUsecaseLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['secretsmanager:UpdateSecret'],
-      resources: [secretsArnPattern]
-    }))
-
     // Bedrock Permissions (wildcard region for cross-region inference profiles)
     this.generateUsecaseLambda.addToRolePolicy(new PolicyStatement({
       effect: Effect.ALLOW,
@@ -1448,18 +1573,6 @@ export class NovaActQAStudioLambdaStack extends NovaActQAStudioBaseStack {
 
     // Grant execute_suite Lambda permission to invoke execute_usecase Lambda
     props.executeUsecaseLambda.grantInvoke(this.executeTestSuiteLambda);
-
-    // Grant stop_suite_execution Lambda permission to stop ECS tasks
-    this.stopSuiteExecutionLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['ecs:StopTask'],
-      resources: [`arn:aws:ecs:${Aws.REGION}:${Aws.ACCOUNT_ID}:task/*`],
-      conditions: {
-        'ArnEquals': {
-          'ecs:cluster': props.ecsClusterArn
-        }
-      }
-    }));
 
     // Grant update_suite_schedule Lambda permission to manage EventBridge rules
     this.updateSuiteScheduleLambda.addToRolePolicy(new PolicyStatement({

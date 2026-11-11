@@ -1,0 +1,110 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-10-29T08:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-12 Legacy Create Bookmarks",
+    "description": "Old creation URLs open the unified wizard at the matching step; a clone bookmark keeps its source",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "wizard",
+      "redirect",
+      "create"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "browser",
+      "instruction": "Open /create",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/create\"}"
+    },
+    {
+      "sort": 5,
+      "step_type": "validation",
+      "instruction": "Is the wizard step 'How to start' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 6,
+      "step_type": "validation",
+      "instruction": "Does the browser address end with '/create/new'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 7,
+      "step_type": "browser",
+      "instruction": "Open /create/blank",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/create/blank\"}"
+    },
+    {
+      "sort": 8,
+      "step_type": "validation",
+      "instruction": "Is the wizard step 'Platform selection' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 9,
+      "step_type": "browser",
+      "instruction": "Open /create/clone?sourceId=069b14f8-9c4e-4fe7-a0bb-02467a31bb49",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/create/clone?sourceId=069b14f8-9c4e-4fe7-a0bb-02467a31bb49\"}"
+    },
+    {
+      "sort": 10,
+      "step_type": "validation",
+      "instruction": "Is the wizard step 'Select source' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 11,
+      "step_type": "validation",
+      "instruction": "Is '[QA Validation App] Login' selected in the 'Select use case to clone' field?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 12,
+      "step_type": "validation",
+      "instruction": "Does the 'New use case name' field contain '[QA Validation App] Login (Copy)'?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 13,
+      "step_type": "navigation",
+      "instruction": "Click the 'Cancel' button"
+    }
+  ],
+  "variables": []
+}

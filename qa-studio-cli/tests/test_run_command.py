@@ -106,7 +106,7 @@ class TestRunCommandDispatch:
         )
         mock_runner.run_usecase.assert_called_once()
         kw = mock_runner.run_usecase.call_args[1]
-        assert kw["usecase_id"] == "uc-123"
+        assert kw["usecase_ids"] == ["uc-123"]
         assert kw["local_only"] is True
         assert kw["base_url"] == "http://localhost:3000"
         assert kw["region"] == "eu-west-1"
@@ -136,10 +136,23 @@ class TestRunCommandDispatch:
         runner.invoke(cli, ["run", "--usecase-id", "u1"])
         assert mock_runner.run_usecase.call_args[1]["output_format"] == "json"
 
-    def test_default_timeout_is_3600(self, runner, mock_modules):
+    def test_default_timeout_is_no_limit(self, runner, mock_modules):
         mock_runner, _ = mock_modules
         runner.invoke(cli, ["run", "--usecase-id", "u1"])
-        assert mock_runner.run_usecase.call_args[1]["timeout"] == 3600
+        assert mock_runner.run_usecase.call_args[1]["timeout"] is None
+
+    @pytest.mark.parametrize("value", ["0", "-5"])
+    def test_non_positive_timeout_rejected(self, runner, mock_modules, value):
+        mock_runner, _ = mock_modules
+        result = runner.invoke(cli, ["run", "--usecase-id", "u1", "--timeout", value])
+        assert result.exit_code == 2
+        assert "Invalid value for '--timeout'" in result.output
+        mock_runner.run_usecase.assert_not_called()
+
+    def test_suite_timeout_passed_through(self, runner, mock_modules):
+        mock_runner, _ = mock_modules
+        runner.invoke(cli, ["run", "--suite-id", "s1", "--timeout", "600"])
+        assert mock_runner.run_runner.call_args[1]["timeout"] == 600
 
     def test_token_file_passed_to_usecase(self, runner, mock_modules):
         mock_runner, _ = mock_modules
@@ -291,3 +304,116 @@ class TestExecutionIdFlag:
         assert result.exit_code == 0
         _, kwargs = mock_runner.run_usecase.call_args
         assert kwargs["execution_id"] is None
+
+
+class TestElectronAppFlags:
+    """--app-path is shared with mobile; --app-arg / --app-user-data-dir are
+    electron-only and meaningless without an app to launch."""
+
+    def test_app_arg_requires_app_path(self, runner):
+        result = runner.invoke(cli, ["run", "--usecase-id", "u1", "--app-arg", "x"])
+        assert result.exit_code != 0
+        assert "--app-arg" in result.output and "--app-path" in result.output
+
+    def test_app_user_data_dir_requires_app_path(self, runner, tmp_path):
+        result = runner.invoke(
+            cli, ["run", "--usecase-id", "u1", "--app-user-data-dir", str(tmp_path)],
+        )
+        assert result.exit_code != 0
+        assert "--app-user-data-dir" in result.output and "--app-path" in result.output
+
+    def test_app_flags_pass_through_to_run_usecase(self, runner, mock_modules, tmp_path):
+        mock_runner, _ = mock_modules
+        result = runner.invoke(
+            cli,
+            [
+                "run", "--usecase-id", "u1",
+                "--app-path", "/Apps/Harness.app",
+                "--app-arg", "/src/app", "--app-arg", "--flag",
+                "--app-user-data-dir", str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["app_path"] == "/Apps/Harness.app"
+        assert kwargs["app_args"] == ["/src/app", "--flag"]
+        assert kwargs["app_user_data_dir"] == str(tmp_path)
+
+    def test_app_flags_pass_through_to_run_runner(self, runner, mock_modules):
+        mock_runner, _ = mock_modules
+        result = runner.invoke(
+            cli,
+            ["run", "--suite-id", "s1", "--app-path", "/Apps/Harness.app", "--app-arg", "a"],
+        )
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_runner.run_runner.call_args
+        assert kwargs["app_path"] == "/Apps/Harness.app"
+        assert kwargs["app_args"] == ["a"]
+        assert kwargs["app_user_data_dir"] is None
+
+    def test_defaults_when_absent(self, runner, mock_modules):
+        mock_runner, _ = mock_modules
+        result = runner.invoke(cli, ["run", "--usecase-id", "u1"])
+        assert result.exit_code == 0
+        _, kwargs = mock_runner.run_usecase.call_args
+        assert kwargs["app_path"] is None
+        assert kwargs["app_args"] == []
+        assert kwargs["app_user_data_dir"] is None
+
+
+class TestRunCommandMultipleUsecaseIds:
+    """``--usecase-id`` accepts a whitespace-separated list; ``--fail-fast``."""
+
+    def _ids(self, mock_modules):
+        return mock_modules[0].run_usecase.call_args[1]["usecase_ids"]
+
+    def test_single_unquoted_id(self, runner, mock_modules):
+        runner.invoke(cli, ["run", "--usecase-id", "a"])
+        assert self._ids(mock_modules) == ["a"]
+
+    def test_whitespace_separated_ids_are_split(self, runner, mock_modules):
+        runner.invoke(cli, ["run", "--usecase-id", " a b\tc\n d  "])
+        assert self._ids(mock_modules) == ["a", "b", "c", "d"]
+
+    def test_blank_value_rejected(self, runner):
+        result = runner.invoke(cli, ["run", "--usecase-id", "   "])
+        assert result.exit_code != 0
+        assert "--usecase-id must contain at least one ID" in result.output
+
+    def test_duplicate_ids_rejected(self, runner):
+        result = runner.invoke(cli, ["run", "--usecase-id", "a b a"])
+        assert result.exit_code != 0
+        assert "duplicate" in result.output.lower()
+        assert "a" in result.output
+
+    def test_execution_id_with_many_ids_rejected(self, runner):
+        result = runner.invoke(
+            cli, ["run", "--usecase-id", "a b", "--execution-id", "ex-1"]
+        )
+        assert result.exit_code != 0
+        assert "--execution-id requires exactly one --usecase-id" in result.output
+
+    def test_execution_id_with_single_id_accepted(self, runner, mock_modules):
+        result = runner.invoke(
+            cli, ["run", "--usecase-id", "a", "--execution-id", "ex-1"]
+        )
+        assert result.exit_code == 0
+        assert mock_modules[0].run_usecase.call_args[1]["execution_id"] == "ex-1"
+
+    def test_fail_fast_default_false(self, runner, mock_modules):
+        runner.invoke(cli, ["run", "--usecase-id", "a b"])
+        assert mock_modules[0].run_usecase.call_args[1]["fail_fast"] is False
+
+    def test_fail_fast_flag_forwarded(self, runner, mock_modules):
+        runner.invoke(cli, ["run", "--usecase-id", "a b", "--fail-fast"])
+        assert mock_modules[0].run_usecase.call_args[1]["fail_fast"] is True
+
+    def test_fail_fast_with_suite_rejected(self, runner):
+        result = runner.invoke(cli, ["run", "--suite-id", "s1", "--fail-fast"])
+        assert result.exit_code != 0
+        assert "--fail-fast is only supported with --usecase-id" in result.output
+
+    def test_help_text_mentions_multiple_ids(self, runner):
+        result = runner.invoke(cli, ["run", "--help"])
+        assert "One or more use case IDs" in result.output
+        assert "--fail-fast" in result.output

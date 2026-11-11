@@ -1,0 +1,147 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-05-06T12:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] Repeat Step Not Offered In Wizard",
+    "description": "Negative check: the Interactive Wizard's step type list does not contain the Repeat step type (repeat steps are editor-only in v1). Starts a wizard session, inspects the step type search, cancels the session.",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "repeat",
+      "wizard",
+      "negative",
+      "test"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "instruction": "focus username field",
+      "step_type": "secret",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "instruction": "focus password field",
+      "step_type": "secret",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "instruction": "Click the 'Sign in' button",
+      "step_type": "navigation"
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Use case' button",
+      "sort": 4
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Create New' option",
+      "sort": 5
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 6
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Web' platform option",
+      "sort": 7
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 8
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] Wizard Repeat Check {{UniqueID}}' in the Name field",
+      "sort": 9
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type 'https://example.com' in the Starting URL field",
+      "sort": 10
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'eu-central-1' in the Execution Region dropdown",
+      "sort": 11
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'nova-act-v1.0' in the Model dropdown",
+      "sort": 12
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'QA Studio' in the Application dropdown",
+      "sort": 13
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 14
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Interactive Wizard' option",
+      "sort": 15
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 16
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the button that starts the browser session",
+      "sort": 17
+    },
+    {
+      "sort": 18,
+      "instruction": "Wait until the step builder with the 'Step Type' field is visible",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 19,
+      "instruction": "Type 'Repeat' in the 'Search step types...' field",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 20,
+      "instruction": "Is 'No matching step type' shown and no 'Repeat' option listed?",
+      "step_type": "validation",
+      "validation_type": "bool",
+      "validation_operator": "equals",
+      "validation_value": "true"
+    },
+    {
+      "sort": 21,
+      "instruction": "Click the 'Cancel Session' button",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 22,
+      "instruction": "Confirm cancelling the session if asked",
+      "step_type": "navigation"
+    }
+  ],
+  "variables": [],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Username for login"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Password for login"
+    }
+  ]
+}

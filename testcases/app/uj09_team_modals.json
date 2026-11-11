@@ -1,0 +1,190 @@
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-10-29T08:00:00Z",
+  "usecase": {
+    "name": "[QA Validation App] UJ-9 Team Admin Modals",
+    "description": "Create Team, Add Member and Grant Shared Access modals validate their fields and cancel cleanly; the team is deleted again",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "teams",
+      "admin",
+      "modal"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "step_type": "secret",
+      "instruction": "Focus the username field",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "step_type": "secret",
+      "instruction": "Focus the password field",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "step_type": "navigation",
+      "instruction": "Click the 'Sign in' button"
+    },
+    {
+      "sort": 4,
+      "step_type": "browser",
+      "instruction": "Open /admin/teams",
+      "browser_action": "navigate",
+      "browser_args": "{\"url\": \"https://d2pfg8qs5i5edc.cloudfront.net/admin/teams\"}"
+    },
+    {
+      "sort": 5,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Team' button"
+    },
+    {
+      "sort": 6,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button in the dialog"
+    },
+    {
+      "sort": 7,
+      "step_type": "validation",
+      "instruction": "Is the error 'Team name is required' shown in the dialog?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 8,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] Modals {{UniqueID}}' in the Team name field"
+    },
+    {
+      "sort": 9,
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button in the dialog"
+    },
+    {
+      "sort": 10,
+      "step_type": "validation",
+      "instruction": "Is a team named '[QA Test] Modals {{UniqueID}}' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 11,
+      "step_type": "navigation",
+      "instruction": "Click the team name '[QA Test] Modals {{UniqueID}}'"
+    },
+    {
+      "sort": 12,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add Member' button"
+    },
+    {
+      "sort": 13,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Add Team Member' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 14,
+      "step_type": "navigation",
+      "instruction": "Click the 'Add Member' button in the dialog"
+    },
+    {
+      "sort": 15,
+      "step_type": "validation",
+      "instruction": "Is the error 'User email or ID is required' shown in the dialog?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 16,
+      "step_type": "navigation",
+      "instruction": "Click the 'Cancel' button in the dialog"
+    },
+    {
+      "sort": 17,
+      "step_type": "validation",
+      "instruction": "Is the 'Add Team Member' dialog closed?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 18,
+      "step_type": "navigation",
+      "instruction": "Click the 'Shared Access' tab"
+    },
+    {
+      "sort": 19,
+      "step_type": "navigation",
+      "instruction": "Click the 'Grant Access' button"
+    },
+    {
+      "sort": 20,
+      "step_type": "validation",
+      "instruction": "Is a dialog with the header 'Grant Shared Access' shown?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 21,
+      "step_type": "navigation",
+      "instruction": "Click the 'Grant Access' button in the dialog"
+    },
+    {
+      "sort": 22,
+      "step_type": "validation",
+      "instruction": "Is the error 'Target team is required' shown in the dialog?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 23,
+      "step_type": "navigation",
+      "instruction": "Click the 'Cancel' button in the dialog"
+    },
+    {
+      "sort": 24,
+      "step_type": "validation",
+      "instruction": "Is the 'Grant Shared Access' dialog closed?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "true"
+    },
+    {
+      "sort": 25,
+      "step_type": "navigation",
+      "instruction": "Click the 'Teams' item in the left navigation"
+    },
+    {
+      "sort": 26,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the row of team '[QA Test] Modals {{UniqueID}}'"
+    },
+    {
+      "sort": 27,
+      "step_type": "navigation",
+      "instruction": "Click the 'Delete' button in the confirmation dialog"
+    },
+    {
+      "sort": 28,
+      "step_type": "validation",
+      "instruction": "Is a team named '[QA Test] Modals {{UniqueID}}' listed in the table?",
+      "validation_type": "bool",
+      "validation_operator": "exact",
+      "validation_value": "false"
+    }
+  ],
+  "variables": []
+}

@@ -18,14 +18,14 @@
 - [ ] Admin assigns app to team → team members can see it, others cannot
 - [ ] Admin reassigns app to different team → old team loses access, new team gains it
 - [ ] Team Lead creates app → auto-assigned to their team
-- [ ] Non-admin user cannot see apps owned by other teams in Dashboard or Applications
+- [ ] Non-admin user cannot see apps owned by other teams on the Applications page
 - [ ] Unassigned app (no owner_team_id) → only admins can see it
 
 ## Role-Based UI
 - [ ] Admin sees: Use Cases, Test Suites, Teams, Users in sidebar
-- [ ] Team Lead sees: Dashboard, Applications, Templates, My Team (no Use Cases/Test Suites)
-- [ ] Editor/Executor/Viewer sees: Dashboard, Applications, Templates
-- [ ] Unassigned user sees: Dashboard (Forbidden), Applications (empty), Templates
+- [ ] Team Lead sees: Applications, Templates, My Team (no Use Cases/Test Suites)
+- [ ] Editor/Executor/Viewer sees: Applications, Templates
+- [ ] Unassigned user sees: Applications (Forbidden/empty), Templates
 
 ## Use Case / Test Suite Boundaries
 - [ ] Use cases inside a team's app are visible to team members
@@ -41,7 +41,7 @@
 - [ ] Last admin cannot be removed/demoted (409 error)
 - [ ] Duplicate team member add → 400 "already a member"
 - [ ] Non-existent user email in Add Member → 404
-- [ ] Unassigned user → "Forbidden" on dashboard (known: should show landing page instead)
+- [ ] Unassigned user → "Forbidden" on the applications page (known: should show landing page instead)
 
 ## MFA / Security (not yet implemented)
 - [ ] New user receives email with temp password → must change on first login

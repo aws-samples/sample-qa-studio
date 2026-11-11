@@ -16,7 +16,7 @@ interface UseAsyncDataReturn<T> {
 }
 
 // Custom hook for handling async data fetching with loading states
-export function useAsyncData<T>(
+function useAsyncData<T>(
   asyncFunction: () => Promise<T>,
   options: UseAsyncDataOptions<T> = {}
 ): UseAsyncDataReturn<T> {

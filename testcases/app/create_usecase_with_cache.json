@@ -7,7 +7,12 @@
     "starting_url": "",
     "active": true,
     "executing_region": "",
-    "tags": ["cache", "create", "usecase", "test"]
+    "tags": [
+      "cache",
+      "create",
+      "usecase",
+      "test"
+    ]
   },
   "steps": [
     {
@@ -28,118 +33,168 @@
       "step_type": "navigation"
     },
     {
-      "sort": 4,
+      "step_type": "navigation",
       "instruction": "Click the 'Create Use case' button",
-      "step_type": "navigation"
+      "sort": 4
     },
     {
-      "sort": 5,
-      "instruction": "Click the 'Create Blank' card",
-      "step_type": "navigation"
+      "step_type": "navigation",
+      "instruction": "Select the 'Create New' option",
+      "sort": 5
     },
     {
-      "sort": 6,
-      "instruction": "Type '[QA Test] Cache Test {{UniqueID}}' in the name field",
-      "step_type": "navigation"
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 6
     },
     {
-      "sort": 7,
-      "instruction": "Type 'Testing cache toggle' in the description field",
-      "step_type": "navigation"
+      "step_type": "navigation",
+      "instruction": "Select the 'Web' platform option",
+      "sort": 7
     },
     {
-      "sort": 8,
-      "instruction": "Type 'https://example.com' in the starting URL field",
-      "step_type": "navigation"
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 8
     },
     {
-      "sort": 9,
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] Cache Test {{UniqueID}}' in the Name field",
+      "sort": 9
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type 'Testing cache toggle' in the Description field",
+      "sort": 10
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type 'https://example.com' in the Starting URL field",
+      "sort": 11
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'eu-central-1' in the Execution Region dropdown",
+      "sort": 12
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'nova-act-v1.0' in the Model dropdown",
+      "sort": 13
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'QA Studio' in the Application dropdown",
+      "sort": 14
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 15
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Create Blank' option",
+      "sort": 16
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 17
+    },
+    {
+      "step_type": "navigation",
       "instruction": "Enable the 'Enable step caching' toggle",
-      "step_type": "navigation"
+      "sort": 18
     },
     {
-      "sort": 10,
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 19
+    },
+    {
+      "step_type": "navigation",
       "instruction": "Click the 'Create' button",
-      "step_type": "navigation"
+      "sort": 20
     },
     {
-      "sort": 11,
+      "sort": 21,
       "instruction": "Verify the usecase was created successfully",
       "step_type": "validation",
       "expected_value": "true",
       "operator": "boolean_true"
     },
     {
-      "sort": 12,
+      "sort": 22,
       "instruction": "Click on the created usecase '[QA Test] Cache Test {{UniqueID}}'",
       "step_type": "navigation"
     },
     {
-      "sort": 13,
+      "sort": 23,
       "instruction": "Click the 'Edit' button",
       "step_type": "navigation"
     },
     {
-      "sort": 14,
+      "sort": 24,
       "instruction": "Verify the 'Enable step caching' toggle is enabled",
       "step_type": "validation",
       "expected_value": "true",
       "operator": "boolean_true"
     },
     {
-      "sort": 15,
+      "sort": 25,
       "instruction": "Disable the 'Enable step caching' toggle",
       "step_type": "navigation"
     },
     {
-      "sort": 16,
+      "sort": 26,
       "instruction": "Click 'Save Changes' button",
       "step_type": "navigation"
     },
     {
-      "sort": 17,
+      "sort": 27,
       "instruction": "Click the 'Edit' button again",
       "step_type": "navigation"
     },
     {
-      "sort": 18,
+      "sort": 28,
       "instruction": "Verify the 'Enable step caching' toggle is now disabled",
       "step_type": "validation",
       "expected_value": "false",
       "operator": "boolean_false"
     },
     {
-      "sort": 19,
+      "sort": 29,
       "instruction": "Click 'Cancel' button",
       "step_type": "navigation"
     },
     {
-      "sort": 20,
+      "sort": 30,
       "instruction": "Click the 'Use cases' menu item",
       "step_type": "navigation"
     },
     {
-      "sort": 21,
+      "sort": 31,
       "instruction": "Type '[QA Test] Cache Test' in the search bar",
       "step_type": "navigation"
     },
     {
-      "sort": 22,
+      "sort": 32,
       "instruction": "Click checkbox in front of usecase '[QA Test] Cache Test {{UniqueID}}'",
       "step_type": "navigation"
     },
     {
-      "sort": 23,
+      "sort": 33,
       "instruction": "Open the dropdown menu",
       "step_type": "navigation"
     },
     {
-      "sort": 24,
+      "sort": 34,
       "instruction": "Select 'Delete Selected' from dropdown",
       "step_type": "navigation"
     },
     {
-      "sort": 25,
+      "sort": 35,
       "instruction": "Confirm deletion",
       "step_type": "navigation"
     }

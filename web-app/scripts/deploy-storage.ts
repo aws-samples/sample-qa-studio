@@ -14,8 +14,15 @@
  */
 import { CloudFormationClient, GetTemplateCommand } from '@aws-sdk/client-cloudformation';
 import { execFileSync } from 'child_process';
+import * as path from 'path';
 import { loadConfig } from '../lib/config';
 import { STORAGE_GSIS_CONTEXT_KEY, planGsiSteps } from '../lib/storage-gsis';
+
+// Call the aws-cdk CLI by path. `npx cdk` must NOT be used from this package:
+// if package.json ever declares a `bin` named "cdk" again, npm resolves
+// `npx cdk` to the project's own bin — the result was a silent synth instead
+// of a deploy.
+const CDK_BIN = path.join(__dirname, '..', 'node_modules', '.bin', 'cdk');
 
 const config = loadConfig();
 const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || config.defaultRegion;
@@ -42,9 +49,9 @@ async function getDeployedGsis(): Promise<string[] | null> {
 }
 
 function cdkDeployStorage(extraArgs: string[]): void {
-  const args = ['cdk', 'deploy', 'storage', '--require-approval', 'never', '--exclusively', ...extraArgs];
-  console.log(`▶ npx ${args.join(' ')}`);
-  execFileSync('npx', args, { stdio: 'inherit' });
+  const args = ['deploy', 'storage', '--require-approval', 'never', '--exclusively', ...extraArgs];
+  console.log(`▶ cdk ${args.join(' ')}`);
+  execFileSync(CDK_BIN, args, { stdio: 'inherit' });
 }
 
 async function main(): Promise<void> {

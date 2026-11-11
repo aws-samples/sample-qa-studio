@@ -5,7 +5,7 @@ at module load time by core CLI modules (lazy import only).
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -108,6 +108,10 @@ class StepResultDetail(BaseModel):
     status: str
     duration: float
     error: Optional[str] = None
+    # Set on steps unrolled from a ``repeat`` step (see repeat-step design).
+    repeat_row_index: Optional[int] = None
+    repeat_row_total: Optional[int] = None
+    repeat_label: Optional[str] = None
 
 
 class ArtifactPaths(BaseModel):
@@ -141,3 +145,44 @@ class RemoteExecutionResult(BaseModel):
     execution_id: str = Field(alias="executionId")
     duration: float
     steps: list[StepResultDetail]
+
+
+MultiRunStatus = Literal["success", "failed", "skipped"]
+
+
+class MultiRunEntry(BaseModel):
+    """One use case's verdict in a multi-use-case ``qa-studio run``.
+
+    ``skipped`` is only produced by ``--fail-fast`` for use cases that
+    were never started.  ``execution_id`` is set on the remote path only.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    usecase_id: str = Field(alias="usecaseId")
+    usecase_name: str = Field(alias="usecaseName")
+    status: MultiRunStatus
+    execution_id: Optional[str] = Field(default=None, alias="executionId")
+    duration: float = 0.0
+    error: Optional[str] = None
+
+
+class MultiRunSummary(BaseModel):
+    """Aggregate verdict of a multi-use-case run. Serialized as JSON to stdout."""
+
+    total: int
+    passed: int
+    failed: int
+    skipped: int
+    results: List[MultiRunEntry]
+
+    @classmethod
+    def from_results(cls, results: List[MultiRunEntry]) -> "MultiRunSummary":
+        """Build the summary; counts are always derived, never hand-assembled."""
+        return cls(
+            total=len(results),
+            passed=sum(1 for r in results if r.status == "success"),
+            failed=sum(1 for r in results if r.status == "failed"),
+            skipped=sum(1 for r in results if r.status == "skipped"),
+            results=list(results),
+        )

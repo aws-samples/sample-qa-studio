@@ -1,70 +1,26 @@
-import { useState, useEffect } from 'react';
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
-import { api } from '../../utils/api';
+import type { ExecutionVariablesResponse } from '../../utils/api';
 
 interface ExecutionVariablesProps {
-  usecaseId: string;
-  executionId: string;
+  /** The `/variables` response polled by `ExecutionDetailPanel`. */
+  variables: ExecutionVariablesResponse;
 }
 
-interface Variable {
-  key: string;
-  value: string;
-}
+/**
+ * The Variables container of an execution. Presentational: the panel owns the fetch.
+ * *Defined Variables* is the run's snapshot (`execution_variables`), not the use case's
+ * current variables, so the values match what the run started with.
+ */
+export default function ExecutionVariables({ variables }: ExecutionVariablesProps) {
+  const defined = Object.entries(variables.execution_variables ?? {}).map(([key, value]) => ({ key, value }));
+  const runtime = variables.runtime_variables ?? [];
 
-interface ExecutionVariablesData {
-  variables: Variable[];
-  runtime_variables: Variable[];
-}
-
-export default function ExecutionVariables({ usecaseId, executionId }: ExecutionVariablesProps) {
-  const [variablesData, setVariablesData] = useState<ExecutionVariablesData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchVariables = async () => {
-      try {
-        setLoading(true);
-        const data = await api.get(`usecase/${usecaseId}/executions/${executionId}/variables`);
-        setVariablesData(data);
-        setError(null);
-      } catch (err) {
-        console.error('Failed to fetch execution variables:', err);
-        setError('Failed to load execution variables');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchVariables();
-  }, [usecaseId, executionId]);
-
-  if (loading) {
-    return (
-      <Container header={<Header variant="h2">Variables</Header>}>
-        <Box>Loading variables...</Box>
-      </Container>
-    );
-  }
-
-  if (error) {
-    return (
-      <Container header={<Header variant="h2">Variables</Header>}>
-        <Box color="text-status-error">{error}</Box>
-      </Container>
-    );
-  }
-
-  const hasDefinedVariables = variablesData?.variables && variablesData.variables.length > 0;
-  const hasRuntimeVariables = variablesData?.runtime_variables && variablesData.runtime_variables.length > 0;
-
-  if (!hasDefinedVariables && !hasRuntimeVariables) {
+  if (defined.length === 0 && runtime.length === 0) {
     return (
       <Container header={<Header variant="h2">Variables</Header>}>
         <Box color="text-status-inactive">No variables defined for this execution</Box>
@@ -73,52 +29,43 @@ export default function ExecutionVariables({ usecaseId, executionId }: Execution
   }
 
   return (
-    <Container 
+    <Container
       header={
-        <Header 
-          variant="h2"
-          counter={`(${(variablesData?.variables?.length || 0) + (variablesData?.runtime_variables?.length || 0)})`}
-        >
+        <Header variant="h2" counter={`(${defined.length + runtime.length})`}>
           Variables
         </Header>
       }
     >
       <SpaceBetween direction="vertical" size="l">
-        {hasDefinedVariables && (
+        {defined.length > 0 && (
           <div>
             <SpaceBetween direction="vertical" size="xs">
               <Header variant="h3">
                 <SpaceBetween direction="horizontal" size="xs">
                   <span>Defined Variables</span>
-                  <Badge color="blue">{variablesData.variables.length}</Badge>
+                  <Badge color="blue">{defined.length}</Badge>
                 </SpaceBetween>
               </Header>
               <KeyValuePairs
                 columns={2}
-                items={variablesData.variables.map(variable => ({
-                  label: variable.key,
-                  value: variable.value
-                }))}
+                items={defined.map(variable => ({ label: variable.key, value: variable.value }))}
               />
             </SpaceBetween>
           </div>
         )}
 
-        {hasRuntimeVariables && (
+        {runtime.length > 0 && (
           <div>
             <SpaceBetween direction="vertical" size="xs">
               <Header variant="h3">
                 <SpaceBetween direction="horizontal" size="xs">
                   <span>Runtime Variables</span>
-                  <Badge color="green">{variablesData.runtime_variables.length}</Badge>
+                  <Badge color="green">{runtime.length}</Badge>
                 </SpaceBetween>
               </Header>
               <KeyValuePairs
                 columns={2}
-                items={variablesData.runtime_variables.map(variable => ({
-                  label: variable.key,
-                  value: variable.value
-                }))}
+                items={runtime.map(variable => ({ label: variable.key, value: variable.value }))}
               />
             </SpaceBetween>
           </div>

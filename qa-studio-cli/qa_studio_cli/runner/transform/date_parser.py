@@ -1,8 +1,7 @@
 """Centralized date parser for transform and validation surfaces.
 
-Mirror of ``web-app/worker/transform/date_parser.py``. The two
-implementations MUST stay in lockstep — see
-``tests/test_date_parser_consistency.py`` for the cross-package check.
+The wizard worker (``web-app/worker``) imports this module directly; there is
+no second copy to keep in lockstep.
 
 Two parsing modes:
 

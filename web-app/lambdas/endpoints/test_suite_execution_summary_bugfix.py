@@ -5,7 +5,8 @@
 These tests demonstrate the three root causes of the bug:
 1. update_execution_status does not update suite execution counters
 2. update_suite_execution_status does not propagate to test suite summary
-3. update_test_suite_summary omits last_execution_id
+3. the test-suite summary write omits last_execution_id (the write now
+   lives in execution_transitions, shared by the API path and the reconciler)
 
 CRITICAL: These tests should fail on unfixed code — failure confirms the bugs exist.
 """
@@ -17,7 +18,7 @@ from unittest.mock import patch, MagicMock, call
 
 from update_execution_status import handler as update_execution_handler
 from update_suite_execution_status import handler as update_suite_execution_handler
-from handle_task_state_change import update_test_suite_summary
+from execution_transitions import finalize_terminal_transition
 
 
 class TestCounterUpdateMissing(unittest.TestCase):
@@ -323,12 +324,12 @@ class TestSummaryPropagationMissing(unittest.TestCase):
 
 
 class TestLastExecutionIdMissing(unittest.TestCase):
-    """Root Cause 3: update_test_suite_summary omits last_execution_id.
+    """Root Cause 3: the test-suite summary write omits last_execution_id.
 
-    The update_test_suite_summary function in handle_task_state_change.py
-    builds an UpdateExpression that sets last_execution_status,
-    last_successful_count, last_failed_count, and last_execution_time —
-    but omits last_execution_id.
+    The summary write (PK=TEST_SUITES, SK=SUITE#{suite_id}) is issued by
+    execution_transitions when the last use case of a suite execution lands.
+    It must set last_execution_status, last_successful_count,
+    last_failed_count, last_execution_time AND last_execution_id.
 
     On UNFIXED code: UpdateExpression does not contain last_execution_id — test FAILS.
 
@@ -336,30 +337,45 @@ class TestLastExecutionIdMissing(unittest.TestCase):
     """
 
     def test_update_expression_includes_last_execution_id(self):
-        """update_test_suite_summary should include last_execution_id in the
-        DynamoDB UpdateExpression.
+        """The TEST_SUITES summary write should include last_execution_id in the
+        DynamoDB UpdateExpression, carrying the suite_execution_id.
 
         **Validates: Requirements 2.3**
         """
         mock_client = MagicMock()
-        mock_client.update_item.return_value = {}
+        mock_eventbridge = MagicMock()
+        # The counter ADD returns the suite execution with every use case landed.
+        mock_client.update_item.return_value = {
+            "Attributes": {
+                "total_usecases": {"N": "5"},
+                "completed_usecases": {"N": "5"},
+                "successful_usecases": {"N": "5"},
+                "failed_usecases": {"N": "0"},
+                "started_at": {"S": "2025-01-01T11:00:00Z"},
+            }
+        }
+        execution_item = {
+            "pk": {"S": "USECASE_EXECUTION#uc-last-exec-001"},
+            "sk": {"S": "EXECUTION#exec-last-exec-001"},
+            "suite_execution_id": {"S": "suite-exec-last-exec-001"},
+            "suite_id": {"S": "suite-last-exec-001"},
+        }
 
-        with patch("handle_task_state_change.get_current_timestamp", return_value="2025-01-01T12:00:00Z"):
-            result = update_test_suite_summary(
-                client=mock_client,
-                table_name="test-table",
-                suite_id="suite-last-exec-001",
-                suite_execution_id="exec-last-exec-001",
-                last_status="completed",
-                successful=5,
-                failed=0,
-                total=5,
+        with patch("execution_transitions.get_current_timestamp", return_value="2025-01-01T12:00:00Z"):
+            finalize_terminal_transition(
+                mock_client, mock_eventbridge, "test-table",
+                "uc-last-exec-001", "exec-last-exec-001", "success", execution_item,
             )
 
-        mock_client.update_item.assert_called_once()
-        call_kwargs = mock_client.update_item.call_args[1]
-        update_expr = call_kwargs["UpdateExpression"]
-        attr_values = call_kwargs["ExpressionAttributeValues"]
+        summary_calls = [
+            c.kwargs for c in mock_client.update_item.call_args_list
+            if c.kwargs["Key"]["pk"]["S"] == "TEST_SUITES"
+        ]
+        self.assertEqual(len(summary_calls), 1, "expected exactly one TEST_SUITES summary write")
+        summary_call = summary_calls[0]
+        self.assertEqual(summary_call["Key"]["sk"]["S"], "SUITE#suite-last-exec-001")
+        update_expr = summary_call["UpdateExpression"]
+        attr_values = summary_call["ExpressionAttributeValues"]
 
         # Verify last_execution_id is included in the update expression
         self.assertIn(
@@ -370,9 +386,10 @@ class TestLastExecutionIdMissing(unittest.TestCase):
 
         # Verify the execution ID value is correct
         self.assertEqual(
-            attr_values[":exec_id"]["S"], "exec-last-exec-001",
-            "last_execution_id value should match the suite_execution_id parameter"
+            attr_values[":exec_id"]["S"], "suite-exec-last-exec-001",
+            "last_execution_id value should match the suite_execution_id"
         )
+        self.assertEqual(attr_values[":time"]["S"], "2025-01-01T12:00:00Z")
 
 
 if __name__ == "__main__":

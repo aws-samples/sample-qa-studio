@@ -3,8 +3,8 @@
 The execution detail screen now fans out its two rendered sections
 (``get_execution_metadata`` and ``get_execution_steps``) in parallel
 via ``asyncio.gather`` and paints each as its call returns, instead
-of waiting on the old composite ``get_execution_detail`` that did
-four serial HTTP calls. This test locks that behaviour in place.
+of waiting on one composite call that did four serial HTTP calls (that
+composite has since been removed). This test locks that behaviour in place.
 
 Strategy
 --------

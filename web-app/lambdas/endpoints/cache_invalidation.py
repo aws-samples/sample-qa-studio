@@ -6,11 +6,12 @@ blobs from S3. Used by:
 
 * :mod:`update_usecase` — when the use case itself is edited and any
   existing cache data may no longer be valid for the new step layout.
-* :mod:`update_execution_status` — when an execution transitions to
+* :mod:`execution_transitions` — when an execution transitions to
   ``failed`` (Option C: coarse but reliable cache invalidation on
-  failure — see the RCA in the cli-tui spec's history).
-* :mod:`handle_task_state_change` — same behaviour, but triggered when
-  an ECS task crashes/exits without the runner reporting status.
+  failure — see the RCA in the cli-tui spec's history). Reached from
+  :mod:`update_execution_status` (runner / CI PATCH) and from
+  :mod:`reconcile_executions` when a MicroVM dies without the runner
+  reporting status.
 
 Contract
 --------

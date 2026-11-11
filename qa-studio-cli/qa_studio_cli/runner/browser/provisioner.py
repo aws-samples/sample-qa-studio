@@ -29,8 +29,9 @@ class BrowserProvisioner(Protocol):
 
         ``context`` is a free-form dict of execution-scoped inputs:
         ``starting_url``, ``execution_id``, ``usecase_id``, ``region``,
-        and anything provisioner-specific (e.g. AgentCore's VPC config
-        or an externally supplied CDP URL).  Strategies pick the keys
-        they care about and ignore the rest.
+        and anything provisioner-specific (e.g. AgentCore's enterprise
+        browser policy path or an externally supplied CDP URL; AgentCore's
+        VPC settings come from env vars, not the context).  Strategies pick
+        the keys they care about and ignore the rest.
         """
         ...

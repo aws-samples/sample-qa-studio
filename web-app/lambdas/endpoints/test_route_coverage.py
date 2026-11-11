@@ -24,6 +24,7 @@ ALLOWLIST = {
     'list_test_suites': ('filtered list by owner team / shares', 'require_scopes'),
     'handlers.list_applications': ('filtered list (filter_visible_apps)', 'filter_visible_apps'),
     'handlers.get_dashboard_overview': ('filtered list of visible apps', 'require_scopes'),
+    'handlers.get_dashboard_costs': ('filtered list of visible apps (filter_visible_apps)', 'filter_visible_apps'),
     'list_oauth_clients': ('admins all; others only clients of their editor+ teams', 'require_scopes'),
     # Global catalogues: no team-owned resource behind them.
     'list_models': ('global Bedrock / Nova model catalogue', 'require_scopes'),
@@ -44,6 +45,9 @@ ALLOWLIST = {
     'delete_template_step': ('studio-global templates (decision 4)', 'require_scopes'),
     'get_template_variables': ('studio-global templates (decision 4)', 'require_scopes'),
     'create_template_variables': ('studio-global templates (decision 4)', 'require_scopes'),
+    'get_template_usages': ('studio-global templates (decision 4)', 'require_scopes'),
+    'import_template_definition': ('studio-global templates (decision 4)', 'require_scopes'),
+    'replace_template_definition': ('studio-global templates (decision 4)', 'require_scopes'),
     # OAuth clients: bound to a team, checked against that team.
     'create_oauth_client': ('editor+ of the body teamId', 'require_team_role'),
     'delete_oauth_client': ('creator, team lead of the client team, or admin', 'require_oauth_client_manager'),
@@ -68,8 +72,8 @@ ALLOWLIST = {
     'handlers.list_users': ('admin only', "'api/admin'"),
     'handlers.create_user': ('admin only', "'api/admin'"),
     'handlers.update_user': ('admin only', "'api/admin'"),
+    'handlers.delete_user': ('admin only', "'api/admin'"),
     'get_user': ('admin only', "'api/admin'"),
-    'delete_user': ('admin only', "'api/admin'"),
     'update_user_groups': ('admin only', "'api/admin'"),
 }
 
@@ -123,6 +127,15 @@ def test_every_route_has_a_handler_module():
     assert not unknown, f'routes whose Lambda has no createPythonLambda path: {unknown}'
     missing = [m for m in routed_handler_modules() if not (ENDPOINTS_DIR / f"{m.replace('.', os.sep)}.py").exists()]
     assert not missing, f'routed handler modules not found: {missing}'
+
+
+def test_every_router_handler_module_is_routed():
+    """handlers/*.py are only reachable via ROUTE_MAP: an unrouted one is dead code
+    (or a route that was forgotten, like DELETE /users before B7)."""
+    on_disk = {f"handlers.{p.stem}" for p in (ENDPOINTS_DIR / 'handlers').glob('*.py') if p.stem != '__init__'}
+    routed = router_modules()
+    assert not on_disk - routed, f'handler modules not in ROUTE_MAP: {sorted(on_disk - routed)}'
+    assert not routed - on_disk, f'ROUTE_MAP entries without a module: {sorted(routed - on_disk)}'
 
 
 def test_router_reached_through_api_stack():

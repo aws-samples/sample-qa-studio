@@ -77,8 +77,14 @@ class UseCaseAPI:
         variables: Optional[Dict[str, str]] = None,
         region: Optional[str] = None,
         model_id: Optional[str] = None,
+        repeat_datasets: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Create an execution record for a use case."""
+        """Create an execution record for a use case.
+
+        ``repeat_datasets`` (``{"<repeat label>": {"columns", "rows"}}``)
+        replaces the stored rows of the labelled repeat step for this
+        execution; it is only sent when set.
+        """
         payload: Dict[str, Any] = {}
         if base_url is not None:
             payload["base_url"] = base_url
@@ -88,6 +94,8 @@ class UseCaseAPI:
             payload["region"] = region
         if model_id is not None:
             payload["model_id"] = model_id
+        if repeat_datasets:
+            payload["repeat_datasets"] = repeat_datasets
         return self.client.post(
             f"/usecase/{usecase_id}/execute",
             json_body=payload if payload else None,

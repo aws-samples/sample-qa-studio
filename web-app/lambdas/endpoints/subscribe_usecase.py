@@ -1,12 +1,13 @@
 import logging
-import json
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict
 from uuid import uuid4
 import boto3
-from botocore.exceptions import ClientError
 from utils import create_response, get_table_name, get_current_timestamp, extract_user_identity
 from resource_auth import require_resource_access, usecase_from_path
+from sns_filter_policy import (
+    PENDING_CONFIRMATION, add_usecase, filter_policy_json, find_email_subscription,
+)
 
 # Configure logging
 logger = logging.getLogger()
@@ -64,155 +65,30 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
 
 def configure_sns_subscription_with_filter(sns_client, table, email: str, usecase_id: str):
-    """
-    Subscribe user to SNS topic and set/update filter policy for this usecase.
-    
-    Args:
-        sns_client: Boto3 SNS client
-        table: DynamoDB table resource
-        email: User email address
-        usecase_id: Usecase ID to subscribe to
+    """Subscribe ``email`` to the topic (filtered to this use case) or add the
+    use case to an existing confirmed subscription's filter policy.
+
+    Never fails the request: SNS errors are logged.
     """
     topic_arn = os.environ.get('SNS_TOPIC_ARN')
     if not topic_arn:
         logger.info("SNS_TOPIC_ARN not set, skipping SNS subscription")
         return
-    
+
     try:
-        # Check if user is already subscribed
-        response = sns_client.list_subscriptions_by_topic(TopicArn=topic_arn)
-        
-        subscription_arn = None
-        existing_subscription = False
-        
-        for subscription in response.get('Subscriptions', []):
-            if subscription.get('Endpoint') == email and subscription.get('Protocol') == 'email':
-                subscription_arn = subscription.get('SubscriptionArn')
-                existing_subscription = True
-                logger.info(f"User already subscribed to SNS topic with ARN: {subscription_arn}")
-                break
-        
-        # If not subscribed, subscribe with initial filter policy
-        if not existing_subscription:
-            initial_filter_policy = create_filter_policy_json([usecase_id])
-            
-            subscribe_response = sns_client.subscribe(
+        subscription_arn = find_email_subscription(sns_client, topic_arn, email, confirmed_only=False)
+        if subscription_arn is None:
+            response = sns_client.subscribe(
                 TopicArn=topic_arn,
                 Protocol='email',
                 Endpoint=email,
-                Attributes={
-                    'FilterPolicy': initial_filter_policy
-                }
+                Attributes={'FilterPolicy': filter_policy_json([usecase_id])},
             )
-            
-            subscription_arn = subscribe_response.get('SubscriptionArn')
-            logger.info(f"Successfully subscribed to SNS topic with filter policy {initial_filter_policy}. Subscription ARN: {subscription_arn}")
+            logger.info(f"Subscribed to SNS topic. Subscription ARN: {response.get('SubscriptionArn')}")
+        elif subscription_arn == PENDING_CONFIRMATION:
+            logger.info("Subscription pending confirmation - filter policy is updated after confirmation")
         else:
-            # For existing subscriptions, update the filter policy to include the new usecase
-            if subscription_arn and subscription_arn != 'PendingConfirmation':
-                update_filter_policy_for_user(sns_client, table, email, usecase_id)
-            else:
-                logger.info(f"Subscription pending confirmation - filter policy is updated after confirmation")
-    
+            add_usecase(sns_client, subscription_arn, usecase_id)
     except Exception as e:
         logger.error(f"Error ensuring SNS subscription with filter: {str(e)}", exc_info=True)
         # Continue anyway - don't fail the usecase subscription
-
-
-def update_filter_policy_for_user(sns_client, table, email: str, usecase_id: str):
-    """
-    Update the SNS filter policy to include a new usecase for the user.
-    
-    Args:
-        sns_client: Boto3 SNS client
-        table: DynamoDB table resource
-        email: User email address
-        usecase_id: Usecase ID to add to filter
-    """
-    topic_arn = os.environ.get('SNS_TOPIC_ARN')
-    if not topic_arn:
-        raise Exception("SNS_TOPIC_ARN not set")
-    
-    # Find the user's subscription
-    response = sns_client.list_subscriptions_by_topic(TopicArn=topic_arn)
-    
-    subscription_arn = None
-    for subscription in response.get('Subscriptions', []):
-        if (subscription.get('Endpoint') == email and 
-            subscription.get('Protocol') == 'email' and 
-            subscription.get('SubscriptionArn') != 'PendingConfirmation'):
-            subscription_arn = subscription.get('SubscriptionArn')
-            break
-    
-    if not subscription_arn:
-        raise Exception(f"No confirmed subscription found for {email}")
-    
-    # Get current filter policy from SNS subscription (ONLY source of truth)
-    current_usecases = get_current_filter_policy_usecases(sns_client, subscription_arn)
-    logger.info(f"Current SNS filter policy usecases: {current_usecases}")
-    
-    # Add the new usecase if not already in the list
-    if usecase_id not in current_usecases:
-        current_usecases.append(usecase_id)
-    
-    # Create filter policy JSON with updated usecases
-    filter_policy = create_filter_policy_json(current_usecases)
-    logger.info(f"Setting filter policy with usecases {current_usecases}: {filter_policy}")
-    
-    # Set the filter policy
-    sns_client.set_subscription_attributes(
-        SubscriptionArn=subscription_arn,
-        AttributeName='FilterPolicy',
-        AttributeValue=filter_policy
-    )
-    
-    logger.info(f"Successfully set filter policy: {filter_policy}")
-
-
-def get_current_filter_policy_usecases(sns_client, subscription_arn: str) -> List[str]:
-    """
-    Get the current usecase_id array from SNS filter policy.
-    
-    Args:
-        sns_client: Boto3 SNS client
-        subscription_arn: SNS subscription ARN
-        
-    Returns:
-        List of usecase IDs in the current filter policy
-    """
-    try:
-        response = sns_client.get_subscription_attributes(SubscriptionArn=subscription_arn)
-        
-        filter_policy_str = response.get('Attributes', {}).get('FilterPolicy')
-        if not filter_policy_str:
-            logger.info(f"No existing filter policy found for subscription {subscription_arn}")
-            return []
-        
-        logger.info(f"Current filter policy: {filter_policy_str}")
-        
-        # Parse the filter policy JSON
-        filter_policy = json.loads(filter_policy_str)
-        logger.info(f"Parsed filter policy: {filter_policy}")
-        
-        # Extract usecase_id array
-        usecases = filter_policy.get('usecase_id', [])
-        logger.info(f"Final parsed usecases: {usecases}")
-        
-        return usecases
-        
-    except Exception as e:
-        logger.warning(f"Could not get current filter policy, starting fresh: {str(e)}")
-        return []
-
-
-def create_filter_policy_json(usecase_ids: List[str]) -> str:
-    """
-    Create the SNS filter policy JSON for multiple usecases.
-    
-    Args:
-        usecase_ids: List of usecase IDs
-        
-    Returns:
-        JSON string for SNS filter policy
-    """
-    return json.dumps({'usecase_id': usecase_ids})

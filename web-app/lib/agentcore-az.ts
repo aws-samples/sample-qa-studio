@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 
 /**
  * AgentCore VPC support is limited to specific Availability Zones per region.
@@ -40,51 +40,68 @@ export const AGENTCORE_SUPPORTED_AZ_IDS: Record<string, string[]> = {
   'us-gov-west-1': ['usgw1-az1', 'usgw1-az2', 'usgw1-az3'],
 };
 
-const DOC_URL =
+export const AGENTCORE_VPC_DOC_URL =
   'https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agentcore-vpc.html';
 
+/** One `[ZoneName, ZoneId]` pair as returned by `describe-availability-zones`. */
+export type AzNameIdPair = [string, string];
+
+/** Returns the raw JSON of `aws ec2 describe-availability-zones` for a region. */
+export type DescribeAzs = (region: string) => string;
+
+/** Default {@link DescribeAzs}: the AWS CLI with the synth-time credentials. */
+export const describeAzsWithAwsCli: DescribeAzs = (region) =>
+  execFileSync(
+    'aws',
+    [
+      'ec2', 'describe-availability-zones',
+      '--region', region,
+      '--query', 'AvailabilityZones[].[ZoneName,ZoneId]',
+      '--output', 'json',
+    ],
+    { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+
 /**
- * Resolve the set of Availability Zone **names** (e.g. "us-east-1a") in the
- * given region that AgentCore supports for VPC connectivity, for the AWS
- * account credentials active during synth.
+ * Resolve the Availability Zone **names** (e.g. "us-east-1a") in the given
+ * region that AgentCore supports for VPC connectivity, for the AWS account
+ * whose credentials are active during synth.
  *
- * This is used when `agentCoreVPC` is enabled and the stack creates its own
- * VPC: the returned names are passed to the `Vpc` construct's
- * `availabilityZones` so the created subnets only ever live in AgentCore-
- * supported zones. It is also used to validate/select subnets when an
- * existing VPC is imported.
+ * Used when `vpcId` is set: the worker stack only passes subnets of the
+ * imported VPC that live in one of these zones to the browser.
  *
- * Because AZ name <-> ID mapping is account-specific, this calls
- * `ec2:DescribeAvailabilityZones` via the AWS CLI at synth time. That means
- * synth requires AWS credentials and the AWS CLI to be available whenever
- * `agentCoreVPC` is enabled (the deploy pipeline satisfies this). It only
- * runs on the VPC path, so non-VPC deploys keep env-agnostic synthesis.
+ * Because the AZ name <-> ID mapping is account-specific, the default
+ * `describeAzs` calls `ec2:DescribeAvailabilityZones` via the AWS CLI at
+ * synth time. Synth therefore needs AWS credentials and the AWS CLI whenever
+ * `vpcId` is set; deploys without `vpcId` never call this and keep
+ * env-agnostic synthesis.
  *
- * @throws if the region has no known supported AZs, if the CLI call fails,
- *         or if fewer than two supported zones resolve in the account.
+ * May return an empty list (the account has none of the supported zones);
+ * the caller's subnet check reports that with the VPC's own zones.
+ *
+ * @throws if the region has no known supported AZs, or the lookup fails.
  */
-export function resolveAgentCoreAzNames(region: string): string[] {
+export function resolveAgentCoreAzNames(
+  region: string,
+  describeAzs: DescribeAzs = describeAzsWithAwsCli,
+): string[] {
   const supportedIds = AGENTCORE_SUPPORTED_AZ_IDS[region];
   if (!supportedIds || supportedIds.length === 0) {
     throw new Error(
-      `agentCoreVPC is enabled but region "${region}" has no known AgentCore-` +
+      `vpcId is set but region "${region}" has no known AgentCore-` +
         `supported Availability Zones in this stack's table. If AWS now supports ` +
         `AgentCore VPC in this region, add its AZ IDs to AGENTCORE_SUPPORTED_AZ_IDS ` +
-        `(web-app/lib/agentcore-az.ts) from ${DOC_URL}.`,
+        `(web-app/lib/agentcore-az.ts) from ${AGENTCORE_VPC_DOC_URL}.`,
     );
   }
 
   let raw: string;
   try {
-    raw = execSync(
-      `aws ec2 describe-availability-zones --region ${region} ` +
-        `--query "AvailabilityZones[].[ZoneName,ZoneId]" --output json`,
-      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
-    );
+    raw = describeAzs(region);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `agentCoreVPC is enabled, which requires resolving AgentCore-supported ` +
+      `vpcId is set, which requires resolving AgentCore-supported ` +
         `Availability Zones for region "${region}" at synth time, but ` +
         `"aws ec2 describe-availability-zones" failed. Ensure the AWS CLI is ` +
         `installed and credentials for the target account/region are available ` +
@@ -92,9 +109,10 @@ export function resolveAgentCoreAzNames(region: string): string[] {
     );
   }
 
-  let pairs: Array<[string, string]>;
+  let pairs: AzNameIdPair[];
   try {
     pairs = JSON.parse(raw);
+    if (!Array.isArray(pairs)) throw new Error('expected a JSON array');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -103,20 +121,8 @@ export function resolveAgentCoreAzNames(region: string): string[] {
     );
   }
 
-  const supportedNames = pairs
+  return pairs
     .filter(([, zoneId]) => supportedIds.includes(zoneId))
     .map(([zoneName]) => zoneName)
     .sort();
-
-  if (supportedNames.length < 2) {
-    throw new Error(
-      `agentCoreVPC is enabled but only ${supportedNames.length} AgentCore-` +
-        `supported Availability Zone(s) resolved in region "${region}" (at least ` +
-        `2 are required to build the VPC). Supported AZ IDs for this region: ` +
-        `${supportedIds.join(', ')}. Resolved supported AZ names: ` +
-        `${supportedNames.join(', ') || '(none)'}. See ${DOC_URL}.`,
-    );
-  }
-
-  return supportedNames;
 }

@@ -362,6 +362,7 @@ class TestSetMemberRole:
 
         result = set_member_role('user-1', team['id'], 'viewer')
         assert result['role'] == 'viewer'
+        assert result['previous_role'] == 'editor'
 
     def test_noop_same_role(self, dynamodb_table):
         from permissions_repo import create_team, add_membership, set_member_role
@@ -371,6 +372,7 @@ class TestSetMemberRole:
 
         result = set_member_role('user-1', team['id'], 'editor')
         assert result['role'] == 'editor'
+        assert result['previous_role'] == 'editor'
 
     def test_legacy_admin_membership_can_be_demoted(self, dynamodb_table):
         """Team 'admin' memberships are legacy (C-1); demoting one has no counter/guard."""

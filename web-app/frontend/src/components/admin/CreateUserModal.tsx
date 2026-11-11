@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
-import Modal from '@cloudscape-design/components/modal';
-import Box from '@cloudscape-design/components/box';
-import SpaceBetween from '@cloudscape-design/components/space-between';
-import Button from '@cloudscape-design/components/button';
 import FormField from '@cloudscape-design/components/form-field';
 import Input from '@cloudscape-design/components/input';
 import Select, { SelectProps } from '@cloudscape-design/components/select';
 import { Role, Team } from '../../types/permissions';
+import FormModal from '../common/FormModal';
 
 interface CreateUserModalProps {
   visible: boolean;
@@ -23,6 +20,8 @@ const ROLE_OPTIONS: SelectProps.Option[] = [
   { label: 'Viewer', value: 'viewer' },
 ];
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const CreateUserModal: React.FC<CreateUserModalProps> = ({
   visible,
   onDismiss,
@@ -32,8 +31,6 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
   const [email, setEmail] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<SelectProps.Option | null>(null);
   const [selectedRole, setSelectedRole] = useState<SelectProps.Option | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const teamOptions: SelectProps.Option[] = availableTeams.map((t) => ({
     label: t.name,
@@ -42,98 +39,69 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
 
   const handleSubmit = async () => {
     if (!email.trim()) {
-      setError('Email is required');
-      return;
+      throw new Error('Email is required');
     }
-    // Basic email validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError('Invalid email format');
-      return;
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      throw new Error('Invalid email format');
     }
-    try {
-      setSubmitting(true);
-      setError(null);
-      const isAdminRole = selectedRole?.value === 'admin';
-      await onSubmit(
-        email.trim(),
-        isAdminRole ? undefined : (selectedTeam?.value || undefined),
-        (selectedRole?.value as Role) || undefined
-      );
-      setEmail('');
-      setSelectedTeam(null);
-      setSelectedRole(null);
-      onDismiss();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create user');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDismiss = () => {
-    setEmail('');
-    setSelectedTeam(null);
-    setSelectedRole(null);
-    setError(null);
-    onDismiss();
+    // Admins are studio-wide: never send a team for them.
+    const isAdminRole = selectedRole?.value === 'admin';
+    await onSubmit(
+      email.trim(),
+      isAdminRole ? undefined : (selectedTeam?.value || undefined),
+      (selectedRole?.value as Role) || undefined
+    );
   };
 
   return (
-    <Modal
+    <FormModal
       visible={visible}
-      onDismiss={handleDismiss}
-      closeAriaLabel="Close"
       header="Create User"
-      footer={
-        <Box float="right">
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button variant="link" onClick={handleDismiss} data-testid="create-user-cancel">
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              loading={submitting}
-              data-testid="create-user-submit"
-            >
-              Create User
-            </Button>
-          </SpaceBetween>
-        </Box>
-      }
+      submitLabel="Create User"
+      onSubmit={handleSubmit}
+      onDismiss={onDismiss}
+      onReset={() => {
+        setEmail('');
+        setSelectedTeam(null);
+        setSelectedRole(null);
+      }}
+      errorFallback="Failed to create user"
+      testIdPrefix="create-user"
     >
-      <SpaceBetween direction="vertical" size="m">
-        <FormField label="Email" errorText={error}>
-          <Input
-            value={email}
-            onChange={({ detail }) => setEmail(detail.value)}
-            placeholder="user@example.com"
-            type="email"
-            data-testid="create-user-email-input"
-          />
-        </FormField>
-        <FormField label="Role" description="Admins have studio-wide access and are not tied to a team">
-          <Select
-            selectedOption={selectedRole}
-            onChange={({ detail }) => setSelectedRole(detail.selectedOption)}
-            options={ROLE_OPTIONS}
-            placeholder="Select role (optional)"
-            data-testid="create-user-role-select"
-          />
-        </FormField>
-        {selectedRole?.value !== 'admin' && (
-          <FormField label="Team" description="Optional - assign to a team">
-            <Select
-              selectedOption={selectedTeam}
-              onChange={({ detail }) => setSelectedTeam(detail.selectedOption)}
-              options={teamOptions}
-              placeholder="Select team (optional)"
-              data-testid="create-user-team-select"
+      {(error) => (
+        <>
+          <FormField label="Email" errorText={error}>
+            <Input
+              value={email}
+              onChange={({ detail }) => setEmail(detail.value)}
+              placeholder="user@example.com"
+              type="email"
+              data-testid="create-user-email-input"
             />
           </FormField>
-        )}
-      </SpaceBetween>
-    </Modal>
+          <FormField label="Role" description="Admins have studio-wide access and are not tied to a team">
+            <Select
+              selectedOption={selectedRole}
+              onChange={({ detail }) => setSelectedRole(detail.selectedOption)}
+              options={ROLE_OPTIONS}
+              placeholder="Select role (optional)"
+              data-testid="create-user-role-select"
+            />
+          </FormField>
+          {selectedRole?.value !== 'admin' && (
+            <FormField label="Team" description="Optional - assign to a team">
+              <Select
+                selectedOption={selectedTeam}
+                onChange={({ detail }) => setSelectedTeam(detail.selectedOption)}
+                options={teamOptions}
+                placeholder="Select team (optional)"
+                data-testid="create-user-team-select"
+              />
+            </FormField>
+          )}
+        </>
+      )}
+    </FormModal>
   );
 };
 

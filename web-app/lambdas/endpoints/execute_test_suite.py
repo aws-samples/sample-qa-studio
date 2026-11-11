@@ -8,11 +8,12 @@ For ci_runner trigger_type, it creates execution records only (no ECS tasks).
 
 Endpoint: POST /api/test-suites/{id}/execute
 """
+import lambda_init  # noqa: F401 — must be first import (execution_steps → dataset_ref → dataset_models uses pydantic)
 import json
 import os
 import time
 import boto3
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Iterable, List, Optional
 from urllib.parse import urlparse
 from botocore.exceptions import ClientError
 
@@ -30,8 +31,24 @@ from test_suite_schema import (
     get_suite_sk,
     get_suite_mapping_pk
 )
+from platforms import ELECTRON_CI_RUNNER_ONLY_ERROR, electron_trigger_allowed
 from url_override import apply_base_url_override
-from variable_merge import merge_variables, validate_variables_resolved
+from variable_merge import (
+    client_item_reader,
+    load_application_variables,
+    load_usecase_variables,
+    merge_layers,
+    merge_variables,
+    rows_to_dict,
+    validate_variables_resolved,
+)
+from execution_steps import (
+    DatasetNotFoundError,
+    RepeatExpansionError,
+    build_execution_step_items,
+    write_execution_step_items,
+)
+from dataset_ref import UNRESOLVED_DATASET_ERROR, DatasetFetcher, application_dataset_fetcher
 
 dynamodb = boto3.client('dynamodb')
 eventbridge = boto3.client('events')
@@ -253,42 +270,61 @@ def get_usecase_definition(usecase_id: str, table_name: str) -> Dict[str, Any]:
         'device_farm_project_arn': item.get('device_farm_project_arn', {}).get('S', ''),
         'device_arn': item.get('device_arn', {}).get('S', ''),
         'browser_policy_s3_path': item.get('browser_policy_s3_path', {}).get('S', ''),
+        'application_id': item.get('application_id', {}).get('S', ''),
     }
 
 
-def get_usecase_variables(usecase_id: str, table_name: str) -> Dict[str, str]:
+def get_application_variables(application_ids: Iterable[str], table_name: str) -> Dict[str, Dict[str, str]]:
     """
-    Fetch usecase variables from DynamoDB.
-    
+    Prefetch the application variable layer, one ``get_item`` per distinct
+    application (not per use case).
+
+    Returns:
+        ``{application_id: {key: value}}``; applications without a
+        ``VARIABLES`` record map to ``{}``. Empty ids are skipped.
+    """
+    read_item = client_item_reader(dynamodb, table_name)
+    return {
+        application_id: load_application_variables(read_item, application_id)
+        for application_id in sorted({app_id for app_id in application_ids if app_id})
+    }
+
+
+def get_usecase_variables(usecase_id: str, table_name: str, app_vars: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """
+    Effective variables of a use case: the (prefetched) application layer
+    under the use case's own ``USECASE_VARIABLES`` record.
+
     Args:
         usecase_id: Usecase UUID
         table_name: DynamoDB table name
-    
+        app_vars: The use case's application layer from
+            ``get_application_variables`` (``None`` / ``{}`` = no application)
+
     Returns:
-        Dictionary of variable key-value pairs (empty dict if no variables)
+        ``{key: value}``; the use case wins per key. Secret values are never
+        part of it (H-1).
     """
-    try:
-        response = dynamodb.get_item(
-            TableName=table_name,
-            Key={
-                'pk': {'S': f'USECASE#{usecase_id}'},
-                'sk': {'S': 'USECASE_VARIABLES'}
-            }
-        )
-        
-        if 'Item' not in response:
-            return {}
-        
-        # Variables are stored as a map
-        variables_map = response['Item'].get('variables', {}).get('M', {})
-        variables = {}
-        for key, value in variables_map.items():
-            variables[key] = value.get('S', '')
-        
-        return variables
-    except Exception as e:
-        print(f'Error fetching variables for usecase {usecase_id}: {str(e)}')
-        return {}
+    usecase_vars = load_usecase_variables(client_item_reader(dynamodb, table_name), usecase_id)
+    return rows_to_dict(merge_layers(app_vars or {}, usecase_vars))
+
+
+def get_dataset_fetchers(application_ids: Iterable[str], table_name: str) -> Dict[str, DatasetFetcher]:
+    """
+    One memoising dataset fetcher per distinct application (``''`` included,
+    for use cases without an application — it resolves nothing).  Sharing
+    the fetcher across the use cases of an application and across the dry
+    run and the real build means one ``get_item`` per referenced dataset for
+    the whole suite; nothing is read for use cases without a reference.
+
+    Returns:
+        ``{application_id: fetch(dataset_id) -> dataset record | None}``
+    """
+    read_item = client_item_reader(dynamodb, table_name)
+    return {
+        application_id: application_dataset_fetcher(read_item, application_id or None)
+        for application_id in set(application_ids)
+    }
 
 
 def create_suite_execution_record(
@@ -417,6 +453,19 @@ def update_suite_execution_with_executions(
     print(f'Updated suite execution {suite_execution_id} with {len(execution_ids)} executions')
 
 
+def get_usecase_steps(usecase_id: str, table_name: str) -> List[Dict[str, Any]]:
+    """Fetch the STEP# records of a usecase (low-level typed format)."""
+    steps_result = dynamodb.query(
+        TableName=table_name,
+        KeyConditionExpression='pk = :pk AND begins_with(sk, :prefix)',
+        ExpressionAttributeValues={
+            ':pk': {'S': f'USECASE#{usecase_id}'},
+            ':prefix': {'S': 'STEP#'}
+        }
+    )
+    return steps_result.get('Items', [])
+
+
 def create_execution_record_for_usecase(
     usecase_id: str,
     usecase_definition: Dict[str, Any],
@@ -428,7 +477,9 @@ def create_execution_record_for_usecase(
     region: str,
     model_id: str,
     created_at: str,
-    table_name: str
+    table_name: str,
+    steps: Optional[List[Dict[str, Any]]] = None,
+    dataset_fetcher: Optional[DatasetFetcher] = None,
 ) -> str:
     """
     Create execution record for a single usecase.
@@ -452,12 +503,25 @@ def create_execution_record_for_usecase(
         model_id: Model ID (with override applied)
         created_at: ISO8601 timestamp
         table_name: DynamoDB table name
+        steps: Prefetched STEP# records (typed format); queried when omitted
+        dataset_fetcher: Resolves ``dataset_id`` repeat steps against the use
+            case's application (``get_dataset_fetchers``); without one a
+            reference raises ``DatasetNotFoundError``
     
     Returns:
         execution_id (UUIDv7)
     """
     # Generate execution ID (UUIDv7 for time-ordered sorting)
     execution_id = generate_uuid7()
+
+    # Resolve dataset references and unroll repeats before writing anything
+    # so a bad dataset cannot leave a half-created execution (the handler
+    # pre-validates, this is the belt-and-braces path).
+    if steps is None:
+        steps = get_usecase_steps(usecase_id, table_name)
+    execution_step_items = build_execution_step_items(
+        steps, execution_id, created_at, dataset_fetcher=dataset_fetcher,
+    )
     
     # Create execution record
     execution_item = {
@@ -506,6 +570,10 @@ def create_execution_record_for_usecase(
             val = usecase_definition.get(field, '')
             if val:
                 execution_item[field] = {'S': val}
+    elif test_platform == 'electron':
+        # Optional bundle id the runner verifies against the launched .app
+        if usecase_definition.get('bundle_id'):
+            execution_item['bundle_id'] = {'S': usecase_definition['bundle_id']}
     
     dynamodb.put_item(
         TableName=table_name,
@@ -513,58 +581,10 @@ def create_execution_record_for_usecase(
     )
     print(f'Created execution {execution_id} for usecase {usecase_id}')
     
-    # Load and copy steps
-    steps_result = dynamodb.query(
-        TableName=table_name,
-        KeyConditionExpression='pk = :pk AND begins_with(sk, :prefix)',
-        ExpressionAttributeValues={
-            ':pk': {'S': f'USECASE#{usecase_id}'},
-            ':prefix': {'S': 'STEP#'}
-        }
-    )
+    # Create execution step records (shared builder, batched writes)
+    write_execution_step_items(dynamodb, table_name, execution_step_items)
     
-    steps = steps_result.get('Items', [])
-    # Sort by sort field
-    steps.sort(key=lambda x: int(x.get('sort', {}).get('N', '0')))
-    
-    # Create execution step records
-    for step in steps:
-        step_execution_id = generate_uuid7()
-        
-        execution_step = {
-            'pk': {'S': f'EXECUTION#{execution_id}'},
-            'sk': {'S': f'EXECUTION_STEP#{step_execution_id}'},
-            'created_at': {'S': created_at}
-        }
-        
-        # Copy required fields
-        if 'id' in step:
-            execution_step['step_id'] = step['id']
-        if 'sort' in step:
-            execution_step['sort'] = step['sort']
-        if 'instruction' in step:
-            execution_step['instruction'] = step['instruction']
-        if 'step_type' in step:
-            execution_step['step_type'] = step['step_type']
-        
-        # Copy optional fields if present
-        for field in ['secret_key', 'validation_type', 'validation_operator', 
-                     'validation_value', 'capture_variable', 'assertion_variable', 'value_type', 'value_format', 'enable_advanced_click_types',
-                     'value_source', 'cached_steps', 'cache_last_updated',
-                     'trajectory_s3_key', 'trajectory_last_updated',
-                     'browser_action', 'browser_args',
-                     'transform_operation', 'transform_args',
-                     'network_url_pattern', 'network_method', 'network_request_body',
-                     'network_body_match_type', 'network_mock_response',
-                     'network_mock_passthrough', 'network_timeout',
-                     'network_response_body', 'network_response_body_match_type',
-                     'network_response_status']:
-            if field in step:
-                execution_step[field] = step[field]
-        
-        dynamodb.put_item(TableName=table_name, Item=execution_step)
-    
-    print(f'Created {len(steps)} execution steps for execution {execution_id}')
+    print(f'Created {len(execution_step_items)} execution steps for execution {execution_id}')
     
     # Load and copy hooks
     try:
@@ -729,6 +749,14 @@ def _execute_suite(event: Dict[str, Any], user_identity: Dict[str, Any]) -> Dict
             'error': 'Invalid variables',
             'message': 'variables must be a dictionary of key-value pairs'
         })
+
+    # Dataset overrides are a single-usecase feature (qa-studio run
+    # --dataset-file); refuse explicitly instead of silently ignoring them.
+    if 'repeat_datasets' in body:
+        return create_response(400, {
+            'error': 'repeat_datasets is not supported for suites',
+            'message': 'Dataset overrides are only accepted on POST /usecase/{id}/execute',
+        })
     
     print(f'Executing suite: {suite_id}, trigger_type: {trigger_type}')
     print(f'Overrides - base_url: {base_url}, variables: {bool(cli_variables)}, region: {region_override}, model_id: {model_id_override}')
@@ -772,6 +800,76 @@ def _execute_suite(event: Dict[str, Any], user_identity: Dict[str, Any]) -> Dict
             })
         
         print(f'Fetched {len(usecases)} usecase mappings')
+
+        # 2b. Fetch every usecase definition up front. Two reasons: the
+        # electron gate below must run before *any* record is written (a
+        # half-created suite execution is worse than a clean 400), and a
+        # usecase missing from the table is a data-integrity error we want
+        # to report before creating the suite execution, not mid-loop.
+        usecase_definitions: Dict[str, Dict[str, Any]] = {}
+        for usecase_mapping in usecases:
+            mapping_usecase_id = usecase_mapping['usecase_id']
+            try:
+                usecase_definitions[mapping_usecase_id] = get_usecase_definition(
+                    mapping_usecase_id, table_name,
+                )
+            except ValueError:
+                print(f'ERROR: Usecase {mapping_usecase_id} not found but is in suite {suite_id}')
+                return create_response(500, {
+                    'error': 'Data integrity error',
+                    'message': f'Usecase {mapping_usecase_id} referenced by suite but not found'
+                })
+
+        # Electron usecases run only on the CI runner's host; the cloud
+        # worker (which OnDemand/scheduled suites spawn) cannot launch them.
+        electron_blocked = [
+            uid for uid, definition in usecase_definitions.items()
+            if not electron_trigger_allowed(definition.get('test_platform', 'web'), trigger_type)
+        ]
+        if electron_blocked:
+            return create_response(400, {
+                'error': ELECTRON_CI_RUNNER_ONLY_ERROR,
+                'details': {'usecase_ids': electron_blocked},
+            })
+
+        # 2c. Prefetch the application variable layer once per application
+        # (inherited by every use case of that application; the use case's
+        # own record is read per use case below and wins per key).
+        application_variables = get_application_variables(
+            (definition.get('application_id', '') for definition in usecase_definitions.values()),
+            table_name,
+        )
+
+        # 2d. Prefetch steps, resolve dataset references and dry-run the
+        # repeat expansion for every usecase.  A dataset missing from the use
+        # case's application, or a repeat that cannot be unrolled (no rows,
+        # no children, orphan child), fails the whole request with 400 before
+        # the suite execution record exists, instead of leaving half-written
+        # records.  Fetchers are shared per application (one read per dataset).
+        dataset_fetchers = get_dataset_fetchers(
+            (definition.get('application_id', '') for definition in usecase_definitions.values()),
+            table_name,
+        )
+        usecase_steps: Dict[str, List[Dict[str, Any]]] = {}
+        for mapping_usecase_id, definition in usecase_definitions.items():
+            usecase_steps[mapping_usecase_id] = get_usecase_steps(mapping_usecase_id, table_name)
+            try:
+                build_execution_step_items(
+                    usecase_steps[mapping_usecase_id], 'dry-run', created_at,
+                    dataset_fetcher=dataset_fetchers[definition.get('application_id', '')],
+                )
+            except DatasetNotFoundError as e:
+                return create_response(400, {
+                    'error': UNRESOLVED_DATASET_ERROR,
+                    'dataset_id': e.dataset_id,
+                    'details': {'usecase_id': mapping_usecase_id},
+                })
+            except RepeatExpansionError as e:
+                return create_response(400, {
+                    'error': 'Invalid repeat step',
+                    'message': str(e),
+                    'details': {'usecase_id': mapping_usecase_id},
+                })
         
         # 3. Create suite execution record
         suite_execution_id = generate_uuid7()
@@ -788,7 +886,7 @@ def _execute_suite(event: Dict[str, Any], user_identity: Dict[str, Any]) -> Dict
         
         triggered_by = resolve_triggered_by(user_identity, table_name)
         
-        suite_execution = create_suite_execution_record(
+        create_suite_execution_record(
             suite_id=suite_id,
             suite_execution_id=suite_execution_id,
             suite_name=suite['name'],
@@ -814,14 +912,17 @@ def _execute_suite(event: Dict[str, Any], user_identity: Dict[str, Any]) -> Dict
             usecase_name = usecase_mapping['usecase_name']
             
             try:
-                # Fetch usecase definition
-                usecase = get_usecase_definition(usecase_id, table_name)
+                # Definition was prefetched above (step 2b)
+                usecase = usecase_definitions[usecase_id]
                 
-                # Fetch variables. Secret values are never merged into
-                # execution variables (readable by Viewers via
+                # Effective variables: application layer (prefetched in 2c)
+                # under the use case's own record. Secret values are never
+                # merged into execution variables (readable by Viewers via
                 # GET .../executions/{id}/variables); the runner reads them
                 # per step from Secrets Manager with execute access (H-1).
-                usecase_vars = get_usecase_variables(usecase_id, table_name)
+                usecase_vars = get_usecase_variables(
+                    usecase_id, table_name, application_variables.get(usecase.get('application_id', ''))
+                )
                 
                 # Apply base URL override
                 modified_starting_url = apply_base_url_override(
@@ -909,7 +1010,9 @@ def _execute_suite(event: Dict[str, Any], user_identity: Dict[str, Any]) -> Dict
                         region=execution_region,
                         model_id=execution_model_id,
                         created_at=created_at,
-                        table_name=table_name
+                        table_name=table_name,
+                        steps=usecase_steps.get(usecase_id),
+                        dataset_fetcher=dataset_fetchers[usecase.get('application_id', '')],
                     )
                 
                 execution_ids.append({
@@ -921,7 +1024,7 @@ def _execute_suite(event: Dict[str, Any], user_identity: Dict[str, Any]) -> Dict
                 print(f'Created execution {execution_id} for usecase {usecase_name}')
                 
             except ValueError as e:
-                # Variable validation failed or usecase not found
+                # Variable validation failed (usecase-not-found is caught in step 2b)
                 error_msg = str(e)
                 if 'Unresolved variables' in error_msg:
                     return create_response(400, {
@@ -933,11 +1036,10 @@ def _execute_suite(event: Dict[str, Any], user_identity: Dict[str, Any]) -> Dict
                         }
                     })
                 else:
-                    # Usecase not found - data integrity issue
-                    print(f'ERROR: Usecase {usecase_id} not found but is in suite {suite_id}')
+                    print(f'ERROR: Unexpected validation error for usecase {usecase_id}: {error_msg}')
                     return create_response(500, {
                         'error': 'Data integrity error',
-                        'message': f'Usecase {usecase_id} referenced by suite but not found'
+                        'message': error_msg
                     })
         
         # 5. Update suite execution with all execution IDs

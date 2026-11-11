@@ -1,1 +1,169 @@
-{"exportVersion": "1.0", "exportedAt": "2026-02-04T17:35:08Z", "usecase": {"name": "[QA Validation App] Create Blank Usecase", "description": "Login, create a blank usecase, and delete it", "starting_url": "", "active": true, "executing_region": "", "tags": ["create", "usecase", "test", "delete"]}, "steps": [{"sort": 1, "instruction": "focus username field", "step_type": "secret", "secret_key": "username"}, {"sort": 2, "instruction": "focus password field", "step_type": "secret", "secret_key": "password"}, {"sort": 3, "instruction": "Click the 'Sign in' button", "step_type": "navigation"}, {"sort": 4, "instruction": "Click the 'Create Use case' button", "step_type": "navigation"}, {"sort": 5, "instruction": "Click the 'Create Blank' card", "step_type": "navigation"}, {"sort": 6, "instruction": "Type '[QA Test] Create Blank {{UniqueID}}' in the name field", "step_type": "navigation"}, {"sort": 7, "instruction": "Type '{{description}}' in the description field", "step_type": "navigation"}, {"sort": 8, "instruction": "Type 'https://example.com' in the starting URL field", "step_type": "navigation"}, {"sort": 9, "instruction": "Select 'eu-central-1' in the region dropdown", "step_type": "navigation"}, {"sort": 10, "instruction": "Select 'nova-act-v1.0' in the model dropdown", "step_type": "navigation"}, {"sort": 11, "instruction": "Add tag 'test'", "step_type": "navigation"}, {"sort": 12, "instruction": "Click the 'Create' button", "step_type": "navigation"}, {"sort": 13, "instruction": "Click the 'Use cases' menu item", "step_type": "navigation"}, {"sort": 14, "instruction": "Type '[QA Test] Create Blank' in the search bar", "step_type": "navigation"}, {"sort": 15, "instruction": "Click checkbox in front of usecase '[QA Test] Create Blank {{UniqueID}}'", "step_type": "navigation"}, {"sort": 16, "instruction": "Open the dropdown menu", "step_type": "navigation"}, {"sort": 17, "instruction": "Select 'Delete Selected' from dropdown", "step_type": "navigation"}, {"sort": 18, "instruction": "Confirm deletion", "step_type": "navigation"}], "variables": [{"Value": "test description", "Key": "description"}], "secrets": [{"key": "username", "value": null, "placeholder": "Required: Secret for usecase 336266c8-14ae-46cf-b5b4-8beabe0e7395"}, {"key": "password", "value": null, "placeholder": "Required: Secret for usecase 336266c8-14ae-46cf-b5b4-8beabe0e7395"}]}
+{
+  "exportVersion": "1.0",
+  "exportedAt": "2026-02-04T17:35:08Z",
+  "usecase": {
+    "name": "[QA Validation App] Create Blank Usecase",
+    "description": "Login, create a blank usecase, and delete it",
+    "starting_url": "",
+    "active": true,
+    "executing_region": "",
+    "tags": [
+      "create",
+      "usecase",
+      "test",
+      "delete"
+    ]
+  },
+  "steps": [
+    {
+      "sort": 1,
+      "instruction": "focus username field",
+      "step_type": "secret",
+      "secret_key": "username"
+    },
+    {
+      "sort": 2,
+      "instruction": "focus password field",
+      "step_type": "secret",
+      "secret_key": "password"
+    },
+    {
+      "sort": 3,
+      "instruction": "Click the 'Sign in' button",
+      "step_type": "navigation"
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Create Use case' button",
+      "sort": 4
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Create New' option",
+      "sort": 5
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 6
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Web' platform option",
+      "sort": 7
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 8
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type '[QA Test] Create Blank {{UniqueID}}' in the Name field",
+      "sort": 9
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type '{{description}}' in the Description field",
+      "sort": 10
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type 'test' in the Tags field",
+      "sort": 11
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Type 'https://example.com' in the Starting URL field",
+      "sort": 12
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'eu-central-1' in the Execution Region dropdown",
+      "sort": 13
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'nova-act-v1.0' in the Model dropdown",
+      "sort": 14
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select 'QA Studio' in the Application dropdown",
+      "sort": 15
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 16
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Select the 'Create Blank' option",
+      "sort": 17
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 18
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Next' button",
+      "sort": 19
+    },
+    {
+      "step_type": "navigation",
+      "instruction": "Click the 'Create' button",
+      "sort": 20
+    },
+    {
+      "sort": 21,
+      "instruction": "Click the 'Use cases' menu item",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 22,
+      "instruction": "Type '[QA Test] Create Blank' in the search bar",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 23,
+      "instruction": "Click checkbox in front of usecase '[QA Test] Create Blank {{UniqueID}}'",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 24,
+      "instruction": "Open the dropdown menu",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 25,
+      "instruction": "Select 'Delete Selected' from dropdown",
+      "step_type": "navigation"
+    },
+    {
+      "sort": 26,
+      "instruction": "Confirm deletion",
+      "step_type": "navigation"
+    }
+  ],
+  "variables": [
+    {
+      "Value": "test description",
+      "Key": "description"
+    }
+  ],
+  "secrets": [
+    {
+      "key": "username",
+      "value": null,
+      "placeholder": "Required: Secret for usecase 336266c8-14ae-46cf-b5b4-8beabe0e7395"
+    },
+    {
+      "key": "password",
+      "value": null,
+      "placeholder": "Required: Secret for usecase 336266c8-14ae-46cf-b5b4-8beabe0e7395"
+    }
+  ]
+}
