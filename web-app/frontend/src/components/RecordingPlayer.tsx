@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Box, Spinner, Alert, ProgressBar } from '@cloudscape-design/components';
 import { listRecordingBatches, getRecordingBatch, getVideoPlayback, RecordingEvent, RecordingMetadata } from '../utils/recordingUtils';
+import { getEffectiveBatchSize } from '../utils/batchedPromiseAll';
+
+const RECORDING_PAGE_CONCURRENCY = getEffectiveBatchSize(__APP_CONFIG__.lambdaConcurrency);
 
 interface RecordingPlayerProps {
   usecaseId: string;
@@ -106,7 +109,7 @@ export const RecordingPlayer: React.FC<RecordingPlayerProps> = ({
           
           // Create array of page numbers to fetch (pages 2 to totalPages)
           const pageNumbers = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-          const concurrency = 5; // Fetch 5 pages at a time
+          const concurrency = RECORDING_PAGE_CONCURRENCY;
           
           // Process pages in chunks for controlled concurrency
           for (let i = 0; i < pageNumbers.length; i += concurrency) {
@@ -273,7 +276,7 @@ export const RecordingPlayer: React.FC<RecordingPlayerProps> = ({
             // Load remaining pages in parallel if there are more
             if (batchTotalPages > 1) {
               const pageNumbers = Array.from({ length: batchTotalPages - 1 }, (_, idx) => idx + 2);
-              const concurrency = 5; // Fetch 5 pages at a time
+              const concurrency = RECORDING_PAGE_CONCURRENCY;
               
               for (let j = 0; j < pageNumbers.length; j += concurrency) {
                 const chunk = pageNumbers.slice(j, j + concurrency);
