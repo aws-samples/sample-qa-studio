@@ -536,6 +536,12 @@ Never edit a ledger by hand: the collector rewrites the processed dates on every
    - Provide error details
    - Include request ID if available
 
+#### Recording batch request returns 500
+
+When one recording page returns `{"message":"Internal server error"}` while adjacent pages succeed, compare the request time with the `/aws/lambda/<baseName>-getrecordingbatch` log group and the function's metrics. A request with no `START` log and an increment in the Lambda `Throttles` metric was rejected before the handler ran because reserved concurrency was exhausted.
+
+The web player limits each page-request chunk to a positive `lambdaConcurrency` value; when the value is zero, Lambda reserved concurrency is disabled and the player retains the bounded fallback of five. If this still occurs, confirm the deployed frontend was built from the same configuration as the Lambda stack, then check whether other users or callers consumed the function's remaining concurrency. A retry that succeeds after the competing requests finish is further evidence of throttling; a request with a Lambda error log requires investigation of that handler error instead.
+
 ---
 
 ## Mobile Testing Issues

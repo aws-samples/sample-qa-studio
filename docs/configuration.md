@@ -18,7 +18,7 @@ cp configuration.json.sample configuration.json
 | `defaultRegion` | string | No | `"us-east-1"` | Default AWS region (must be in `enabledRegions`) |
 | `bedrockModelId` | string | No | `"us.amazon.nova-2-lite-v1:0"` | Bedrock model ID for AI-powered test generation. See [Bedrock Model Selection](#bedrock-model-selection). |
 | `useNovaActGa` | boolean | No | `true` | Use Nova Act GA API (vs preview) |
-| `lambdaConcurrency` | number | No | `5` | Reserved concurrent executions per Lambda function. Controls max parallel invocations per function to prevent account concurrency exhaustion. Set to `0` to disable the limit. |
+| `lambdaConcurrency` | number | No | `5` | Reserved concurrent executions per Lambda function and the maximum frontend batch size for shared batch operations and recording pages. Set to `0` to disable the Lambda limit; frontend batching retains a fallback of five. |
 | `apiGatewayUrl` | string | No | — | Full API Gateway URL for local development proxy |
 | `enableExtensionAuthentication` | boolean | No | — | Enable Kiro extension OAuth callback authentication |
 | `cliCallbackUrl` | string | No | — | Callback URL for CLI OAuth flow (e.g. `"http://localhost:19847/callback"`) |
